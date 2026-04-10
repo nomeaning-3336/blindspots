@@ -1,0 +1,34 @@
+{
+  "name": "chessview",
+  "private": true,
+  "scripts": {
+    "dev": "npm run build:css && npm run sync:analyze && next dev",
+    "build": "npm run build:css && npm run sync:analyze && next build",
+    "start": "next start",
+    "sync:analyze": "node scripts/sync-analyze-assets.mjs",
+    "build:css": "tailwindcss -i ./standalone.tailwind.css -o ./standalone.css --minify",
+    "build:analyze-css": "tailwindcss -i ./standalone.tailwind.css -o ./standalone.css --minify",
+    "watch:css": "tailwindcss -i ./standalone.tailwind.css -o ./standalone.css --watch",
+    "watch:analyze-css": "tailwindcss -i ./standalone.tailwind.css -o ./standalone.css --watch",
+    "test:theme-backgrounds": "node scripts/check-theme-backgrounds.mjs"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.2.2",
+    "@tailwindcss/postcss": "^4.2.2",
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "playwright": "^1.58.2",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^4.2.2",
+    "typescript": "^6.0.2"
+  },
+  "dependencies": {
+    "@clerk/nextjs": "^7.0.7",
+    "@supabase/supabase-js": "^2.100.1",
+    "chess.js": "^1.4.0",
+    "next": "^16.2.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  }
+}
