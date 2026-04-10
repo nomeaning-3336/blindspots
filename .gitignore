@@ -1,0 +1,55 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+
+# local env
+.env
+.env.local
+.env.*.local
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# build caches
+*.tsbuildinfo
+__pycache__/
+.pytest_cache/
+
+# editor / local tooling
+.vscode/
+.idea/
+.claude/
+.opencode/
+
+# local temp / debug output
+tmp/
+logs/
+cache/
+artifacts/
+.tmp_served_standalone.js
+.__*
+.analyze-dev-check.*
+.dev-after-clean.*
+.next-dev-*
+.next-start-check.*
+tmp-*.log
+
+# generated screenshots / local diagnostics
+theme-*-account.png
+theme-*-analyze.png
+theme-*-performance.png
+
+# operating system
+Thumbs.db
+desktop.ini
+
+stockfish-ubuntu-x86-64-avx2
+
+stockfish-windows-x86-64-avx2.exe
