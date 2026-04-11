@@ -1310,11 +1310,11 @@
               <div class="head"><h2>Game Report</h2><span id="evalChartMeta"></span></div>
               <div class="report-stack">
                 <div id="reportOverview" class="report-overview"></div>
+                <div id="assistantMessages" class="assistant-messages report-breakdown"></div>
                 <div class="eval-wrap report-eval-wrap">
                   <svg id="evalChart" class="eval-chart" viewBox="0 0 640 220" preserveAspectRatio="none"></svg>
                   <div id="evalTooltip" class="eval-tooltip"></div>
                 </div>
-                <div id="assistantMessages" class="assistant-messages report-breakdown"></div>
               </div>
               <div class="chat" hidden aria-hidden="true">
                 <div class="pill" id="coachPill" hidden aria-hidden="true"><span></span><input id="assistantInput" type="text" hidden disabled aria-hidden="true"><button class="btn send" id="sendBtn" hidden disabled aria-hidden="true">Send</button></div>
@@ -4070,15 +4070,46 @@
     return `<button type="button" class="report-class-count" data-report-node-id="${escapeHtml(nodeId)}">${escapeHtml(String(count))}</button>`;
   }
 
-  function renderReportCategoryTable(title, tone, moveClassKeys, report) {
+  function renderReportPlayerSummaryCard(stats, sideLabel, goodShare, winnerColor) {
+    const isWinner = winnerColor === stats.color;
+    const accuracyText =
+      stats.accuracy == null ? "--" : `${escapeHtml(stats.accuracy.toFixed(1))}%`;
     return `
-      <section class="report-category-card ${escapeHtml(tone)}">
+      <section class="report-player-summary ${escapeHtml(stats.color)}${isWinner ? " is-winner" : ""}">
+        <div class="report-player-summary-head">
+          <div class="report-player-name-row">
+            <span class="report-player-name">${escapeHtml(stats.name || sideLabel)}</span>
+          </div>
+          <div class="report-player-side">${escapeHtml(sideLabel)}</div>
+        </div>
+        <div class="report-player-stat-grid">
+          <div class="report-player-stat">
+            <div class="report-player-stat-label">Accuracy</div>
+            <div class="report-metric-value">${accuracyText}</div>
+            <div class="report-mini-bar">
+              <span class="report-mini-bar-good" style="width:${Math.max(0, Math.min(100, goodShare)).toFixed(1)}%"></span>
+              <span class="report-mini-bar-bad" style="width:${Math.max(0, Math.min(100, 100 - goodShare)).toFixed(1)}%"></span>
+            </div>
+            <div class="report-mini-counts"><span>${escapeHtml(String(stats.goodMoves))}</span><span>${escapeHtml(String(stats.badMoves))}</span></div>
+          </div>
+          <div class="report-player-stat compact">
+            <div class="report-player-stat-label">Elo</div>
+            <div class="report-metric-value">${escapeHtml(stats.rating || "--")}</div>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderReportPlayerClassificationCard(stats, sideLabel, moveClassKeys) {
+    return `
+      <section class="report-category-card player-breakdown ${escapeHtml(stats.color)}">
         <div class="report-category-head">
           <div class="report-category-title-wrap">
             <span class="report-category-dot" aria-hidden="true"></span>
-            <h4>${escapeHtml(title)}</h4>
+            <h4>${escapeHtml(stats.name || sideLabel)}</h4>
           </div>
-          <div class="report-category-columns"><span>W</span><span>B</span></div>
+          <span class="report-player-side">${escapeHtml(sideLabel)}</span>
         </div>
         <div class="report-category-body">
           ${moveClassKeys
@@ -4091,9 +4122,8 @@
                     <img class="report-class-icon" src="${escapeHtml(style.icon)}" alt="">
                     <span>${escapeHtml(style.label)}</span>
                   </div>
-                  <div class="report-class-counts">
-                    ${reportCountCellMarkup(report.white, moveClassKey)}
-                    ${reportCountCellMarkup(report.black, moveClassKey)}
+                  <div class="report-class-counts solo">
+                    ${reportCountCellMarkup(stats, moveClassKey)}
                   </div>
                 </div>
               `;
@@ -4103,7 +4133,6 @@
       </section>
     `;
   }
-
   function renderAnalysisReport() {
     if (!ui.reportOverview || !ui.assistantMessages) return;
     syncReportVisibility(true);
@@ -4116,58 +4145,19 @@
       report.black.goodMoves + report.black.badMoves > 0
         ? (report.black.goodMoves / (report.black.goodMoves + report.black.badMoves)) * 100
         : 100;
-    if (ui.evalChartMeta) ui.evalChartMeta.textContent = report.outcome.label;
+    if (ui.evalChartMeta) ui.evalChartMeta.textContent = "";
     ui.reportOverview.innerHTML = `
       <div class="report-overview-shell">
-        <div class="report-matchup">
-          <div class="report-player-card white${report.outcome.winnerColor === "white" ? " is-winner" : ""}">
-            <div class="report-player-name-row">
-              <span class="report-player-name">${escapeHtml(report.white.name || "White")}</span>
-            </div>
-            <div class="report-player-side">White</div>
-          </div>
-          <div class="report-versus-pill">${escapeHtml(report.outcome.result === "Ready" ? "vs" : report.outcome.result)}</div>
-          <div class="report-player-card black${report.outcome.winnerColor === "black" ? " is-winner" : ""}">
-            <div class="report-player-name-row">
-              <span class="report-player-name">${escapeHtml(report.black.name || "Black")}</span>
-            </div>
-            <div class="report-player-side">Black</div>
-          </div>
-        </div>
-        <div class="report-metric-row">
-          <div class="report-metric-card white">
-            <div class="report-metric-value">${report.white.accuracy == null ? "--" : escapeHtml(report.white.accuracy.toFixed(1))}</div>
-            <div class="report-mini-bar">
-              <span class="report-mini-bar-good" style="width:${Math.max(0, Math.min(100, whiteGoodShare)).toFixed(1)}%"></span>
-              <span class="report-mini-bar-bad" style="width:${Math.max(0, Math.min(100, 100 - whiteGoodShare)).toFixed(1)}%"></span>
-            </div>
-            <div class="report-mini-counts"><span>${escapeHtml(String(report.white.goodMoves))}</span><span>${escapeHtml(String(report.white.badMoves))}</span></div>
-          </div>
-          <div class="report-metric-center">Accuracy</div>
-          <div class="report-metric-card black">
-            <div class="report-metric-value">${report.black.accuracy == null ? "--" : escapeHtml(report.black.accuracy.toFixed(1))}</div>
-            <div class="report-mini-bar">
-              <span class="report-mini-bar-good" style="width:${Math.max(0, Math.min(100, blackGoodShare)).toFixed(1)}%"></span>
-              <span class="report-mini-bar-bad" style="width:${Math.max(0, Math.min(100, 100 - blackGoodShare)).toFixed(1)}%"></span>
-            </div>
-            <div class="report-mini-counts"><span>${escapeHtml(String(report.black.goodMoves))}</span><span>${escapeHtml(String(report.black.badMoves))}</span></div>
-          </div>
-        </div>
-        <div class="report-metric-row ratings">
-          <div class="report-metric-card white compact">
-            <div class="report-metric-value">${escapeHtml(report.white.rating || "--")}</div>
-          </div>
-          <div class="report-metric-center">Elo</div>
-          <div class="report-metric-card black compact">
-            <div class="report-metric-value">${escapeHtml(report.black.rating || "--")}</div>
-          </div>
+        <div class="report-player-columns">
+          ${renderReportPlayerSummaryCard(report.white, "White", whiteGoodShare, report.outcome.winnerColor)}
+          ${renderReportPlayerSummaryCard(report.black, "Black", blackGoodShare, report.outcome.winnerColor)}
         </div>
       </div>
     `;
     ui.assistantMessages.style.display = "grid";
     ui.assistantMessages.innerHTML = [
-      renderReportCategoryTable("Good", "good", ["brilliant", "critical", "best", "excellent", "okay"], report),
-      renderReportCategoryTable("Bad", "bad", ["inaccuracy", "mistake", "blunder"], report),
+      renderReportPlayerClassificationCard(report.white, "White", ["brilliant", "critical", "best", "excellent", "okay", "inaccuracy", "mistake", "blunder"]),
+      renderReportPlayerClassificationCard(report.black, "Black", ["brilliant", "critical", "best", "excellent", "okay", "inaccuracy", "mistake", "blunder"]),
     ].join("");
   }
 
@@ -17148,6 +17138,13 @@
   }
 
 })();
+
+
+
+
+
+
+
 
 
 

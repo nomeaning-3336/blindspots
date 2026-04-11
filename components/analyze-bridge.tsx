@@ -486,6 +486,14 @@ function ensureOverrideStyle() {
 
       #analyze-app-host #app .right {
         gap: 10px !important;
+        grid-template-rows: minmax(0, 1fr) !important;
+      }
+
+      #analyze-app-host #app #coachCard {
+        min-height: 0 !important;
+        height: 100% !important;
+        max-height: calc(100dvh - 92px) !important;
+        overflow: auto !important;
       }
 
       #analyze-app-host #app .right > .card {
@@ -906,6 +914,7 @@ export function AnalyzeBridge({
     </div>
   );
 }
+
 
 
 
