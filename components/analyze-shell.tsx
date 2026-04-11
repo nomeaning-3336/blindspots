@@ -13,12 +13,14 @@ function AnalyzeShellInner({
   layoutMode,
   initialArcadeGame,
   arcadeGamePersistUrl,
+  analyzePreferencesPersistUrl,
 }: {
   initialPreferences: AnalyzePreferences | null;
   initialWorkspaceMode: AnalyzeWorkspaceMode;
   layoutMode?: "default" | "arcade-play";
   initialArcadeGame?: ArcadeInitialGameSnapshot | null;
   arcadeGamePersistUrl?: string | null;
+  analyzePreferencesPersistUrl?: string | null;
 }) {
   return (
     <div
@@ -33,6 +35,7 @@ function AnalyzeShellInner({
           layoutMode={layoutMode}
           initialArcadeGame={initialArcadeGame}
           arcadeGamePersistUrl={arcadeGamePersistUrl}
+          analyzePreferencesPersistUrl={analyzePreferencesPersistUrl}
         />
       </div>
     </div>
@@ -45,12 +48,14 @@ export function AnalyzeShell({
   layoutMode,
   initialArcadeGame,
   arcadeGamePersistUrl,
+  analyzePreferencesPersistUrl,
 }: {
   initialPreferences: AnalyzePreferences | null;
   initialWorkspaceMode: AnalyzeWorkspaceMode;
   layoutMode?: "default" | "arcade-play";
   initialArcadeGame?: ArcadeInitialGameSnapshot | null;
   arcadeGamePersistUrl?: string | null;
+  analyzePreferencesPersistUrl?: string | null;
 }) {
   return (
     <ChessAppProvider>
@@ -60,6 +65,7 @@ export function AnalyzeShell({
         layoutMode={layoutMode}
         initialArcadeGame={initialArcadeGame}
         arcadeGamePersistUrl={arcadeGamePersistUrl}
+        analyzePreferencesPersistUrl={analyzePreferencesPersistUrl}
       />
     </ChessAppProvider>
   );
