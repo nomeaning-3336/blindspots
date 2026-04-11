@@ -338,7 +338,7 @@ function ensureOverrideStyle() {
 
     @media (min-width: 1280px) {
       #analyze-app-host #app .workspace {
-        --app-right-rail-width: clamp(270px, 15vw, 320px);
+        --app-right-rail-width: clamp(320px, 20vw, 420px);
         gap: 12px !important;
         padding-bottom: 10px !important;
         grid-template-columns: minmax(0, 1fr) var(--app-right-rail-width) !important;
@@ -454,7 +454,7 @@ function ensureOverrideStyle() {
 
     @media (min-width: 1280px) and (max-height: 1100px) {
       #analyze-app-host #app .workspace {
-        --app-right-rail-width: clamp(250px, 15vw, 300px);
+        --app-right-rail-width: clamp(300px, 18vw, 380px);
         gap: 10px !important;
         padding-bottom: 12px !important;
         grid-template-columns: minmax(0, 1fr) var(--app-right-rail-width) !important;

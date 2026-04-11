@@ -1093,6 +1093,7 @@
     @apply grid min-h-0 min-w-0 self-stretch rounded-none border-2;
     gap: 10px;
     min-width: 0;
+    max-width: 100%;
     min-height: 0;
     justify-self: stretch;
     padding: 12px 12px 10px;
@@ -1110,6 +1111,7 @@
   .board-analysis-primary {
     @apply grid min-h-0 rounded-none border;
     width: 100%;
+    min-height: 200px;
     border-color: var(--stroke-dim);
     background: var(--card-2);
     padding: 8px;
@@ -1135,7 +1137,7 @@
 
   .analysis-list {
     width: 100%;
-    max-width: 370px;
+    max-width: 100%;
     align-content: start;
     grid-auto-rows: max-content;
   }
@@ -3624,6 +3626,7 @@
 
 .report-card {
   grid-template-rows: auto minmax(0, 1fr);
+  container-type: inline-size;
 }
 
 .report-stack {
@@ -3726,13 +3729,14 @@
 
 .report-player-name-row {
   min-width: 0;
+  overflow: hidden;
 }
 
 .report-player-name {
   display: block;
   min-width: 0;
   color: var(--text);
-  font-size: 1rem;
+  font-size: 0.875rem;
   font-weight: 700;
   line-height: 1.2;
   overflow: hidden;
@@ -3826,7 +3830,10 @@
 }
 
 .report-category-card {
+  width: 100%;
+  min-width: 0;
   display: grid;
+  grid-template-columns: 100%;
   align-content: start;
   gap: 0;
   overflow: hidden;
@@ -3875,6 +3882,7 @@
   display: grid;
   grid-template-columns: repeat(2, 32px);
   gap: 8px;
+  flex: 0 0 auto;
 }
 
 .report-category-columns span {
@@ -3885,7 +3893,10 @@
 }
 
 .report-category-body {
+  min-width: 0;
+  overflow: hidden;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .arcade-mode-grid {
@@ -3914,6 +3925,14 @@
   color: var(--report-class-color, var(--text));
   font-size: 0.7rem;
   font-weight: 700;
+  overflow: hidden;
+}
+
+.report-class-label span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .report-class-icon {
@@ -3923,9 +3942,12 @@
 }
 
 .report-class-counts {
+  min-width: 0;
   display: grid;
   grid-template-columns: repeat(2, 32px);
   gap: 8px;
+  flex: 0 0 auto;
+  justify-content: end;
 }
 
 .report-class-count {
@@ -3977,6 +3999,114 @@
   .report-versus-pill,
   .report-metric-center {
     justify-self: start;
+  }
+}
+
+@container (max-width: 420px) {
+  .report-overview-shell {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .report-summary-banner,
+  .report-matchup,
+  .report-metric-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .report-player-card.black,
+  .report-metric-card.black {
+    text-align: left;
+  }
+
+  .report-status-pill,
+  .report-versus-pill,
+  .report-metric-center {
+    justify-self: start;
+  }
+
+  .report-breakdown {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .report-category-head {
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .report-category-columns,
+  .report-class-counts {
+    grid-template-columns: repeat(2, 28px);
+    gap: 6px;
+  }
+
+  .report-class-row {
+    gap: 8px;
+    padding: 8px 10px;
+  }
+}
+
+@container (max-width: 360px) {
+  .report-kicker {
+    font-size: 0.52rem;
+  }
+
+  .report-summary-copy {
+    font-size: 0.66rem;
+    line-height: 1.35;
+  }
+
+  .report-status-pill,
+  .report-versus-pill,
+  .report-metric-center,
+  .report-category-columns span {
+    font-size: 0.52rem;
+    letter-spacing: 0.08em;
+    padding-inline: 8px;
+  }
+
+  .report-player-card,
+  .report-metric-card {
+    padding: 10px;
+  }
+
+  .report-player-name {
+    font-size: 0.78rem;
+  }
+
+  .report-player-side {
+    font-size: 0.58rem;
+  }
+
+  .report-metric-value {
+    font-size: 0.88rem;
+  }
+
+  .report-eval-wrap {
+    min-height: 164px;
+    padding: 8px;
+  }
+
+  .report-category-title-wrap h4 {
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+  }
+
+  .report-class-label {
+    gap: 6px;
+    font-size: 0.64rem;
+  }
+
+  .report-class-icon {
+    width: 14px;
+    height: 14px;
+    flex-basis: 14px;
+  }
+
+  .report-class-count {
+    font-size: 0.62rem;
+    padding: 3px 0;
   }
 }
 
