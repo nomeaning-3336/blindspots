@@ -279,6 +279,13 @@
       border: "var(--app-class-critical-border)",
       icon: assetUrl("classification-icons/critical.png"),
     },
+    brilliant: {
+      label: "Brilliant",
+      color: "var(--app-class-brilliant)",
+      soft: "var(--app-class-brilliant-soft)",
+      border: "var(--app-class-brilliant-border)",
+      icon: assetUrl("classification-icons/brilliant.png"),
+    },
     best: {
       label: "Best",
       color: "var(--app-class-best)",
@@ -396,6 +403,51 @@
   const revealApp = () => document.documentElement.classList.add("boot-ready");
   const revealAppWhenReady = () =>
     requestAnimationFrame(() => requestAnimationFrame(revealApp));
+
+  async function fetchJsonWithRetry(input, init = {}, options = {}) {
+    const attempts = Math.max(1, Number(options.attempts) || 1);
+    const retryStatuses = new Set(
+      Array.isArray(options.retryStatuses) ? options.retryStatuses : [],
+    );
+    const retryOnInvalidJson = !!options.retryOnInvalidJson;
+    const retryDelayMs = Math.max(0, Number(options.retryDelayMs) || 0);
+    let lastError = null;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        const response = await fetch(input, init);
+        const raw = await response.text();
+        let payload = null;
+        if (raw) {
+          try {
+            payload = JSON.parse(raw);
+          } catch (error) {
+            if (retryOnInvalidJson && attempt < attempts) {
+              lastError = error;
+              if (retryDelayMs) {
+                await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+              }
+              continue;
+            }
+            throw error;
+          }
+        }
+        if (retryStatuses.has(response.status) && attempt < attempts) {
+          if (retryDelayMs) {
+            await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+          }
+          continue;
+        }
+        return { response, payload };
+      } catch (error) {
+        lastError = error;
+        if (attempt >= attempts) throw error;
+        if (retryDelayMs) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+        }
+      }
+    }
+    throw lastError || new Error("JSON request failed");
+  }
 
   if (typeof Chess === "undefined") {
     root.innerHTML =
@@ -536,6 +588,7 @@
     analysisRows: [],
     awaitingFinalAnalysis: false,
     awaitingImportedPgnAnalysis: false,
+    importedPgnReportReady: false,
     importedPgnAnalysisFens: [],
     importedPgnAnalysisMoves: [],
     importedGameReviewMode: false,
@@ -1249,23 +1302,18 @@
             </section>
           </section>
           <aside class="right">
-            <section class="glass card eval-card">
-              <div class="head"><h2>Eval Chart</h2></div>
-              <div class="eval-wrap">
-                <svg id="evalChart" class="eval-chart" viewBox="0 0 640 220" preserveAspectRatio="none"></svg>
-                <div id="evalTooltip" class="eval-tooltip"></div>
-              </div>
-            </section>
-            <section class="glass card assistant-card" id="coachCard">
-              <div class="head"><h2>AI Coach</h2></div>
-              <div id="assistantMessages" class="assistant-messages"></div>
-              <div class="chat">
-                <div id="coachReviewCta" class="coach-review-cta">
-                  <div class="board-history-empty">Jump into the Arcade board and start a saved run or a new ruleset.</div>
-                  <a class="btn subtle" id="coachGoToReviewBtn" href="/arcade">Open Arcade</a>
+            <section class="glass card report-card" id="coachCard">
+              <div class="head"><h2>Game Report</h2><span id="evalChartMeta"></span></div>
+              <div class="report-stack">
+                <div id="reportOverview" class="report-overview"></div>
+                <div class="eval-wrap report-eval-wrap">
+                  <svg id="evalChart" class="eval-chart" viewBox="0 0 640 220" preserveAspectRatio="none"></svg>
+                  <div id="evalTooltip" class="eval-tooltip"></div>
                 </div>
+                <div id="assistantMessages" class="assistant-messages report-breakdown"></div>
+              </div>
+              <div class="chat" hidden aria-hidden="true">
                 <div class="pill" id="coachPill" hidden aria-hidden="true"><span></span><input id="assistantInput" type="text" hidden disabled aria-hidden="true"><button class="btn send" id="sendBtn" hidden disabled aria-hidden="true">Send</button></div>
-  
                 <div class="coach-hidden-settings" hidden aria-hidden="true">
                   <input id="apiKeyInput" class="input" type="password" placeholder="Provider API key">
                   <input id="modelInput" class="input" type="text">
@@ -1449,6 +1497,7 @@
       "evalChart",
       "evalChartMeta",
       "evalTooltip",
+      "reportOverview",
       "assistantMessages",
       "assistantInput",
       "apiKeyInput",
@@ -1542,9 +1591,16 @@
     });
     ui.assistantMessages.addEventListener("click", (event) => {
       const variantButton = event.target.closest("[data-arcade-variant]");
-      if (!variantButton) return;
+      if (variantButton) {
+        event.preventDefault();
+        setArcadeVariant(variantButton.dataset.arcadeVariant || "");
+        return;
+      }
+      const reportJump = event.target.closest("[data-report-node-id]");
+      if (!reportJump) return;
       event.preventDefault();
-      setArcadeVariant(variantButton.dataset.arcadeVariant || "");
+      const node = nodeRegistry.get(reportJump.dataset.reportNodeId) || null;
+      if (node) goToNode(node);
     });
     ui.importRecentList.addEventListener("click", (event) => {
       const refreshButton = event.target.closest("[data-recent-refresh]");
@@ -2348,6 +2404,8 @@
 
   function evalChartMoveClass(moveClass) {
     if (!moveClass) return null;
+    if (moveClass === MOVE_CLASS_STYLES.brilliant)
+      return MOVE_CLASS_STYLES.brilliant;
     if (moveClass === MOVE_CLASS_STYLES.critical)
       return MOVE_CLASS_STYLES.critical;
     if (moveClass === MOVE_CLASS_STYLES.okay) return MOVE_CLASS_STYLES.okay;
@@ -2364,6 +2422,7 @@
     const moveClass = point.moveClass;
     const isImportant =
       point.node.id === state.current.id ||
+      moveClass === MOVE_CLASS_STYLES.brilliant ||
       moveClass === MOVE_CLASS_STYLES.critical ||
       moveClass === MOVE_CLASS_STYLES.inaccuracy ||
       moveClass === MOVE_CLASS_STYLES.mistake ||
@@ -3832,25 +3891,292 @@
     startImportedReviewTypewriter(node.id, comment);
   }
 
+  function reportIdentityForColor(color) {
+    const isWhite = color === "white";
+    const importedName = isWhite
+      ? state.importedWhitePlayerName
+      : state.importedBlackPlayerName;
+    const importedRating = isWhite
+      ? state.importedWhitePlayerRating
+      : state.importedBlackPlayerRating;
+    const liveName = isWhite ? state.whitePlayerName : state.blackPlayerName;
+    const liveRating = isWhite ? state.whitePlayerRating : state.blackPlayerRating;
+    const arcadeIdentity = arcadeDisplayIdentityForColor(color);
+    return {
+      name:
+        arcadeIdentity?.name ||
+        (liveName === (isWhite ? "White" : "Black") && importedName
+          ? importedName
+          : liveName),
+      rating: arcadeIdentity?.rating || liveRating || importedRating || "",
+    };
+  }
+
+  function moverColorForNode(node) {
+    const turn = String(node?.parent?.fen || "").split(" ")[1] || "w";
+    return turn === "w" ? "white" : "black";
+  }
+
+  function reportMoveClassScore(moveClass) {
+    if (moveClass === MOVE_CLASS_STYLES.brilliant) return 100;
+    if (moveClass === MOVE_CLASS_STYLES.critical) return 98;
+    if (moveClass === MOVE_CLASS_STYLES.best) return 96;
+    if (moveClass === MOVE_CLASS_STYLES.excellent) return 91;
+    if (moveClass === MOVE_CLASS_STYLES.okay) return 78;
+    if (moveClass === MOVE_CLASS_STYLES.inaccuracy) return 58;
+    if (moveClass === MOVE_CLASS_STYLES.mistake) return 32;
+    if (moveClass === MOVE_CLASS_STYLES.blunder) return 0;
+    return 72;
+  }
+
+  function initialReportPlayerStats(color) {
+    return {
+      color,
+      ...reportIdentityForColor(color),
+      totalMoves: 0,
+      goodMoves: 0,
+      badMoves: 0,
+      accuracyTotal: 0,
+      accuracy: null,
+      counts: {
+        brilliant: 0,
+        critical: 0,
+        best: 0,
+        excellent: 0,
+        okay: 0,
+        inaccuracy: 0,
+        mistake: 0,
+        blunder: 0,
+      },
+      firstNodeIds: {
+        brilliant: "",
+        critical: "",
+        best: "",
+        excellent: "",
+        okay: "",
+        inaccuracy: "",
+        mistake: "",
+        blunder: "",
+      },
+    };
+  }
+
+  function reportOutcomeInfo(game = currentGame()) {
+    const pathLength = Math.max(0, currentPath().length - 1);
+    const openingLabel = state.openingInfo?.name
+      ? `${state.openingInfo.eco ? `${state.openingInfo.eco} ` : ""}${state.openingInfo.name}`
+      : "";
+    if (game?.in_checkmate?.()) {
+      const winnerColor = game.turn() === "w" ? "black" : "white";
+      return {
+        label: "Checkmate",
+        detail: `${winnerColor === "white" ? "White" : "Black"} delivered mate.`,
+        result: winnerColor === "white" ? "1-0" : "0-1",
+        winnerColor,
+        openingLabel,
+      };
+    }
+    if (game?.in_stalemate?.()) {
+      return {
+        label: "Stalemate",
+        detail: "No legal moves remain.",
+        result: "1/2-1/2",
+        winnerColor: "",
+        openingLabel,
+      };
+    }
+    if (game?.game_over?.()) {
+      return {
+        label: "Game Over",
+        detail: "This line has reached a terminal result.",
+        result: "1/2-1/2",
+        winnerColor: "",
+        openingLabel,
+      };
+    }
+    const sideToMove = currentTurnColor(game) === "black" ? "Black to move" : "White to move";
+    return {
+      label: sideToMove,
+      detail: pathLength
+        ? `${pathLength} plies tracked${openingLabel ? ` • ${openingLabel}` : ""}.`
+        : openingLabel || "Fresh board. Play a few moves or import a game.",
+      result: pathLength ? "Live" : "Ready",
+      winnerColor: "",
+      openingLabel,
+    };
+  }
+
+  function collectAnalysisReport() {
+    const game = currentGame();
+    const nodes = currentMoveNodes();
+    const white = initialReportPlayerStats("white");
+    const black = initialReportPlayerStats("black");
+    const goodKeys = new Set(["brilliant", "critical", "best", "excellent", "okay"]);
+    const badKeys = new Set(["inaccuracy", "mistake", "blunder"]);
+    nodes.forEach((node) => {
+      const color = moverColorForNode(node);
+      const stats = color === "white" ? white : black;
+      const moveClass = classificationForHistoryNode(node);
+      const moveClassKey = moveClassKeyForStyle(moveClass) || "";
+      stats.totalMoves += 1;
+      stats.accuracyTotal += reportMoveClassScore(moveClass);
+      if (moveClassKey && Object.prototype.hasOwnProperty.call(stats.counts, moveClassKey)) {
+        stats.counts[moveClassKey] += 1;
+        if (!stats.firstNodeIds[moveClassKey]) stats.firstNodeIds[moveClassKey] = node.id;
+      }
+      if (goodKeys.has(moveClassKey)) stats.goodMoves += 1;
+      if (badKeys.has(moveClassKey)) stats.badMoves += 1;
+    });
+    [white, black].forEach((stats) => {
+      stats.accuracy = stats.totalMoves
+        ? Number((stats.accuracyTotal / stats.totalMoves).toFixed(1))
+        : null;
+    });
+    return {
+      game,
+      nodes,
+      white,
+      black,
+      hasMoveData: nodes.length > 0,
+      outcome: reportOutcomeInfo(game),
+    };
+  }
+
+  function reportCountCellMarkup(stats, moveClassKey) {
+    const count = stats.counts[moveClassKey] || 0;
+    if (!count) return '<span class="report-class-count is-empty">0</span>';
+    const nodeId = stats.firstNodeIds[moveClassKey] || "";
+    return `<button type="button" class="report-class-count" data-report-node-id="${escapeHtml(nodeId)}">${escapeHtml(String(count))}</button>`;
+  }
+
+  function renderReportCategoryTable(title, tone, moveClassKeys, report) {
+    return `
+      <section class="report-category-card ${escapeHtml(tone)}">
+        <div class="report-category-head">
+          <div class="report-category-title-wrap">
+            <span class="report-category-dot" aria-hidden="true"></span>
+            <h4>${escapeHtml(title)}</h4>
+          </div>
+          <div class="report-category-columns"><span>W</span><span>B</span></div>
+        </div>
+        <div class="report-category-body">
+          ${moveClassKeys
+            .map((moveClassKey) => {
+              const style = MOVE_CLASS_STYLES[moveClassKey];
+              if (!style) return "";
+              return `
+                <div class="report-class-row" style="--report-class-color:${escapeHtml(style.color)}">
+                  <div class="report-class-label">
+                    <img class="report-class-icon" src="${escapeHtml(style.icon)}" alt="">
+                    <span>${escapeHtml(style.label)}</span>
+                  </div>
+                  <div class="report-class-counts">
+                    ${reportCountCellMarkup(report.white, moveClassKey)}
+                    ${reportCountCellMarkup(report.black, moveClassKey)}
+                  </div>
+                </div>
+              `;
+            })
+            .join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderAnalysisReport() {
+    if (!ui.reportOverview || !ui.assistantMessages) return;
+    syncReportVisibility(true);
+    const report = collectAnalysisReport();
+    const whiteGoodShare =
+      report.white.goodMoves + report.white.badMoves > 0
+        ? (report.white.goodMoves / (report.white.goodMoves + report.white.badMoves)) * 100
+        : 100;
+    const blackGoodShare =
+      report.black.goodMoves + report.black.badMoves > 0
+        ? (report.black.goodMoves / (report.black.goodMoves + report.black.badMoves)) * 100
+        : 100;
+    if (ui.evalChartMeta) ui.evalChartMeta.textContent = report.outcome.label;
+    ui.reportOverview.innerHTML = `
+      <div class="report-overview-shell">
+        <div class="report-summary-banner">
+          <div>
+            <div class="report-kicker">Merged analysis report</div>
+            <div class="report-summary-copy">${escapeHtml(report.outcome.detail)}</div>
+          </div>
+          <div class="report-status-pill">${escapeHtml(report.outcome.result)}</div>
+        </div>
+        <div class="report-matchup">
+          <div class="report-player-card white${report.outcome.winnerColor === "white" ? " is-winner" : ""}">
+            <div class="report-player-name-row">
+              <span class="report-player-name">${escapeHtml(report.white.name || "White")}</span>
+            </div>
+            <div class="report-player-side">White</div>
+          </div>
+          <div class="report-versus-pill">${escapeHtml(report.outcome.result === "Ready" ? "vs" : report.outcome.result)}</div>
+          <div class="report-player-card black${report.outcome.winnerColor === "black" ? " is-winner" : ""}">
+            <div class="report-player-name-row">
+              <span class="report-player-name">${escapeHtml(report.black.name || "Black")}</span>
+            </div>
+            <div class="report-player-side">Black</div>
+          </div>
+        </div>
+        <div class="report-metric-row">
+          <div class="report-metric-card white">
+            <div class="report-metric-value">${report.white.accuracy == null ? "--" : escapeHtml(report.white.accuracy.toFixed(1))}</div>
+            <div class="report-mini-bar">
+              <span class="report-mini-bar-good" style="width:${Math.max(0, Math.min(100, whiteGoodShare)).toFixed(1)}%"></span>
+              <span class="report-mini-bar-bad" style="width:${Math.max(0, Math.min(100, 100 - whiteGoodShare)).toFixed(1)}%"></span>
+            </div>
+            <div class="report-mini-counts"><span>${escapeHtml(String(report.white.goodMoves))}</span><span>${escapeHtml(String(report.white.badMoves))}</span></div>
+          </div>
+          <div class="report-metric-center">Accuracy</div>
+          <div class="report-metric-card black">
+            <div class="report-metric-value">${report.black.accuracy == null ? "--" : escapeHtml(report.black.accuracy.toFixed(1))}</div>
+            <div class="report-mini-bar">
+              <span class="report-mini-bar-good" style="width:${Math.max(0, Math.min(100, blackGoodShare)).toFixed(1)}%"></span>
+              <span class="report-mini-bar-bad" style="width:${Math.max(0, Math.min(100, 100 - blackGoodShare)).toFixed(1)}%"></span>
+            </div>
+            <div class="report-mini-counts"><span>${escapeHtml(String(report.black.goodMoves))}</span><span>${escapeHtml(String(report.black.badMoves))}</span></div>
+          </div>
+        </div>
+        <div class="report-metric-row ratings">
+          <div class="report-metric-card white compact">
+            <div class="report-metric-value">${escapeHtml(report.white.rating || "--")}</div>
+          </div>
+          <div class="report-metric-center">Elo</div>
+          <div class="report-metric-card black compact">
+            <div class="report-metric-value">${escapeHtml(report.black.rating || "--")}</div>
+          </div>
+        </div>
+      </div>
+    `;
+    ui.assistantMessages.style.display = "grid";
+    ui.assistantMessages.innerHTML = [
+      renderReportCategoryTable("Good", "good", ["brilliant", "critical", "best", "excellent", "okay"], report),
+      renderReportCategoryTable("Bad", "bad", ["inaccuracy", "mistake", "blunder"], report),
+    ].join("");
+  }
+
   function renderAssistant() {
+    const showReport = reportRailVisible();
+    syncReportVisibility(showReport || isArcadeMode());
+    if (!isArcadeMode() && !showReport) return;
     if (ui.sendBtn) {
       ui.sendBtn.disabled = true;
       ui.sendBtn.textContent = state.llmWaiting ? "Thinking..." : "Send";
       ui.sendBtn.classList.toggle("loading", state.llmWaiting);
     }
-    ui.coachCard.classList.toggle("waiting", state.llmWaiting || state.importedGameReviewLoading);
-    ui.coachPill.classList.toggle("waiting", state.llmWaiting || state.importedGameReviewLoading);
-    ui.coachPill.style.display = "none";
-
-    if (state.importedGameReviewMode) {
-      syncImportedReviewCoachMessage(false);
-    }
-
-    if (state.workspaceMode === "explore") {
-      ui.coachCard.classList.add("no-messages");
-      ui.assistantMessages.innerHTML = "";
-      ui.assistantMessages.style.display = "none";
-      return;
+    ui.coachCard.classList.toggle(
+      "waiting",
+      state.llmWaiting || state.importedGameReviewLoading,
+    );
+    ui.coachCard.classList.remove("no-messages");
+    if (ui.coachPill) {
+      ui.coachPill.classList.toggle(
+        "waiting",
+        state.llmWaiting || state.importedGameReviewLoading,
+      );
+      ui.coachPill.style.display = "none";
     }
 
     if (isArcadeMode()) {
@@ -3870,32 +4196,31 @@
           : variant.mode === "weirdhorse"
             ? "The opponent is about to move under the current horse law."
             : "The opponent is about to move.";
-      const weirdhorsePanel =
-        variant.mode === "weirdhorse"
-          ? `
-            <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,0.1);padding-top:10px">
-              <strong>Horse Law</strong><br>
-              ${escapeHtml(currentWeirdhorseProfile().label)}<br>
-              <span style="opacity:.8">Offsets:</span> ${escapeHtml(weirdhorseOffsetsText())}<br>
-              <span style="opacity:.8">Reshuffle in:</span> ${escapeHtml(String(pliesUntilNextWeirdhorseShuffle()))} plies
+      if (ui.evalChartMeta) ui.evalChartMeta.textContent = state.arcadeThinking ? "Opponent thinking" : "Arcade";
+      if (ui.reportOverview) {
+        ui.reportOverview.innerHTML = `
+          <div class="report-overview-shell arcade-report-shell">
+            <div class="report-summary-banner">
+              <div>
+                <div class="report-kicker">Arcade status</div>
+                <div class="report-summary-copy">${escapeHtml(variant.description)}</div>
+              </div>
+              <div class="report-status-pill">${escapeHtml(variant.title)}</div>
             </div>
-          `
-          : "";
-      ui.coachCard.classList.remove("no-messages");
+            <div class="report-summary-copy">${escapeHtml(statusCopy)}</div>
+          </div>
+        `;
+      }
       ui.assistantMessages.style.display = "grid";
       ui.assistantMessages.innerHTML = `
-        <div class="msg assistant">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px">
-            <div>
-              <div style="font-size:11px;letter-spacing:.18em;text-transform:uppercase;opacity:.75">Arcade</div>
-              <strong>${escapeHtml(variant.title)}</strong>
-            </div>
-            <div style="padding:6px 10px;border:1px solid rgba(255,255,255,0.14);border-radius:999px;background:rgba(255,255,255,0.04);font-size:12px">
-              ${escapeHtml(variant.aiName)}
+        <section class="report-category-card good">
+          <div class="report-category-head">
+            <div class="report-category-title-wrap">
+              <span class="report-category-dot" aria-hidden="true"></span>
+              <h4>Arcade modes</h4>
             </div>
           </div>
-          <div style="margin-bottom:12px">${escapeHtml(variant.description)}</div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px">
+          <div class="report-category-body arcade-mode-grid">
             ${Object.values(ARCADE_VARIANTS)
               .map(
                 (entry) => `
@@ -3912,35 +4237,12 @@
               )
               .join("")}
           </div>
-          <div style="padding:10px 12px;border:1px solid rgba(255,255,255,0.1);border-radius:14px;background:rgba(255,255,255,0.035)">
-            ${escapeHtml(statusCopy)}
-          </div>
-          ${weirdhorsePanel}
-        </div>
+        </section>
       `;
       return;
     }
 
-    const hasMessages = !!state.llmMessages.length;
-    ui.coachCard.classList.toggle("no-messages", !hasMessages);
-    if (!hasMessages) {
-      ui.assistantMessages.innerHTML = "";
-      ui.assistantMessages.style.display = "none";
-      return;
-    }
-    ui.assistantMessages.style.display = "grid";
-    ui.assistantMessages.innerHTML = state.llmMessages
-      .map(
-        (msg) =>
-          '<div class="msg ' +
-          msg.role +
-          (msg.extraClass ? " " + msg.extraClass : "") +
-          '">' +
-          renderCoachMessageContent(msg) +
-          "</div>",
-      )
-      .join("");
-    ui.assistantMessages.scrollTop = ui.assistantMessages.scrollHeight;
+    renderAnalysisReport();
   }
 
   function renderDragPiece() {
@@ -4332,6 +4634,171 @@
     return classifyLossMove(best, row);
   }
 
+  function reportRailVisible() {
+    return !isArcadeMode() && state.importedPgnReportReady && !state.awaitingImportedPgnAnalysis;
+  }
+
+  function syncReportVisibility(visible = reportRailVisible()) {
+    const rightRail = ui.coachCard?.closest(".right");
+    const workspace = rightRail?.closest(".workspace");
+    if (rightRail) rightRail.style.display = visible ? "" : "none";
+    if (workspace && !isArcadeMode()) {
+      workspace.classList.toggle("report-rail-hidden", !visible);
+      workspace.style.gridTemplateColumns = visible ? "" : "minmax(0, 1fr)";
+    }
+  }
+
+  function moverSidedEval(row, fen) {
+    const evalInfo = whiteCentricEvalInfo(row, fen);
+    if (!evalInfo?.hasEval) return 0;
+    const moverColor = sideToMoveForFen(fen);
+    return moverColor === "white" ? evalInfo.value : -evalInfo.value;
+  }
+
+  function legalMovesForColor(boardFen, color) {
+    try {
+      const parts = String(boardFen || "").split(" ");
+      parts[1] = color;
+      parts[3] = "-";
+      const probe = new Chess(parts.join(" "));
+      return probe.moves({ verbose: true });
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function hangingPiecesForColor(boardMap, attackMap, color) {
+    const detected = detectHangingPieces(boardMap, attackMap);
+    return color === "white" ? detected.white || [] : detected.black || [];
+  }
+
+  function totalHangingValue(entries) {
+    return (entries || []).reduce(
+      (sum, entry) => sum + Math.max(0, Number(entry?.value) || 0),
+      0,
+    );
+  }
+
+  function moveFeelsImportant(row, rows, fen) {
+    const game = readOnlyGameForFen(fen);
+    const parsed = parseUci(row?.bestUci || "");
+    if (!row?.bestUci || !rows?.length || !game || !parsed) return false;
+    if (game.in_check?.()) return false;
+    if (parsed.promotion === "q") return false;
+    const bestEval = moverSidedEval(row, fen);
+    if (bestEval >= 700) return false;
+    if (rows[1] && moverSidedEval(rows[1], fen) >= 700) return false;
+    return true;
+  }
+
+  function newlyExposedOwnSacrificeValue(
+    beforeBoard,
+    afterBoard,
+    moverCode,
+    enemyCode,
+    beforeAttackMap,
+    afterAttackMap,
+  ) {
+    let maxValue = 0;
+    for (const [square, piece] of afterBoard.entries()) {
+      if (!piece || piece.color !== moverCode || piece.type === "k") continue;
+      const afterRisk = computeSEE(afterBoard, square, enemyCode, afterAttackMap);
+      if (afterRisk <= 0) continue;
+      const beforePiece = beforeBoard.get(square);
+      const beforeRisk =
+        beforePiece && beforePiece.color === moverCode
+          ? computeSEE(beforeBoard, square, enemyCode, beforeAttackMap)
+          : 0;
+      if (beforeRisk > 0) continue;
+      maxValue = Math.max(maxValue, PIECE_VALUES[piece.type] || 0);
+    }
+    return maxValue;
+  }
+
+  function looksBrilliant(row, rows, fen) {
+    if (!moveFeelsImportant(row, rows, fen)) return false;
+    const parsed = parseUci(row?.bestUci || "");
+    if (!parsed?.from || !parsed?.to) return false;
+    const afterFen = nextFenForUci(fen, row.bestUci);
+    if (!afterFen) return false;
+    const moverColor = sideToMoveForFen(fen);
+    const moverCode = moverColor === "white" ? "w" : "b";
+    const enemyCode = moverCode === "w" ? "b" : "w";
+    let beforeGame = readOnlyGameForFen(fen);
+    let afterGame = readOnlyGameForFen(afterFen);
+    if (!beforeGame || !afterGame) {
+      try {
+        beforeGame = new Chess(fen);
+        afterGame = new Chess(afterFen);
+      } catch (_) {
+        return false;
+      }
+    }
+    const probe = new Chess(fen);
+    const played = probe.move({
+      from: parsed.from,
+      to: parsed.to,
+      promotion: parsed.promotion || undefined,
+    });
+    if (!played) return false;
+    const beforeBoard = buildBoardMap(beforeGame);
+    const afterBoard = buildBoardMap(afterGame);
+    const movedPiece = beforeBoard.get(parsed.from);
+    if (!movedPiece || movedPiece.type === "k") return false;
+    const bestEval = moverSidedEval(row, fen);
+    const secondEval = rows[1] ? moverSidedEval(rows[1], fen) : bestEval - 1.5;
+    const evalGap = rows[1] ? bestEval - secondEval : 1.5;
+    const beforeAttackMap = buildAttackMap(beforeBoard);
+    const afterAttackMap = buildAttackMap(afterBoard);
+    const afterEntry = getAttackEntry(afterAttackMap, parsed.to);
+    const afterEnemyAttackers = enemyCode === "w" ? afterEntry.white : afterEntry.black;
+    const beforeRisk = computeSEE(beforeBoard, parsed.from, enemyCode, beforeAttackMap);
+    const afterRisk = computeSEE(afterBoard, parsed.to, enemyCode, afterAttackMap);
+    const movedPieceValue = PIECE_VALUES[movedPiece.type] || 0;
+    const capturedTarget = captureTargetFromMove(beforeGame, played);
+    const capturedValue = capturedTarget?.value || 0;
+    const materiallySacrificialCapture = !!played.captured && movedPieceValue > capturedValue;
+    const movedPieceSacrifice =
+      movedPieceValue >= 3 &&
+      afterEnemyAttackers.length > 0 &&
+      beforeRisk <= 0 &&
+      afterRisk > capturedValue &&
+      (!played.captured || movedPieceValue > capturedValue);
+    const newlyExposedValue = newlyExposedOwnSacrificeValue(
+      beforeBoard,
+      afterBoard,
+      moverCode,
+      enemyCode,
+      beforeAttackMap,
+      afterAttackMap,
+    );
+    const heavyPieceSacrifice = newlyExposedValue >= 5;
+    const forkForecast = forkForecastForRow(row, fen);
+    const isCapture = !!played.captured;
+    const isCheck = /[+#]/.test(played.san || "");
+    const tacticalFollowUp = isCheck || !!forkForecast || materiallySacrificialCapture;
+    if (movedPiece.type === "p" && !tacticalFollowUp && !heavyPieceSacrifice)
+      return false;
+    if (!movedPieceSacrifice && !heavyPieceSacrifice && !tacticalFollowUp)
+      return false;
+    if (evalGap < 0.45 && !heavyPieceSacrifice && !movedPieceSacrifice)
+      return false;
+    const beforeTrapped = new Set(
+      detectTrappedPieces(
+        beforeBoard,
+        moverCode,
+        legalMovesForColor(fen, moverCode),
+        beforeAttackMap,
+      ).map((entry) => entry.square),
+    );
+    if (beforeTrapped.has(parsed.from)) return false;
+    return (
+      movedPieceSacrifice ||
+      heavyPieceSacrifice ||
+      (tacticalFollowUp && evalGap >= 0.75)
+    );
+  }
+
   function bestDestinationNodeUci(square, game = currentGame()) {
     const candidates = visibleAnalysisRows(game)
       .map((row, index) => ({ row, index, parsed: parseUci(row.bestUci) }))
@@ -4359,6 +4826,8 @@
     const best = rows[0] || row;
 
     if (index === 0) {
+      const fen = game?.fen?.() || state.current?.fen || "";
+      if (looksBrilliant(row, rows, fen)) return MOVE_CLASS_STYLES.brilliant;
       if (looksCritical(row, rows)) return MOVE_CLASS_STYLES.critical;
       return MOVE_CLASS_STYLES.best;
     }
@@ -4384,6 +4853,7 @@
     if (fullRows.length) return fullRows;
     return liveRows;
   }
+
 
   function classifyDisplayedMove(
     row,
@@ -6825,6 +7295,7 @@
     state.cacheTask = null;
     state.cacheQueueRefreshToken = 0;
     state.awaitingImportedPgnAnalysis = false;
+    state.importedPgnReportReady = false;
     state.importedPgnAnalysisFens = [];
     state.importedPgnAnalysisMoves = [];
     state.importedGameReviewMode = false;
@@ -7247,6 +7718,7 @@
     const pending = progress.total > 0 && !progress.ready;
     state.awaitingImportedPgnAnalysis = pending;
     if (!pending && progress.total) {
+      state.importedPgnReportReady = true;
       state.importedPgnAnalysisFens = [];
       state.importedPgnAnalysisMoves = [];
       clearImportedPgnPlayback(true);
@@ -7693,6 +8165,7 @@
       .filter(Boolean)
       .join(" • ");
     const iconClasses = new Set([
+      MOVE_CLASS_STYLES.brilliant,
       MOVE_CLASS_STYLES.critical,
       MOVE_CLASS_STYLES.inaccuracy,
       MOVE_CLASS_STYLES.mistake,
@@ -8216,6 +8689,7 @@
       setPlayerRatings("", "");
       clearImportedPlayerIdentity();
       clearPlayerClockMap();
+      state.importedPgnReportReady = false;
       resetAssistantSession();
       invalidateGameCache();
       invalidateLegalUciSetCache();
@@ -8403,6 +8877,7 @@
         state.importedGameReviewThinkingTimer = null;
       }
       state.importedGameReviewThinkingDots = 0;
+      state.importedPgnReportReady = false;
       state.importPlaybackNodeIds = pathToNode(cursor).map((node) => node.id);
       state.importPlaybackIndex = 0;
       clearTimeout(state.importPlaybackTimer);
@@ -9003,6 +9478,7 @@
         renderAnalysisFull();
         renderBoardOverlay();
         renderEvalChart();
+        renderAssistant();
       }
     } else if (task?.type === "position") {
       const rows = sanitizeAnalysisRows(
@@ -9042,6 +9518,7 @@
           renderAnalysisFull();
           renderBoardOverlay();
           renderEvalChart();
+          renderAssistant();
         }
         if (isFenOnCurrentPath(task.fen)) renderEvalChart();
         if (
@@ -10560,7 +11037,15 @@
             targets,
           );
           if (!nullMoveForkProbe.hasFollowUpCapture) return;
-          const totalValue = targets.reduce(
+          const captureSquareSet = new Set(nullMoveForkProbe.captureSquares || []);
+          const meaningfulTargets = targets.filter(
+            (target) => target.is_king || captureSquareSet.has(target.square),
+          );
+          if (meaningfulTargets.length < 2) return;
+          const meaningfulValuableTargets = meaningfulTargets.filter(
+            (target) => target.is_king || target.value >= 3,
+          );
+          const totalValue = meaningfulTargets.reduce(
             (sum, target) => sum + (target.is_king ? 100 : target.value),
             0,
           );
@@ -10570,15 +11055,15 @@
             from: move.from,
             to: move.to,
             forking_piece: pieceCode(forkingPiece),
-            targets: targets
+            targets: meaningfulTargets
               .sort(
                 (a, b) =>
                   Number(b.is_king) - Number(a.is_king) || b.value - a.value,
               )
               .slice(0, 4),
-            target_count: targets.length,
-            valuable_target_count: valuableTargets.length,
-            contains_king: valuableTargets.some((target) => target.is_king),
+            target_count: meaningfulTargets.length,
+            valuable_target_count: meaningfulValuableTargets.length,
+            contains_king: meaningfulTargets.some((target) => target.is_king),
             total_target_value: totalValue,
           });
         });
@@ -10611,7 +11096,6 @@
       const probeGame = new Chess(fenParts.join(" "));
       const targetMap = new Map(targetList.map((target) => [target.square, target]));
       const attackMap = buildAttackMap(afterBoard);
-      const attackerValue = PIECE_VALUES[movedPiece.type] || 0;
       const captureSquares = probeGame
         .moves({ verbose: true })
         .filter((move) => {
@@ -10625,8 +11109,7 @@
             movedPiece.color,
             attackMap,
           );
-          if (!(staticExchange > 0 || (target.value || 0) >= attackerValue))
-            return false;
+          if (!(staticExchange > 0)) return false;
           const forwardProbe = new Chess(probeGame.fen());
           const playedForward = forwardProbe.move({
             from: move.from,
@@ -10780,7 +11263,7 @@
             path: path.map((step) => ({ ...step })),
             maneuverSquares,
             followUpCaptureSquares: nullMoveForkProbe.captureSquares,
-            targets: targets
+            targets: meaningfulTargets
               .sort(
                 (a, b) =>
                   Number(b.is_king) - Number(a.is_king) || b.value - a.value,
@@ -16429,4 +16912,6 @@
   }
 
 })();
+
+
 

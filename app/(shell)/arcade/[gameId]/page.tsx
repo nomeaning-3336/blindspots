@@ -80,8 +80,10 @@ export default async function ArcadeGamePage({
             state: game.state,
           }}
           arcadeGamePersistUrl={`/api/arcade/games/${game.id}`}
+          analyzePreferencesPersistUrl="/api/analyze/preferences"
         />
       </div>
     </section>
   );
 }
+

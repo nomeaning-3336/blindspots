@@ -350,6 +350,49 @@ function ensureOverrideStyle() {
         width: 100% !important;
       }
 
+      #analyze-app-host #app .workspace.report-rail-hidden {
+        grid-template-columns: minmax(0, 1fr) !important;
+        justify-content: stretch !important;
+      }
+
+      #analyze-app-host #app .workspace.report-rail-hidden .left {
+        display: grid !important;
+        justify-content: center !important;
+      }
+
+      #analyze-app-host #app .workspace.report-rail-hidden .board-pane {
+        width: 100% !important;
+        max-width: 100% !important;
+        justify-self: stretch !important;
+        margin-inline: 0 !important;
+      }
+
+      #analyze-app-host #app .workspace.report-rail-hidden .board-stage {
+        width: fit-content !important;
+        max-width: 100% !important;
+        justify-self: center !important;
+        margin-inline: auto !important;
+      }
+
+      #analyze-app-host #app .workspace.report-rail-hidden .board-stage {
+        --board-shell-width: min(
+          calc(
+            var(--analyze-viewport-room, 100dvh) -
+              (var(--board-player-strip-size) * 2) -
+              var(--board-options-height) -
+              var(--board-stack-gap) -
+              24px
+          ),
+          calc(
+            100vw -
+              var(--analysis-panel-width) -
+              var(--board-history-width) -
+              72px
+          ),
+          800px
+        ) !important;
+      }
+
       #analyze-app-host #app .board-stage {
         --analysis-panel-width: clamp(400px, 23vw, 560px) !important;
         --board-player-strip-size: 48px !important;
@@ -417,12 +460,55 @@ function ensureOverrideStyle() {
         grid-template-columns: minmax(0, 1fr) var(--app-right-rail-width) !important;
       }
 
+      #analyze-app-host #app .workspace.report-rail-hidden {
+        grid-template-columns: minmax(0, 1fr) !important;
+        justify-content: stretch !important;
+      }
+
+      #analyze-app-host #app .workspace.report-rail-hidden .left {
+        display: grid !important;
+        justify-content: center !important;
+      }
+
+      #analyze-app-host #app .workspace.report-rail-hidden .board-pane {
+        width: 100% !important;
+        max-width: 100% !important;
+        justify-self: stretch !important;
+        margin-inline: 0 !important;
+      }
+
+      #analyze-app-host #app .workspace.report-rail-hidden .board-stage {
+        width: fit-content !important;
+        max-width: 100% !important;
+        justify-self: center !important;
+        margin-inline: auto !important;
+      }
+
       #analyze-app-host #app .right {
         gap: 10px !important;
       }
 
       #analyze-app-host #app .right > .card {
         padding: 10px !important;
+      }
+
+      #analyze-app-host #app .workspace.report-rail-hidden .board-stage {
+        --board-shell-width: min(
+          calc(
+            var(--analyze-viewport-room, 100dvh) -
+              (var(--board-player-strip-size) * 2) -
+              var(--board-options-height) -
+              var(--board-stack-gap) -
+              22px
+          ),
+          calc(
+            100vw -
+              var(--analysis-panel-width) -
+              var(--board-history-width) -
+              68px
+          ),
+          700px
+        ) !important;
       }
 
       #analyze-app-host #app .board-stage {
@@ -666,12 +752,14 @@ export function AnalyzeBridge({
   layoutMode = "default",
   initialArcadeGame = null,
   arcadeGamePersistUrl = null,
+  analyzePreferencesPersistUrl = null,
 }: {
   initialPreferences: AnalyzePreferences | null;
   initialWorkspaceMode: AnalyzeWorkspaceMode;
   layoutMode?: "default" | "arcade-play";
   initialArcadeGame?: ArcadeInitialGameSnapshot | null;
   arcadeGamePersistUrl?: string | null;
+  analyzePreferencesPersistUrl?: string | null;
 }) {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
@@ -720,8 +808,8 @@ export function AnalyzeBridge({
 
     document.body.classList.add("analyze-embedded");
     window.__CHESSVIEW_INITIAL_ANALYZE_PREFERENCES__ = initialPreferences;
-    // Always set persist URL — API returns 401 for unauthenticated users (caught silently)
-    window.__CHESSVIEW_ANALYZE_PREFERENCES_PERSIST_URL__ = "/api/analyze/preferences";
+    window.__CHESSVIEW_ANALYZE_PREFERENCES_PERSIST_URL__ =
+      analyzePreferencesPersistUrl;
     window.__CHESSVIEW_INITIAL_WORKSPACE_MODE__ = initialWorkspaceMode;
     window.__CHESSVIEW_INITIAL_ARCADE_GAME__ = initialArcadeGame;
     window.__CHESSVIEW_ARCADE_GAME_PERSIST_URL__ = arcadeGamePersistUrl;
@@ -790,6 +878,7 @@ export function AnalyzeBridge({
     initialWorkspaceMode,
     initialArcadeGame,
     arcadeGamePersistUrl,
+    analyzePreferencesPersistUrl,
   ]);
 
   return (
@@ -817,6 +906,10 @@ export function AnalyzeBridge({
     </div>
   );
 }
+
+
+
+
 
 
 
