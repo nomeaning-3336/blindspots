@@ -219,7 +219,7 @@
   }
 
   .workspace.report-rail-hidden .board-stage {
-    width: fit-content;
+    width: auto;
     max-width: 100%;
     margin-inline: auto;
   }
@@ -322,7 +322,7 @@
     grid-template-columns:
       minmax(148px, var(--board-history-width))
       calc(var(--board-shell-width) + var(--board-frame-extra-width))
-      minmax(150px, 1fr);
+      minmax(0, 400px);
     grid-template-rows: 1fr;
   }
 
@@ -339,7 +339,7 @@
       grid-template-columns:
         minmax(116px, var(--board-history-width))
         calc(var(--board-shell-width) + var(--board-frame-extra-width))
-        minmax(196px, 1fr);
+        400px;
     }
   }
 
@@ -357,7 +357,7 @@
       grid-template-columns:
         minmax(96px, var(--board-history-width))
         calc(var(--board-shell-width) + var(--board-frame-extra-width))
-        minmax(216px, 1fr);
+        400px;
     }
 
     .board-frame {
@@ -383,7 +383,7 @@
       grid-template-columns:
         minmax(72px, var(--board-history-width))
         calc(var(--board-shell-width) + var(--board-frame-extra-width))
-        minmax(140px, 1fr);
+        400px;
     }
 
     .board-history-opening {
@@ -430,7 +430,7 @@
       grid-template-columns:
         minmax(108px, var(--board-history-width))
         calc(var(--board-shell-width) + var(--board-frame-extra-width))
-        minmax(208px, 1fr);
+        400px;
     }
 
     .board-frame {
@@ -489,6 +489,7 @@
 
   .theme-analysis {
     @apply grid self-stretch rounded-none border;
+    width: 100%;
     flex: 1;
     min-height: 0;
     grid-template-rows: auto 1fr;
@@ -1091,8 +1092,7 @@
   .board-analysis {
     @apply grid min-h-0 min-w-0 self-stretch rounded-none border-2;
     gap: 10px;
-    width: 100%;
-    flex: 1;
+    min-width: 0;
     min-height: 0;
     justify-self: stretch;
     padding: 12px 12px 10px;
@@ -1109,6 +1109,7 @@
 
   .board-analysis-primary {
     @apply grid min-h-0 rounded-none border;
+    width: 100%;
     border-color: var(--stroke-dim);
     background: var(--card-2);
     padding: 8px;
@@ -1133,6 +1134,8 @@
   }
 
   .analysis-list {
+    width: 100%;
+    max-width: 370px;
     align-content: start;
     grid-auto-rows: max-content;
   }
