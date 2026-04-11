@@ -663,6 +663,10 @@
     recentArcadeImportMessage: "",
     recentArcadeImportFetchedAt: 0,
     recentArcadeImportPromise: null,
+    randomGameOfTheDayState: "idle",
+    randomGameOfTheDayGame: null,
+    randomGameOfTheDayFetchedAt: 0,
+    randomGameOfTheDayPromise: null,
     importPlaybackNodeIds: [],
     importPlaybackIndex: 0,
     importPlaybackTimer: null,
@@ -1353,6 +1357,12 @@
               </div>
               <div id="importArcadeList" class="import-recent-list"></div>
             </section>
+            <section class="import-recent-section">
+              <div class="import-section-head">
+                <h4>Random game of the day</h4>
+              </div>
+              <div id="importRandomGameList" class="import-recent-list"></div>
+            </section>
           </div>
         </div>
       </div>
@@ -1479,6 +1489,7 @@
       "submitImportBtn",
       "importRecentList",
       "importArcadeList",
+      "importRandomGameList",
       "exportBtn",
       "exportModal",
       "closeExportBtn",
@@ -1625,6 +1636,18 @@
       if (!target) return;
       event.preventDefault();
       importRecentArcadeGame(target.dataset.arcadeImportId || "");
+    });
+    ui.importRandomGameList.addEventListener("click", (event) => {
+      const refreshButton = event.target.closest("[data-random-game-refresh]");
+      if (refreshButton) {
+        event.preventDefault();
+        ensureRandomGameOfTheDay(true);
+        return;
+      }
+      const target = event.target.closest("[data-random-game-gid]");
+      if (!target) return;
+      event.preventDefault();
+      importRandomGameOfTheDay();
     });
     ui.evalChart.addEventListener("mouseover", (event) => {
       const target = event.target.closest("[data-node-id]");
@@ -2135,7 +2158,7 @@
     if (!moves.length) {
       ui.movePanelMeta.textContent = "No moves yet";
       ui.movePanelList.innerHTML =
-        '<div class="board-history-empty">Empty like my head when thinking of a good move to play...</div>';
+        '<div class="board-history-empty">No moves yet</div>';
       return;
     }
 
@@ -2169,7 +2192,7 @@
       .map(
         (row) => `
           <div class="board-history-row">
-            <span class="board-history-number">${row.moveNumber}</span>
+            <span class="board-history-number">${row.moveNumber}.</span>
             <div class="board-history-cell">${row.white}</div>
             <div class="board-history-cell">${row.black}</div>
           </div>
@@ -3997,10 +4020,8 @@
     const sideToMove = currentTurnColor(game) === "black" ? "Black to move" : "White to move";
     return {
       label: sideToMove,
-      detail: pathLength
-        ? `${pathLength} plies tracked${openingLabel ? ` • ${openingLabel}` : ""}.`
-        : openingLabel || "Fresh board. Play a few moves or import a game.",
-      result: pathLength ? "Live" : "Ready",
+      detail: openingLabel || "",
+      result: "Ready",
       winnerColor: "",
       openingLabel,
     };
@@ -4098,13 +4119,6 @@
     if (ui.evalChartMeta) ui.evalChartMeta.textContent = report.outcome.label;
     ui.reportOverview.innerHTML = `
       <div class="report-overview-shell">
-        <div class="report-summary-banner">
-          <div>
-            <div class="report-kicker">Merged analysis report</div>
-            <div class="report-summary-copy">${escapeHtml(report.outcome.detail)}</div>
-          </div>
-          <div class="report-status-pill">${escapeHtml(report.outcome.result)}</div>
-        </div>
         <div class="report-matchup">
           <div class="report-player-card white${report.outcome.winnerColor === "white" ? " is-winner" : ""}">
             <div class="report-player-name-row">
@@ -4635,7 +4649,12 @@
   }
 
   function reportRailVisible() {
-    return !isArcadeMode() && state.importedPgnReportReady && !state.awaitingImportedPgnAnalysis;
+    if (isArcadeMode()) return false;
+    // Report is visible if imported PGN analysis is complete
+    if (state.importedPgnReportReady && !state.awaitingImportedPgnAnalysis) return true;
+    // Or if we have a restored game tree with cached analysis (after page refresh)
+    if (state.root?.children?.length > 0 && state.positionAnalysisCache?.size > 0 && !state.awaitingImportedPgnAnalysis) return true;
+    return false;
   }
 
   function syncReportVisibility(visible = reportRailVisible()) {
@@ -4715,6 +4734,53 @@
     return maxValue;
   }
 
+  // Compute evaluation from mover's perspective after the move
+  function moverSidedEvalForAfterMove(row, afterFen) {
+    return moverSidedEval(row, afterFen);
+  }
+
+  // Compute total value of opponent's hanging pieces (attacked by mover, not defended)
+  function computeOpponentHangingValue(afterBoard, afterAttackMap, moverCode, enemyCode) {
+    let totalValue = 0;
+    for (const [square, piece] of afterBoard.entries()) {
+      if (!piece || piece.color !== enemyCode) continue;
+      // Get pieces attacking this square
+      const attackers = moverCode === "w"
+        ? (afterAttackMap.get(square)?.white || [])
+        : (afterAttackMap.get(square)?.black || []);
+      if (attackers.length === 0) continue; // not attacked
+      // Check if defended by friendly piece
+      const defenders = moverCode === "w"
+        ? (afterAttackMap.get(square)?.black || [])
+        : (afterAttackMap.get(square)?.white || []);
+      if (defenders.length > 0) continue; // defended
+      // It's hanging!
+      totalValue += PIECE_VALUES[piece.type] || 0;
+    }
+    return totalValue;
+  }
+
+  // Compute total value of our own hanging pieces (attacked by opponent, not defended)
+  function computeOurHangingValue(afterBoard, afterAttackMap, moverCode, enemyCode) {
+    let totalValue = 0;
+    for (const [square, piece] of afterBoard.entries()) {
+      if (!piece || piece.color !== moverCode) continue;
+      // Get pieces attacking this square
+      const attackers = moverCode === "w"
+        ? (afterAttackMap.get(square)?.black || [])
+        : (afterAttackMap.get(square)?.white || []);
+      if (attackers.length === 0) continue; // not attacked
+      // Check if defended by friendly piece
+      const defenders = moverCode === "w"
+        ? (afterAttackMap.get(square)?.white || [])
+        : (afterAttackMap.get(square)?.black || []);
+      if (defenders.length > 0) continue; // defended
+      // It's hanging!
+      totalValue += PIECE_VALUES[piece.type] || 0;
+    }
+    return totalValue;
+  }
+
   function looksBrilliant(row, rows, fen) {
     if (!moveFeelsImportant(row, rows, fen)) return false;
     const parsed = parseUci(row?.bestUci || "");
@@ -4792,10 +4858,22 @@
       ).map((entry) => entry.square),
     );
     if (beforeTrapped.has(parsed.from)) return false;
+    // Check if position after move is losing (wintrchess: "Brilliants cannot leave you in a bad position")
+    const afterEval = moverSidedEvalForAfterMove(row, afterFen);
+    if (afterEval < 0) return false; // must not be losing
+    // Check that opponent has hanging pieces (pieces under attack with no defense)
+    // A "hanging" piece is one that if we capture it, opponent can't recapture profitably
+    const opponentHangingValue = computeOpponentHangingValue(afterBoard, afterAttackMap, moverCode, enemyCode);
+    const ourHangingValue = computeOurHangingValue(afterBoard, afterAttackMap, moverCode, enemyCode);
+    // For brilliant: opponent must have hanging pieces worth at least a pawn
+    // (wintrchess: "threatened opponent material >= yours")
+    if (opponentHangingValue < 3) return false; // must threaten at least a pawn (3 = minor piece)
+    if (ourHangingValue > opponentHangingValue) return false; // don't threaten more than you give
+    // ALL brilliant paths require opponent hanging pieces
     return (
-      movedPieceSacrifice ||
-      heavyPieceSacrifice ||
-      (tacticalFollowUp && evalGap >= 0.75)
+      (movedPieceSacrifice && opponentHangingValue >= 3) ||
+      (heavyPieceSacrifice && opponentHangingValue >= 3) ||
+      (tacticalFollowUp && evalGap >= 0.75 && opponentHangingValue >= 3)
     );
   }
 
@@ -6359,8 +6437,10 @@
     ui.importModal.setAttribute("aria-hidden", "false");
     renderRecentImportSection();
     renderRecentArcadeImportSection();
+    renderRandomGameOfTheDaySection();
     ensureRecentImportGames();
     ensureRecentArcadeImportGames();
+    ensureRandomGameOfTheDay();
     requestAnimationFrame(() => ui.importInput?.focus());
   }
 
@@ -6575,6 +6655,61 @@
       .join("");
   }
 
+  function renderRandomGameOfTheDaySection() {
+    if (!ui.importRandomGameList) return;
+
+    const stateKey = state.randomGameOfTheDayState;
+
+    if (stateKey === "idle" || stateKey === "loading") {
+      ui.importRandomGameList.innerHTML = `
+        <div class="import-recent-empty">
+          <p>Loading random game of the day…</p>
+        </div>
+      `;
+      return;
+    }
+
+    if (stateKey === "error") {
+      ui.importRandomGameList.innerHTML = `
+        <div class="import-recent-empty">
+          <p>${escapeHtml(state.randomGameOfTheDayMessage || "Game of the day could not be loaded.")}</p>
+          <button class="btn" type="button" data-random-game-refresh="true">Try Again</button>
+        </div>
+      `;
+      return;
+    }
+
+    if (stateKey !== "ready" || !state.randomGameOfTheDayGame) {
+      ui.importRandomGameList.innerHTML = `
+        <div class="import-recent-empty">
+          <p>No game of the day available.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const game = state.randomGameOfTheDayGame;
+    const title = game.title || "Game of the Day";
+    const meta = game.players || "";
+    const sub = game.date || "";
+
+    ui.importRandomGameList.innerHTML = `
+      <button
+        type="button"
+        class="import-recent-game"
+        data-random-game-gid="${escapeHtml(game.gid)}"
+        title="Import this game"
+      >
+        <span class="import-recent-game-top">
+          <span class="import-recent-game-title">${escapeHtml(title)}</span>
+          <span class="import-recent-game-action">Import</span>
+        </span>
+        <span class="import-recent-game-meta">${escapeHtml(meta)}</span>
+        <span class="import-recent-game-sub">${escapeHtml(sub)}</span>
+      </button>
+    `;
+  }
+
   async function ensureRecentImportGames(force = false) {
     const isFresh =
       state.recentImportState !== "idle" &&
@@ -6775,6 +6910,89 @@
     return requestPromise;
   }
 
+  const RANDOM_GAME_CACHE_MS = 60 * 60 * 1000; // 1 hour cache
+
+  async function ensureRandomGameOfTheDay(force = false) {
+    const isFresh =
+      state.randomGameOfTheDayState !== "idle" &&
+      Date.now() - state.randomGameOfTheDayFetchedAt < RANDOM_GAME_CACHE_MS;
+    if (!force && isFresh) {
+      renderRandomGameOfTheDaySection();
+      return;
+    }
+    if (state.randomGameOfTheDayPromise) return state.randomGameOfTheDayPromise;
+
+    state.randomGameOfTheDayState = "loading";
+    renderRandomGameOfTheDaySection();
+
+    let requestPromise = null;
+    requestPromise = fetchJsonWithRetry(
+      "/api/analyze/random-game-of-the-day",
+      {
+        credentials: "same-origin",
+        cache: "no-store",
+      },
+      {
+        attempts: 2,
+        retryStatuses: [404, 500],
+        retryOnInvalidJson: true,
+        retryDelayMs: 300,
+      },
+    )
+      .then(async ({ response, payload }) => {
+        const data = payload;
+        if (!data || typeof data !== "object") {
+          throw new Error("Game of the day response was invalid.");
+        }
+        if (!response.ok && data.status !== "error") {
+          throw new Error(`Game of the day request failed: ${response.status}`);
+        }
+
+        state.randomGameOfTheDayFetchedAt = Date.now();
+
+        if (data.status === "error" || !data.game) {
+          state.randomGameOfTheDayState = "error";
+          state.randomGameOfTheDayMessage =
+            typeof data.message === "string"
+              ? data.message
+              : "Game of the day could not be loaded.";
+          state.randomGameOfTheDayGame = null;
+        } else {
+          state.randomGameOfTheDayState = "ready";
+          state.randomGameOfTheDayGame = {
+            gid: data.game.gid,
+            title: data.game.title,
+            players: data.game.players,
+            pgn: data.game.pgn,
+            date: data.game.date,
+          };
+        }
+
+        renderRandomGameOfTheDaySection();
+        return state.randomGameOfTheDayGame;
+      })
+      .catch((error) => {
+        console.warn("Random game of the day failed", error);
+        state.randomGameOfTheDayFetchedAt = Date.now();
+        state.randomGameOfTheDayState = "error";
+        state.randomGameOfTheDayGame = null;
+        state.randomGameOfTheDayMessage =
+          error instanceof Error && error.message
+            ? error.message
+            : "Game of the day could not be loaded.";
+        renderRandomGameOfTheDaySection();
+        return null;
+      })
+      .finally(() => {
+        if (state.randomGameOfTheDayPromise === requestPromise) {
+          state.randomGameOfTheDayPromise = null;
+        }
+      });
+
+    state.randomGameOfTheDayPromise = requestPromise;
+    return requestPromise;
+  }
+
   async function importRecentGame(gameId) {
     const game = state.recentImportGames.find((entry) => entry.id === gameId);
     if (!game?.pgn) {
@@ -6859,6 +7077,24 @@
     } else {
       restartSearchIfNeeded();
     }
+    closeImportModal();
+  }
+
+  async function importRandomGameOfTheDay() {
+    const game = state.randomGameOfTheDayGame;
+    if (!game?.pgn) {
+      state.engineStatus = "Import failed";
+      state.engineHint = "That game could not be imported.";
+      renderEngineStatus();
+      return;
+    }
+
+    const imported = await loadFenOrPgnText(game.pgn);
+    if (!imported) return;
+
+    state.engineStatus = "Game imported";
+    state.engineHint = "Game of the day loaded for analysis.";
+    renderEngineStatus();
     closeImportModal();
   }
 
