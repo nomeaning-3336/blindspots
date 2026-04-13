@@ -5199,7 +5199,7 @@
     )
       return true;
     return (
-      danger.singlePlayableMove &&
+      danger.nearBestCount <= 1 &&
       (danger.secondLoss >= 0.085 || danger.seriousMistakes >= 2)
     );
   }
