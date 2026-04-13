@@ -5492,7 +5492,8 @@
   }
 
   function onSearchSettingChange() {
-    if (state.limitKind === "depth") {
+    const kind = ui.limitKind.value === "depth" ? "depth" : "time";
+    if (kind === "depth") {
       state.depthLimitValue = clampInt(
         ui.limitValue.value,
         1,
@@ -5507,7 +5508,7 @@
         state.timeLimitValue,
       );
     }
-    state.limitKind = ui.limitKind.value === "depth" ? "depth" : "time";
+    state.limitKind = kind;
     state.limitValue =
       state.limitKind === "depth"
         ? state.depthLimitValue
