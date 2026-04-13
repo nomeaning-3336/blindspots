@@ -1987,7 +1987,7 @@
                 : `No legal moves from ${state.selectedSquare}`
             : visibleCount
               ? `${visibleCount} ${visibleCount === 1 ? "line" : "lines"}`
-              : "Waiting for engine info";
+              : "Waiting for engine evaluation";
     ui.haltBtn.textContent = state.engineLinesHidden
       ? "Show lines"
       : "Hide lines";
@@ -3551,7 +3551,7 @@
       !terminal &&
       (!state.selectedSquare || focusMoves.length)
     ) {
-      ui.analysisList.innerHTML = `<div class="empty" aria-label="Engine loading"><div class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></div></div>`;
+      ui.analysisList.innerHTML = `<div class="empty" aria-label="Engine loading"><div class="empty-copy">Waiting for engine evaluation</div><div class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></div></div>`;
       return;
     }
     const panelRows = panelAnalysisRows(game);
@@ -5529,13 +5529,16 @@
       state.threads,
     );
     syncSearchSettingsControls();
-    state.analysisRows = Array.from(state.analysisMap.values())
-      .sort((a, b) => a.multipv - b.multipv)
-      .slice(0, activeAnalysisLimit());
+    // Clear stale analysis rows so the old rows don't flash while new search starts
+    state.analysisMap.clear();
+    analysisByUci.clear();
+    state.analysisRows = [];
+    renderAnalysis();
+    renderAnalysisFull();
+    renderEvalBar();
     snapshotFullPositionAnalysis();
     saveSettings();
     renderMeta();
-    renderAnalysisFull();
     renderBoardOverlay();
     applyUpdatedSearchSettings();
     restartSearchIfNeeded();
