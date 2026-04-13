@@ -525,9 +525,6 @@
   const _openingWikiLookupPromiseCache = new Map();
   const _wikibookFetchPromiseCache = new Map();
   const _analysisDisplayClassCache = new Map();
-  const _forkForecastCache = new Map();
-  const FORK_ICON_URL =
-    "https://lichess1.org/assets/hashed/fork.03f4a983.svg";
 
   const state = {
     orientation: "white",
@@ -1233,7 +1230,6 @@
                   </div>
                   <div class="board-history-head">
                     <h2>Moves</h2>
-                    <span id="movePanelMeta">No moves yet</span>
                   </div>
                   <div id="movePanelList" class="board-history-list"></div>
                 </aside>
@@ -1773,6 +1769,7 @@
       fullPositionRowsForFen,
       analysisRowsForFen,
       classificationForFenAndUci,
+      brilliantDiagnosticsForFenAndUci,
       classifyAnalysisMove,
       displayedMoveClassForUci,
       moveDangerProfile,
@@ -1782,7 +1779,6 @@
       classifyLossMove,
       currentGame,
       analysisVersionForFen,
-      forkForecastForRow,
       tacticalSignalsForCurrentLine,
       positionAnalysisCache: state.positionAnalysisCache,
       playedMoveAnalysisCache: state.playedMoveAnalysisCache,
@@ -2995,7 +2991,14 @@
   ) {
     if (!targetEl) return;
     const isWhite = color === "white";
-    const capturedCounts = isWhite ? capturedByWhite : capturedByBlack;
+    const own = isWhite ? capturedByWhite : capturedByBlack;
+    const opp = isWhite ? capturedByBlack : capturedByWhite;
+    const order = ["q", "r", "b", "n", "p"];
+    const netCounts = {};
+    for (const type of order) {
+      netCounts[type] = Math.max(0, (own[type] || 0) - (opp[type] || 0));
+    }
+    const capturedCounts = netCounts;
     const capturedColor = isWhite ? "black" : "white";
     const importedName = isWhite
       ? state.importedWhitePlayerName
@@ -3299,12 +3302,6 @@
       const nodeLabelClass = nodeLabel.startsWith("\u2212")
         ? "node-label node-label-negative"
         : "node-label";
-      const allowForkPreview =
-        !moveClass || isRecommendableMoveClass(moveClass);
-      const forkForecast =
-        allowForkPreview && activeForkPreviewUci === row.bestUci
-          ? forkForecastForRow(row, state.current?.fen || "")
-          : null;
       lineVisuals.push(
         `<line class="${animateDelta.trim()}" x1="${start.x}" y1="${start.y}" x2="${frontSegmentStart.x}" y2="${frontSegmentStart.y}" stroke="${a}" stroke-linecap="butt" stroke-width="${thick}" opacity="1"/>`,
       );
@@ -3317,72 +3314,6 @@
       hits.push(
         `<g><line data-uci="${row.bestUci}" data-hit="line" x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}" stroke="transparent" stroke-linecap="round" stroke-width="${Math.max(thick + 18, 28)}"></line><circle data-uci="${row.bestUci}" data-hit="node" cx="${end.x}" cy="${end.y}" r="${radius + 10}" fill="transparent"></circle></g>`,
       );
-      if (forkForecast?.targets?.length) {
-        const forkColor = resolveThemeColor(
-          patternThemeColor("fork"),
-          "var(--app-accent)",
-        );
-        const forkOrigin = squareCenter(forkForecast.to);
-        const maneuverSquares = Array.isArray(forkForecast.maneuverSquares)
-          ? forkForecast.maneuverSquares.filter(Boolean)
-          : [forkForecast.from, forkForecast.to].filter(Boolean);
-        const futureDepth = Number(forkForecast.ply || 0);
-        const pathOpacity = Math.max(0.24, 0.52 - futureDepth * 0.08);
-        for (let stepIndex = 0; stepIndex < maneuverSquares.length - 1; stepIndex += 1) {
-          const segmentStartSquare = maneuverSquares[stepIndex];
-          const segmentEndSquare = maneuverSquares[stepIndex + 1];
-          const segmentStartBase = squareCenter(segmentStartSquare);
-          const segmentEndBase = squareCenter(segmentEndSquare);
-          let segmentStart = segmentStartBase;
-          let segmentEnd = segmentEndBase;
-          if (segmentStartSquare === parsed.to) {
-            segmentStart = offsetPointTowards(
-              segmentStartBase,
-              segmentEndBase,
-              Math.max(nodeRadius + 8, 20),
-            );
-          }
-          if (segmentEndSquare === parsed.to) {
-            segmentEnd = offsetPointTowards(
-              segmentEndBase,
-              segmentStartBase,
-              Math.max(nodeRadius + 8, 20),
-            );
-          }
-          const isLastSegment = stepIndex === maneuverSquares.length - 2;
-          const segmentOpacity = Math.max(
-            0.2,
-            pathOpacity - (maneuverSquares.length - stepIndex - 2) * 0.08,
-          );
-          const segmentStroke = overlayGradientStroke(
-            segmentStart,
-            segmentEnd,
-            stepIndex === 0 ? a : mixCssColors(a, forkColor, 0.28),
-            forkColor,
-          );
-          lineVisuals.push(
-            `<line class="${isLastSegment ? "fork-path" : "fork-preview-path"}${animateDelta}" x1="${segmentStart.x}" y1="${segmentStart.y}" x2="${segmentEnd.x}" y2="${segmentEnd.y}" stroke="${segmentStroke}" stroke-width="${isLastSegment ? 3.2 : 2.2}" stroke-linecap="round" stroke-dasharray="${isLastSegment ? "6 8" : "3 9"}" opacity="${segmentOpacity.toFixed(2)}"/>`,
-          );
-        }
-        forkForecast.targets.forEach((target, targetIndex) => {
-          const targetCenter = squareCenter(target.square);
-          const rayStart = offsetPointTowards(
-            forkOrigin,
-            targetCenter,
-            Math.max(nodeRadius + 6, 18),
-          );
-          const rayEnd = offsetPointTowards(targetCenter, forkOrigin, 10);
-          const rayStroke = overlayGradientStroke(
-            rayStart,
-            rayEnd,
-            mixCssColors(a, forkColor, 0.2),
-            forkColor,
-          );
-          lineVisuals.push(
-            `<line class="fork-ray${animateDelta}" x1="${rayStart.x}" y1="${rayStart.y}" x2="${rayEnd.x}" y2="${rayEnd.y}" stroke="${rayStroke}" stroke-width="4.4" stroke-linecap="round" stroke-dasharray="6 5" opacity="${Math.max(0.5, 0.88 - futureDepth * 0.12).toFixed(2)}"/>`,
-          );
-        });
-      }
     });
 
     ui.overlaySvg.innerHTML = `${lineDefs.length ? `<defs>${lineDefs.join("")}</defs>` : ""}${lineVisuals.join("")}`;
@@ -3530,18 +3461,6 @@
     return rgbaFromHex(moveClass?.color || "var(--app-accent)", alpha);
   }
 
-  function forkBadgeLabel(forkForecast) {
-    const ply = Number(forkForecast?.ply);
-    if (!Number.isFinite(ply) || ply <= 0) return "Fork";
-    return `Fork in ${ply}`;
-  }
-
-  function forkBadgeTitle(forkForecast) {
-    const ply = Number(forkForecast?.ply);
-    if (!Number.isFinite(ply) || ply <= 0) return "Creates fork";
-    return `Fork in ${ply} ${ply === 1 ? "ply" : "plies"}`;
-  }
-
   function joinLabels(labels) {
     const parts = (labels || []).filter(Boolean);
     if (!parts.length) return "";
@@ -3574,46 +3493,7 @@
   }
 
   function tacticalSignalsForCurrentLine(game = currentGame()) {
-    const { row, rows, index, activeUci } = activeTacticalPreviewRow(game);
-    if (!row || !activeUci) return [];
-    const moveClass = classifyDisplayedMove(row, index, rows, game);
-    if (moveClass && !isRecommendableMoveClass(moveClass)) return [];
-    const baseFen = state.current?.fen || "";
-    const forkForecast = forkForecastForRow(row, baseFen);
-    if (!forkForecast) return [];
-    const pathSquares = Array.isArray(forkForecast.maneuverSquares)
-      ? forkForecast.maneuverSquares.filter(Boolean)
-      : [forkForecast.from, forkForecast.to].filter(Boolean);
-    const targets = (forkForecast.targets || [])
-      .map((target) => describeTacticalTarget(target))
-      .filter(Boolean)
-      .slice(0, 3);
-    const pathLabel =
-      pathSquares.length >= 2
-        ? pathSquares.join(" -> ")
-        : forkForecast.to || pathSquares[0] || "";
-    const activeLineLabel =
-      analysisLeadText(row, baseFen || state.current?.fen || START_FEN) ||
-      row.bestUci ||
-      "";
-    const summary =
-      pathSquares.length >= 2
-        ? `Path ${pathLabel}.`
-        : `Fork lands on ${forkForecast.to}.`;
-    const attackerLabel = pieceName(String(forkForecast.attackerType || "").trim().toLowerCase() || "piece");
-    const details = targets.length
-      ? `From ${forkForecast.to}, the ${attackerLabel} attacks ${joinLabels(targets)}.`
-      : `From ${forkForecast.to}, the ${attackerLabel} creates a fork threat.`;
-    return [
-      {
-        kind: "fork",
-        title: activeLineLabel,
-        badgeLabel: forkBadgeLabel(forkForecast),
-        badgeTitle: forkBadgeTitle(forkForecast),
-        summary,
-        details,
-      },
-    ];
+    return [];
   }
 
   function looksLikeRawUci(text) {
@@ -3693,6 +3573,7 @@
           : `<div class="empty" aria-label="Engine loading"><div class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></div></div>`;
       return;
     }
+    const maxRankCols = Math.max(2, String(panelRows.length).length + 1);
     ui.analysisList.innerHTML = panelRows
       .map(({ row, blurred }, index) => {
         const active = state.hoveredUci === row.bestUci ? " hover" : "";
@@ -3701,11 +3582,6 @@
         const pv = row.restSan || "";
         const stats = `${row.evalText} · d${row.depth || "-"} · ${formatNodes(row.nodes)}`;
         const moveClass = classifyDisplayedMove(row, index, visibleRows, game);
-        const allowForkBadge =
-          !moveClass || isRecommendableMoveClass(moveClass);
-        const forkForecast = allowForkBadge
-          ? forkForecastForRow(row, baseFen)
-          : null;
         const visualClass = moveClass || {
           color: "var(--app-muted-soft)",
           soft: "var(--app-surface-subtle)",
@@ -3714,10 +3590,7 @@
         const classBadge = moveClass
           ? `<span class="analysis-class" title="${escapeHtml(moveClass.label)}"><img class="analysis-class-icon" src="${escapeHtml(moveClass.icon || "")}" alt="${escapeHtml(moveClass.label)} icon"><span>${escapeHtml(moveClass.label)}</span></span>`
           : '<span class="analysis-class" aria-hidden="true" style="visibility:hidden"></span>';
-        const forkBadge = forkForecast
-          ? `<span class="fork-badge" title="${escapeHtml(forkBadgeTitle(forkForecast))}"><img class="fork-badge-icon" src="${escapeHtml(FORK_ICON_URL)}" alt=""><span>${escapeHtml(forkBadgeLabel(forkForecast))}</span></span>`
-          : "";
-        return `<div class="analysis-row${active}${blurClass}" data-uci="${row.bestUci}" tabindex="0" style="--accent:${visualClass.color};--accent-soft:${visualClass.soft};--accent-border:${visualClass.border};--lead-cols:${maxLeadCols}"><div class="analysis-main"><span class="analysis-rank">#${index + 1}</span><strong class="analysis-san">${escapeHtml(lead)}</strong><span class="analysis-badges">${classBadge}${forkBadge}</span><span class="analysis-stats">${escapeHtml(stats)}</span></div><div class="analysis-pv${pv ? "" : " dim"}">${escapeHtml(pv || lead)}</div></div>`;
+        return `<div class="analysis-row${active}${blurClass}" data-uci="${row.bestUci}" tabindex="0" style="--accent:${visualClass.color};--accent-soft:${visualClass.soft};--border:${visualClass.border};--lead-cols:${maxLeadCols};--rank-cols:${maxRankCols}"><div class="analysis-main"><span class="analysis-rank">#${index + 1}</span><strong class="analysis-san">${escapeHtml(lead)}</strong><span class="analysis-badges">${classBadge}</span><span class="analysis-stats">${escapeHtml(stats)}</span></div><div class="analysis-pv${pv ? "" : " dim"}">${escapeHtml(pv || lead)}</div></div>`;
       })
       .join("");
   }
@@ -3952,6 +3825,60 @@
     return 72;
   }
 
+  // Estimated ELO from analysis metrics.
+  // Based on multi-feature regression research:
+  // - ACPL (average centipawn loss) is the primary predictor
+  // - Accuracy % (move quality) adds signal
+  // - Blunder rate (moves ≥1.0 pawn loss) is highly predictive
+  function estimateEloFromStats(stats) {
+    if (!stats || stats.totalMoves < 5) return null;
+    const { accuracy, counts, totalMoves } = stats;
+
+    // Average centipawn loss per move classification
+    // Weighted by frequency of each class
+    const avgCpLossPerClass = {
+      brilliant: 5,
+      critical: 15,
+      best: 10,
+      excellent: 25,
+      okay: 60,
+      inaccuracy: 140,
+      mistake: 260,
+      blunder: 450,
+    };
+    let totalCpLoss = 0;
+    let moveCount = 0;
+    for (const [key, count] of Object.entries(counts)) {
+      if (avgCpLossPerClass[key] != null && count > 0) {
+        totalCpLoss += avgCpLossPerClass[key] * count;
+        moveCount += count;
+      }
+    }
+    if (moveCount === 0) return null;
+    const acpl = totalCpLoss / moveCount;
+
+    // Blunder and mistake rates
+    const blunderRate = (counts.blunder || 0) / totalMoves;
+    const mistakeRate = (counts.mistake || 0) / totalMoves;
+    const inaccuracyRate = (counts.inaccuracy || 0) / totalMoves;
+    const goodRate = (stats.goodMoves || 0) / totalMoves;
+
+    // Primary formula: exponential decay from ACPL
+    // Calibrated so ~1500 at 75 ACPL, ~2000 at 30 ACPL, ~2500 at 10 ACPL
+    let elo = 2850 * Math.exp(-0.0065 * acpl);
+
+    // Adjust down for high blunder rate (each 10% blunder rate ≈ -80 Elo)
+    elo -= blunderRate * 800;
+
+    // Adjust for accuracy (each 10% below 90% accuracy ≈ -50 Elo)
+    if (accuracy != null && accuracy < 90) {
+      elo -= (90 - accuracy) * 5;
+    }
+
+    // Clamp to reasonable range
+    return Math.round(Math.max(0, Math.min(3000, elo)));
+  }
+
   function initialReportPlayerStats(color) {
     return {
       color,
@@ -3961,6 +3888,7 @@
       badMoves: 0,
       accuracyTotal: 0,
       accuracy: null,
+      estimatedElo: null,
       counts: {
         brilliant: 0,
         critical: 0,
@@ -4052,6 +3980,7 @@
       stats.accuracy = stats.totalMoves
         ? Number((stats.accuracyTotal / stats.totalMoves).toFixed(1))
         : null;
+      stats.estimatedElo = estimateEloFromStats(stats);
     });
     return {
       game,
@@ -4074,6 +4003,8 @@
     const isWinner = winnerColor === stats.color;
     const accuracyText =
       stats.accuracy == null ? "--" : `${escapeHtml(stats.accuracy.toFixed(1))}%`;
+    const estimatedEloText =
+      stats.estimatedElo != null ? String(stats.estimatedElo) : null;
     return `
       <section class="report-player-summary ${escapeHtml(stats.color)}${isWinner ? " is-winner" : ""}">
         <div class="report-player-summary-head">
@@ -4093,8 +4024,8 @@
             <div class="report-mini-counts"><span>${escapeHtml(String(stats.goodMoves))}</span><span>${escapeHtml(String(stats.badMoves))}</span></div>
           </div>
           <div class="report-player-stat compact">
-            <div class="report-player-stat-label">Elo</div>
-            <div class="report-metric-value">${escapeHtml(stats.rating || "--")}</div>
+            <div class="report-player-stat-label">ELO</div>
+            <div class="report-metric-value">${estimatedEloText ? escapeHtml(estimatedEloText) : escapeHtml(stats.rating || "--")}</div>
           </div>
         </div>
       </section>
@@ -4642,8 +4573,8 @@
     if (isArcadeMode()) return false;
     // Report is visible if imported PGN analysis is complete
     if (state.importedPgnReportReady && !state.awaitingImportedPgnAnalysis) return true;
-    // Or if we have a restored game tree with cached analysis (after page refresh)
-    if (state.root?.children?.length > 0 && state.positionAnalysisCache?.size > 0 && !state.awaitingImportedPgnAnalysis) return true;
+    // Or if we have a restored imported PGN game tree with cached analysis (after page refresh)
+    if (Array.isArray(state.importPlaybackNodeIds) && state.importPlaybackNodeIds.length > 0 && state.positionAnalysisCache?.size > 0 && !state.awaitingImportedPgnAnalysis) return true;
     return false;
   }
 
@@ -4694,9 +4625,12 @@
     if (!row?.bestUci || !rows?.length || !game || !parsed) return false;
     if (game.in_check?.()) return false;
     if (parsed.promotion === "q") return false;
-    const bestEval = moverSidedEval(row, fen);
-    if (bestEval >= 700) return false;
-    if (rows[1] && moverSidedEval(rows[1], fen) >= 700) return false;
+    const bestMate = Number(row?.mate || 0);
+    const secondMate = Number(rows?.[1]?.mate || 0);
+    const secondEval = rows[1] ? moverSidedEval(rows[1], fen) : null;
+    const alternativeIsAlsoWinningMate = bestMate > 0 && secondMate > 0;
+    if (!alternativeIsAlsoWinningMate && secondEval != null && secondEval >= 700)
+      return false;
     return true;
   }
 
@@ -4771,12 +4705,48 @@
     return totalValue;
   }
 
-  function looksBrilliant(row, rows, fen) {
-    if (!moveFeelsImportant(row, rows, fen)) return false;
+  function computeSafeThreatSummary(boardFen, boardMap, attackerCode, attackMap = null) {
+    try {
+      const moves = legalMovesForColor(boardFen, attackerCode);
+      const resolvedAttackMap = attackMap || buildAttackMap(boardMap);
+      const seenSquares = new Set();
+      let totalCp = 0;
+      let maxCp = 0;
+      let targetCount = 0;
+      for (const move of moves) {
+        const flags = String(move?.flags || "");
+        if (!move?.to || (!move.captured && !flags.includes("e"))) continue;
+        if (seenSquares.has(move.to)) continue;
+        const targetPiece = boardMap.get(move.to);
+        const targetType = move.captured || (flags.includes("e") ? "p" : targetPiece?.type);
+        if (!targetType || targetType === "k") continue;
+        if (targetPiece && targetPiece.color === attackerCode) continue;
+        if (computeSEE(boardMap, move.to, attackerCode, resolvedAttackMap) <= 0)
+          continue;
+        const valueCp = pieceValueCp(targetType);
+        seenSquares.add(move.to);
+        targetCount += 1;
+        totalCp += valueCp;
+        maxCp = Math.max(maxCp, valueCp);
+      }
+      return { totalCp, maxCp, targetCount };
+    } catch (_) {
+      return { totalCp: 0, maxCp: 0, targetCount: 0 };
+    }
+  }
+
+  function brilliantDiagnostics(row, rows, fen) {
+    if (!moveFeelsImportant(row, rows, fen)) {
+      return { result: false, reason: "not-important" };
+    }
     const parsed = parseUci(row?.bestUci || "");
-    if (!parsed?.from || !parsed?.to) return false;
+    if (!parsed?.from || !parsed?.to) {
+      return { result: false, reason: "bad-uci" };
+    }
     const afterFen = nextFenForUci(fen, row.bestUci);
-    if (!afterFen) return false;
+    if (!afterFen) {
+      return { result: false, reason: "no-after-fen" };
+    }
     const moverColor = sideToMoveForFen(fen);
     const moverCode = moverColor === "white" ? "w" : "b";
     const enemyCode = moverCode === "w" ? "b" : "w";
@@ -4787,7 +4757,7 @@
         beforeGame = new Chess(fen);
         afterGame = new Chess(afterFen);
       } catch (_) {
-        return false;
+        return { result: false, reason: "bad-game" };
       }
     }
     const probe = new Chess(fen);
@@ -4796,49 +4766,67 @@
       to: parsed.to,
       promotion: parsed.promotion || undefined,
     });
-    if (!played) return false;
+    if (!played) {
+      return { result: false, reason: "illegal-move" };
+    }
     const beforeBoard = buildBoardMap(beforeGame);
     const afterBoard = buildBoardMap(afterGame);
     const movedPiece = beforeBoard.get(parsed.from);
-    if (!movedPiece || movedPiece.type === "k") return false;
-    const bestEval = moverSidedEval(row, fen);
-    const secondEval = rows[1] ? moverSidedEval(rows[1], fen) : bestEval - 1.5;
-    const evalGap = rows[1] ? bestEval - secondEval : 1.5;
+    const movedPieceAfter = afterBoard.get(parsed.to);
+    if (
+      !movedPiece ||
+      !movedPieceAfter ||
+      movedPieceAfter.color !== moverCode ||
+      movedPiece.type === "k" ||
+      movedPiece.type === "p"
+    ) {
+      return { result: false, reason: "piece-not-eligible" };
+    }
     const beforeAttackMap = buildAttackMap(beforeBoard);
     const afterAttackMap = buildAttackMap(afterBoard);
-    const afterEntry = getAttackEntry(afterAttackMap, parsed.to);
-    const afterEnemyAttackers = enemyCode === "w" ? afterEntry.white : afterEntry.black;
     const beforeRisk = computeSEE(beforeBoard, parsed.from, enemyCode, beforeAttackMap);
-    const afterRisk = computeSEE(afterBoard, parsed.to, enemyCode, afterAttackMap);
-    const movedPieceValue = PIECE_VALUES[movedPiece.type] || 0;
+    const afterRisk = bestLegalExchangeGainOnSquare(afterFen, parsed.to);
+    const enemyCanCaptureMovedPiece = afterRisk > 0;
+    if (!enemyCanCaptureMovedPiece) {
+      return {
+        result: false,
+        reason: "not-capturable",
+        beforeRisk,
+        afterRisk,
+      };
+    }
+    const exchangeOfferCp = afterRisk;
+    if (exchangeOfferCp < 100) {
+      return {
+        result: false,
+        reason: "not-new-sacrifice",
+        beforeRisk,
+        afterRisk,
+        exchangeOfferCp,
+      };
+    }
     const capturedTarget = captureTargetFromMove(beforeGame, played);
-    const capturedValue = capturedTarget?.value || 0;
-    const materiallySacrificialCapture = !!played.captured && movedPieceValue > capturedValue;
-    const movedPieceSacrifice =
-      movedPieceValue >= 3 &&
-      afterEnemyAttackers.length > 0 &&
-      beforeRisk <= 0 &&
-      afterRisk > capturedValue &&
-      (!played.captured || movedPieceValue > capturedValue);
-    const newlyExposedValue = newlyExposedOwnSacrificeValue(
-      beforeBoard,
-      afterBoard,
-      moverCode,
-      enemyCode,
-      beforeAttackMap,
-      afterAttackMap,
-    );
-    const heavyPieceSacrifice = newlyExposedValue >= 5;
-    const forkForecast = forkForecastForRow(row, fen);
-    const isCapture = !!played.captured;
-    const isCheck = /[+#]/.test(played.san || "");
-    const tacticalFollowUp = isCheck || !!forkForecast || materiallySacrificialCapture;
-    if (movedPiece.type === "p" && !tacticalFollowUp && !heavyPieceSacrifice)
-      return false;
-    if (!movedPieceSacrifice && !heavyPieceSacrifice && !tacticalFollowUp)
-      return false;
-    if (evalGap < 0.45 && !heavyPieceSacrifice && !movedPieceSacrifice)
-      return false;
+    const movedPieceValueCp = pieceValueCp(movedPiece.type);
+    const capturedValueCp = pieceValueCp(capturedTarget?.type || "");
+    const sacrificeNetCp = afterRisk - capturedValueCp;
+    const clearMaterialSacrifice =
+      movedPieceValueCp > capturedValueCp && sacrificeNetCp >= 100;
+    const exchangeSacrifice = !clearMaterialSacrifice && exchangeOfferCp >= 100;
+    if (!clearMaterialSacrifice && !exchangeSacrifice) {
+      return {
+        result: false,
+        reason: "not-sacrifice",
+        beforeRisk,
+        afterRisk,
+        exchangeOfferCp,
+        movedPieceValueCp,
+        capturedValueCp,
+        sacrificeNetCp,
+      };
+    }
+    const bestEval = moverSidedEval(row, fen);
+    const secondEval = rows[1] ? moverSidedEval(rows[1], fen) : bestEval;
+    const evalGap = rows[1] ? bestEval - secondEval : 0;
     const beforeTrapped = new Set(
       detectTrappedPieces(
         beforeBoard,
@@ -4847,24 +4835,79 @@
         beforeAttackMap,
       ).map((entry) => entry.square),
     );
-    if (beforeTrapped.has(parsed.from)) return false;
-    // Check if position after move is losing (wintrchess: "Brilliants cannot leave you in a bad position")
+    if (beforeTrapped.has(parsed.from) && !(/[+#]/.test(played.san || "") || Number(row?.mate || 0) > 0)) {
+      return { result: false, reason: "already-trapped", evalGap };
+    }
     const afterEval = moverSidedEvalForAfterMove(row, afterFen);
-    if (afterEval < 0) return false; // must not be losing
-    // Check that opponent has hanging pieces (pieces under attack with no defense)
-    // A "hanging" piece is one that if we capture it, opponent can't recapture profitably
-    const opponentHangingValue = computeOpponentHangingValue(afterBoard, afterAttackMap, moverCode, enemyCode);
-    const ourHangingValue = computeOurHangingValue(afterBoard, afterAttackMap, moverCode, enemyCode);
-    // For brilliant: opponent must have hanging pieces worth at least a pawn
-    // (wintrchess: "threatened opponent material >= yours")
-    if (opponentHangingValue < 3) return false; // must threaten at least a pawn (3 = minor piece)
-    if (ourHangingValue > opponentHangingValue) return false; // don't threaten more than you give
-    // ALL brilliant paths require opponent hanging pieces
-    return (
-      (movedPieceSacrifice && opponentHangingValue >= 3) ||
-      (heavyPieceSacrifice && opponentHangingValue >= 3) ||
-      (tacticalFollowUp && evalGap >= 0.75 && opponentHangingValue >= 3)
+    if (afterEval < -1.25) {
+      return { result: false, reason: "losing-after-move", afterEval, evalGap };
+    }
+    const positiveMate = Number(row?.mate || 0) > 0;
+    const isCheck = /[+#]/.test(played.san || "");
+    const safeThreat = computeSafeThreatSummary(
+      afterFen,
+      afterBoard,
+      moverCode,
+      afterAttackMap,
     );
+    const critical = looksCritical(row, rows);
+    const forcingCompensation =
+      positiveMate ||
+      safeThreat.maxCp >= movedPieceValueCp ||
+      safeThreat.totalCp >= Math.max(300, exchangeOfferCp) ||
+      evalGap >= 0.9 ||
+      critical;
+    const sacrificialCheck =
+      isCheck && (clearMaterialSacrifice || positiveMate || evalGap >= 0.9);
+    let result = false;
+    if (clearMaterialSacrifice) {
+      result = forcingCompensation || sacrificialCheck;
+    } else if (capturedValueCp >= movedPieceValueCp) {
+      result =
+        positiveMate ||
+        safeThreat.maxCp > movedPieceValueCp ||
+        evalGap >= 1.0;
+    } else {
+      result = forcingCompensation || (isCheck && safeThreat.maxCp >= 300);
+    }
+    return {
+      result,
+      reason: result ? "passed" : "compensation-too-weak",
+      beforeRisk,
+      afterRisk,
+      exchangeOfferCp,
+      movedPieceValueCp,
+      capturedValueCp,
+      sacrificeNetCp,
+      clearMaterialSacrifice,
+      exchangeSacrifice,
+      bestEval,
+      secondEval,
+      evalGap,
+      afterEval,
+      positiveMate,
+      isCheck,
+      safeThreat,
+      critical,
+      san: played.san || "",
+    };
+  }
+
+  function brilliantDiagnosticsForFenAndUci(
+    fen,
+    uci,
+    game = readOnlyGameForFen(fen),
+  ) {
+    if (!fen || !uci || !game) return null;
+    const rows = fullPositionRowsForFen(fen);
+    if (!rows.length) return null;
+    const rowIndex = rows.findIndex((candidate) => candidate.bestUci === uci);
+    if (rowIndex < 0) return null;
+    return brilliantDiagnostics(rows[rowIndex], rows, fen);
+  }
+
+  function looksBrilliant(row, rows, fen) {
+    return !!brilliantDiagnostics(row, rows, fen)?.result;
   }
 
   function bestDestinationNodeUci(square, game = currentGame()) {
@@ -5148,7 +5191,7 @@
     )
       return true;
     return (
-      danger.onlyMove &&
+      danger.singlePlayableMove &&
       (danger.secondLoss >= 0.085 || danger.seriousMistakes >= 2)
     );
   }
@@ -7505,7 +7548,6 @@
 
   function resetAnalysisCaches() {
     _analysisDisplayClassCache.clear();
-    _forkForecastCache.clear();
     state.fenPieceAnalysisCache = new Map();
     state.positionAnalysisCache = new Map();
     state.nextPlyAnalysisCache = new Map();
@@ -8653,7 +8695,6 @@
 
   function clearAnalysisForNewPosition(preserveCachedFullAnalysis = false) {
     _analysisDisplayClassCache.clear();
-    _forkForecastCache.clear();
     state.analysisMap.clear();
     analysisByUci.clear();
     state.analysisRows = [];
@@ -10163,6 +10204,7 @@
 
   function normalizeAnalysisRows(rows, fen = "") {
     const uniqueRows = dedupeAnalysisRows(rows);
+    uniqueRows.sort((a, b) => compareAnalysisRowQuality(b, a));
     return uniqueRows.map((row, index) => ({
       ...row,
       multipv: index + 1,
@@ -11365,150 +11407,11 @@
 
   function movedPieceIsImmediatelyPunishable(afterFen, afterBoard, movedPiece, square) {
     try {
-      if (!afterFen || !afterBoard || !movedPiece || !square) return false;
-      const enemyColor = movedPiece.color === "w" ? "b" : "w";
-      const probeGame = new Chess(normalizeToolFen(afterFen));
-      const legalCaptures = probeGame.moves({ verbose: true }).filter((move) => {
-        if (move.to !== square) return false;
-        return Boolean(move.captured) || String(move.flags || "").includes("e");
-      });
-      if (!legalCaptures.length) return false;
-      const attackMap = buildAttackMap(afterBoard);
-      return computeSEE(afterBoard, square, enemyColor, attackMap) > 0;
+      if (!afterFen || !square) return false;
+      return bestLegalExchangeGainOnSquare(afterFen, square) > 0;
     } catch (_) {
       return false;
     }
-  }
-
-  function forkForecastForRow(row, baseFen) {
-    const fen = String(baseFen || "").trim();
-    const uci = String(row?.bestUci || "").trim();
-    if (!fen || !uci) return null;
-    const cacheKey = `${fen}|${uci}`;
-    const pvMoves = Array.isArray(row?.pv)
-      ? row.pv
-          .slice(0, 3)
-          .map((move) => String(move || "").trim())
-          .filter(Boolean)
-      : [];
-    const rootParsed = parseUci(pvMoves[0] || uci);
-    if (!rootParsed) return null;
-    const pvKey = pvMoves.join(",");
-    const cachedEntry = _forkForecastCache.get(cacheKey);
-    if (cachedEntry?.pvKey === pvKey) return cachedEntry.forecast;
-    let forecast = null;
-    try {
-      const game = new Chess(fen);
-      const path = [];
-      for (let index = 0; index < pvMoves.length; index += 1) {
-        const parsed = parseUci(pvMoves[index]);
-        if (!parsed) break;
-        const beforeBoard = buildBoardMap(game);
-        const movingPiece = beforeBoard.get(parsed.from);
-        const played = game.move({
-          from: parsed.from,
-          to: parsed.to,
-          promotion: parsed.promotion || undefined,
-        });
-        if (!played) break;
-        path.push({
-          from: parsed.from,
-          to: parsed.to,
-          uci: pvMoves[index],
-          ply: index,
-          color: movingPiece ? colorName(movingPiece.color) : "",
-        });
-        const afterBoard = buildBoardMap(game);
-        const movedPiece = afterBoard.get(parsed.to);
-        if (
-          !movedPiece ||
-          !movingPiece ||
-          movedPiece.color !== movingPiece.color ||
-          movedPiece.type === "k"
-        ) {
-          continue;
-        }
-        const enemy = movedPiece.color === "w" ? "b" : "w";
-        const targets = attackSquaresForPiece(afterBoard, parsed.to, movedPiece)
-          .map((targetSquare) => {
-            const targetPiece = afterBoard.get(targetSquare);
-            if (!targetPiece || targetPiece.color !== enemy) return null;
-            const targetValue = PIECE_VALUES[targetPiece.type] || 0;
-            return {
-              square: targetSquare,
-              piece: pieceCode(targetPiece),
-              type: targetPiece.type,
-              value: targetValue,
-              is_king: targetPiece.type === "k",
-            };
-          })
-          .filter(Boolean);
-        const meaningfulTargets = targets.filter(
-          (target) => target.is_king || target.value >= 3,
-        );
-        const hasForkShape =
-          meaningfulTargets.length >= 2 ||
-          (meaningfulTargets.length >= 1 && targets.length >= 2);
-        if (hasForkShape) {
-          if (
-            movedPieceIsImmediatelyPunishable(
-              game.fen(),
-              afterBoard,
-              movedPiece,
-              parsed.to,
-            )
-          )
-            continue;
-          const nullMoveForkProbe = probeForkNullMoveCapture(
-            game.fen(),
-            afterBoard,
-            movedPiece,
-            parsed.to,
-            targets,
-          );
-          if (!nullMoveForkProbe.hasFollowUpCapture) continue;
-          const forkColor = colorName(movedPiece.color);
-          const maneuverSquares = [parsed.from, parsed.to];
-          for (let pathIndex = path.length - 2; pathIndex >= 0; pathIndex -= 1) {
-            const step = path[pathIndex];
-            if (step.color !== forkColor) continue;
-            if (step.to !== maneuverSquares[0]) continue;
-            maneuverSquares.unshift(step.from);
-          }
-          if (
-            maneuverSquares[0] !== rootParsed.from ||
-            maneuverSquares[1] !== rootParsed.to
-          )
-            continue;
-          forecast = {
-            ply: index,
-            from: parsed.from,
-            to: parsed.to,
-            color: forkColor,
-            attackerType: movedPiece.type,
-            path: path.map((step) => ({ ...step })),
-            maneuverSquares,
-            followUpCaptureSquares: nullMoveForkProbe.captureSquares,
-            targets: meaningfulTargets
-              .sort(
-                (a, b) =>
-                  Number(b.is_king) - Number(a.is_king) || b.value - a.value,
-              )
-              .slice(0, 4),
-          };
-          break;
-        }
-      }
-    } catch (_) {
-      forecast = null;
-    }
-    _forkForecastCache.set(cacheKey, { pvKey, forecast });
-    while (_forkForecastCache.size > 96) {
-      const oldest = _forkForecastCache.keys().next();
-      if (oldest.done) break;
-      _forkForecastCache.delete(oldest.value);
-    }
-    return forecast;
   }
 
   function detectAbsolutePins(boardMap, color) {
@@ -12044,6 +11947,52 @@
         gain[index - 1] = Math.max(-gain[index], gain[index - 1]);
       }
       return Math.max(0, gain[0] || 0);
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  function legalCaptureNet(game, move, depth = 0, maxDepth = 12) {
+    try {
+      if (!game || !move || depth >= maxDepth) return 0;
+      const flags = String(move.flags || "");
+      const capturedType = move.captured || (flags.includes("e") ? "p" : "");
+      const capturedValue = pieceValueCp(capturedType);
+      if (capturedValue <= 0) return 0;
+      const next = new Chess(game.fen());
+      const played = next.move({
+        from: move.from,
+        to: move.to,
+        promotion: move.promotion || undefined,
+      });
+      if (!played) return 0;
+      const replies = next.moves({ verbose: true }).filter((candidate) => {
+        if (candidate.to !== move.to) return false;
+        return Boolean(candidate.captured) || String(candidate.flags || "").includes("e");
+      });
+      let bestReply = 0;
+      for (const reply of replies) {
+        bestReply = Math.max(bestReply, legalCaptureNet(next, reply, depth + 1, maxDepth));
+      }
+      return Math.max(0, capturedValue - bestReply);
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  function bestLegalExchangeGainOnSquare(fen, square) {
+    try {
+      if (!fen || !square) return 0;
+      const game = new Chess(normalizeToolFen(fen));
+      const captures = game.moves({ verbose: true }).filter((move) => {
+        if (move.to !== square) return false;
+        return Boolean(move.captured) || String(move.flags || "").includes("e");
+      });
+      let best = 0;
+      for (const move of captures) {
+        best = Math.max(best, legalCaptureNet(game, move));
+      }
+      return best;
     } catch (_) {
       return 0;
     }

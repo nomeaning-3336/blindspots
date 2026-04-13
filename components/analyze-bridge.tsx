@@ -22,7 +22,7 @@ declare global {
 }
 
 const ANALYZE_BASE_PATH = "/analyze";
-const ANALYZE_ASSET_VERSION = "2026-04-10-arcade-maia2-v82";
+const ANALYZE_ASSET_VERSION = "2026-04-13-bugfix-v88";
 const ANALYZE_STYLE_ID = "analyze-style";
 const ANALYZE_OVERRIDE_ID = "analyze-react-override";
 const ANALYZE_CHESS_SCRIPT_ID = "analyze-chess-js";
@@ -634,18 +634,25 @@ function ensureOverrideStyle() {
       }
 
       #analyze-app-host #app .board-analysis {
-        padding: 10px 10px 8px !important;
+        width: 100% !important;
+        padding: 0 !important;
         gap: 8px !important;
+        grid-template-columns: minmax(0, 1fr) !important;
       }
 
       #analyze-app-host #app .analysis-row {
-        --analysis-rank-col: 1.9rem !important;
+        --analysis-rank-col: calc((var(--rank-cols, 2) + 0.55) * 0.78ch) !important;
         --analysis-stats-col: 11.5ch !important;
         padding: 7px 9px 6px 14px !important;
       }
 
       #analyze-app-host #app .analysis-main {
         gap: 6px 8px !important;
+        grid-template-columns:
+          minmax(var(--analysis-rank-col), var(--analysis-rank-col))
+          minmax(calc((var(--lead-cols, 6) + 2) * 0.82ch), calc((var(--lead-cols, 6) + 2) * 0.82ch))
+          minmax(108px, 108px)
+          minmax(var(--analysis-stats-col), auto) !important;
       }
 
       #analyze-app-host #app .analysis-rank,
@@ -654,7 +661,8 @@ function ensureOverrideStyle() {
       }
 
       #analyze-app-host #app .analysis-san {
-        min-width: calc(var(--lead-cols, 6) * 0.82ch) !important;
+        min-width: 0 !important;
+        width: max-content !important;
         font-size: 0.84rem !important;
       }
 
