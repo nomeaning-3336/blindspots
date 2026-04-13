@@ -4290,9 +4290,14 @@
 
   function cachedEntryMeetsCurrentSearchTarget(entry) {
     if (!entry?.rows?.length) return false;
+    // Reject entries with no limitKind (pre-migration, unknown constraints)
+    if (!entry.limitKind) return false;
+    // If mode changed, reject — can't reuse depth analysis in time mode or vice versa
+    if (entry.limitKind !== state.limitKind) return false;
     if (state.limitKind === "depth")
       return (entry.publishedDepth || 0) >= state.limitValue;
-    return true;
+    // time mode: only reuse if cached search ran at least as long as current target
+    return (entry.passMs || 0) >= state.limitValue;
   }
 
   function cachedPositionIsReusable(entry, fen) {
@@ -4304,9 +4309,12 @@
 
   function playedMoveEntryMeetsCurrentSearchTarget(entry) {
     if (!entry?.complete) return false;
+    // Reject entries with no limitKind (pre-migration, unknown constraints)
+    if (!entry.limitKind) return false;
+    if (entry.limitKind !== state.limitKind) return false;
     if (state.limitKind === "depth")
       return (entry.publishedDepth || 0) >= state.limitValue;
-    return true;
+    return (entry.passMs || 0) >= state.limitValue;
   }
 
   function legalMovesForFen(fen, selectedSquare = "") {
@@ -7644,6 +7652,7 @@
     if (!rows.length) return null;
     return {
       fen,
+      limitKind: entry.limitKind || null,
       passMs: Math.max(0, Number(entry.passMs) || 0),
       publishedAt: Math.max(0, Number(entry.publishedAt) || 0),
       publishedDepth: Math.max(0, Number(entry.publishedDepth) || 0),
@@ -7657,6 +7666,7 @@
     if (!rows.length) return null;
     return {
       fen,
+      limitKind: entry.limitKind || null,
       parentFen: entry.parentFen || "",
       moveUci: entry.moveUci || "",
       passMs: Math.max(0, Number(entry.passMs) || 0),
@@ -7671,6 +7681,7 @@
     const payload = {
       fen: entry.fen,
       moveUci: entry.moveUci,
+      limitKind: entry.limitKind || null,
       passMs: Math.max(0, Number(entry.passMs) || 0),
       publishedAt: Math.max(0, Number(entry.publishedAt) || 0),
       publishedDepth: Math.max(0, Number(entry.publishedDepth) || 0),
@@ -7689,6 +7700,7 @@
       fen: raw.fen,
       map: new Map(rows.map((row) => [row.multipv, { ...row }])),
       rows,
+      limitKind: raw.limitKind || null,
       publishedAt: Math.max(0, Number(raw.publishedAt) || 0),
       publishedDepth: Math.max(0, Number(raw.publishedDepth) || 0),
       passMs: Math.max(0, Number(raw.passMs) || 0),
@@ -7705,6 +7717,7 @@
       moveUci: raw.moveUci || "",
       map: new Map(rows.map((row) => [row.multipv, { ...row }])),
       rows,
+      limitKind: raw.limitKind || null,
       publishedAt: Math.max(0, Number(raw.publishedAt) || 0),
       publishedDepth: Math.max(0, Number(raw.publishedDepth) || 0),
       passMs: Math.max(0, Number(raw.passMs) || 0),
@@ -7718,6 +7731,7 @@
       fen: raw.fen,
       moveUci: raw.moveUci,
       row: row?.bestUci ? row : null,
+      limitKind: raw.limitKind || null,
       publishedAt: Math.max(0, Number(raw.publishedAt) || 0),
       publishedDepth: Math.max(0, Number(raw.publishedDepth) || 0),
       passMs: Math.max(0, Number(raw.passMs) || 0),
@@ -8234,6 +8248,7 @@
         parentFen,
         fen,
         moveUci: row.bestUci,
+        searchKind: state.limitKind,
         passMs: NEXT_PLY_CACHE_MOVETIME,
         multiPv: state.linesShown,
       });
@@ -9663,6 +9678,12 @@
           ? `go depth ${task.targetDepth}`
           : `go movetime ${task.passMs}`,
       );
+    else if (task.type === "nextply")
+      sendCacheEngine(
+        task.searchKind === "depth"
+          ? `go depth ${task.targetDepth || 18}`
+          : `go movetime ${task.passMs}`,
+      );
     else sendCacheEngine(`go movetime ${task.passMs}`);
   }
 
@@ -9723,6 +9744,7 @@
           fen: task.fen,
           moveUci: task.moveUci,
           row: playedMoveRow ? { ...playedMoveRow } : null,
+          limitKind: task.searchKind,
           publishedAt: Date.now(),
           publishedDepth:
             task.searchKind === "depth"
@@ -9765,6 +9787,7 @@
           publishedAt: Date.now(),
           publishedDepth: rows[0]?.depth || 0,
           passMs: task.searchKind === "time" ? task.passMs : 0,
+          limitKind: task.searchKind,
         };
         state.positionAnalysisCache.set(task.fen, entry);
         touchCachedFen(task.fen);
@@ -9819,6 +9842,7 @@
           publishedAt: Date.now(),
           publishedDepth: rows[0]?.depth || 0,
           passMs: task.passMs,
+          limitKind: task.searchKind,
         };
         state.nextPlyAnalysisCache.delete(task.fen);
         state.nextPlyAnalysisCache.set(task.fen, entry);
@@ -10337,6 +10361,7 @@
       publishedAt: state.analysisPublishedAt,
       publishedDepth: state.analysisPublishedDepth,
       passMs,
+      limitKind: state.limitKind,
     };
     state.cachedFullAnalysis = entry;
     state.positionAnalysisCache.set(state.current.fen, entry);
