@@ -233,6 +233,7 @@ function ensureOverrideStyle() {
     #analyze-app-host[data-layout-mode="arcade-play"] #app .workspace {
       grid-template-columns: minmax(0, 1fr) !important;
       gap: 12px !important;
+      justify-content: center !important;
     }
 
     #analyze-app-host[data-layout-mode="arcade-play"] #app .right,
@@ -261,7 +262,7 @@ function ensureOverrideStyle() {
       grid-template-columns:
         minmax(132px, var(--board-history-width))
         minmax(0, var(--board-shell-width)) !important;
-      justify-content: start !important;
+      justify-content: center !important;
       gap: 10px !important;
       align-items: start !important;
       width: 100% !important;
@@ -273,15 +274,18 @@ function ensureOverrideStyle() {
       grid-template-columns: auto !important;
       gap: 0 !important;
       width: var(--board-shell-width) !important;
+      justify-self: center !important;
     }
 
     #analyze-app-host[data-layout-mode="arcade-play"] #app .board-history-panel {
       height: var(--board-shell-height) !important;
+      justify-self: center !important;
     }
 
     #analyze-app-host[data-layout-mode="arcade-play"] #app .board-shell-wrap {
       width: var(--board-shell-width) !important;
       max-width: none !important;
+      justify-self: center !important;
     }
 
     #analyze-app-host[data-layout-mode="arcade-play"] #app .board-stack {
@@ -604,6 +608,10 @@ function ensureOverrideStyle() {
         font-size: 0.72rem !important;
       }
 
+      #analyze-app-host #app .player-clock.empty {
+        display: none !important;
+      }
+
       #analyze-app-host #app .board-options {
         padding: 6px 12px 8px !important;
       }
@@ -692,6 +700,49 @@ function ensureOverrideStyle() {
       font-size: 0.74rem !important;
       line-height: 1.1 !important;
       letter-spacing: 0.1em !important;
+    }
+
+    /* Remove borders from move classification icons */
+    #analyze-app-host #app .board-history-move-icon {
+      border: none !important;
+    }
+
+    /* Arcade-play: hide move classification icons in the moves panel */
+    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-history-move-icon {
+      display: none !important;
+    }
+
+    /* Arcade-play: ensure player info is visible and properly sized */
+    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-player-info {
+      display: flex !important;
+      min-height: 44px !important;
+      padding: 6px 10px !important;
+    }
+
+    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-player-info .player-name {
+      font-size: 0.85rem !important;
+      font-weight: 700 !important;
+    }
+
+    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-player-info .player-rating {
+      font-size: 0.7rem !important;
+      padding: 1px 5px !important;
+    }
+
+    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-player-info .player-clock {
+      font-size: 0.75rem !important;
+      min-width: 70px !important;
+      height: 20px !important;
+      padding: 0 6px !important;
+    }
+
+    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-player-info .player-captures {
+      display: flex !important;
+    }
+
+    /* Arcade-play: show the moves panel without analysis rows */
+    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-history-opening {
+      display: none !important;
     }
 
   `;
