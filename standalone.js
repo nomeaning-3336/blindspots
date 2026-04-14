@@ -338,6 +338,7 @@
     analysisCache: "chess-something:analysis-cache:v1",
     boardState: "chess-something:board-state:v1",
     reviewHandoff: "chess-something:review-handoff:v1",
+    localArcadeGames: "chessview_arcade_games",
   };
   const BOARD_STATE_VERSION = 1;
   const INITIAL_ANALYZE_PREFERENCES =
@@ -349,6 +350,18 @@
     typeof globalThis.__CHESSVIEW_INITIAL_ARCADE_GAME__ === "object"
       ? globalThis.__CHESSVIEW_INITIAL_ARCADE_GAME__
       : null;
+  const getInitialArcadeTimeControl = () => {
+    if (!INITIAL_ARCADE_GAME?.settings) return null;
+    const settings = INITIAL_ARCADE_GAME.settings;
+    if (!settings || typeof settings !== "object") return null;
+    const tc = String(settings.timeControl || "");
+    if (!tc || tc === "untimed") return { starting: 0, increment: 0 };
+    const parts = tc.split(/[-_]/);
+    if (parts.length < 2) return null;
+    const mins = Number(parts[parts.length - 2]) || 0;
+    const secs = Number(parts[parts.length - 1]) || 0;
+    return { starting: mins * 60 + secs, increment: secs };
+  };
   const getInitialWorkspaceMode = () => {
     const mode = String(globalThis.__CHESSVIEW_INITIAL_WORKSPACE_MODE__ || "")
       .trim()
@@ -641,6 +654,9 @@
     arcadeHiddenElo: 1500,
     arcadeTargetElo: 1500,
     arcadeBurstPliesLeft: 0,
+    arcadeTimeControl: 900,
+    arcadeTimeIncrement: 10,
+    arcadeStartingTime: 900,
     arcadeRequestId: 0,
     arcadeThinking: false,
     weirdhorseProfilesByCycle: new Map(),
@@ -833,6 +849,11 @@
         hiddenElo: Number(state.arcadeHiddenElo) || 1500,
         targetElo: Number(state.arcadeTargetElo) || 1500,
         burstPliesLeft: Number(state.arcadeBurstPliesLeft) || 0,
+        timeControl: String(
+          state.arcadeStartingTime > 0
+            ? `${Math.floor(state.arcadeStartingTime / 60)}+${state.arcadeTimeIncrement}`
+            : "untimed",
+        ),
         weirdhorseProfilesByCycle: Array.from(
           state.weirdhorseProfilesByCycle.entries(),
         ),
@@ -862,16 +883,47 @@
 
   function persistArcadeGameState(options = {}) {
     const persistUrl = getArcadeGamePersistUrl();
-    if (!persistUrl) return;
+    const payload = buildPersistedBoardStatePayload();
+    if (!payload) return;
+    const persistKey = JSON.stringify({
+      ...payload,
+      savedAt: 0,
+    });
+    if (!options.force && persistKey === _arcadeGamePersistKey) return;
+    _arcadeGamePersistKey = persistKey;
+
+    // Guest mode: persist to localStorage
+    if (!persistUrl) {
+      try {
+        const initialGame = globalThis.__CHESSVIEW_INITIAL_ARCADE_GAME__;
+        if (!initialGame?.gameId) return;
+        const gameId = initialGame.gameId;
+        const raw = localStorage.getItem(STORAGE.localArcadeGames);
+        const games = raw ? JSON.parse(raw) : [];
+        const idx = games.findIndex((g) => g.id === gameId);
+        const updated = {
+          id: gameId,
+          variantKey: initialGame.variantKey || "vanilla",
+          status: payload.isGameOver ? "finished" : "active",
+          currentFen: payload.currentFen || "",
+          state: payload,
+          createdAt: games[idx]?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          lastPlayedAt: new Date().toISOString(),
+        };
+        if (idx >= 0) {
+          games[idx] = updated;
+        } else {
+          games.unshift(updated);
+        }
+        localStorage.setItem(STORAGE.localArcadeGames, JSON.stringify(games));
+      } catch (error) {
+        console.warn("Could not persist arcade game state locally", error);
+      }
+      return;
+    }
+
     try {
-      const payload = buildPersistedBoardStatePayload();
-      if (!payload) return;
-      const persistKey = JSON.stringify({
-        ...payload,
-        savedAt: 0,
-      });
-      if (!options.force && persistKey === _arcadeGamePersistKey) return;
-      _arcadeGamePersistKey = persistKey;
       const body = JSON.stringify({ state: payload });
       if (options.keepalive && navigator?.sendBeacon) {
         const blob = new Blob([body], { type: "application/json" });
@@ -1044,6 +1096,22 @@
         0,
         Number(arcade.burstPliesLeft) || 0,
       );
+      // Parse time control from restored state if present
+      if (arcade.timeControl && String(arcade.timeControl).trim() !== "untimed") {
+        const tc = String(arcade.timeControl);
+        const parts = tc.split(/[+]/);
+        if (parts.length >= 1) {
+          const mins = Number(parts[0]) || 0;
+          const secs = parts.length > 1 ? Number(parts[1]) || 0 : 0;
+          state.arcadeStartingTime = mins * 60 + secs;
+          state.arcadeTimeControl = state.arcadeStartingTime;
+          state.arcadeTimeIncrement = secs;
+        }
+      } else {
+        state.arcadeStartingTime = 0;
+        state.arcadeTimeControl = 0;
+        state.arcadeTimeIncrement = 0;
+      }
       const restoredWeirdhorseProfiles = new Map();
       const rawProfileEntries = Array.isArray(arcade.weirdhorseProfilesByCycle)
         ? arcade.weirdhorseProfilesByCycle
@@ -1453,7 +1521,6 @@
       "openingTrail",
       "historyTrail",
       "openingPanelTitle",
-      "movePanelMeta",
       "movePanelList",
       "boardShell",
       "topPlayerInfo",
@@ -1759,6 +1826,15 @@
     applyInitialWorkspaceMode();
     if (!restoredBoard && isArcadeMode()) {
       newGame();
+    } else if (restoredBoard && isArcadeMode() && state.arcadeStartingTime > 0 && state.playerClockByNodeId.size === 0) {
+      // Initialize clocks for restored arcade game if not present
+      if (state.root?.id) {
+        const clockDisplay = formatClockDisplay(state.arcadeStartingTime);
+        state.playerClockByNodeId.set(state.root.id, {
+          white: clockDisplay,
+          black: clockDisplay,
+        });
+      }
     }
     window.__chessSomething = {
       getEngineRaw: () => state.engineRaw.slice(),
@@ -2146,19 +2222,16 @@
   }
 
   function renderMovePanel() {
-    if (!ui.movePanelList || !ui.movePanelMeta) return;
+    if (!ui.movePanelList) return;
     const path = visibleHistoryPath();
     const moves = path.slice(1);
     const displayNode = currentDisplayNode();
 
     if (!moves.length) {
-      ui.movePanelMeta.textContent = "No moves yet";
       ui.movePanelList.innerHTML =
         '<div class="board-history-empty">No moves yet</div>';
       return;
     }
-
-    ui.movePanelMeta.textContent = `${moves.length} ${moves.length === 1 ? "move" : "moves"}`;
 
     const currentIndex = moves.findIndex((node) => node.id === displayNode?.id);
     const rows = [];
@@ -2737,6 +2810,13 @@
       .replace(/^'+|'+$/g, "")
       .trim();
     return cleaned;
+  }
+
+  function formatClockDisplay(seconds) {
+    if (!seconds || seconds <= 0) return "";
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   }
 
   function setPlayerNames(whiteName, blackName) {
@@ -3329,6 +3409,33 @@
     ui.overlayGhostNodeSvg.innerHTML = "";
     ui.overlayGhostSvg.classList.remove("fade-out");
     ui.overlayGhostNodeSvg.classList.remove("fade-out");
+  }
+
+  function renderLegalMoveIndicators() {
+    const selectedSquare = state.selectedSquare;
+    if (!selectedSquare) {
+      ui.legalLayer.innerHTML = "";
+      return;
+    }
+    const game = currentGame();
+    const piece = game.get(selectedSquare);
+    if (!piece || piece.color !== game.turn()) {
+      ui.legalLayer.innerHTML = "";
+      return;
+    }
+    const allMoves = legalMovesForFen(state.current.fen);
+    const legalTargets = allMoves
+      .filter((move) => move.from === selectedSquare)
+      .map((move) => move.to);
+    if (!legalTargets.length) {
+      ui.legalLayer.innerHTML = "";
+      return;
+    }
+    const indicators = legalTargets.map((target) => {
+      const center = squareCenter(target);
+      return `<div class="legal-dot" style="left:${center.x}%;top:${center.y}%;"></div>`;
+    });
+    ui.legalLayer.innerHTML = indicators.join("");
   }
 
   function preserveOverlayGhost() {
@@ -5322,6 +5429,7 @@
     if (!wasSelected) {
       state.selectedSquare = square;
       refreshSelectedPieceAnalysis();
+      renderLegalMoveIndicators();
     }
     window.addEventListener("pointermove", onGlobalPointerMove);
     window.addEventListener("pointerup", onGlobalPointerUp, true);
@@ -5456,6 +5564,7 @@
     ui.dragLayer.innerHTML = "";
     state.selectedSquare = null;
     refreshSelectedPieceAnalysis();
+    renderLegalMoveIndicators();
   }
 
   function stopDragListeners() {
@@ -5477,6 +5586,7 @@
     if (!to || to === from) {
       state.selectedSquare = from;
       refreshSelectedPieceAnalysis();
+      renderLegalMoveIndicators();
       return;
     }
     const move = uciToLegalMove(game, from + to + "q");
@@ -5486,6 +5596,7 @@
         displayedMoveClassForUci(canonical, game, from),
       );
       state.selectedSquare = null;
+      renderLegalMoveIndicators();
       applyPrincipalMove(canonical, { moveClassKey });
       return;
     }
@@ -5493,10 +5604,12 @@
     if (piece && piece.color === game.turn()) {
       state.selectedSquare = to;
       refreshSelectedPieceAnalysis();
+      renderLegalMoveIndicators();
       return;
     }
     state.selectedSquare = from;
     refreshSelectedPieceAnalysis();
+    renderLegalMoveIndicators();
   }
 
   function onSearchSettingChange() {
@@ -5533,7 +5646,6 @@
     state.analysisMap.clear();
     analysisByUci.clear();
     state.analysisRows = [];
-    renderAnalysis();
     renderAnalysisFull();
     renderEvalBar();
     snapshotFullPositionAnalysis();
@@ -8373,12 +8485,27 @@
       state.orientation = variant.playerColor;
       state.engineLinesHidden = true;
       resetArcadeDrift();
+      // Initialize clocks based on time control setting
+      const tc = getInitialArcadeTimeControl();
+      if (tc) {
+        state.arcadeStartingTime = tc.starting;
+        state.arcadeTimeControl = tc.starting;
+        state.arcadeTimeIncrement = tc.increment;
+      }
     } else {
       setPlayerNames("White", "Black");
       setPlayerRatings("", "");
     }
     clearImportedPlayerIdentity();
     clearPlayerClockMap();
+    // Initialize clocks for arcade mode AFTER clearing the map
+    if (isArcadeMode() && state.arcadeStartingTime > 0 && state.root?.id) {
+      const clockDisplay = formatClockDisplay(state.arcadeStartingTime);
+      state.playerClockByNodeId.set(state.root.id, {
+        white: clockDisplay,
+        black: clockDisplay,
+      });
+    }
     resetAssistantSession();
     invalidateGameCache();
     invalidateLegalUciSetCache();
@@ -10059,7 +10186,6 @@
           currentFen,
         );
         rebuildAnalysisByUci();
-        renderAnalysis();
         renderAnalysisFull();
         renderEvalBar();
         renderEvalChart();
