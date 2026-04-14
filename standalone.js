@@ -4744,7 +4744,7 @@
     const secondMate = Number(rows?.[1]?.mate || 0);
     const secondEval = rows[1] ? moverSidedEval(rows[1], fen) : null;
     const alternativeIsAlsoWinningMate = bestMate > 0 && secondMate > 0;
-    if (!alternativeIsAlsoWinningMate && secondEval != null && secondEval >= 700)
+    if (!alternativeIsAlsoWinningMate && secondEval != null && secondEval >= 7.0)
       return false;
     return true;
   }
@@ -4850,6 +4850,65 @@
     }
   }
 
+  // Returns true if the opponent has at least one legal capture on the given square
+  // (ignores whether the capture is profitable — use bestLegalExchangeGainOnSquare for that)
+  function opponentHasLegalCapture(fen, square) {
+    try {
+      const game = new Chess(normalizeToolFen(fen));
+      const moves = game.moves({ verbose: true });
+      for (const move of moves) {
+        if (move.to !== square) continue;
+        if (move.captured || String(move.flags || "").includes("e")) return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Like detectTrappedPieces but evaluates destination safety on the board AFTER
+  // the candidate move is applied, so occupancy/blockers/x-rays reflect the new position.
+  // boardMap, attackMap, legalMoves, moverCode: state AFTER the candidate move.
+  function detectTrappedPiecesAfterMove(
+    boardMap,
+    moverCode,
+    legalMoves,
+    attackMap,
+  ) {
+    try {
+      const byPiece = new Map();
+      for (const move of legalMoves) {
+        const piece = boardMap.get(move.from);
+        if (!piece || piece.color !== moverCode || piece.type === "p" || piece.type === "k")
+          continue;
+        if (!byPiece.has(move.from)) byPiece.set(move.from, []);
+        byPiece.get(move.from).push(move);
+      }
+      const result = [];
+      for (const [square, moves] of byPiece.entries()) {
+        const piece = boardMap.get(square);
+        // Evaluate each legal destination on the POST-move board
+        const safeMoves = moves.filter((move) => {
+          const enemyColor = moverCode === "w" ? "b" : "w";
+          // Use after-move board: the piece is already at move.from on boardMap
+          // and the occupancy reflects the move having been made.
+          // To properly evaluate move.to safety we need to pretend the piece
+          // has moved to move.to. We probe by temporarily moving it.
+          const probeMap = new Map(boardMap);
+          probeMap.delete(square);
+          probeMap.set(move.to, piece);
+          const probeAttackMap = buildAttackMap(probeMap);
+          return computeSEE(probeMap, move.to, enemyColor, probeAttackMap) <= 0;
+        });
+        if (safeMoves.length > 0) continue;
+        result.push({ square, piece_type: piece?.type || "", safe_destinations: safeMoves.length });
+      }
+      return result.slice(0, 8);
+    } catch (_) {
+      return [];
+    }
+  }
+
   function brilliantDiagnostics(row, rows, fen) {
     if (!moveFeelsImportant(row, rows, fen)) {
       return { result: false, reason: "not-important" };
@@ -4875,7 +4934,12 @@
         return { result: false, reason: "bad-game" };
       }
     }
-    const probe = new Chess(fen);
+    let probe;
+    try {
+      probe = new Chess(fen);
+    } catch (_) {
+      return { result: false, reason: "bad-game" };
+    }
     const played = probe.move({
       from: parsed.from,
       to: parsed.to,
@@ -4901,8 +4965,8 @@
     const afterAttackMap = buildAttackMap(afterBoard);
     const beforeRisk = computeSEE(beforeBoard, parsed.from, enemyCode, beforeAttackMap);
     const afterRisk = bestLegalExchangeGainOnSquare(afterFen, parsed.to);
-    const enemyCanCaptureMovedPiece = afterRisk > 0;
-    if (!enemyCanCaptureMovedPiece) {
+    const enemyHasLegalCapture = opponentHasLegalCapture(afterFen, parsed.to);
+    if (!enemyHasLegalCapture) {
       return {
         result: false,
         reason: "not-capturable",
@@ -4910,43 +4974,26 @@
         afterRisk,
       };
     }
+    const newRiskCp = afterRisk - beforeRisk;
     const exchangeOfferCp = afterRisk;
-    if (exchangeOfferCp < 100) {
-      return {
-        result: false,
-        reason: "not-new-sacrifice",
-        beforeRisk,
-        afterRisk,
-        exchangeOfferCp,
-      };
-    }
     const capturedTarget = captureTargetFromMove(beforeGame, played);
     const movedPieceValueCp = pieceValueCp(movedPiece.type);
     const capturedValueCp = pieceValueCp(capturedTarget?.type || "");
     const sacrificeNetCp = afterRisk - capturedValueCp;
     const clearMaterialSacrifice =
       movedPieceValueCp > capturedValueCp && sacrificeNetCp >= 100;
-    const exchangeSacrifice = !clearMaterialSacrifice && exchangeOfferCp >= 100;
-    if (!clearMaterialSacrifice && !exchangeSacrifice) {
-      return {
-        result: false,
-        reason: "not-sacrifice",
-        beforeRisk,
-        afterRisk,
-        exchangeOfferCp,
-        movedPieceValueCp,
-        capturedValueCp,
-        sacrificeNetCp,
-      };
-    }
+    const exchangeSacrifice = exchangeOfferCp >= 100;
+    const isSacrifice = clearMaterialSacrifice || exchangeSacrifice;
     const bestEval = moverSidedEval(row, fen);
     const secondEval = rows[1] ? moverSidedEval(rows[1], fen) : bestEval;
     const evalGap = rows[1] ? bestEval - secondEval : 0;
+    // Was the piece already trapped before the move? Reject unless check/mate overrides.
+    const beforeLegalMoves = legalMovesForColor(fen, moverCode);
     const beforeTrapped = new Set(
       detectTrappedPieces(
         beforeBoard,
         moverCode,
-        legalMovesForColor(fen, moverCode),
+        beforeLegalMoves,
         beforeAttackMap,
       ).map((entry) => entry.square),
     );
@@ -4969,20 +5016,20 @@
     const forcingCompensation =
       positiveMate ||
       safeThreat.maxCp >= movedPieceValueCp ||
-      safeThreat.totalCp >= Math.max(300, exchangeOfferCp) ||
       evalGap >= 0.9 ||
       critical;
     const sacrificialCheck =
       isCheck && (clearMaterialSacrifice || positiveMate || evalGap >= 0.9);
     let result = false;
     if (clearMaterialSacrifice) {
+      // Material sacrifice: need forcing compensation or sacrificial check
       result = forcingCompensation || sacrificialCheck;
     } else if (capturedValueCp >= movedPieceValueCp) {
-      result =
-        positiveMate ||
-        safeThreat.maxCp > movedPieceValueCp ||
-        evalGap >= 1.0;
+      // Non-sacrifice or capture of equal/greater value: need mate or eval advantage
+      result = positiveMate || safeThreat.maxCp > movedPieceValueCp || evalGap >= 1.0;
     } else {
+      // Speculative sac (legal capture exists but unprofitable, or quiet move with exchange risk):
+      // require strong compensation signals — forcing moves, mate, or critical position
       result = forcingCompensation || (isCheck && safeThreat.maxCp >= 300);
     }
     return {
@@ -4990,12 +5037,15 @@
       reason: result ? "passed" : "compensation-too-weak",
       beforeRisk,
       afterRisk,
+      newRiskCp,
       exchangeOfferCp,
+      enemyHasLegalCapture,
       movedPieceValueCp,
       capturedValueCp,
       sacrificeNetCp,
       clearMaterialSacrifice,
       exchangeSacrifice,
+      isSacrifice,
       bestEval,
       secondEval,
       evalGap,
