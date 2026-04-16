@@ -1,8 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const ANALYZE_SETTINGS_STORAGE_KEY = "chess-something:settings";
 
@@ -13,21 +11,14 @@ const forcedHoverStyle = {
 } as const;
 
 export function AuthSignOutButton({ className = "" }: { className?: string }) {
-  const router = useRouter();
   const [isForcedHover, setIsForcedHover] = useState(false);
 
-  async function handleSignOut() {
+  function handleSignOut() {
     try {
       window.localStorage.removeItem(ANALYZE_SETTINGS_STORAGE_KEY);
     } catch {}
 
-    try {
-      const supabase = getSupabaseBrowserClient();
-      await supabase.auth.signOut();
-    } finally {
-      router.push("/");
-      router.refresh();
-    }
+    window.location.assign("/auth/sign-out");
   }
 
   return (
@@ -40,7 +31,7 @@ export function AuthSignOutButton({ className = "" }: { className?: string }) {
       onFocus={() => setIsForcedHover(true)}
       onBlur={() => setIsForcedHover(false)}
       onClick={() => {
-        void handleSignOut();
+        handleSignOut();
       }}
     >
       Sign Out

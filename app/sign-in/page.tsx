@@ -11,6 +11,8 @@ function resolveErrorMessage(error?: string | null) {
       return "That email and password did not match an account.";
     case "auth-callback":
       return "The confirmation link could not be completed. Try signing in again.";
+    case "oauth-failed":
+      return "Google sign-in could not be started right now. Try again in a moment.";
     case "sign-in-failed":
       return "Sign in could not be completed right now. Try again in a moment.";
     default:
@@ -76,8 +78,8 @@ export default async function SignInPage({
                 Welcome Back
               </h1>
               <p className="mx-auto max-w-xl text-base leading-8 text-[var(--app-muted)]">
-                Sign in with your Chessview email account to open the analysis shell,
-                resume Arcade runs, and keep your saved preferences in sync.
+                Create your account to link your chess profile, import your recent games,
+                and track your performance over time.
               </p>
             </div>
 
@@ -93,6 +95,25 @@ export default async function SignInPage({
                   {errorMessage}
                 </div>
               ) : null}
+
+              <a
+                href={`/auth/google?next=${encodeURIComponent(nextPath)}`}
+                className="inline-flex h-12 items-center justify-center gap-3 border border-[var(--app-border)] bg-[var(--app-surface-input)] px-4 text-sm font-bold tracking-[0.08em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:bg-[var(--app-accent-soft)]"
+              >
+                <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+                  <path fill="#4285F4" d="M23.745 12.27c0-.79-.07-1.54-.19-2.27h-11.3v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"/>
+                  <path fill="#34A853" d="M12.255 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96h-3.98v3.09C3.515 21.3 7.615 24 12.255 24z"/>
+                  <path fill="#FBBC05" d="M5.525 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62h-3.98a11.86 11.86 0 0 0 0 10.76l3.98-3.09z"/>
+                  <path fill="#EA4335" d="M12.255 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C18.205 1.19 15.495 0 12.255 0c-4.64 0-8.74 2.7-10.71 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"/>
+                </svg>
+                Continue with Google
+              </a>
+
+              <div className="flex items-center gap-3 text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--app-muted)]">
+                <span className="h-px flex-1 bg-[var(--app-border)]" />
+                <span>Or continue with email</span>
+                <span className="h-px flex-1 bg-[var(--app-border)]" />
+              </div>
 
               <form action="/auth/sign-in" method="post" className="grid gap-5">
                 <input type="hidden" name="next" value={nextPath} />
@@ -134,15 +155,10 @@ export default async function SignInPage({
                 </button>
               </form>
 
-              <div className="grid gap-4 border-t border-[var(--app-border)] pt-5 md:grid-cols-[1fr_auto] md:items-center">
-                <div className="space-y-2">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--app-muted)]">
-                    Redirect After Sign-In
-                  </p>
-                  <p className="text-sm font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
-                    {nextPath}
-                  </p>
-                </div>
+              <div className="flex flex-col items-center gap-3 border-t border-[var(--app-border)] pt-5 text-center">
+                <p className="text-sm leading-6 text-[var(--app-muted)]">
+                  Don&apos;t have an account?
+                </p>
                 <Link
                   href={`/sign-up?next=${encodeURIComponent(nextPath)}`}
                   className="inline-flex items-center justify-center border border-[var(--app-border)] px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-text)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"

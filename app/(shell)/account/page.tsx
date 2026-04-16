@@ -1,7 +1,7 @@
 import { getUserAppTheme } from "@/lib/app-theme-store";
 import { getLinkedChessProfile } from "@/lib/chess-profile-store";
 import { getAnalyzePreferences } from "@/lib/analyze-preferences-store";
-import { normalizeAnalyzePreferences } from "@/lib/analyze-preferences";
+import { syncAnalyzePreferencesWithAppTheme } from "@/lib/analyze-preferences";
 import { AccountThemeForm } from "@/components/account-theme-form";
 import { AnalyzeSettingsForm } from "@/components/analyze-settings-form";
 import { AccountLinkedProfileForm } from "@/components/account-linked-profile-form";
@@ -90,21 +90,18 @@ export default async function AccountPage({
     ? resolvedSearchParams.provider[0]
     : resolvedSearchParams.provider;
   const banner = bannerCopy(status, error, provider);
-  const currentAnalyzePreferences = normalizeAnalyzePreferences(analyzePreferences);
+  const currentAnalyzePreferences = syncAnalyzePreferencesWithAppTheme(
+    analyzePreferences,
+    currentTheme,
+  );
 
   return (
     <section className="w-full overflow-auto pb-2">
       <div className="mx-auto grid w-full max-w-[1180px] gap-6">
         <div className="app-brutal-card-strong p-8">
-          <p className="text-xs uppercase tracking-[0.28em] text-[var(--app-muted)]">
-            Settings
-          </p>
-          <h1 className="mt-3 text-3xl font-bold uppercase tracking-[0.16em] text-white">
+          <h1 className="text-3xl font-bold uppercase tracking-[0.16em] text-white">
             Settings
           </h1>
-          <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--app-muted)]">
-            Manage your board defaults, linked chess profile, and visual theme from one place.
-          </p>
         </div>
 
         {banner ? (
@@ -127,18 +124,14 @@ export default async function AccountPage({
                 Analyze
               </p>
               <h2 className="mt-3 text-2xl font-bold uppercase tracking-[0.14em] text-white">
-                Board Defaults
+                Engine Search Settings
               </h2>
-              <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--app-muted)]">
-                Set the default engine search profile for the analysis board.
-              </p>
             </div>
           </div>
 
           <AnalyzeSettingsForm
             currentPreferences={currentAnalyzePreferences}
             sections="search"
-            helperText="These engine defaults are restored automatically on the analysis board."
           />
         </article>
 
@@ -199,7 +192,7 @@ export default async function AccountPage({
                 Themes & Visuals
               </h2>
               <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--app-muted)]">
-                Group the shell theme, board palette, and piece set in one place so the whole app feels consistent.
+                Your app theme now drives the board colors automatically, while piece sets stay configurable here.
               </p>
             </div>
           </div>
@@ -216,7 +209,6 @@ export default async function AccountPage({
               currentPreferences={currentAnalyzePreferences}
               sections="visual"
               saveLabel="Save Visual Settings"
-              helperText="These visual defaults are restored automatically on the analysis board."
             />
           </div>
         </article>

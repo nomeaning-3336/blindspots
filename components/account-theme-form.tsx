@@ -17,7 +17,7 @@ export function AccountThemeForm({
   currentTheme: AppTheme | null;
 }) {
   const [isPending, startTransition] = useTransition();
-  const [message, setMessage] = useState("Theme autosaves when changed.");
+  const [message, setMessage] = useState("");
 
   // For unauthenticated users, use the server-provided theme (from cookie)
   // For authenticated users, use the server-provided theme (from database)

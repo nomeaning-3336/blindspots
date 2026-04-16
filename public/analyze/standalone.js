@@ -239,6 +239,12 @@
       coord: "#b39ae0",
     },
   };
+  function normalizeBoardThemeForAppTheme(themeKey) {
+    const normalized = String(themeKey || "")
+      .trim()
+      .toLowerCase();
+    return BOARD_THEMES[normalized] ? normalized : "midnight";
+  }
   const PIECE_THEMES = {
     cburnett: {
       label: "Cburnett",
@@ -1221,9 +1227,9 @@
       MAX_ENGINE_THREADS,
       state.threads,
     );
-    state.boardTheme = BOARD_THEMES[preferences.boardTheme]
-      ? preferences.boardTheme
-      : state.boardTheme;
+    state.boardTheme = normalizeBoardThemeForAppTheme(
+      document?.documentElement?.dataset?.theme,
+    );
     state.pieceTheme = PIECE_THEMES[preferences.pieceTheme]
       ? preferences.pieceTheme
       : state.pieceTheme;
@@ -1866,6 +1872,7 @@
       flushPersistedAnalysisCaches,
       persistAnalysisCaches: (force) => persistAnalysisCaches(force),
       buildPersistedAnalysisCachePayload,
+      setAppTheme: (theme) => syncBoardThemeWithAppTheme(theme),
       setWorkspaceMode: (mode) => setWorkspaceMode(mode),
       applyUserAnalyzePreferences: (preferences) => {
         applyAnalyzePreferences(preferences);
@@ -10743,6 +10750,22 @@
     ui.boardShell.style.setProperty("--dark", theme.dark);
     ui.boardShell.style.setProperty("--coord", theme.coord);
     ui.boardShell.dataset.boardTheme = state.boardTheme;
+  }
+
+  function syncBoardThemeWithAppTheme(themeKey) {
+    const nextTheme = normalizeBoardThemeForAppTheme(
+      themeKey || document?.documentElement?.dataset?.theme,
+    );
+    if (state.boardTheme === nextTheme) {
+      applyBoardThemeToBoardShell();
+      return;
+    }
+    state.boardTheme = nextTheme;
+    applyBoardThemeToBoardShell();
+    saveSettings();
+    renderThemeSettings();
+    renderBoard();
+    renderBoardOverlay();
   }
 
   function setBoardTheme(themeKey) {
