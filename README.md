@@ -54,8 +54,7 @@ A future `Library` page may hold articles, books, notes, or a lightweight blog. 
 ## Tech Shape
 
 - Next.js App Router shell for the signed-in app
-- Clerk for authentication
-- Supabase for persistence
+- Supabase for authentication and persistence
 - `standalone.js` remains the source of truth for the embedded analysis runtime
 - `public/analyze/` is the synced runtime copy served by Next.js
 - Maia 2 powers the current Arcade opponent behavior

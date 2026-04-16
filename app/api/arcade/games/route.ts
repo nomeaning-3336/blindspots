@@ -1,10 +1,10 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { getOptionalAppUserId } from "@/lib/app-auth";
 import { createArcadeGameForUser } from "@/lib/arcade-game-store";
 import { isArcadeVariantKey } from "@/lib/arcade";
 
 export async function POST(request: Request) {
-  const { userId } = await auth();
+  const userId = await getOptionalAppUserId();
 
   if (!userId) {
     return NextResponse.json({ error: "Sign in to create an Arcade game." }, { status: 401 });

@@ -1,4 +1,3 @@
-import { auth } from "@clerk/nextjs/server";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import {
@@ -8,7 +7,7 @@ import {
   normalizeChessProvider,
   normalizeChessUsername,
 } from "@/lib/chess-profile";
-import { DEFAULT_APP_ROUTE, normalizeNextPath } from "@/lib/app-auth";
+import { DEFAULT_APP_ROUTE, getOptionalAppUserId, normalizeNextPath } from "@/lib/app-auth";
 import { upsertLinkedChessProfileForUser } from "@/lib/chess-profile-store";
 
 function isJsonRequest(request: Request) {
@@ -22,7 +21,7 @@ export async function POST(request: Request) {
     typeof requestedNext === "string"
       ? normalizeNextPath(requestedNext)
       : "/account";
-  const { userId } = await auth();
+  const userId = await getOptionalAppUserId();
 
   const cookieStore = await cookies();
 

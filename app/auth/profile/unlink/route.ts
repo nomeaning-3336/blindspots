@@ -1,8 +1,7 @@
-import { auth } from "@clerk/nextjs/server";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { CHESS_PROFILE_COOKIE } from "@/lib/chess-profile";
-import { normalizeNextPath } from "@/lib/app-auth";
+import { getOptionalAppUserId, normalizeNextPath } from "@/lib/app-auth";
 import { deleteLinkedChessProfileForUser } from "@/lib/chess-profile-store";
 
 export async function POST(request: Request) {
@@ -12,7 +11,7 @@ export async function POST(request: Request) {
     typeof requestedNext === "string"
       ? normalizeNextPath(requestedNext)
       : "/account";
-  const { userId } = await auth();
+  const userId = await getOptionalAppUserId();
 
   const cookieStore = await cookies();
 

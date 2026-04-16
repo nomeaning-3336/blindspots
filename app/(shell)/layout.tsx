@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
-import { auth } from "@clerk/nextjs/server";
 import { AppShellNav } from "@/components/app-shell-nav";
+import { getOptionalAppUserId } from "@/lib/app-auth";
 
 export default async function ProtectedAppLayout({
   children,
 }: Readonly<{
   children: ReactNode;
 }>) {
-  const { userId } = await auth();
+  const userId = await getOptionalAppUserId();
   const isSignedIn = Boolean(userId);
 
   return (

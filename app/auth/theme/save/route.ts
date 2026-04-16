@@ -1,6 +1,5 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { DEFAULT_APP_ROUTE, normalizeNextPath } from "@/lib/app-auth";
+import { DEFAULT_APP_ROUTE, getOptionalAppUserId, normalizeNextPath } from "@/lib/app-auth";
 import { normalizeAppTheme } from "@/lib/app-theme";
 import { upsertUserAppThemeForUser } from "@/lib/app-theme-store";
 
@@ -15,7 +14,7 @@ export async function POST(request: Request) {
     typeof requestedNext === "string"
       ? normalizeNextPath(requestedNext)
       : "/account";
-  const { userId } = await auth();
+  const userId = await getOptionalAppUserId();
 
   if (!userId) {
     if (isJsonRequest(request)) {

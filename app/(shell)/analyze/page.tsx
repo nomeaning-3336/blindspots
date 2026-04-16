@@ -1,6 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { AnalyzeShell } from "@/components/analyze-shell";
 import { getAnalyzePreferences } from "@/lib/analyze-preferences-store";
+import { getOptionalAppUserId } from "@/lib/app-auth";
 
 const ANALYZE_PAGE_FETCH_TIMEOUT_MS = 5000;
 
@@ -16,7 +16,7 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Pro
 }
 
 export default async function AnalyzePage() {
-  const { userId } = await auth();
+  const userId = await getOptionalAppUserId();
   const initialPreferences = await withTimeout(
     getAnalyzePreferences(),
     ANALYZE_PAGE_FETCH_TIMEOUT_MS,

@@ -1,15 +1,9 @@
-import { auth } from "@clerk/nextjs/server";
 import { ArcadeDashboard } from "@/components/arcade-dashboard";
 import { listActiveArcadeGamesForUser } from "@/lib/arcade-game-store";
+import { getOptionalAppUserId } from "@/lib/app-auth";
 
 export default async function ArcadePage() {
-  let userId: string | null = null;
-  try {
-    const authRes = await auth();
-    userId = authRes.userId ?? null;
-  } catch {
-    userId = null;
-  }
+  const userId = await getOptionalAppUserId();
 
   const activeGames = userId
     ? await listActiveArcadeGamesForUser(userId).catch(() => [])

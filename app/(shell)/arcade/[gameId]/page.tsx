@@ -1,8 +1,8 @@
 import { AnalyzeShell } from "@/components/analyze-shell";
-import { auth } from "@clerk/nextjs/server";
 import { getAnalyzePreferences } from "@/lib/analyze-preferences-store";
 import { getArcadeGameForUser } from "@/lib/arcade-game-store";
-import { notFound, redirect } from "next/navigation";
+import { requireAppAuth } from "@/lib/app-auth";
+import { notFound } from "next/navigation";
 
 const ARCADE_GAME_FETCH_TIMEOUT_MS = 5000;
 
@@ -23,11 +23,7 @@ export default async function ArcadeGamePage({
   params: Promise<{ gameId: string }>;
 }) {
   const { gameId } = await params;
-  const { userId } = await auth();
-
-  if (!userId) {
-    redirect(`/sign-in?next=${encodeURIComponent(`/arcade/${gameId}`)}`);
-  }
+  const userId = await requireAppAuth(`/arcade/${gameId}`);
 
   const game = await withTimeout(getArcadeGameForUser(userId, gameId), ARCADE_GAME_FETCH_TIMEOUT_MS, null);
   if (!game) {

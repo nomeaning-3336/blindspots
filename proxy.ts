@@ -1,7 +1,7 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { updateSupabaseSession } from "@/lib/supabase/middleware";
 
-export default clerkMiddleware((_, request) => {
+export default async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   if (
     pathname === "/analyze" ||
@@ -18,8 +18,8 @@ export default clerkMiddleware((_, request) => {
     const targetUrl = new URL(`${targetPath}${search}`, request.url);
     return NextResponse.redirect(targetUrl, 308);
   }
-  return NextResponse.next();
-});
+  return updateSupabaseSession(request);
+}
 
 export const config = {
   matcher: [

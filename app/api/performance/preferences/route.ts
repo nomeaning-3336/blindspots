@@ -1,4 +1,3 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import {
   normalizeGameType,
@@ -6,6 +5,7 @@ import {
   type PerformanceGameType,
   type PerformanceRangeDays,
 } from "@/lib/chess-profile";
+import { getOptionalAppUserId } from "@/lib/app-auth";
 import { updatePerformancePreferencesForUser } from "@/lib/chess-profile-store";
 
 interface PerformancePreferencesPayload {
@@ -14,7 +14,7 @@ interface PerformancePreferencesPayload {
 }
 
 export async function POST(request: Request) {
-  const { userId } = await auth();
+  const userId = await getOptionalAppUserId();
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

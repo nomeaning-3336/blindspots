@@ -1,9 +1,9 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { listRecentStandardArcadeGamesForUser } from "@/lib/arcade-game-store";
+import { getOptionalAppUserId } from "@/lib/app-auth";
 
 export async function GET() {
-  const { userId } = await auth();
+  const userId = await getOptionalAppUserId();
   const headers = { "Cache-Control": "no-store" };
 
   if (!userId) {

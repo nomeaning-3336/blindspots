@@ -1,10 +1,10 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { normalizeAnalyzePreferences } from "@/lib/analyze-preferences";
 import { upsertAnalyzePreferencesForUser } from "@/lib/analyze-preferences-store";
+import { getOptionalAppUserId } from "@/lib/app-auth";
 
 export async function POST(request: Request) {
-  const { userId } = await auth();
+  const userId = await getOptionalAppUserId();
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
