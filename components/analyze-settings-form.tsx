@@ -1,25 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition, type CSSProperties } from "react";
-import type { AnalyzeBoardTheme, AnalyzeLimitKind, AnalyzePieceTheme, AnalyzePreferences } from "@/lib/analyze-preferences";
-import { normalizeAnalyzePreferences } from "@/lib/analyze-preferences";
+import { useEffect, useRef, useState, useTransition } from "react";
+import type { AnalyzePieceTheme, AnalyzePreferences } from "@/lib/analyze-preferences";
+import {
+  analyzeBoardThemeForAppTheme,
+  normalizeAnalyzePreferences,
+} from "@/lib/analyze-preferences";
 
 const LOCAL_STORAGE_KEY = "chessview-analyze-preferences";
-
-const BOARD_THEMES: Array<{
-  id: AnalyzeBoardTheme;
-  label: string;
-  light: string;
-  dark: string;
-}> = [
-  { id: "midnight", label: "Midnight", light: "#efe6fb", dark: "#6d5a8f" },
-  { id: "grey", label: "Grey", light: "#E8E8E8", dark: "#A1A1AE" },
-  { id: "light", label: "Light", light: "#f7f0e0", dark: "#d9ccb5" },
-  { id: "solarized", label: "Solarized", light: "#f3ebcf", dark: "#c8ba98" },
-  { id: "forest", label: "Forest", light: "#dce7d8", dark: "#7d9770" },
-  { id: "ocean", label: "Ocean", light: "#dce6f2", dark: "#5c769a" },
-  { id: "crimson", label: "Crimson", light: "#f0dde2", dark: "#73515f" },
-];
 
 const PIECE_THEMES: Array<{
   id: AnalyzePieceTheme;
@@ -41,11 +29,21 @@ function pieceAsset(assetSet: string, code: string) {
   return `/analyze/pieces/${assetSet}/${code}.svg`;
 }
 
+function syncedBoardTheme(preferences: AnalyzePreferences) {
+  const currentTheme =
+    typeof document !== "undefined" ? document.documentElement.dataset.theme : null;
+
+  return {
+    ...preferences,
+    boardTheme: analyzeBoardThemeForAppTheme(currentTheme),
+  };
+}
+
 export function AnalyzeSettingsForm({
   currentPreferences,
   sections = "all",
   saveLabel = "Save Analyze Settings",
-  helperText = "These defaults are restored automatically on the analyze board.",
+  helperText,
 }: {
   currentPreferences: AnalyzePreferences;
   sections?: "all" | "search" | "visual";
@@ -65,7 +63,7 @@ export function AnalyzeSettingsForm({
   }
 
   useEffect(() => {
-    const serialized = JSON.stringify(preferences);
+    const serialized = JSON.stringify(syncedBoardTheme(preferences));
     if (serialized === lastSavedRef.current) return;
 
     const timeoutId = window.setTimeout(() => {
@@ -114,7 +112,6 @@ export function AnalyzeSettingsForm({
       currentPreferences.depthLimitValue === 18 &&
       currentPreferences.linesShown === 3 &&
       currentPreferences.threads === 1 &&
-      currentPreferences.boardTheme === "midnight" &&
       currentPreferences.pieceTheme === "maestro";
 
     if (!isLikelyDefaultPreferences) return;
@@ -122,7 +119,7 @@ export function AnalyzeSettingsForm({
       const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        const normalized = normalizeAnalyzePreferences(parsed);
+        const normalized = syncedBoardTheme(normalizeAnalyzePreferences(parsed));
         setPreferences(normalized);
         lastSavedRef.current = JSON.stringify(normalized);
       }
@@ -223,43 +220,6 @@ export function AnalyzeSettingsForm({
       {(sections === "all" || sections === "visual") && (
         <>
           <section className="app-brutal-inset p-5">
-            <p className="text-xs uppercase tracking-[0.24em] text-[var(--app-muted)]">Board</p>
-            <div className="mt-4 app-theme-grid">
-              {BOARD_THEMES.map((theme) => (
-                <label key={theme.id} className="app-theme-option">
-                  <input
-                    type="radio"
-                    name="boardTheme"
-                    value={theme.id}
-                    checked={preferences.boardTheme === theme.id}
-                    onChange={() => update("boardTheme", theme.id)}
-                  />
-                  <div className="app-theme-option-card">
-                    <div
-                      className="analyze-board-preview"
-                      style={
-                        {
-                          "--preview-light": theme.light,
-                          "--preview-dark": theme.dark,
-                        } as CSSProperties
-                      }
-                    >
-                      {Array.from({ length: 16 }, (_, index) => (
-                        <span key={`${theme.id}-${index}`} className={`analyze-board-preview-cell ${index % 2 === Math.floor(index / 4) % 2 ? "light" : "dark"}`} />
-                      ))}
-                    </div>
-                    <div className="app-theme-meta mt-4">
-                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-text)]">
-                        {theme.label}
-                      </p>
-                    </div>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </section>
-
-          <section className="app-brutal-inset p-5">
             <p className="text-xs uppercase tracking-[0.24em] text-[var(--app-muted)]">Pieces</p>
             <div className="mt-4 app-theme-grid">
               {PIECE_THEMES.map((theme) => (
@@ -289,9 +249,11 @@ export function AnalyzeSettingsForm({
         </>
       )}
 
-      <p className="text-sm leading-6 text-[var(--app-muted)]">
-        {isPending ? `${saveLabel}...` : message || helperText}
-      </p>
+      {(message || helperText) && (
+        <p className="text-sm leading-6 text-[var(--app-muted)]">
+          {isPending ? `${saveLabel}...` : message || helperText}
+        </p>
+      )}
     </div>
   );
 }

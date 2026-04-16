@@ -18,8 +18,9 @@ Chessview now uses Supabase Auth as the single auth layer.
 ## Auth Setup
 
 1. Enable Email auth in Supabase Authentication.
-2. If you want email confirmation, keep email confirmations enabled and add your app URL plus `/auth/callback` to the allowed redirect URLs.
-3. If you want immediate sign-in after sign-up during local development, disable email confirmation in Supabase Auth.
+2. If you want Google sign-in, enable the Google provider in Supabase Authentication and add your app URL plus `/auth/callback` to the allowed redirect URLs.
+3. If you want email confirmation, keep email confirmations enabled and add your app URL plus `/auth/callback` to the allowed redirect URLs.
+4. If you want immediate sign-in after sign-up during local development, disable email confirmation in Supabase Auth.
 
 ## Notes
 

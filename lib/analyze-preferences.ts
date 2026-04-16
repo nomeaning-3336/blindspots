@@ -1,3 +1,5 @@
+import { normalizeAppTheme, type AppTheme } from "@/lib/app-theme";
+
 export type AnalyzeLimitKind = "time" | "depth";
 export type AnalyzeBoardTheme =
   | "grey"
@@ -77,6 +79,10 @@ export function normalizeAnalyzeBoardTheme(value: unknown): AnalyzeBoardTheme {
   }
 }
 
+export function analyzeBoardThemeForAppTheme(value: AppTheme | string | null | undefined) {
+  return normalizeAnalyzeBoardTheme(normalizeAppTheme(value));
+}
+
 export function normalizeAnalyzePieceTheme(value: unknown): AnalyzePieceTheme {
   switch (value) {
     case "cburnett":
@@ -103,5 +109,17 @@ export function normalizeAnalyzePreferences(
     threads: clampAnalyzeThreads(value?.threads),
     boardTheme: normalizeAnalyzeBoardTheme(value?.boardTheme),
     pieceTheme: normalizeAnalyzePieceTheme(value?.pieceTheme),
+  };
+}
+
+export function syncAnalyzePreferencesWithAppTheme(
+  value: Partial<AnalyzePreferences> | null | undefined,
+  appTheme: AppTheme | string | null | undefined,
+): AnalyzePreferences {
+  const normalized = normalizeAnalyzePreferences(value);
+
+  return {
+    ...normalized,
+    boardTheme: analyzeBoardThemeForAppTheme(appTheme),
   };
 }

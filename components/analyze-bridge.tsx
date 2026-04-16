@@ -836,6 +836,7 @@ export function AnalyzeBridge({
     let cancelled = false;
     const host = hostRef.current;
     const hoverCleanups: Array<() => void> = [];
+    let themeObserver: MutationObserver | null = null;
 
     const syncViewportRoom = () => {
       if (!host) return;
@@ -873,6 +874,11 @@ export function AnalyzeBridge({
       });
     };
 
+    const syncAppTheme = () => {
+      const theme = document.documentElement.dataset.theme || null;
+      window.__chessSomething?.setAppTheme?.(theme);
+    };
+
     document.body.classList.add("analyze-embedded");
     window.__CHESSVIEW_INITIAL_ANALYZE_PREFERENCES__ = initialPreferences;
     window.__CHESSVIEW_ANALYZE_PREFERENCES_PERSIST_URL__ =
@@ -881,6 +887,7 @@ export function AnalyzeBridge({
     window.__CHESSVIEW_INITIAL_ARCADE_GAME__ = initialArcadeGame;
     window.__CHESSVIEW_ARCADE_GAME_PERSIST_URL__ = arcadeGamePersistUrl;
     window.__chessSomething?.applyUserAnalyzePreferences?.(initialPreferences);
+    syncAppTheme();
     window.__chessSomething?.setWorkspaceMode?.(initialWorkspaceMode);
     syncViewportRoom();
     let syncLater = window.requestAnimationFrame(() => {
@@ -919,6 +926,7 @@ export function AnalyzeBridge({
     bootState.promise
       .then(() => {
         if (cancelled) return;
+        syncAppTheme();
         window.__chessSomething?.setWorkspaceMode?.(initialWorkspaceMode);
         wireVisualHoverState();
         setStatus("ready");
@@ -933,10 +941,19 @@ export function AnalyzeBridge({
         );
       });
 
+    themeObserver = new MutationObserver(() => {
+      syncAppTheme();
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+
     return () => {
       cancelled = true;
       window.cancelAnimationFrame(syncLater);
       window.removeEventListener("resize", syncViewportRoom);
+      themeObserver?.disconnect();
       hoverCleanups.forEach((cleanup) => cleanup());
       document.body.classList.remove("analyze-embedded");
     };
