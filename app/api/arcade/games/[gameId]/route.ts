@@ -1,5 +1,5 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { getOptionalAppUserId } from "@/lib/app-auth";
 import {
   getArcadeGameForUser,
   saveArcadeGameStateForUser,
@@ -9,7 +9,7 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ gameId: string }> },
 ) {
-  const { userId } = await auth();
+  const userId = await getOptionalAppUserId();
 
   if (!userId) {
     return NextResponse.json({ error: "Sign in to load this Arcade game." }, { status: 401 });
@@ -45,7 +45,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ gameId: string }> },
 ) {
-  const { userId } = await auth();
+  const userId = await getOptionalAppUserId();
 
   if (!userId) {
     return NextResponse.json({ error: "Sign in to save this Arcade game." }, { status: 401 });

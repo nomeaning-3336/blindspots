@@ -1,5 +1,5 @@
-import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { getSupabaseServerUserId } from "@/lib/supabase/server";
 
 export const DEFAULT_APP_ROUTE = "/analysis";
 
@@ -30,10 +30,16 @@ export function normalizeNextPath(value?: string | null) {
   return DEFAULT_APP_ROUTE;
 }
 
+export async function getOptionalAppUserId() {
+  return getSupabaseServerUserId();
+}
+
 export async function requireAppAuth(nextPath: string) {
-  const { userId } = await auth();
+  const userId = await getOptionalAppUserId();
 
   if (!userId) {
     redirect(`/sign-in?next=${encodeURIComponent(normalizeNextPath(nextPath))}`);
   }
+
+  return userId;
 }

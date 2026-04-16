@@ -10,7 +10,6 @@ from pathlib import Path
 TARGET_HOST_SNIPPETS = (
     "localhost",
     "127.0.0.1",
-    "clerk",
 )
 
 

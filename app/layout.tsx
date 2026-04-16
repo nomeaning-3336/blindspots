@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
 import { JetBrains_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 import { getUserAppTheme } from "@/lib/app-theme-store";
@@ -28,15 +27,13 @@ export default async function RootLayout({
   const theme = await getUserAppTheme();
 
   return (
-    <html lang="en" className={jetbrainsMono.variable} data-theme={theme}>
+    <html
+      lang="en"
+      className={jetbrainsMono.variable}
+      data-theme={theme ?? undefined}
+    >
       <body>
-        <ClerkProvider
-          signInUrl="/sign-in"
-          signUpUrl="/sign-up"
-          afterSignOutUrl="/"
-        >
-          {children}
-        </ClerkProvider>
+        {children}
       </body>
     </html>
   );

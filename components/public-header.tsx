@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useClerk } from "@clerk/nextjs";
 import { usePathname } from "next/navigation";
+import { AuthSignOutButton } from "@/components/auth-sign-out-button";
 
 const appLinks = [
   { href: "/analysis", label: "Analysis" },
@@ -11,8 +11,6 @@ const appLinks = [
   { href: "/performance", label: "Statistics" },
   { href: "/account", label: "Settings" },
 ];
-
-const ANALYZE_SETTINGS_STORAGE_KEY = "chess-something:settings";
 
 function linkClassName(isActive: boolean) {
   return [
@@ -56,27 +54,10 @@ function AppShellLink({
 }
 
 function AppShellSignOutButton() {
-  const { signOut } = useClerk();
-  const [isForcedHover, setIsForcedHover] = useState(false);
-
   return (
-    <button
-      type="button"
+    <AuthSignOutButton
       className="border-2 border-[color:var(--app-border)] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--app-text)] transition"
-      style={isForcedHover ? forcedHoverStyle : undefined}
-      onMouseEnter={() => setIsForcedHover(true)}
-      onMouseLeave={() => setIsForcedHover(false)}
-      onFocus={() => setIsForcedHover(true)}
-      onBlur={() => setIsForcedHover(false)}
-      onClick={() => {
-        try {
-          window.localStorage.removeItem(ANALYZE_SETTINGS_STORAGE_KEY);
-        } catch {}
-        void signOut({ redirectUrl: "/" });
-      }}
-    >
-      Sign Out
-    </button>
+    />
   );
 }
 

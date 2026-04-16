@@ -1,12 +1,12 @@
-import { auth } from "@clerk/nextjs/server";
 import { cookies } from "next/headers";
 import { APP_THEMES, DEFAULT_APP_THEME, normalizeAppTheme, type AppTheme } from "@/lib/app-theme";
+import { getOptionalAppUserId } from "@/lib/app-auth";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 
 const THEME_COOKIE_NAME = "chessview-theme";
 
 export async function getUserAppTheme() {
-  const { userId } = await auth();
+  const userId = await getOptionalAppUserId();
 
   if (!userId) {
     // Check for theme cookie for unauthenticated users

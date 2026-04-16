@@ -1,12 +1,11 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { getLinkedChessProfile } from "@/lib/chess-profile-store";
 import { getRecentImportGames } from "@/lib/analyze-recent-games-server";
 import { getChessProviderLabel } from "@/lib/chess-profile";
-import { normalizeNextPath } from "@/lib/app-auth";
+import { getOptionalAppUserId, normalizeNextPath } from "@/lib/app-auth";
 
 export async function GET() {
-  const { userId } = await auth();
+  const userId = await getOptionalAppUserId();
   const isSignedIn = Boolean(userId);
   const headers = { "Cache-Control": "no-store" };
 

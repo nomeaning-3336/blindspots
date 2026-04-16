@@ -1,4 +1,3 @@
-import { auth } from "@clerk/nextjs/server";
 import { getUserAppTheme } from "@/lib/app-theme-store";
 import { getLinkedChessProfile } from "@/lib/chess-profile-store";
 import { getAnalyzePreferences } from "@/lib/analyze-preferences-store";
@@ -6,6 +5,7 @@ import { normalizeAnalyzePreferences } from "@/lib/analyze-preferences";
 import { AccountThemeForm } from "@/components/account-theme-form";
 import { AnalyzeSettingsForm } from "@/components/analyze-settings-form";
 import { AccountLinkedProfileForm } from "@/components/account-linked-profile-form";
+import { getOptionalAppUserId } from "@/lib/app-auth";
 
 function bannerCopy(status?: string | null, error?: string | null, provider?: string | null) {
   if (error === "invalid-provider") {
@@ -71,7 +71,7 @@ export default async function AccountPage({
     provider?: string | string[];
   }>;
 }) {
-  const { userId } = await auth();
+  const userId = await getOptionalAppUserId();
 
   const [linkedProfile, currentTheme, analyzePreferences, resolvedSearchParams] = await Promise.all([
     getLinkedChessProfile(),

@@ -1,10 +1,10 @@
-import { auth } from "@clerk/nextjs/server";
 import type { AnalyzePreferences } from "@/lib/analyze-preferences";
 import { normalizeAnalyzePreferences } from "@/lib/analyze-preferences";
+import { getOptionalAppUserId } from "@/lib/app-auth";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 
 export async function getAnalyzePreferences() {
-  const { userId } = await auth();
+  const userId = await getOptionalAppUserId();
 
   if (!userId) {
     return null;

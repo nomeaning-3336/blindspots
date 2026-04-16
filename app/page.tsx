@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { auth } from "@clerk/nextjs/server";
 import { PublicHeaderClient } from "@/components/public-header";
+import { getOptionalAppUserId } from "@/lib/app-auth";
 
 const analysisFeatures = [
   {
@@ -38,7 +38,7 @@ const heroMoves = [
 ];
 
 export default async function HomePage() {
-  const { userId } = await auth();
+  const userId = await getOptionalAppUserId();
   const isSignedIn = Boolean(userId);
 
   return (

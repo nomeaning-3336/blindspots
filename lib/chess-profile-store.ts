@@ -1,4 +1,3 @@
-import { auth } from "@clerk/nextjs/server";
 import type {
   LinkedChessProfile,
   PerformancePreferences,
@@ -8,6 +7,7 @@ import {
   isPerformanceRangeDays,
   normalizeChessProvider,
 } from "@/lib/chess-profile";
+import { getOptionalAppUserId } from "@/lib/app-auth";
 import type { Database } from "@/lib/supabase/database";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 
@@ -19,7 +19,7 @@ export interface LinkedChessProfileRecord extends LinkedChessProfile {
 }
 
 export async function getLinkedChessProfile() {
-  const { userId } = await auth();
+  const userId = await getOptionalAppUserId();
 
   if (!userId) {
     return null;
