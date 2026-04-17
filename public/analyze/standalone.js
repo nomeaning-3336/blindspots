@@ -5335,6 +5335,8 @@
       return {
         onlyMove: false,
         singlePlayableMove: false,
+        recommendableAlternatives: 0,
+        recommendableCount: best ? 1 : 0,
         nearBestCount: best ? 1 : 0,
         playableCount: best ? 1 : 0,
         seriousMistakes: 0,
@@ -5347,9 +5349,15 @@
       };
     }
     const alternatives = rows.slice(1);
+    const alternativeClasses = alternatives.map((candidate) =>
+      classifyLossMove(best, candidate),
+    );
     const losses = alternatives.map((candidate) =>
       expectedScoreLoss(best, candidate),
     );
+    const recommendableAlternatives = alternativeClasses.filter((moveClass) =>
+      isRecommendableMoveClass(moveClass),
+    ).length;
     const nearBestCount = 1 + losses.filter((loss) => loss <= 0.018).length;
     const playableCount = 1 + losses.filter((loss) => loss <= 0.055).length;
     const losingMateAlternatives = alternatives
@@ -5362,6 +5370,8 @@
     return {
       onlyMove: nearBestCount === 1,
       singlePlayableMove: playableCount === 1,
+      recommendableAlternatives,
+      recommendableCount: 1 + recommendableAlternatives,
       nearBestCount,
       playableCount,
       seriousMistakes: losses.filter((loss) => loss >= 0.13).length,
@@ -5380,6 +5390,7 @@
   function looksCritical(row, rows) {
     if (!row?.bestUci || rows.length < 2) return false;
     const danger = moveDangerProfile(rows);
+    if (danger.recommendableAlternatives > 0) return false;
     if (danger.bestEscapesMate) return true;
     if (
       danger.bestMateDistance != null &&
@@ -5388,6 +5399,7 @@
     )
       return true;
     return (
+      danger.seriousMistakes + danger.blunders > 0 &&
       danger.nearBestCount <= 1 &&
       (danger.secondLoss >= 0.085 || danger.seriousMistakes >= 2)
     );
