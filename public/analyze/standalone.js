@@ -602,6 +602,9 @@
     wikibookCache: new Map(),
     analysisMap: new Map(),
     analysisRows: [],
+    analysisRowsFen: "",
+    analysisSearchId: 0,
+    analysisSnapshotBuffer: null,
     awaitingFinalAnalysis: false,
     awaitingImportedPgnAnalysis: false,
     importedPgnReportReady: false,
@@ -1861,6 +1864,7 @@
       classifyLossMove,
       currentGame,
       analysisVersionForFen,
+      debugSimulateAnalysisSnapshotSelection,
       tacticalSignalsForCurrentLine,
       positionAnalysisCache: state.positionAnalysisCache,
       playedMoveAnalysisCache: state.playedMoveAnalysisCache,
@@ -1881,6 +1885,7 @@
         state.analysisRows = Array.from(state.analysisMap.values())
           .sort((a, b) => a.multipv - b.multipv)
           .slice(0, activeAnalysisLimit());
+        state.analysisRowsFen = state.current?.fen || "";
         snapshotFullPositionAnalysis();
         renderMeta();
         renderAnalysisFull();
@@ -2397,11 +2402,18 @@
     return whiteCentricEvalInfo(row, node.parent.fen);
   }
 
+  function currentDisplayedAnalysisRowsForFen(fen) {
+    if (!fen || state.analysisRowsFen !== fen || !state.analysisRows.length)
+      return [];
+    return state.analysisRows;
+  }
+
   function fullPositionRowsForFen(fen) {
     if (!fen) return [];
     if (fen === state.current?.fen) {
-      if (!state.selectedSquare && state.analysisRows.length)
-        return sanitizeAnalysisRows(state.analysisRows, fen);
+      const displayedRows = currentDisplayedAnalysisRowsForFen(fen);
+      if (!state.selectedSquare && displayedRows.length)
+        return sanitizeAnalysisRows(displayedRows, fen);
       const entry =
         state.positionAnalysisCache.get(fen) || matchingCachedFullAnalysisForFen(fen);
       return sanitizeAnalysisRows(entry?.rows || [], fen);
@@ -3689,13 +3701,13 @@
     }
     const maxRankCols = Math.max(2, String(panelRows.length).length + 1);
     ui.analysisList.innerHTML = panelRows
-      .map(({ row, blurred }, index) => {
+      .map(({ row, blurred, moveClass: rowMoveClass }, index) => {
         const active = state.hoveredUci === row.bestUci ? " hover" : "";
         const blurClass = blurred ? " blurred" : "";
         const lead = analysisLeadText(row, state.current.fen);
         const pv = row.restSan || "";
         const stats = `${row.evalText} · d${row.depth || "-"} · ${formatNodes(row.nodes)}`;
-        const moveClass = classifyDisplayedMove(row, index, visibleRows, game);
+        const moveClass = rowMoveClass ?? classifyDisplayedMove(row, index, visibleRows, game);
         const visualClass = moveClass || {
           color: "var(--app-muted-soft)",
           soft: "var(--app-surface-subtle)",
@@ -4319,10 +4331,9 @@
   function visibleAnalysisRows(game = currentGame()) {
     const fen = state.current?.fen || game?.fen?.() || "";
     const legalUcis = legalUciSetForGame(game);
+    const displayedRows = currentDisplayedAnalysisRowsForFen(fen);
     const legalRows = normalizeAnalysisRows(
-      state.analysisRows.filter(
-        (row) => row?.bestUci && legalUcis.has(row.bestUci),
-      ),
+      displayedRows.filter((row) => row?.bestUci && legalUcis.has(row.bestUci)),
       fen,
     );
     if (!legalRows.length) return [];
@@ -4342,10 +4353,9 @@
   function panelAnalysisRows(game = currentGame()) {
     const fen = state.current?.fen || game?.fen?.() || "";
     const legalUcis = legalUciSetForGame(game);
+    const displayedRows = currentDisplayedAnalysisRowsForFen(fen);
     const legalRows = normalizeAnalysisRows(
-      state.analysisRows.filter(
-        (row) => row?.bestUci && legalUcis.has(row.bestUci),
-      ),
+      displayedRows.filter((row) => row?.bestUci && legalUcis.has(row.bestUci)),
       fen,
     );
     if (!legalRows.length) return [];
@@ -4353,19 +4363,33 @@
     if (state.selectedSquare) {
       return limitedRows.map((row) => ({ row, blurred: false }));
     }
-    return limitedRows.map((row, index) => {
+    const rowsWithBlur = limitedRows.map((row, index) => {
       const moveClass = classifyAnalysisMove(row, index, legalRows, game);
       return {
         row,
         blurred: !isRecommendableMoveClass(moveClass),
+        moveClass,
       };
     });
+    const unblurredCount = rowsWithBlur.filter((r) => !r.blurred).length;
+    if (unblurredCount === 1 && rowsWithBlur.length >= 2) {
+      const loneIndex = rowsWithBlur.findIndex((r) => !r.blurred);
+      rowsWithBlur[loneIndex].moveClass = MOVE_CLASS_STYLES.critical;
+      rowsWithBlur[loneIndex].blurred = false;
+    }
+    return rowsWithBlur.map(({ row, blurred, moveClass }) => ({
+      row,
+      blurred,
+      moveClass,
+    }));
   }
 
   function analysisRowsForFen(fen) {
     if (!fen) return [];
-    if (state.current?.fen === fen && state.analysisRows.length)
-      return state.analysisRows;
+    if (state.current?.fen === fen) {
+      const displayedRows = currentDisplayedAnalysisRowsForFen(fen);
+      if (displayedRows.length) return displayedRows;
+    }
     const positionEntry = state.positionAnalysisCache.get(fen);
     if (positionEntry?.rows?.length) return positionEntry.rows;
     const nextPlyEntry = state.nextPlyAnalysisCache.get(fen);
@@ -4487,6 +4511,7 @@
     if (
       fen === state.current?.fen &&
       !state.selectedSquare &&
+      state.analysisRowsFen === fen &&
       state.analysisRows.length
     ) {
       return `live:${state.analysisPublishedAt}:${state.analysisPublishedDepth}:${state.analysisRows.length}`;
@@ -5703,6 +5728,8 @@
     state.analysisMap.clear();
     analysisByUci.clear();
     state.analysisRows = [];
+    state.analysisRowsFen = "";
+    state.analysisSnapshotBuffer = null;
     renderAnalysisFull();
     renderEvalBar();
     snapshotFullPositionAnalysis();
@@ -8326,6 +8353,8 @@
     state.analysisMap = new Map(rows.map((row) => [row.multipv, { ...row }]));
     rebuildAnalysisByUci();
     state.analysisRows = rows.map((row) => ({ ...row }));
+    state.analysisRowsFen = fen;
+    state.analysisSnapshotBuffer = null;
     state.analysisPublishedAt = entry.publishedAt;
     state.analysisPublishedDepth = rows[0]?.depth || 0;
     state.awaitingFinalAnalysis = false;
@@ -8347,6 +8376,8 @@
     state.analysisMap = new Map(rows.map((row) => [row.multipv, { ...row }]));
     rebuildAnalysisByUci();
     state.analysisRows = rows.map((row) => ({ ...row }));
+    state.analysisRowsFen = fen;
+    state.analysisSnapshotBuffer = null;
     state.analysisPublishedAt = entry.publishedAt;
     state.analysisPublishedDepth = rows[0]?.depth || 0;
     state.awaitingFinalAnalysis = false;
@@ -8901,6 +8932,8 @@
     state.analysisMap.clear();
     analysisByUci.clear();
     state.analysisRows = [];
+    state.analysisRowsFen = "";
+    state.analysisSnapshotBuffer = null;
     state.analysisPublishedAt = 0;
     state.analysisPublishedDepth = 0;
     clearTimeout(state.analysisPublishTimer);
@@ -9684,13 +9717,23 @@
       if (state.discardEngineInfo) return;
       let row = parseInfoLine(line);
       if (row) {
-        const priorSlotRow = state.analysisMap.get(row.multipv);
-        const priorMoveRow = analysisByUci.get(row.bestUci);
+        const priorSlotRow =
+          latestBufferedAnalysisRowForMultipv(state.analysisSnapshotBuffer, row.multipv) ||
+          state.analysisMap.get(row.multipv);
+        const priorMoveRow =
+          latestBufferedAnalysisRowForUci(state.analysisSnapshotBuffer, row.bestUci) ||
+          analysisByUci.get(row.bestUci);
         row = hydrateAnalysisRowFromFallback(row, priorSlotRow);
         row = hydrateAnalysisRowFromFallback(row, priorMoveRow);
         state.silentSearchRetries = 0;
-        state.analysisMap.set(row.multipv, row);
-        analysisByUci.set(row.bestUci, row);
+        if (!state.analysisSnapshotBuffer) {
+          state.analysisSnapshotBuffer = createAnalysisSnapshotBuffer({
+            searchId: state.analysisSearchId,
+            fen: state.current?.fen || "",
+            expectedRows: expectedAnalysisRowsForCurrentSearch(),
+          });
+        }
+        recordAnalysisSnapshotRow(state.analysisSnapshotBuffer, row);
         if (state.engineMode === "analysis" && state.engineReady) {
           state.engineStatus =
             state.limitKind === "infinite"
@@ -10242,6 +10285,11 @@
           (cachedEntry?.rows || []).map((row) => ({ ...row })),
           currentFen,
         );
+        state.analysisRowsFen = currentFen;
+        state.analysisSnapshotBuffer = null;
+        state.analysisMap = new Map(
+          state.analysisRows.map((row) => [row.multipv, { ...row }]),
+        );
         rebuildAnalysisByUci();
         renderAnalysisFull();
         renderEvalBar();
@@ -10263,6 +10311,12 @@
     if (!command) return;
     state.analysisMap.clear();
     analysisByUci.clear();
+    state.analysisSearchId += 1;
+    state.analysisSnapshotBuffer = createAnalysisSnapshotBuffer({
+      searchId: state.analysisSearchId,
+      fen: state.current.fen,
+      expectedRows: expectedAnalysisRowsForCurrentSearch(),
+    });
     state.awaitingFinalAnalysis = true;
     state.engineBusy = true;
     state.stopRequested = false;
@@ -10301,10 +10355,10 @@
       ? ` searchmoves ${focusMoves.map((move) => move.from + move.to + (move.promotion || "")).join(" ")}`
       : "";
     if (state.limitKind === "infinite") return `go infinite${suffix}`;
-    if (state.limitKind === "depth")
-      return `go depth ${state.limitValue}${suffix}`;
     if (state.limitKind === "nodes")
       return `go nodes ${state.limitValue}${suffix}`;
+    if (state.limitKind === "depth")
+      return `go depth ${state.limitValue}${suffix}`;
     return `go movetime ${state.limitValue}${suffix}`;
   }
 
@@ -10329,7 +10383,9 @@
     const tokens = line.trim().split(/\s+/);
     const row = {
       depth: 0,
+      seldepth: 0,
       nodes: 0,
+      nps: 0,
       multipv: 1,
       scoreCp: null,
       mate: null,
@@ -10341,7 +10397,10 @@
     for (let i = 1; i < tokens.length; i += 1) {
       const token = tokens[i];
       if (token === "depth") row.depth = parseInt(tokens[++i] || "0", 10);
+      else if (token === "seldepth")
+        row.seldepth = parseInt(tokens[++i] || "0", 10);
       else if (token === "nodes") row.nodes = parseInt(tokens[++i] || "0", 10);
+      else if (token === "nps") row.nps = parseInt(tokens[++i] || "0", 10);
       else if (token === "multipv")
         row.multipv = parseInt(tokens[++i] || "1", 10);
       else if (token === "score") {
@@ -10441,30 +10500,290 @@
     return merged;
   }
 
+  function expectedAnalysisRowsForCurrentSearch(game = currentGame()) {
+    const legalCount = legalUciSetForGame(game).size;
+    return Math.max(1, Math.min(activeAnalysisLimit(game), legalCount || 1));
+  }
+
+  function createAnalysisSnapshotBuffer({
+    searchId = 0,
+    fen = "",
+    expectedRows = 1,
+  } = {}) {
+    return {
+      searchId,
+      fen,
+      expectedRows: Math.max(1, Number(expectedRows) || 1),
+      snapshots: new Map(),
+    };
+  }
+
+  function cloneAnalysisSnapshotRow(row) {
+    if (!row) return row;
+    return {
+      ...row,
+      pv: Array.isArray(row.pv) ? [...row.pv] : [],
+      wdl: row.wdl ? { ...row.wdl } : null,
+    };
+  }
+
+  function analysisSnapshotKeyForRow(row) {
+    return "d" + Math.max(0, Number(row?.depth) || 0);
+  }
+
+  function ensureAnalysisSnapshot(buffer, row) {
+    if (!buffer || !row) return null;
+    const key = analysisSnapshotKeyForRow(row);
+    let snapshot = buffer.snapshots.get(key);
+    if (!snapshot) {
+      snapshot = {
+        key,
+        depth: Math.max(0, Number(row.depth) || 0),
+        seldepth: Math.max(0, Number(row.seldepth) || 0),
+        nodes: Math.max(0, Number(row.nodes) || 0),
+        nps: Math.max(0, Number(row.nps) || 0),
+        rowsByPv: new Map(),
+        updatedAt: 0,
+      };
+      buffer.snapshots.set(key, snapshot);
+    }
+    return snapshot;
+  }
+
+  function recordAnalysisSnapshotRow(buffer, row) {
+    if (!buffer || !row?.bestUci) return null;
+    const snapshot = ensureAnalysisSnapshot(buffer, row);
+    const priorRow = snapshot.rowsByPv.get(row.multipv);
+    const mergedRow = priorRow
+      ? hydrateAnalysisRowFromFallback(row, priorRow)
+      : row;
+    snapshot.rowsByPv.set(row.multipv, cloneAnalysisSnapshotRow(mergedRow));
+    snapshot.depth = Math.max(snapshot.depth || 0, row.depth || 0);
+    snapshot.seldepth = Math.max(snapshot.seldepth || 0, row.seldepth || 0);
+    snapshot.nodes = Math.max(snapshot.nodes || 0, row.nodes || 0);
+    snapshot.nps = Math.max(snapshot.nps || 0, row.nps || 0);
+    snapshot.updatedAt = Date.now();
+    return snapshot;
+  }
+
+  function analysisSnapshotRowCount(snapshot) {
+    return snapshot?.rowsByPv?.size || 0;
+  }
+
+  function analysisSnapshotIsComplete(snapshot, expectedRows) {
+    const required = Math.max(1, Number(expectedRows) || 1);
+    return analysisSnapshotRowCount(snapshot) >= required;
+  }
+
+  function compareAnalysisSnapshotPriority(a, b, expectedRows) {
+    const completeGap =
+      Number(analysisSnapshotIsComplete(a, expectedRows)) -
+      Number(analysisSnapshotIsComplete(b, expectedRows));
+    if (completeGap) return completeGap;
+    const rowGap = analysisSnapshotRowCount(a) - analysisSnapshotRowCount(b);
+    if (rowGap) return rowGap;
+    const depthGap = (a?.depth || 0) - (b?.depth || 0);
+    if (depthGap) return depthGap;
+    const seldepthGap = (a?.seldepth || 0) - (b?.seldepth || 0);
+    if (seldepthGap) return seldepthGap;
+    const nodeGap = (a?.nodes || 0) - (b?.nodes || 0);
+    if (nodeGap) return nodeGap;
+    const npsGap = (a?.nps || 0) - (b?.nps || 0);
+    if (npsGap) return npsGap;
+    return (a?.updatedAt || 0) - (b?.updatedAt || 0);
+  }
+
+  function bestAnalysisSnapshot(buffer, { requireComplete = false } = {}) {
+    if (!buffer?.snapshots?.size) return null;
+    let best = null;
+    for (const snapshot of buffer.snapshots.values()) {
+      if (
+        requireComplete &&
+        !analysisSnapshotIsComplete(snapshot, buffer.expectedRows)
+      ) {
+        continue;
+      }
+      if (
+        !best ||
+        compareAnalysisSnapshotPriority(snapshot, best, buffer.expectedRows) > 0
+      ) {
+        best = snapshot;
+      }
+    }
+    return best;
+  }
+
+  function latestBufferedAnalysisRow(buffer, predicate) {
+    if (!buffer?.snapshots?.size || typeof predicate !== "function") return null;
+    let best = null;
+    let bestSnapshot = null;
+    for (const snapshot of buffer.snapshots.values()) {
+      for (const row of snapshot.rowsByPv.values()) {
+        if (!predicate(row)) continue;
+        if (
+          !bestSnapshot ||
+          compareAnalysisSnapshotPriority(snapshot, bestSnapshot, buffer.expectedRows) > 0
+        ) {
+          best = row;
+          bestSnapshot = snapshot;
+        }
+      }
+    }
+    return best;
+  }
+
+  function latestBufferedAnalysisRowForMultipv(buffer, multipv) {
+    return latestBufferedAnalysisRow(
+      buffer,
+      (row) => Number(row?.multipv || 0) === Number(multipv || 0),
+    );
+  }
+
+  function latestBufferedAnalysisRowForUci(buffer, uci) {
+    return latestBufferedAnalysisRow(
+      buffer,
+      (row) => row?.bestUci && row.bestUci === uci,
+    );
+  }
+
+  function snapshotRowsFromAnalysisSnapshot(snapshot, fen, limit) {
+    if (!snapshot?.rowsByPv?.size) return [];
+    return normalizeAnalysisRows(
+      Array.from(snapshot.rowsByPv.values()).sort((a, b) => a.multipv - b.multipv),
+      fen,
+    ).slice(0, Math.max(1, Number(limit) || 1));
+  }
+
+  function selectAnalysisSnapshotForDisplay(
+    buffer,
+    {
+      fen = "",
+      limit = 1,
+      legalUcis = null,
+      fallbackRows = [],
+      preferFallbackWhenNoComplete = false,
+    } = {},
+  ) {
+    const sanitizeRows = (rows) => {
+      if (!rows?.length) return [];
+      const filtered = legalUcis
+        ? rows.filter((row) => row?.bestUci && legalUcis.has(row.bestUci))
+        : rows.filter((row) => row?.bestUci);
+      return filtered.slice(0, Math.max(1, Number(limit) || 1));
+    };
+    if (buffer?.fen && fen && buffer.fen !== fen) {
+      return {
+        source: "fallback",
+        complete: false,
+        snapshot: null,
+        rows: sanitizeRows(fallbackRows),
+      };
+    }
+    const completeSnapshot = bestAnalysisSnapshot(buffer, { requireComplete: true });
+    if (completeSnapshot) {
+      return {
+        source: "complete",
+        complete: true,
+        snapshot: completeSnapshot,
+        rows: sanitizeRows(
+          snapshotRowsFromAnalysisSnapshot(completeSnapshot, fen, limit),
+        ),
+      };
+    }
+    const coherentFallbackRows = sanitizeRows(fallbackRows);
+    if (preferFallbackWhenNoComplete && coherentFallbackRows.length) {
+      return {
+        source: "fallback",
+        complete: false,
+        snapshot: null,
+        rows: coherentFallbackRows,
+      };
+    }
+    const partialSnapshot = bestAnalysisSnapshot(buffer);
+    const partialRows = sanitizeRows(
+      snapshotRowsFromAnalysisSnapshot(partialSnapshot, fen, limit),
+    );
+    if (partialRows.length) {
+      return {
+        source: "partial",
+        complete: false,
+        snapshot: partialSnapshot,
+        rows: partialRows,
+      };
+    }
+    return {
+      source: coherentFallbackRows.length ? "fallback" : "none",
+      complete: false,
+      snapshot: null,
+      rows: coherentFallbackRows,
+    };
+  }
+
+  function debugSimulateAnalysisSnapshotSelection(events, expectedRows = 1) {
+    const buffer = createAnalysisSnapshotBuffer({
+      searchId: 1,
+      fen: "debug-fen",
+      expectedRows,
+    });
+    for (const event of events || []) {
+      if (!event?.bestUci) continue;
+      recordAnalysisSnapshotRow(buffer, {
+        depth: event.depth || 0,
+        seldepth: event.seldepth || 0,
+        nodes: event.nodes || 0,
+        nps: event.nps || 0,
+        multipv: event.multipv || 1,
+        scoreCp: Number.isFinite(event.scoreCp) ? event.scoreCp : null,
+        mate: Number.isFinite(event.mate) ? event.mate : null,
+        wdl: event.wdl ? { ...event.wdl } : null,
+        pv:
+          Array.isArray(event.pv) && event.pv.length
+            ? [...event.pv]
+            : [event.bestUci],
+        bestUci: event.bestUci,
+        firstSan: event.firstSan || event.bestUci,
+        evalText:
+          typeof event.evalText === "string"
+            ? event.evalText
+            : Number.isFinite(event.mate)
+              ? "#" + event.mate
+              : formatEval(event.scoreCp),
+      });
+    }
+    const selection = selectAnalysisSnapshotForDisplay(buffer, {
+      fen: buffer.fen,
+      limit: expectedRows,
+      fallbackRows: [],
+      preferFallbackWhenNoComplete: false,
+    });
+    return {
+      source: selection.source,
+      complete: selection.complete,
+      snapshotKey: selection.snapshot?.key || "",
+      depth: selection.snapshot?.depth || 0,
+      rowCount: selection.rows.length,
+      multipvs: selection.rows.map((row) => row.multipv || 0),
+      rowDepths: selection.rows.map((row) => row.depth || 0),
+      ucis: selection.rows.map((row) => row.bestUci || ""),
+    };
+  }
+
   function fallbackAnalysisRowsForCurrentContext() {
     const fen = state.current?.fen;
     const selectedSquare = state.selectedSquare || "";
     if (!fen) return [];
-    const fallbackRows = [];
-    if (state.analysisRows.length)
-      fallbackRows.push(
-        ...sanitizeAnalysisRows(state.analysisRows, fen, selectedSquare),
-      );
+    const displayedRows = currentDisplayedAnalysisRowsForFen(fen);
+    if (displayedRows.length)
+      return sanitizeAnalysisRows(displayedRows, fen, selectedSquare);
     if (selectedSquare) {
       const pieceEntry =
         state.pieceAnalysisCache.get(selectedSquare) ||
         state.fenPieceAnalysisCache.get(fen)?.get(selectedSquare);
-      if (pieceEntry?.rows?.length)
-        fallbackRows.push(
-          ...sanitizeAnalysisRows(pieceEntry.rows, fen, selectedSquare),
-        );
-    } else {
-      const entry =
-        state.positionAnalysisCache.get(fen) || matchingCachedFullAnalysisForFen(fen);
-      if (entry?.rows?.length)
-        fallbackRows.push(...sanitizeAnalysisRows(entry.rows, fen));
+      return sanitizeAnalysisRows(pieceEntry?.rows || [], fen, selectedSquare);
     }
-    return normalizeAnalysisRows(fallbackRows);
+    const entry =
+      state.positionAnalysisCache.get(fen) || matchingCachedFullAnalysisForFen(fen);
+    return sanitizeAnalysisRows(entry?.rows || [], fen);
   }
 
   function mergeAnalysisRowSets(primaryRows, fallbackRows, limit) {
@@ -10524,25 +10843,31 @@
   function currentBufferedAnalysisRows() {
     const legalUcis = legalUciSetForGame();
     const fen = state.current?.fen || "";
-    const primaryRows = normalizeAnalysisRows(
-      Array.from(state.analysisMap.values())
-        .sort((a, b) => a.multipv - b.multipv)
-        .filter((row) => row?.bestUci && legalUcis.has(row.bestUci)),
-      fen,
-    );
     const limit = activeAnalysisLimit();
     const fallbackRows = fallbackAnalysisRowsForCurrentContext().filter(
       (row) => row?.bestUci && legalUcis.has(row.bestUci),
     );
-    return mergeAnalysisRowSets(primaryRows, fallbackRows, limit);
+    return selectAnalysisSnapshotForDisplay(state.analysisSnapshotBuffer, {
+      fen,
+      limit,
+      legalUcis,
+      fallbackRows,
+      preferFallbackWhenNoComplete: true,
+    }).rows;
   }
 
   function snapshotFullPositionAnalysis() {
-    if (state.selectedSquare || !state.analysisRows.length) return;
+    if (
+      state.selectedSquare ||
+      !state.analysisRows.length ||
+      state.analysisRowsFen !== state.current?.fen
+    ) {
+      return;
+    }
     const passMs = state.limitKind === "time" ? state.limitValue : 0;
     const entry = {
       fen: state.current.fen,
-      map: new Map(state.analysisMap),
+      map: new Map(state.analysisRows.map((row) => [row.multipv, { ...row }])),
       rows: state.analysisRows.map((row) => ({ ...row })),
       publishedAt: state.analysisPublishedAt,
       publishedDepth: state.analysisPublishedDepth,
@@ -10572,6 +10897,8 @@
     state.analysisMap = new Map(rows.map((row) => [row.multipv, { ...row }]));
     rebuildAnalysisByUci();
     state.analysisRows = rows.map((row) => ({ ...row }));
+    state.analysisRowsFen = state.current.fen;
+    state.analysisSnapshotBuffer = null;
     state.analysisPublishedAt = entry.publishedAt;
     state.analysisPublishedDepth = rows[0]?.depth || 0;
     state.awaitingFinalAnalysis = false;
@@ -10599,7 +10926,10 @@
         return;
       }
     }
-    state.analysisRows = rows;
+    state.analysisMap = new Map(rows.map((row) => [row.multipv, { ...row }]));
+    rebuildAnalysisByUci();
+    state.analysisRows = rows.map((row) => ({ ...row }));
+    state.analysisRowsFen = state.current?.fen || "";
     state.analysisPublishedAt = now;
     state.analysisPublishedDepth = topDepth;
     if (force) state.awaitingFinalAnalysis = false;
