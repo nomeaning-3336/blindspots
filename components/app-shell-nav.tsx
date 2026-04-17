@@ -6,7 +6,7 @@ import { AuthSignOutButton } from "@/components/auth-sign-out-button";
 
 const appLinks = [
   { href: "/analysis", label: "Analysis" },
-  { href: "/arcade", label: "Arcade" },
+  { href: "/practice", label: "Practice" },
   { href: "/performance", label: "Statistics" },
   { href: "/account", label: "Settings" },
 ];
@@ -89,7 +89,7 @@ export function AppShellNav({
   const nextPath =
     pathname &&
     (pathname.startsWith("/analysis") ||
-      pathname.startsWith("/arcade") ||
+      pathname.startsWith("/practice") ||
       pathname.startsWith("/performance") ||
       pathname.startsWith("/account"))
       ? pathname

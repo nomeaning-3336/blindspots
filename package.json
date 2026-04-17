@@ -11,6 +11,7 @@
     "watch:css": "tailwindcss -i ./standalone.tailwind.css -o ./standalone.css --watch",
     "watch:analyze-css": "tailwindcss -i ./standalone.tailwind.css -o ./standalone.css --watch",
     "test:theme-backgrounds": "node scripts/check-theme-backgrounds.mjs",
+    "test:analysis-multipv": "node scripts/check-analysis-multipv-snapshots.mjs",
     "benchmark:brilliant": "node scripts/benchmark-brilliant.mjs"
   },
   "devDependencies": {
