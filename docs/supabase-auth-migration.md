@@ -6,7 +6,7 @@ Chessview now uses Supabase Auth as the single auth layer.
 
 - Clerk was removed from the app shell, auth pages, and route protection.
 - Sign-in and sign-up now use custom themed Chessview forms.
-- Server-side auth checks now read the Supabase session user id and reuse that id for saved preferences, linked profiles, and Arcade ownership.
+- Server-side auth checks now read the Supabase session user id and reuse that id for saved preferences and linked profiles.
 - The public header and app shell nav now sign out through Supabase while still clearing the saved analyze-settings key in local storage.
 
 ## Required Environment Variables

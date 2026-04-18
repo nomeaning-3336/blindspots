@@ -11,26 +11,13 @@ export function normalizeNextPath(value?: string | null) {
   if (value.startsWith("/app/")) return normalizeNextPath(value.slice(4) || DEFAULT_APP_ROUTE);
   if (
     value === "/analysis" ||
-    value === "/practice" ||
     value === "/performance" ||
     value === "/account" ||
     value.startsWith("/analysis/") ||
-    value.startsWith("/practice/") ||
     value.startsWith("/performance/") ||
     value.startsWith("/account/")
   ) {
     return value;
-  }
-  if (
-    value === "/arcade" ||
-    value.startsWith("/arcade/") ||
-    value === "/review" ||
-    value.startsWith("/review/")
-  ) {
-    const base = value.startsWith("/arcade")
-      ? value.slice("/arcade".length)
-      : value.slice("/review".length);
-    return `/practice${base}`;
   }
   if (value.startsWith("/analyze/")) {
     return `/analysis/${value.slice("/analyze/".length)}`;

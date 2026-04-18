@@ -62,7 +62,6 @@ export interface AnalyzeApi {
   _renderCount: number;
   applyUserAnalyzePreferences: (preferences: AnalyzePreferences | null) => void;
   setAppTheme?: (theme: string | null) => void;
-  setWorkspaceMode?: (mode: "explore" | "arcade") => void;
   doMove: (uci: string) => void;
   goToNode: (nodeId: string) => void;
   navigateBack: () => void;

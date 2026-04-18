@@ -2,8 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { AnalyzePreferences } from "@/lib/analyze-preferences";
-import type { ArcadeInitialGameSnapshot } from "@/lib/arcade";
-import type { AnalyzeWorkspaceMode } from "./analyze-shell";
 
 declare global {
   interface Window {
@@ -15,9 +13,6 @@ declare global {
     };
     __CHESSVIEW_INITIAL_ANALYZE_PREFERENCES__?: AnalyzePreferences | null;
     __CHESSVIEW_ANALYZE_PREFERENCES_PERSIST_URL__?: string | null;
-    __CHESSVIEW_INITIAL_WORKSPACE_MODE__?: AnalyzeWorkspaceMode | null;
-    __CHESSVIEW_INITIAL_ARCADE_GAME__?: ArcadeInitialGameSnapshot | null;
-    __CHESSVIEW_ARCADE_GAME_PERSIST_URL__?: string | null;
   }
 }
 
@@ -228,116 +223,6 @@ function ensureOverrideStyle() {
 
     #analyze-app-host #app .options-toolbar {
       width: 100%;
-    }
-
-    #analyze-app-host[data-layout-mode="arcade-play"] #app .workspace {
-      grid-template-columns: minmax(0, 1fr) !important;
-      gap: 12px !important;
-      justify-content: center !important;
-    }
-
-    #analyze-app-host[data-layout-mode="arcade-play"] #app .right,
-    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-analysis,
-    #analyze-app-host[data-layout-mode="arcade-play"] #app .eval-bar,
-    #analyze-app-host[data-layout-mode="arcade-play"] #app #coachCard,
-    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-options {
-      display: none !important;
-    }
-
-    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-stage {
-      --board-player-strip-size: 48px !important;
-      --board-stack-gap: 0px !important;
-      --board-frame-extra-width: 0px !important;
-      --board-history-width: clamp(140px, 10vw, 190px) !important;
-      --board-options-height: 0px !important;
-      --board-shell-width: min(
-        calc(
-          var(--analyze-viewport-room, 100dvh) -
-            (var(--board-player-strip-size) * 2) -
-            24px
-        ),
-        calc(100vw - var(--board-history-width) - 120px),
-        800px
-      ) !important;
-      grid-template-columns:
-        minmax(132px, var(--board-history-width))
-        minmax(0, var(--board-shell-width)) !important;
-      justify-content: center !important;
-      gap: 10px !important;
-      align-items: start !important;
-      width: 100% !important;
-      max-width: 100% !important;
-      --board-stage-height: var(--board-shell-height) !important;
-    }
-
-    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-frame {
-      grid-template-columns: auto !important;
-      gap: 0 !important;
-      width: var(--board-shell-width) !important;
-      justify-self: center !important;
-    }
-
-    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-history-panel {
-      height: var(--board-shell-height) !important;
-      justify-self: center !important;
-    }
-
-    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-shell-wrap {
-      width: var(--board-shell-width) !important;
-      max-width: none !important;
-      justify-self: center !important;
-    }
-
-    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-stack {
-      width: var(--board-shell-width) !important;
-      min-width: var(--board-shell-width) !important;
-      max-width: var(--board-shell-width) !important;
-    }
-
-    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-history-panel,
-    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-options {
-      border-radius: 0 !important;
-      box-shadow: 6px 6px 0 var(--app-shell-shadow) !important;
-    }
-
-    @media (max-width: 1180px) {
-      #analyze-app-host[data-layout-mode="arcade-play"] #app .board-stage {
-        --board-history-width: 170px !important;
-        --board-shell-width: min(
-          calc(
-            var(--analyze-viewport-room, 100dvh) -
-              (var(--board-player-strip-size) * 2) -
-              24px
-          ),
-          calc(100vw - 320px),
-          760px
-        ) !important;
-        gap: 12px !important;
-      }
-    }
-
-    @media (max-width: 920px) {
-      #analyze-app-host[data-layout-mode="arcade-play"] #app .board-stage {
-        --board-options-height: 108px !important;
-        --board-shell-width: min(
-          calc(100vw - 32px),
-          calc(var(--analyze-viewport-room, 100dvh) - 250px),
-          680px
-        ) !important;
-        grid-template-columns: minmax(0, 1fr) !important;
-        justify-content: stretch !important;
-      }
-
-      #analyze-app-host[data-layout-mode="arcade-play"] #app .board-history-panel {
-        order: 2 !important;
-        width: var(--board-shell-width) !important;
-        height: auto !important;
-        min-height: 220px !important;
-      }
-
-      #analyze-app-host[data-layout-mode="arcade-play"] #app .board-stack {
-        order: 1 !important;
-      }
     }
 
     @media (min-width: 1280px) {
@@ -707,44 +592,6 @@ function ensureOverrideStyle() {
       border: none !important;
     }
 
-    /* Arcade-play: hide move classification icons in the moves panel */
-    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-history-move-icon {
-      display: none !important;
-    }
-
-    /* Arcade-play: ensure player info is visible and properly sized */
-    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-player-info {
-      display: flex !important;
-      min-height: 44px !important;
-      padding: 6px 10px !important;
-    }
-
-    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-player-info .player-name {
-      font-size: 0.85rem !important;
-      font-weight: 700 !important;
-    }
-
-    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-player-info .player-rating {
-      font-size: 0.7rem !important;
-      padding: 1px 5px !important;
-    }
-
-    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-player-info .player-clock {
-      font-size: 0.75rem !important;
-      min-width: 70px !important;
-      height: 20px !important;
-      padding: 0 6px !important;
-    }
-
-    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-player-info .player-captures {
-      display: flex !important;
-    }
-
-    /* Arcade-play: show the moves panel without analysis rows */
-    #analyze-app-host[data-layout-mode="arcade-play"] #app .board-history-opening {
-      display: none !important;
-    }
-
   `;
   if (!existing) {
     document.head.appendChild(style);
@@ -815,17 +662,9 @@ function resetAnalyzeBootAssets() {
 
 export function AnalyzeBridge({
   initialPreferences,
-  initialWorkspaceMode,
-  layoutMode = "default",
-  initialArcadeGame = null,
-  arcadeGamePersistUrl = null,
   analyzePreferencesPersistUrl = null,
 }: {
   initialPreferences: AnalyzePreferences | null;
-  initialWorkspaceMode: AnalyzeWorkspaceMode;
-  layoutMode?: "default" | "arcade-play";
-  initialArcadeGame?: ArcadeInitialGameSnapshot | null;
-  arcadeGamePersistUrl?: string | null;
   analyzePreferencesPersistUrl?: string | null;
 }) {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -883,12 +722,8 @@ export function AnalyzeBridge({
     window.__CHESSVIEW_INITIAL_ANALYZE_PREFERENCES__ = initialPreferences;
     window.__CHESSVIEW_ANALYZE_PREFERENCES_PERSIST_URL__ =
       analyzePreferencesPersistUrl;
-    window.__CHESSVIEW_INITIAL_WORKSPACE_MODE__ = initialWorkspaceMode;
-    window.__CHESSVIEW_INITIAL_ARCADE_GAME__ = initialArcadeGame;
-    window.__CHESSVIEW_ARCADE_GAME_PERSIST_URL__ = arcadeGamePersistUrl;
     window.__chessSomething?.applyUserAnalyzePreferences?.(initialPreferences);
     syncAppTheme();
-    window.__chessSomething?.setWorkspaceMode?.(initialWorkspaceMode);
     syncViewportRoom();
     let syncLater = window.requestAnimationFrame(() => {
       syncViewportRoom();
@@ -927,7 +762,6 @@ export function AnalyzeBridge({
       .then(() => {
         if (cancelled) return;
         syncAppTheme();
-        window.__chessSomething?.setWorkspaceMode?.(initialWorkspaceMode);
         wireVisualHoverState();
         setStatus("ready");
       })
@@ -959,9 +793,6 @@ export function AnalyzeBridge({
     };
   }, [
     initialPreferences,
-    initialWorkspaceMode,
-    initialArcadeGame,
-    arcadeGamePersistUrl,
     analyzePreferencesPersistUrl,
   ]);
 
@@ -970,7 +801,6 @@ export function AnalyzeBridge({
       id="analyze-app-host"
       ref={hostRef}
       className="relative w-full"
-      data-layout-mode={layoutMode}
       style={{ height: "100%" }}
     >
       {/* Standalone app mounts into #app */}

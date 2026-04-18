@@ -344,46 +344,19 @@
     analysisCache: "chess-something:analysis-cache:v1",
     boardState: "chess-something:board-state:v1",
     reviewHandoff: "chess-something:review-handoff:v1",
-    localArcadeGames: "chessview_arcade_games",
   };
   const BOARD_STATE_VERSION = 1;
   const INITIAL_ANALYZE_PREFERENCES =
     globalThis.__CHESSVIEW_INITIAL_ANALYZE_PREFERENCES__ || null;
   const INITIAL_COACH_SETTINGS =
     globalThis.__CHESSVIEW_INITIAL_COACH_SETTINGS__ || null;
-  const INITIAL_ARCADE_GAME =
-    globalThis.__CHESSVIEW_INITIAL_ARCADE_GAME__ &&
-    typeof globalThis.__CHESSVIEW_INITIAL_ARCADE_GAME__ === "object"
-      ? globalThis.__CHESSVIEW_INITIAL_ARCADE_GAME__
-      : null;
-  const getInitialArcadeTimeControl = () => {
-    if (!INITIAL_ARCADE_GAME?.settings) return null;
-    const settings = INITIAL_ARCADE_GAME.settings;
-    if (!settings || typeof settings !== "object") return null;
-    const tc = String(settings.timeControl || "");
-    if (!tc || tc === "untimed") return { starting: 0, increment: 0 };
-    const parts = tc.split(/[-_]/);
-    if (parts.length < 2) return null;
-    const mins = Number(parts[parts.length - 2]) || 0;
-    const secs = Number(parts[parts.length - 1]) || 0;
-    return { starting: mins * 60 + secs, increment: secs };
-  };
   const getInitialWorkspaceMode = () => {
-    const mode = String(globalThis.__CHESSVIEW_INITIAL_WORKSPACE_MODE__ || "")
-      .trim()
-      .toLowerCase();
-    return mode === "arcade" || mode === "review" ? "arcade" : "explore";
+    return "explore";
   };
+  const getInitialArcadeTimeControl = () => null;
+  const getInitialArcadeVariantKey = () => "";
   const getAnalyzePreferencesPersistUrl = () =>
     globalThis.__CHESSVIEW_ANALYZE_PREFERENCES_PERSIST_URL__ || "";
-  const getArcadeGamePersistUrl = () =>
-    globalThis.__CHESSVIEW_ARCADE_GAME_PERSIST_URL__ || "";
-  const getInitialArcadeVariantKey = () => {
-    const key = String(INITIAL_ARCADE_GAME?.variantKey || "")
-      .trim()
-      .toLowerCase();
-    return ARCADE_VARIANTS[key] ? key : "";
-  };
   const SOUND_BASE = assetUrl("sounds");
   const SOUND_SOURCES = {
     move: `${SOUND_BASE}/move-self.mp3`,
@@ -525,7 +498,6 @@
   let _cachePersistIdleHandle = 0;
   let _analyzePreferencesPersistTimer = null;
   let _boardStatePersistTimer = null;
-  let _arcadeGamePersistKey = "";
   let _themeDetectionTimer = null;
   let _themeDetectionSeq = 0;
   let _themeDetectionFen = "";
@@ -658,8 +630,8 @@
     llmLastContextFen: "",
     llmLastContextTrail: "",
     llmExplainedFens: new Set(),
-    workspaceMode: getInitialWorkspaceMode(),
-    arcadeVariantKey: getInitialArcadeVariantKey() || "drunkfish",
+    workspaceMode: "explore",
+    arcadeVariantKey: "drunkfish",
     arcadeHiddenElo: 1500,
     arcadeTargetElo: 1500,
     arcadeBurstPliesLeft: 0,
@@ -680,11 +652,6 @@
     recentImportAccountHref: "/account",
     recentImportFetchedAt: 0,
     recentImportPromise: null,
-    recentArcadeImportState: "idle",
-    recentArcadeImportGames: [],
-    recentArcadeImportMessage: "",
-    recentArcadeImportFetchedAt: 0,
-    recentArcadeImportPromise: null,
     randomGameOfTheDayState: "idle",
     randomGameOfTheDayGame: null,
     randomGameOfTheDayFetchedAt: 0,
@@ -850,23 +817,8 @@
       rootId: String(state.root.id || ""),
       currentId: String(state.current.id || ""),
       currentFen: String(state.current.fen || ""),
-      workspaceMode: state.workspaceMode,
       orientation: state.orientation,
       nodes,
-      arcade: {
-        variantKey: state.arcadeVariantKey,
-        hiddenElo: Number(state.arcadeHiddenElo) || 1500,
-        targetElo: Number(state.arcadeTargetElo) || 1500,
-        burstPliesLeft: Number(state.arcadeBurstPliesLeft) || 0,
-        timeControl: String(
-          state.arcadeStartingTime > 0
-            ? `${Math.floor(state.arcadeStartingTime / 60)}+${state.arcadeTimeIncrement}`
-            : "untimed",
-        ),
-        weirdhorseProfilesByCycle: Array.from(
-          state.weirdhorseProfilesByCycle.entries(),
-        ),
-      },
       players: {
         whiteName: state.whitePlayerName,
         blackName: state.blackPlayerName,
@@ -890,67 +842,6 @@
     };
   }
 
-  function persistArcadeGameState(options = {}) {
-    const persistUrl = getArcadeGamePersistUrl();
-    const payload = buildPersistedBoardStatePayload();
-    if (!payload) return;
-    const persistKey = JSON.stringify({
-      ...payload,
-      savedAt: 0,
-    });
-    if (!options.force && persistKey === _arcadeGamePersistKey) return;
-    _arcadeGamePersistKey = persistKey;
-
-    // Guest mode: persist to localStorage
-    if (!persistUrl) {
-      try {
-        const initialGame = globalThis.__CHESSVIEW_INITIAL_ARCADE_GAME__;
-        if (!initialGame?.gameId) return;
-        const gameId = initialGame.gameId;
-        const raw = localStorage.getItem(STORAGE.localArcadeGames);
-        const games = raw ? JSON.parse(raw) : [];
-        const idx = games.findIndex((g) => g.id === gameId);
-        const updated = {
-          id: gameId,
-          variantKey: initialGame.variantKey || "vanilla",
-          status: payload.isGameOver ? "finished" : "active",
-          currentFen: payload.currentFen || "",
-          state: payload,
-          createdAt: games[idx]?.createdAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          lastPlayedAt: new Date().toISOString(),
-        };
-        if (idx >= 0) {
-          games[idx] = updated;
-        } else {
-          games.unshift(updated);
-        }
-        localStorage.setItem(STORAGE.localArcadeGames, JSON.stringify(games));
-      } catch (error) {
-        console.warn("Could not persist arcade game state locally", error);
-      }
-      return;
-    }
-
-    try {
-      const body = JSON.stringify({ state: payload });
-      if (options.keepalive && navigator?.sendBeacon) {
-        const blob = new Blob([body], { type: "application/json" });
-        if (navigator.sendBeacon(persistUrl, blob)) return;
-      }
-      fetch(persistUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body,
-        keepalive: options.keepalive === true,
-      }).catch(() => {});
-    } catch (error) {
-      console.warn("Could not persist arcade game state", error);
-    }
-  }
-
   function persistBoardState() {
     if (_boardStatePersistTimer) {
       clearTimeout(_boardStatePersistTimer);
@@ -970,7 +861,6 @@
     _boardStatePersistTimer = setTimeout(() => {
       _boardStatePersistTimer = null;
       persistBoardState();
-      persistArcadeGameState();
     }, delay);
   }
 
@@ -980,7 +870,6 @@
       _boardStatePersistTimer = null;
     }
     persistBoardState();
-    persistArcadeGameState({ keepalive: true, force: true });
   }
 
   function restoreBoardStatePayload(parsed, options = {}) {
@@ -1077,83 +966,7 @@
       const savedCounter = Number(parsed.nodeCounter) || 0;
       nodeCounter = Math.max(nodeCounter, maxIdCounter, savedCounter);
 
-      state.workspaceMode =
-        typeof parsed.workspaceMode === "string"
-          ? normalizeWorkspaceMode(parsed.workspaceMode)
-          : state.workspaceMode;
       state.orientation = parsed.orientation === "black" ? "black" : "white";
-
-      const arcade =
-        parsed.arcade && typeof parsed.arcade === "object" ? parsed.arcade : {};
-      const restoredVariantKey = String(
-        arcade.variantKey || getInitialArcadeVariantKey() || state.arcadeVariantKey,
-      )
-        .trim()
-        .toLowerCase();
-      if (ARCADE_VARIANTS[restoredVariantKey]) {
-        state.arcadeVariantKey = restoredVariantKey;
-      }
-      state.arcadeHiddenElo = Math.max(
-        100,
-        Number(arcade.hiddenElo) || state.arcadeHiddenElo || 1500,
-      );
-      state.arcadeTargetElo = Math.max(
-        100,
-        Number(arcade.targetElo) || state.arcadeTargetElo || state.arcadeHiddenElo,
-      );
-      state.arcadeBurstPliesLeft = Math.max(
-        0,
-        Number(arcade.burstPliesLeft) || 0,
-      );
-      // Parse time control from restored state if present
-      if (arcade.timeControl && String(arcade.timeControl).trim() !== "untimed") {
-        const tc = String(arcade.timeControl);
-        const parts = tc.split(/[+]/);
-        if (parts.length >= 1) {
-          const mins = Number(parts[0]) || 0;
-          const secs = parts.length > 1 ? Number(parts[1]) || 0 : 0;
-          state.arcadeStartingTime = mins * 60 + secs;
-          state.arcadeTimeControl = state.arcadeStartingTime;
-          state.arcadeTimeIncrement = secs;
-        }
-      } else {
-        state.arcadeStartingTime = 0;
-        state.arcadeTimeControl = 0;
-        state.arcadeTimeIncrement = 0;
-      }
-      const restoredWeirdhorseProfiles = new Map();
-      const rawProfileEntries = Array.isArray(arcade.weirdhorseProfilesByCycle)
-        ? arcade.weirdhorseProfilesByCycle
-        : [];
-      rawProfileEntries.forEach((entry) => {
-        if (!Array.isArray(entry) || entry.length < 2) return;
-        const cycleKey = String(entry[0] || "").trim();
-        const profile = entry[1];
-        if (
-          !cycleKey ||
-          !profile ||
-          typeof profile !== "object" ||
-          Array.isArray(profile)
-        ) {
-          return;
-        }
-        const normalizedProfile = {
-          key: String(profile.key || cycleKey),
-          label: String(profile.label || "Horse Law"),
-          mode: String(profile.mode || ""),
-          offsets: Array.isArray(profile.offsets)
-            ? profile.offsets
-                .map((offset) => ({
-                  dx: Number(offset?.dx) || 0,
-                  dy: Number(offset?.dy) || 0,
-                }))
-                .filter((offset) => offset.dx || offset.dy)
-            : [],
-        };
-        if (!normalizedProfile.offsets.length) return;
-        restoredWeirdhorseProfiles.set(cycleKey, normalizedProfile);
-      });
-      state.weirdhorseProfilesByCycle = restoredWeirdhorseProfiles;
 
       const players =
         parsed.players && typeof parsed.players === "object" ? parsed.players : {};
@@ -1426,12 +1239,6 @@
             </section>
             <section class="import-recent-section">
               <div class="import-section-head">
-                <h4>Recent arcade games</h4>
-              </div>
-              <div id="importArcadeList" class="import-recent-list"></div>
-            </section>
-            <section class="import-recent-section">
-              <div class="import-section-head">
                 <h4>Random game of the day</h4>
               </div>
               <div id="importRandomGameList" class="import-recent-list"></div>
@@ -1560,7 +1367,6 @@
       "closeImportBtn",
       "submitImportBtn",
       "importRecentList",
-      "importArcadeList",
       "importRandomGameList",
       "exportBtn",
       "exportModal",
@@ -1673,12 +1479,6 @@
       if (node) goToNode(node);
     });
     ui.assistantMessages.addEventListener("click", (event) => {
-      const variantButton = event.target.closest("[data-arcade-variant]");
-      if (variantButton) {
-        event.preventDefault();
-        setArcadeVariant(variantButton.dataset.arcadeVariant || "");
-        return;
-      }
       const reportJump = event.target.closest("[data-report-node-id]");
       if (!reportJump) return;
       event.preventDefault();
@@ -1696,18 +1496,6 @@
       if (!target) return;
       event.preventDefault();
       importRecentGame(target.dataset.recentGameId || "");
-    });
-    ui.importArcadeList.addEventListener("click", (event) => {
-      const refreshButton = event.target.closest("[data-arcade-refresh]");
-      if (refreshButton) {
-        event.preventDefault();
-        ensureRecentArcadeImportGames(true);
-        return;
-      }
-      const target = event.target.closest("[data-arcade-import-id]");
-      if (!target) return;
-      event.preventDefault();
-      importRecentArcadeGame(target.dataset.arcadeImportId || "");
     });
     ui.importRandomGameList.addEventListener("click", (event) => {
       const refreshButton = event.target.closest("[data-random-game-refresh]");
@@ -1812,11 +1600,7 @@
     createEngine();
     primeSoundBank();
     primeOpeningBook();
-    const restoredBoard = INITIAL_ARCADE_GAME?.state
-      ? restoreBoardStatePayload(INITIAL_ARCADE_GAME.state)
-      : getArcadeGamePersistUrl()
-        ? false
-        : restorePersistedBoardAndChatState();
+    const restoredBoard = restorePersistedBoardAndChatState();
     if (!restoredBoard) {
       state.root = makeRoot(START_FEN, "Start position");
       state.current = state.root;
@@ -1832,19 +1616,6 @@
     if (restored) holdCachedAnalysisResult();
     refreshOpeningData();
     renderAll();
-    applyInitialWorkspaceMode();
-    if (!restoredBoard && isArcadeMode()) {
-      newGame();
-    } else if (restoredBoard && isArcadeMode() && state.arcadeStartingTime > 0 && state.playerClockByNodeId.size === 0) {
-      // Initialize clocks for restored arcade game if not present
-      if (state.root?.id) {
-        const clockDisplay = formatClockDisplay(state.arcadeStartingTime);
-        state.playerClockByNodeId.set(state.root.id, {
-          white: clockDisplay,
-          black: clockDisplay,
-        });
-      }
-    }
     window.__chessSomething = {
       getEngineRaw: () => state.engineRaw.slice(),
       _renderCount: 0,
@@ -6452,33 +6223,9 @@
   }
 
   async function requestArcadeMaiaMove(fen, eloSelf) {
-    const variant = currentArcadeVariant();
-    const response = await fetch("/api/arcade/maia-move", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        fen,
-        eloSelf,
-        eloOppo: variant.opponentElo,
-        modelType: variant.modelType,
-        topK: variant.topK,
-        topMoves: variant.topMoves,
-        temperature: variant.temperature,
-        seed: Date.now(),
-      }),
-    });
-    const data = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new Error(String(data?.error || "Opponent move request failed."));
-    }
-    const move = String(data?.move || "").trim();
-    if (!move) throw new Error("Opponent returned no move.");
-    return {
-      move,
-      topMoves: Array.isArray(data?.topMoves) ? data.topMoves : [],
-    };
+    void fen;
+    void eloSelf;
+    throw new Error("Arcade mode is no longer available.");
   }
 
   async function requestWeirdhorseStockfishMove(game) {
@@ -6556,39 +6303,14 @@
   }
 
   function normalizeWorkspaceMode(mode) {
-    const normalized = String(mode || "").trim().toLowerCase();
-    return normalized === "arcade" || normalized === "review"
-      ? "arcade"
-      : "explore";
+    return "explore";
   }
 
   function syncWorkspaceUi() {
-    const arcadeMode = isArcadeMode();
-    if (ui.coachReviewCta) {
-      ui.coachReviewCta.style.display = arcadeMode ? "none" : "";
-    }
-    if (ui.coachGoToReviewBtn) {
-      ui.coachGoToReviewBtn.href = "/arcade";
-      ui.coachGoToReviewBtn.textContent = "Open Arcade";
-    }
     if (ui.resetBtn) {
-      ui.resetBtn.textContent = arcadeMode ? "New Run" : "Reset Board";
+      ui.resetBtn.textContent = "Reset Board";
     }
-    if (ui.importBtn) {
-      ui.importBtn.style.display = arcadeMode ? "none" : "";
-    }
-    if (ui.exportBtn) {
-      ui.exportBtn.style.display = arcadeMode ? "none" : "";
-    }
-    if (ui.settingsBtn) {
-      ui.settingsBtn.style.display = arcadeMode ? "none" : "";
-    }
-    if (ui.haltBtn) {
-      ui.haltBtn.style.display = arcadeMode ? "none" : "";
-    }
-    state.recentImportSignInHref = arcadeMode
-      ? "/sign-in?next=%2Farcade"
-      : "/sign-in?next=%2Fanalysis";
+    state.recentImportSignInHref = "/sign-in?next=%2Fanalysis";
   }
 
   function persistReviewHandoff(payload) {
@@ -6627,7 +6349,7 @@
   }
 
   function navigateToReviewForCurrentGame() {
-    window.location.href = "/arcade";
+    window.location.href = "/analysis";
   }
 
   function bootstrapReviewFromHandoff() {
@@ -6689,10 +6411,8 @@
     ui.importModal.classList.add("open");
     ui.importModal.setAttribute("aria-hidden", "false");
     renderRecentImportSection();
-    renderRecentArcadeImportSection();
     renderRandomGameOfTheDaySection();
     ensureRecentImportGames();
-    ensureRecentArcadeImportGames();
     ensureRandomGameOfTheDay();
     requestAnimationFrame(() => ui.importInput?.focus());
   }
@@ -6822,85 +6542,6 @@
               <span class="import-recent-game-action">Import</span>
             </span>
             <span class="import-recent-game-meta">${escapeHtml(meta)}</span>
-            <span class="import-recent-game-sub">${escapeHtml(sub)}</span>
-          </button>
-        `;
-      })
-      .join("");
-  }
-
-  function renderRecentArcadeImportSection() {
-    if (!ui.importArcadeList) return;
-
-    const stateKey = state.recentArcadeImportState;
-
-    if (stateKey === "loading") {
-      ui.importArcadeList.innerHTML = `
-        <div class="import-recent-empty">
-          <p>Loading recent Arcade runs…</p>
-        </div>
-      `;
-      return;
-    }
-
-    if (stateKey === "signed-out") {
-      ui.importArcadeList.innerHTML = `
-        <div class="import-recent-empty">
-          <p>Sign in to import one of your saved Arcade runs.</p>
-          <a class="btn primary" href="${escapeHtml(state.recentImportSignInHref)}">Sign In</a>
-        </div>
-      `;
-      return;
-    }
-
-    if (stateKey === "error") {
-      ui.importArcadeList.innerHTML = `
-        <div class="import-recent-empty">
-          <p>${escapeHtml(state.recentArcadeImportMessage || "Recent Arcade games could not be loaded right now.")}</p>
-          <button class="btn" type="button" data-arcade-refresh="true">Try Again</button>
-        </div>
-      `;
-      return;
-    }
-
-    if (stateKey !== "ready" || !state.recentArcadeImportGames.length) {
-      ui.importArcadeList.innerHTML = `
-        <div class="import-recent-empty">
-          <p>No standard-rules Arcade games have been saved yet.</p>
-        </div>
-      `;
-      return;
-    }
-
-    ui.importArcadeList.innerHTML = state.recentArcadeImportGames
-      .map((game) => {
-        const variant = ARCADE_VARIANTS[game.variantKey] || ARCADE_VARIANTS.vanilla;
-        const playedAtMs = Date.parse(String(game.lastPlayedAt || ""));
-        const sub = [
-          variant.label,
-          formatRecentImportPlayedAt(
-            Number.isFinite(playedAtMs) ? playedAtMs : 0,
-          ),
-        ]
-          .filter(Boolean)
-          .join(" • ");
-
-        return `
-          <button
-            type="button"
-            class="import-recent-game"
-            data-arcade-import-id="${escapeHtml(game.id)}"
-            title="Import this Arcade game"
-          >
-            <span class="import-recent-game-top">
-              <span class="import-recent-game-title">${escapeHtml(variant.title)}</span>
-              <span class="import-recent-game-action">Import</span>
-            </span>
-            <span class="import-recent-game-meta">${escapeHtml(
-              game.currentFen === START_FEN
-                ? "Fresh board saved"
-                : "Saved position ready for analysis",
-            )}</span>
             <span class="import-recent-game-sub">${escapeHtml(sub)}</span>
           </button>
         `;
@@ -7070,99 +6711,6 @@
     return requestPromise;
   }
 
-  async function ensureRecentArcadeImportGames(force = false) {
-    const isFresh =
-      state.recentArcadeImportState !== "idle" &&
-      Date.now() - state.recentArcadeImportFetchedAt < RECENT_IMPORT_CACHE_MS;
-    if (!force && isFresh) {
-      renderRecentArcadeImportSection();
-      return state.recentArcadeImportGames;
-    }
-    if (state.recentArcadeImportPromise) return state.recentArcadeImportPromise;
-
-    state.recentArcadeImportState = "loading";
-    renderRecentArcadeImportSection();
-
-    let requestPromise = null;
-    requestPromise = fetchJsonWithRetry(
-      "/api/analyze/recent-arcade-games",
-      {
-        credentials: "same-origin",
-        cache: "no-store",
-      },
-      {
-        attempts: 3,
-        retryStatuses: [404],
-        retryOnInvalidJson: true,
-        retryDelayMs: 300,
-      },
-    )
-      .then(async ({ response, payload }) => {
-        const data = payload;
-        if (!data || typeof data !== "object") {
-          throw new Error("Recent Arcade games response was invalid.");
-        }
-        if (!response.ok && data.status !== "error") {
-          throw new Error(`Recent Arcade games request failed: ${response.status}`);
-        }
-
-        state.recentArcadeImportFetchedAt = Date.now();
-        state.recentArcadeImportGames = [];
-        state.recentArcadeImportMessage = "";
-
-        switch (data.status) {
-          case "signed-out":
-            state.recentArcadeImportState = "signed-out";
-            state.recentImportSignInHref =
-              typeof data.signInHref === "string"
-                ? data.signInHref
-                : state.recentImportSignInHref;
-            break;
-          case "ok":
-            state.recentArcadeImportState = "ready";
-            state.recentArcadeImportGames = Array.isArray(data.games)
-              ? data.games.filter(
-                  (game) =>
-                    game &&
-                    typeof game.id === "string" &&
-                    typeof game.variantKey === "string",
-                )
-              : [];
-            break;
-          default:
-            state.recentArcadeImportState = "error";
-            state.recentArcadeImportMessage =
-              typeof data.message === "string"
-                ? data.message
-                : "Recent Arcade games could not be loaded right now.";
-            break;
-        }
-
-        renderRecentArcadeImportSection();
-        return state.recentArcadeImportGames;
-      })
-      .catch((error) => {
-        console.warn("Recent Arcade import games failed", error);
-        state.recentArcadeImportFetchedAt = Date.now();
-        state.recentArcadeImportState = "error";
-        state.recentArcadeImportGames = [];
-        state.recentArcadeImportMessage =
-          error instanceof Error && error.message
-            ? error.message
-            : "Recent Arcade games could not be loaded right now.";
-        renderRecentArcadeImportSection();
-        return [];
-      })
-      .finally(() => {
-        if (state.recentArcadeImportPromise === requestPromise) {
-          state.recentArcadeImportPromise = null;
-        }
-      });
-
-    state.recentArcadeImportPromise = requestPromise;
-    return requestPromise;
-  }
-
   const RANDOM_GAME_CACHE_MS = 60 * 60 * 1000; // 1 hour cache
 
   async function ensureRandomGameOfTheDay(force = false) {
@@ -7273,63 +6821,6 @@
     );
     flipBoardToOrientation(game.userColor === "black" ? "black" : "white");
     renderAll();
-    closeImportModal();
-  }
-
-  async function importRecentArcadeGame(gameId) {
-    const game = state.recentArcadeImportGames.find((entry) => entry.id === gameId);
-    if (!game?.id) {
-      state.engineStatus = "Import failed";
-      state.engineHint = "That Arcade game could not be imported.";
-      renderEngineStatus();
-      return;
-    }
-
-    const response = await fetch(`/api/arcade/games/${encodeURIComponent(game.id)}`, {
-      credentials: "same-origin",
-      cache: "no-store",
-    }).catch(() => null);
-    const data = response ? await response.json().catch(() => null) : null;
-    if (!response?.ok || !data?.state || typeof data.state !== "object") {
-      state.engineStatus = "Import failed";
-      state.engineHint =
-        data?.error || "That Arcade game could not be imported right now.";
-      renderEngineStatus();
-      return;
-    }
-
-    const restoredBoard = restoreBoardStatePayload(data.state, {
-      restoreChat: false,
-    });
-    if (!restoredBoard) {
-      state.engineStatus = "Import failed";
-      state.engineHint = "That Arcade save could not be restored.";
-      renderEngineStatus();
-      return;
-    }
-
-    resetAssistantSession();
-    state.arcadeThinking = false;
-    state.selectedSquare = null;
-    clearPlayerClockMap();
-    invalidateGameCache();
-    invalidateLegalUciSetCache();
-    invalidateHistoryRenderCache();
-    invalidateEvalChartRenderCache();
-    resetAnalysisCaches();
-    loadPersistedAnalysisCaches();
-    clearAnalysisForNewPosition();
-    const restored = restoreBestCachedAnalysisForCurrentPosition();
-    const reusableCache = restored && hasReusableCachedAnalysisForCurrentPosition();
-    refreshPieceAnalysisCache();
-    refreshOpeningData();
-    setWorkspaceMode("explore");
-    renderAll();
-    if (reusableCache) {
-      holdCachedAnalysisResult();
-    } else {
-      restartSearchIfNeeded();
-    }
     closeImportModal();
   }
 
