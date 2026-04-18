@@ -17,7 +17,6 @@ const ROUTES = [
   { key: "sign-in", path: "/sign-in" },
   { key: "sign-up", path: "/sign-up" },
   { key: "analysis", path: "/analysis" },
-  { key: "arcade", path: "/arcade" },
   { key: "account", path: "/account" },
 ];
 const STABILITY_WAIT_MS = 1400;

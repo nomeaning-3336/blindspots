@@ -9,42 +9,6 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      arcade_games: {
-        Row: {
-          id: string;
-          user_id: string;
-          variant_key: "vanilla" | "drunkfish" | "weirdhorse";
-          status: "active" | "finished";
-          current_fen: string;
-          state: Json | null;
-          created_at: string;
-          updated_at: string;
-          last_played_at: string;
-        };
-        Insert: {
-          id: string;
-          user_id: string;
-          variant_key: "vanilla" | "drunkfish" | "weirdhorse";
-          status?: "active" | "finished";
-          current_fen?: string;
-          state?: Json | null;
-          created_at?: string;
-          updated_at?: string;
-          last_played_at?: string;
-        };
-        Update: {
-          id?: string;
-          user_id?: string;
-          variant_key?: "vanilla" | "drunkfish" | "weirdhorse";
-          status?: "active" | "finished";
-          current_fen?: string;
-          state?: Json | null;
-          created_at?: string;
-          updated_at?: string;
-          last_played_at?: string;
-        };
-        Relationships: [];
-      };
       user_app_preferences: {
         Row: {
           user_id: string;

@@ -1,9 +1,8 @@
 # Chessview
 
-Chessview is a chess web app focused on four core product surfaces:
+Chessview is a chess web app focused on three core product surfaces:
 
 - Analysis
-- Arcade
 - Statistics / Performance
 - Settings
 
@@ -17,21 +16,10 @@ The analysis board is the heart of the app.
 Current goals:
 - import FEN and PGN
 - import recent games from linked Lichess or Chess.com profiles
-- import recent standard-rules Arcade games
 - inspect moves, engine lines, move list, opening info, and board state
 - preserve a strong visual identity across themes
 
-### 2. Arcade
-Arcade is where Chessview can be playful and weird.
-
-Current variants:
-- `Vanilla`: standard chess against a human-like Maia opponent at a chosen Elo
-- `Drunkfish`: standard chess where the opponent strength drifts during the game
-- `Weirdhorse`: standard chess except knight movement mutates every 10 plies
-
-Arcade runs are persisted in Supabase so a game can be resumed from the exact saved position.
-
-### 3. Statistics / Performance
+### 2. Statistics / Performance
 Performance is the progress page.
 
 Current goals:
@@ -39,7 +27,7 @@ Current goals:
 - surface trends and rating context
 - show a useful, readable dashboard instead of raw dumps
 
-### 4. Settings
+### 3. Settings
 Settings is where users manage the practical parts of the app.
 
 Current goals:
@@ -57,14 +45,11 @@ A future `Library` page may hold articles, books, notes, or a lightweight blog. 
 - Supabase for authentication and persistence
 - `standalone.js` remains the source of truth for the embedded analysis runtime
 - `public/analyze/` is the synced runtime copy served by Next.js
-- Maia 2 powers the current Arcade opponent behavior
 
 ## Main Routes
 
 - `/analysis` — main analysis experience
 - `/analyze` — compatibility alias to the analysis experience
-- `/arcade` — Arcade dashboard and active runs
-- `/arcade/:gameId` — persisted Arcade game room
 - `/performance` — statistics / performance dashboard
 - `/account` — settings page
 
@@ -73,9 +58,9 @@ A future `Library` page may hold articles, books, notes, or a lightweight blog. 
 - `app/`
   Next.js routes, API handlers, and auth entry points.
 - `components/`
-  App shell, settings forms, Arcade dashboard, performance UI, and analyze bridge components.
+  App shell, settings forms, performance UI, and analyze bridge components.
 - `lib/`
-  persistence helpers, theme helpers, profile linking, Arcade storage, and performance logic.
+  persistence helpers, theme helpers, profile linking, and performance logic.
 - `public/analyze/`
   synced browser assets used by the embedded analysis app.
 - `standalone.js`, `standalone.css`, `standalone.html`
@@ -102,7 +87,6 @@ npm run dev
 3. Open the main routes.
 
 - `/analysis`
-- `/arcade`
 - `/performance`
 - `/account`
 

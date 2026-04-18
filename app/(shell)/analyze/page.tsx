@@ -26,7 +26,6 @@ export default async function AnalyzePage() {
   return (
     <AnalyzeShell
       initialPreferences={initialPreferences}
-      initialWorkspaceMode="explore"
       analyzePreferencesPersistUrl={userId ? "/api/analyze/preferences" : null}
     />
   );
