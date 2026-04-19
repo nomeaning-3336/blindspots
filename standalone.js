@@ -1828,7 +1828,7 @@
     renderSearchSummary();
     ui.analysisMeta.textContent = state.engineLinesHidden
       ? "Hidden"
-      : state.awaitingImportedPgnAnalysis
+      : importedPgnPlaybackActive()
         ? ""
         : terminal
           ? terminal.shortLabel
@@ -3031,7 +3031,7 @@
     }
     const game = currentGame();
     if (
-      (state.awaitingFinalAnalysis || state.awaitingImportedPgnAnalysis) &&
+      (state.awaitingFinalAnalysis || importedPgnPlaybackActive()) &&
       !terminalPositionInfo(game)
     ) {
       ui.overlaySvg.innerHTML = "";
@@ -3431,7 +3431,7 @@
       ui.analysisList.innerHTML = "";
       return;
     }
-    if (state.awaitingImportedPgnAnalysis) {
+    if (importedPgnPlaybackActive()) {
       const progress = importedPgnAnalysisProgress();
       ui.analysisList.innerHTML = `<div class="empty" aria-label="Stockfish analyzing imported game"><div class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></div><div class="empty-copy">Analyzing imported game ${escapeHtml(`${progress.complete}/${progress.total || 0} moves`)}</div></div>`;
       return;
@@ -8640,6 +8640,7 @@
           black: blackClock,
         });
       }
+      const importedPgnAnalysisMoves = [];
       let cursor = rootNode;
       let ply = 0;
       for (const san of sanMoves) {
@@ -8666,6 +8667,12 @@
             black: blackClock,
           });
         }
+        importedPgnAnalysisMoves.push({
+          ply,
+          parentFen,
+          moveUci,
+          nodeId: cursor.id,
+        });
       }
       if (cursor && timeoutLoserColor) {
         const finalSnapshot = nodeClockById.get(cursor.id) || {
@@ -8684,8 +8691,8 @@
         });
       }
       state.root = rootNode;
-      // PGN import now behaves like loading a position with move history attached:
-      // land on the final position and analyze only the currently selected board.
+      // PGN import lands on the final position immediately while full-move
+      // classification work continues in the background.
       state.current = cursor || rootNode;
       resetAssistantSession();
       invalidateGameCache();
@@ -8699,10 +8706,19 @@
       const restored = restoreBestCachedAnalysisForCurrentPosition();
       const reusableCache =
         restored && hasReusableCachedAnalysisForCurrentPosition();
+      const importedPgnAnalysisFens = [];
+      const seenImportedPgnFens = new Set();
+      let pathNode = cursor;
+      while (pathNode) {
+        if (pathNode.fen && !seenImportedPgnFens.has(pathNode.fen)) {
+          seenImportedPgnFens.add(pathNode.fen);
+          importedPgnAnalysisFens.push(pathNode.fen);
+        }
+        pathNode = pathNode.parent;
+      }
       state.playerClockByNodeId = nodeClockById;
-      state.awaitingImportedPgnAnalysis = false;
-      state.importedPgnAnalysisFens = [];
-      state.importedPgnAnalysisMoves = [];
+      state.importedPgnAnalysisFens = importedPgnAnalysisFens.reverse();
+      state.importedPgnAnalysisMoves = importedPgnAnalysisMoves;
       state.importedGameReviewMode = false;
       state.importedGameReviewLoading = false;
       state.importedGameReviewComments = new Map();
@@ -8720,6 +8736,7 @@
       state.importedGameReviewThinkingDots = 0;
       state.importedPgnReportReady = false;
       clearImportedPgnPlayback(true);
+      updateImportedPgnAnalysisState();
       refreshPieceAnalysisCache();
       refreshOpeningData();
       flipBoardToTurn();
