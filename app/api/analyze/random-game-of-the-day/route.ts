@@ -19,6 +19,39 @@ function formatDateForChessgames(date: Date): string {
   return `${month}-${day}`;
 }
 
+function formatDateForDisplay(date: Date): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatPgnDateForDisplay(value?: string | null): string | null {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(\d{4}|\?{4})\.(\d{2}|\?\?)\.(\d{2}|\?\?)$/);
+  if (!match) return null;
+
+  const [, yearToken, monthToken, dayToken] = match;
+  if (!/^\d{4}$/.test(yearToken)) return null;
+
+  const year = yearToken;
+  const month = /^\d{2}$/.test(monthToken) ? Number(monthToken) : NaN;
+  const day = /^\d{2}$/.test(dayToken) ? Number(dayToken) : NaN;
+  const hasMonth = Number.isInteger(month) && month >= 1 && month <= 12;
+  const hasDay = Number.isInteger(day) && day >= 1 && day <= 31;
+
+  if (hasMonth && hasDay) {
+    return `${getMonthAbbr(month - 1)} ${day}, ${year}`;
+  }
+
+  if (hasMonth) {
+    return `${getMonthAbbr(month - 1)} ${year}`;
+  }
+
+  return year;
+}
+
 export async function GET() {
   try {
     const today = new Date();
@@ -90,6 +123,7 @@ export async function GET() {
     const whiteMatch = pgn.match(/\[White "([^"]+)"\]/);
     const blackMatch = pgn.match(/\[Black "([^"]+)"\]/);
     const eventMatch = pgn.match(/\[Event "([^"]+)"\]/);
+    const playedDateMatch = pgn.match(/\[Date "([^"]+)"\]/);
 
     if (whiteMatch && blackMatch) {
       players = `${whiteMatch[1]} vs ${blackMatch[1]}`;
@@ -103,7 +137,9 @@ export async function GET() {
       title: title || "Game of the Day",
       players: players || "Unknown players",
       pgn,
-      date: dateStr,
+      date:
+        formatPgnDateForDisplay(playedDateMatch?.[1]) ||
+        formatDateForDisplay(today),
     };
 
     return NextResponse.json({ status: "ok", game });

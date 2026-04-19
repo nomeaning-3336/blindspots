@@ -7,6 +7,7 @@ import {
 import { resolve } from "node:path";
 import {
   PERFORMANCE_RANGE_OPTIONS,
+  buildLinkedChessProfileKey,
   type ChessProvider,
   type LinkedChessProfile,
   getChessProfileUrl,
@@ -16,12 +17,13 @@ import {
   buildPerformanceSnapshot,
   type NormalizedGame,
   type PieceType,
+  type PerformanceProfileSource,
   type PerformanceReport,
   type SnapshotFilters,
 } from "@/lib/chess-performance-report";
 
 const REQUEST_TIMEOUT_MS = 20000;
-const PERFORMANCE_CACHE_VERSION = 3;
+const PERFORMANCE_CACHE_VERSION = 4;
 const PERFORMANCE_CACHE_DIR = resolve(process.cwd(), "cache", "performance");
 const MAX_PERFORMANCE_RANGE_DAYS = Math.max(...PERFORMANCE_RANGE_OPTIONS);
 const MAX_PERFORMANCE_RANGE_MS =
@@ -107,6 +109,26 @@ interface LichessUserSummary {
 }
 
 export async function getPerformanceReport(
+  profiles: LinkedChessProfile[],
+): Promise<PerformanceReport> {
+  if (!profiles.length) {
+    return {
+      profiles: [],
+      totalGameCount: null,
+      totalFetchedGames: 0,
+      rangeDaysCovered: MAX_PERFORMANCE_RANGE_DAYS,
+      fetchedAt: new Date().toISOString(),
+      games: [],
+    };
+  }
+
+  const reports = await Promise.all(
+    profiles.map((profile) => getPerformanceReportForProfile(profile)),
+  );
+  return combinePerformanceReports(reports);
+}
+
+async function getPerformanceReportForProfile(
   profile: LinkedChessProfile,
 ): Promise<PerformanceReport> {
   const cached = readCachedPerformanceReport(profile);
@@ -118,7 +140,7 @@ export async function getPerformanceReport(
     currentTotalGameCount !== null &&
     cached.totalGameCount === currentTotalGameCount
   ) {
-    return toPerformanceReport(cached);
+    return toPerformanceReport(profile, cached);
   }
 
   if (
@@ -126,7 +148,7 @@ export async function getPerformanceReport(
     cached.rangeDaysCovered >= MAX_PERFORMANCE_RANGE_DAYS &&
     currentTotalGameCount === null
   ) {
-    return toPerformanceReport(cached);
+    return toPerformanceReport(profile, cached);
   }
 
   try {
@@ -146,10 +168,10 @@ export async function getPerformanceReport(
     };
 
     writeCachedPerformanceReport(profile, payload);
-    return toPerformanceReport(payload);
+    return toPerformanceReport(profile, payload);
   } catch (error) {
     if (cached) {
-      return toPerformanceReport(cached);
+      return toPerformanceReport(profile, cached);
     }
 
     throw error;
@@ -157,10 +179,10 @@ export async function getPerformanceReport(
 }
 
 export async function getPerformanceSnapshot(
-  profile: LinkedChessProfile,
+  profiles: LinkedChessProfile[],
   filters: SnapshotFilters,
 ) {
-  const report = await getPerformanceReport(profile);
+  const report = await getPerformanceReport(profiles);
   return buildPerformanceSnapshot(report, filters);
 }
 
@@ -239,21 +261,52 @@ function writeCachedPerformanceReport(
   );
 }
 
-function toPerformanceReport(cached: CachedPerformanceReport): PerformanceReport {
+function toPerformanceReport(
+  profile: LinkedChessProfile,
+  cached: CachedPerformanceReport,
+): PerformanceReport {
+  const profileSource = buildPerformanceProfileSource(
+    profile,
+    cached.totalGameCount,
+    cached.totalFetchedGames,
+    cached.fetchedAt,
+  );
+
   return {
-    username: cached.username,
-    provider: cached.provider,
-    providerLabel: getChessProviderLabel(cached.provider),
-    profileUrl: getChessProfileUrl({
-      provider: cached.provider,
-      username: cached.username,
-      linkedAt: cached.fetchedAt,
-    }),
+    profiles: [profileSource],
     totalGameCount: cached.totalGameCount,
     totalFetchedGames: cached.totalFetchedGames,
     rangeDaysCovered: cached.rangeDaysCovered,
     fetchedAt: cached.fetchedAt,
     games: cached.games,
+  };
+}
+
+function combinePerformanceReports(reports: PerformanceReport[]): PerformanceReport {
+  const profiles = reports.flatMap((report) => report.profiles);
+  const fetchedAtMs = reports
+    .map((report) => Date.parse(report.fetchedAt))
+    .filter((value) => Number.isFinite(value));
+
+  return {
+    profiles,
+    totalGameCount: profiles.every((profile) => profile.totalGameCount !== null)
+      ? profiles.reduce((sum, profile) => sum + (profile.totalGameCount ?? 0), 0)
+      : null,
+    totalFetchedGames: profiles.reduce(
+      (sum, profile) => sum + profile.totalFetchedGames,
+      0,
+    ),
+    rangeDaysCovered: reports.reduce(
+      (smallest, report) => Math.min(smallest, report.rangeDaysCovered),
+      MAX_PERFORMANCE_RANGE_DAYS,
+    ),
+    fetchedAt: fetchedAtMs.length
+      ? new Date(Math.max(...fetchedAtMs)).toISOString()
+      : new Date().toISOString(),
+    games: reports
+      .flatMap((report) => report.games)
+      .sort((left, right) => right.endTimeMs - left.endTimeMs),
   };
 }
 
@@ -270,18 +323,18 @@ async function fetchGamesForProfile(
   sinceMs: number,
 ): Promise<NormalizedGame[]> {
   if (profile.provider === "chesscom") {
-    return fetchChessComGames(profile.username, sinceMs);
+    return fetchChessComGames(profile, sinceMs);
   }
 
-  return fetchLichessGames(profile.username, sinceMs);
+  return fetchLichessGames(profile, sinceMs);
 }
 
 async function fetchChessComGames(
-  username: string,
+  profile: LinkedChessProfile,
   sinceMs: number,
 ): Promise<NormalizedGame[]> {
   const archivesResponse = await fetchJson<{ archives?: string[] }>(
-    `https://api.chess.com/pub/player/${encodeURIComponent(username)}/games/archives`,
+    `https://api.chess.com/pub/player/${encodeURIComponent(profile.username)}/games/archives`,
   );
   const monthUrls = (archivesResponse.archives ?? []).filter((archiveUrl) => {
     const parts = archiveUrl.split("/").slice(-2);
@@ -302,16 +355,16 @@ async function fetchChessComGames(
 
   return archives
     .flatMap((archive) => archive.games ?? [])
-    .map((game, index) => normalizeChessComGame(username, game, index))
+    .map((game, index) => normalizeChessComGame(profile, game, index))
     .filter(isNormalizedGame);
 }
 
 async function fetchLichessGames(
-  username: string,
+  profile: LinkedChessProfile,
   sinceMs: number,
 ): Promise<NormalizedGame[]> {
   const endpoint = new URL(
-    `https://lichess.org/api/games/user/${encodeURIComponent(username)}`,
+    `https://lichess.org/api/games/user/${encodeURIComponent(profile.username)}`,
   );
   endpoint.searchParams.set("since", String(sinceMs));
   endpoint.searchParams.set("max", "1000");
@@ -339,12 +392,12 @@ async function fetchLichessGames(
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => JSON.parse(line) as LichessGame)
-    .map((game, index) => normalizeLichessGame(username, game, index))
+    .map((game, index) => normalizeLichessGame(profile, game, index))
     .filter(isNormalizedGame);
 }
 
 function normalizeChessComGame(
-  username: string,
+  profile: LinkedChessProfile,
   game: ChessComGame,
   index: number,
 ): NormalizedGame | null {
@@ -352,7 +405,7 @@ function normalizeChessComGame(
 
   const whiteName = game.white?.username?.trim();
   const blackName = game.black?.username?.trim();
-  const normalizedUser = username.toLowerCase();
+  const normalizedUser = profile.username.toLowerCase();
   const userColor =
     whiteName?.toLowerCase() === normalizedUser
       ? "white"
@@ -378,6 +431,10 @@ function normalizeChessComGame(
     id: game.url ?? `chesscom-${index}`,
     url: game.url ?? extractPgnTag(game.pgn, "Link") ?? "",
     provider: "chesscom",
+    profileKey: buildLinkedChessProfileKey(profile),
+    profileUsername: profile.username,
+    profileLabel: formatPerformanceProfileLabel(profile),
+    profileUrl: getChessProfileUrl(profile),
     endTimeMs: Number(game.end_time ?? 0) * 1000,
     timeType: normalizeChessComTimeType(game.time_class, initialSeconds),
     userColor,
@@ -410,7 +467,7 @@ function normalizeChessComGame(
 }
 
 function normalizeLichessGame(
-  username: string,
+  profile: LinkedChessProfile,
   game: LichessGame,
   index: number,
 ): NormalizedGame | null {
@@ -418,7 +475,7 @@ function normalizeLichessGame(
 
   const whiteName = game.players?.white?.user?.name?.trim();
   const blackName = game.players?.black?.user?.name?.trim();
-  const normalizedUser = username.toLowerCase();
+  const normalizedUser = profile.username.toLowerCase();
   const userColor =
     whiteName?.toLowerCase() === normalizedUser
       ? "white"
@@ -446,6 +503,10 @@ function normalizeLichessGame(
     id: game.id ?? `lichess-${index}`,
     url: game.id ? `https://lichess.org/${game.id}` : "",
     provider: "lichess",
+    profileKey: buildLinkedChessProfileKey(profile),
+    profileUsername: profile.username,
+    profileLabel: formatPerformanceProfileLabel(profile),
+    profileUrl: getChessProfileUrl(profile),
     endTimeMs: Number(game.lastMoveAt ?? 0),
     timeType: normalizeLichessTimeType(game.perf, initialSeconds),
     userColor,
@@ -916,6 +977,28 @@ function extractOpeningNameFromUrl(ecoUrl?: string) {
   } catch {
     return null;
   }
+}
+
+function buildPerformanceProfileSource(
+  profile: LinkedChessProfile,
+  totalGameCount: number | null,
+  totalFetchedGames: number,
+  fetchedAt: string,
+): PerformanceProfileSource {
+  return {
+    key: buildLinkedChessProfileKey(profile),
+    provider: profile.provider,
+    providerLabel: getChessProviderLabel(profile.provider),
+    username: profile.username,
+    profileUrl: getChessProfileUrl(profile),
+    totalGameCount,
+    totalFetchedGames,
+    fetchedAt,
+  };
+}
+
+function formatPerformanceProfileLabel(profile: LinkedChessProfile) {
+  return `${getChessProviderLabel(profile.provider)} · ${profile.username}`;
 }
 
 function normalizeAnalysisEval(entry?: LichessAnalysisEntry) {

@@ -1,4 +1,5 @@
 import {
+  buildLinkedChessProfileKey,
   type ChessProvider,
   type LinkedChessProfile,
   getChessProviderLabel,
@@ -35,6 +36,7 @@ interface ChessComGame {
 interface ChessComPlayer {
   username?: string;
   result?: string;
+  rating?: number;
 }
 
 interface LichessGame {
@@ -47,8 +49,8 @@ interface LichessGame {
   pgn?: string;
   clock?: { initial?: number; increment?: number };
   players?: {
-    white?: { user?: { name?: string } };
-    black?: { user?: { name?: string } };
+    white?: { user?: { name?: string }; rating?: number; ratingDiff?: number };
+    black?: { user?: { name?: string }; rating?: number; ratingDiff?: number };
   };
 }
 
@@ -56,10 +58,14 @@ export interface RecentImportGame {
   id: string;
   provider: ChessProvider;
   providerLabel: string;
+  profileKey: string;
+  profileUsername: string;
+  profileLabel: string;
   url: string;
   pgn: string;
   openingName: string | null;
   opponentName: string;
+  opponentRating: number | null;
   userColor: PlayerColor;
   result: GameResult;
   playedAtMs: number;
@@ -67,16 +73,41 @@ export interface RecentImportGame {
 }
 
 export async function getRecentImportGames(
-  profile: LinkedChessProfile,
+  profiles: LinkedChessProfile[],
 ): Promise<RecentImportGame[]> {
-  const games =
-    profile.provider === "chesscom"
-      ? await fetchRecentChessComGames(profile.username)
-      : await fetchRecentLichessGames(profile.username);
+  const settled = await Promise.allSettled(
+    profiles.map(async (profile) => {
+      const games =
+        profile.provider === "chesscom"
+          ? await fetchRecentChessComGames(profile.username)
+          : await fetchRecentLichessGames(profile.username);
 
-  return games
+      const profileLabel = `${getChessProviderLabel(profile.provider)} · ${profile.username}`;
+      const profileKey = buildLinkedChessProfileKey(profile);
+
+      return games.map((game) => ({
+        ...game,
+        profileKey,
+        profileUsername: profile.username,
+        profileLabel,
+      }));
+    }),
+  );
+
+  const combined = settled.flatMap((result) =>
+    result.status === "fulfilled" ? result.value : [],
+  );
+
+  if (!combined.length) {
+    const rejected = settled.find((result) => result.status === "rejected");
+    if (rejected && rejected.status === "rejected") {
+      throw rejected.reason;
+    }
+  }
+
+  return combined
     .sort((left, right) => right.playedAtMs - left.playedAtMs)
-    .slice(0, MAX_RECENT_IMPORT_GAMES);
+    .slice(0, Math.max(MAX_RECENT_IMPORT_GAMES, profiles.length * MAX_RECENT_IMPORT_GAMES));
 }
 
 async function fetchRecentChessComGames(
@@ -168,14 +199,19 @@ function normalizeChessComRecentGame(
     id: game.url ?? `chesscom-recent-${index}`,
     provider: "chesscom",
     providerLabel: getChessProviderLabel("chesscom"),
+    profileKey: "",
+    profileUsername: username,
+    profileLabel: "",
     url: game.url ?? extractPgnTag(game.pgn, "Link") ?? "",
     pgn: game.pgn,
     openingName:
       extractPgnTag(game.pgn, "Opening") ??
-      extractPgnTag(game.pgn, "ECOUrl") ??
+      extractOpeningNameFromUrl(extractPgnTag(game.pgn, "ECOUrl")) ??
       null,
     opponentName:
       userColor === "white" ? blackName ?? "Opponent" : whiteName ?? "Opponent",
+    opponentRating:
+      userColor === "white" ? game.black?.rating ?? null : game.white?.rating ?? null,
     userColor,
     result,
     playedAtMs: Number(game.end_time ?? 0) * 1000,
@@ -211,11 +247,18 @@ function normalizeLichessRecentGame(
     id: game.id ?? `lichess-recent-${index}`,
     provider: "lichess",
     providerLabel: getChessProviderLabel("lichess"),
+    profileKey: "",
+    profileUsername: username,
+    profileLabel: "",
     url: game.id ? `https://lichess.org/${game.id}` : "",
     pgn: game.pgn,
     openingName: game.opening?.name ?? null,
     opponentName:
       userColor === "white" ? blackName ?? "Opponent" : whiteName ?? "Opponent",
+    opponentRating:
+      userColor === "white"
+        ? game.players?.black?.rating ?? null
+        : game.players?.white?.rating ?? null,
     userColor,
     result: resolveLichessResult(userColor, game.winner),
     playedAtMs: Number(game.lastMoveAt ?? 0),
@@ -389,6 +432,23 @@ function extractPgnTag(pgn: string | undefined, tagName: string) {
   const pattern = new RegExp(`\\[${tagName} "([^"]+)"\\]`);
   const match = pgn.match(pattern);
   return match?.[1] ?? null;
+}
+
+function extractOpeningNameFromUrl(url: string | null) {
+  if (!url) return null;
+
+  try {
+    const pathname = new URL(url).pathname;
+    const slug = pathname.split("/").filter(Boolean).pop();
+    if (!slug) return null;
+
+    return decodeURIComponent(slug)
+      .replace(/-/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  } catch {
+    return null;
+  }
 }
 
 function parseMaybeNumber(value: unknown) {

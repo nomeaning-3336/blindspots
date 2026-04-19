@@ -6,8 +6,8 @@ import { AuthSignOutButton } from "@/components/auth-sign-out-button";
 
 const appLinks = [
   { href: "/analysis", label: "Analysis" },
-  { href: "/performance", label: "Statistics" },
-  { href: "/account", label: "Settings" },
+  { href: "/performance", label: "Performance" },
+  { href: "/account", label: "Account" },
 ];
 
 function linkClassName(isActive: boolean) {

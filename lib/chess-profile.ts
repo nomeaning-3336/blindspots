@@ -44,6 +44,26 @@ export function getChessProfileUrl(profile: LinkedChessProfile) {
   return `https://lichess.org/@/${encodeURIComponent(profile.username)}`;
 }
 
+export function buildLinkedChessProfileKey(
+  profile: Pick<LinkedChessProfile, "provider" | "username">,
+) {
+  return `${profile.provider}:${String(profile.username || "").trim().toLowerCase()}`;
+}
+
+export function normalizeLinkedChessProfileKey(value?: string | null) {
+  const raw = String(value || "").trim();
+  const separatorIndex = raw.indexOf(":");
+  if (separatorIndex <= 0) return null;
+
+  const provider = normalizeChessProvider(raw.slice(0, separatorIndex).toLowerCase());
+  if (!provider) return null;
+
+  const username = normalizeChessUsername(provider, raw.slice(separatorIndex + 1));
+  if (!username) return null;
+
+  return buildLinkedChessProfileKey({ provider, username });
+}
+
 export function normalizeChessUsername(
   provider: ChessProvider,
   value?: string | null,

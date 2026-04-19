@@ -1,10 +1,10 @@
 import { getUserAppTheme } from "@/lib/app-theme-store";
-import { getLinkedChessProfile } from "@/lib/chess-profile-store";
+import { getLinkedChessProfiles } from "@/lib/chess-profile-store";
 import { getAnalyzePreferences } from "@/lib/analyze-preferences-store";
 import { syncAnalyzePreferencesWithAppTheme } from "@/lib/analyze-preferences";
 import { AccountThemeForm } from "@/components/account-theme-form";
 import { AnalyzeSettingsForm } from "@/components/analyze-settings-form";
-import { AccountLinkedProfileForm } from "@/components/account-linked-profile-form";
+import { AccountLinkedProfilesManager } from "@/components/account-linked-profiles-manager";
 import { getOptionalAppUserId } from "@/lib/app-auth";
 
 function bannerCopy(status?: string | null, error?: string | null, provider?: string | null) {
@@ -28,6 +28,14 @@ function bannerCopy(status?: string | null, error?: string | null, provider?: st
       tone: "error",
       message:
         "Supabase storage is not ready yet. Run the linked-profile SQL migration, then try again.",
+    };
+  }
+
+  if (error === "storage-needs-migration") {
+    return {
+      tone: "error",
+      message:
+        "The linked-profile table is still on the old schema. Run the latest Supabase migration for multiple linked accounts, then try again.",
     };
   }
 
@@ -73,8 +81,8 @@ export default async function AccountPage({
 }) {
   const userId = await getOptionalAppUserId();
 
-  const [linkedProfile, currentTheme, analyzePreferences, resolvedSearchParams] = await Promise.all([
-    getLinkedChessProfile(),
+  const [linkedProfiles, currentTheme, analyzePreferences, resolvedSearchParams] = await Promise.all([
+    getLinkedChessProfiles(),
     getUserAppTheme(),
     getAnalyzePreferences(),
     searchParams,
@@ -100,7 +108,7 @@ export default async function AccountPage({
       <div className="mx-auto grid w-full max-w-[1180px] gap-6">
         <div className="app-brutal-card-strong p-8">
           <h1 className="text-3xl font-bold uppercase tracking-[0.16em] text-white">
-            Settings
+            Account
           </h1>
         </div>
 
@@ -138,47 +146,10 @@ export default async function AccountPage({
         {userId && (
           <article className="app-brutal-card p-6">
             <p className="text-xs uppercase tracking-[0.24em] text-[var(--app-muted)]">
-              Linked Profile
+              Linked Profiles
             </p>
 
-            {linkedProfile ? (
-              <div className="mt-4 grid gap-4">
-                <div className="border-2 border-[var(--app-accent)] bg-[var(--app-accent-soft)] p-5 shadow-[4px_4px_0_color-mix(in_srgb,var(--app-accent)_18%,transparent)]">
-                  <p className="text-xs uppercase tracking-[0.22em] text-[var(--app-muted)]">
-                    Active Profile
-                  </p>
-                  <div className="mt-3 flex flex-wrap items-center gap-3">
-                    <span className="border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--app-text)]">
-                      {linkedProfile.provider === "chesscom" ? "Chess.com" : "Lichess"}
-                    </span>
-                    <span className="text-lg font-bold text-[var(--app-text)]">
-                      {linkedProfile.username}
-                    </span>
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-[var(--app-muted)]">
-                    Linked on {new Date(linkedProfile.linkedAt).toLocaleDateString()}.
-                  </p>
-                </div>
-
-                <form action="/auth/profile/unlink" method="post" className="flex flex-wrap gap-3">
-                  <input type="hidden" name="next" value="/account" />
-                  <button
-                    type="submit"
-                    className="inline-flex items-center justify-center border border-[var(--app-border)] px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-text)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
-                  >
-                    Remove
-                  </button>
-                  <a
-                    href="/performance"
-                    className="inline-flex items-center justify-center border border-[var(--app-accent)] bg-[var(--app-accent)] px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-accent-contrast)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
-                  >
-                    Open Performance
-                  </a>
-                </form>
-              </div>
-            ) : (
-              <AccountLinkedProfileForm />
-            )}
+            <AccountLinkedProfilesManager profiles={linkedProfiles} />
           </article>
         )}
 
