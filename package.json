@@ -10,9 +10,9 @@
     "build:analyze-css": "tailwindcss -i ./standalone.tailwind.css -o ./standalone.css --minify",
     "watch:css": "tailwindcss -i ./standalone.tailwind.css -o ./standalone.css --watch",
     "watch:analyze-css": "tailwindcss -i ./standalone.tailwind.css -o ./standalone.css --watch",
+<<<<<<< HEAD
     "test:theme-backgrounds": "node scripts/check-theme-backgrounds.mjs",
-    "test:analysis-multipv": "node scripts/check-analysis-multipv-snapshots.mjs",
-    "benchmark:brilliant": "node scripts/benchmark-brilliant.mjs"
+    "test:analysis-multipv": "node scripts/check-analysis-multipv-snapshots.mjs"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.2.2",

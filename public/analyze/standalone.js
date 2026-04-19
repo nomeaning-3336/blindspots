@@ -285,13 +285,6 @@
       border: "var(--app-class-critical-border)",
       icon: assetUrl("classification-icons/critical.png"),
     },
-    brilliant: {
-      label: "Brilliant",
-      color: "var(--app-class-brilliant)",
-      soft: "var(--app-class-brilliant-soft)",
-      border: "var(--app-class-brilliant-border)",
-      icon: assetUrl("classification-icons/brilliant.png"),
-    },
     best: {
       label: "Best",
       color: "var(--app-class-best)",
@@ -1625,7 +1618,6 @@
       fullPositionRowsForFen,
       analysisRowsForFen,
       classificationForFenAndUci,
-      brilliantDiagnosticsForFenAndUci,
       classifyAnalysisMove,
       displayedMoveClassForUci,
       moveDangerProfile,
@@ -2286,8 +2278,6 @@
 
   function evalChartMoveClass(moveClass) {
     if (!moveClass) return null;
-    if (moveClass === MOVE_CLASS_STYLES.brilliant)
-      return MOVE_CLASS_STYLES.brilliant;
     if (moveClass === MOVE_CLASS_STYLES.critical)
       return MOVE_CLASS_STYLES.critical;
     if (moveClass === MOVE_CLASS_STYLES.okay) return MOVE_CLASS_STYLES.okay;
@@ -2304,7 +2294,6 @@
     const moveClass = point.moveClass;
     const isImportant =
       point.node.id === state.current.id ||
-      moveClass === MOVE_CLASS_STYLES.brilliant ||
       moveClass === MOVE_CLASS_STYLES.critical ||
       moveClass === MOVE_CLASS_STYLES.inaccuracy ||
       moveClass === MOVE_CLASS_STYLES.mistake ||
@@ -3711,8 +3700,7 @@
   }
 
   function reportMoveClassScore(moveClass) {
-    if (moveClass === MOVE_CLASS_STYLES.brilliant) return 100;
-    if (moveClass === MOVE_CLASS_STYLES.critical) return 98;
+    if (moveClass === MOVE_CLASS_STYLES.critical) return 100;
     if (moveClass === MOVE_CLASS_STYLES.best) return 96;
     if (moveClass === MOVE_CLASS_STYLES.excellent) return 91;
     if (moveClass === MOVE_CLASS_STYLES.okay) return 78;
@@ -3734,7 +3722,6 @@
     // Average centipawn loss per move classification
     // Weighted by frequency of each class
     const avgCpLossPerClass = {
-      brilliant: 5,
       critical: 15,
       best: 10,
       excellent: 25,
@@ -3787,7 +3774,6 @@
       accuracy: null,
       estimatedElo: null,
       counts: {
-        brilliant: 0,
         critical: 0,
         best: 0,
         excellent: 0,
@@ -3797,7 +3783,6 @@
         blunder: 0,
       },
       firstNodeIds: {
-        brilliant: "",
         critical: "",
         best: "",
         excellent: "",
@@ -3857,7 +3842,7 @@
     const nodes = currentMoveNodes();
     const white = initialReportPlayerStats("white");
     const black = initialReportPlayerStats("black");
-    const goodKeys = new Set(["brilliant", "critical", "best", "excellent", "okay"]);
+    const goodKeys = new Set(["critical", "best", "excellent", "okay"]);
     const badKeys = new Set(["inaccuracy", "mistake", "blunder"]);
     nodes.forEach((node) => {
       const color = moverColorForNode(node);
@@ -3984,8 +3969,8 @@
     `;
     ui.assistantMessages.style.display = "grid";
     ui.assistantMessages.innerHTML = [
-      renderReportPlayerClassificationCard(report.white, "White", ["brilliant", "critical", "best", "excellent", "okay", "inaccuracy", "mistake", "blunder"]),
-      renderReportPlayerClassificationCard(report.black, "Black", ["brilliant", "critical", "best", "excellent", "okay", "inaccuracy", "mistake", "blunder"]),
+      renderReportPlayerClassificationCard(report.white, "White", ["critical", "best", "excellent", "okay", "inaccuracy", "mistake", "blunder"]),
+      renderReportPlayerClassificationCard(report.black, "Black", ["critical", "best", "excellent", "okay", "inaccuracy", "mistake", "blunder"]),
     ].join("");
   }
 
@@ -4712,172 +4697,6 @@
     }
   }
 
-  function brilliantDiagnostics(row, rows, fen) {
-    if (!moveFeelsImportant(row, rows, fen)) {
-      return { result: false, reason: "not-important" };
-    }
-    const parsed = parseUci(row?.bestUci || "");
-    if (!parsed?.from || !parsed?.to) {
-      return { result: false, reason: "bad-uci" };
-    }
-    const afterFen = nextFenForUci(fen, row.bestUci);
-    if (!afterFen) {
-      return { result: false, reason: "no-after-fen" };
-    }
-    const moverColor = sideToMoveForFen(fen);
-    const moverCode = moverColor === "white" ? "w" : "b";
-    const enemyCode = moverCode === "w" ? "b" : "w";
-    let beforeGame = readOnlyGameForFen(fen);
-    let afterGame = readOnlyGameForFen(afterFen);
-    if (!beforeGame || !afterGame) {
-      try {
-        beforeGame = new Chess(fen);
-        afterGame = new Chess(afterFen);
-      } catch (_) {
-        return { result: false, reason: "bad-game" };
-      }
-    }
-    let probe;
-    try {
-      probe = new Chess(fen);
-    } catch (_) {
-      return { result: false, reason: "bad-game" };
-    }
-    const played = probe.move({
-      from: parsed.from,
-      to: parsed.to,
-      promotion: parsed.promotion || undefined,
-    });
-    if (!played) {
-      return { result: false, reason: "illegal-move" };
-    }
-    const beforeBoard = buildBoardMap(beforeGame);
-    const afterBoard = buildBoardMap(afterGame);
-    const movedPiece = beforeBoard.get(parsed.from);
-    const movedPieceAfter = afterBoard.get(parsed.to);
-    if (
-      !movedPiece ||
-      !movedPieceAfter ||
-      movedPieceAfter.color !== moverCode ||
-      movedPiece.type === "k" ||
-      movedPiece.type === "p"
-    ) {
-      return { result: false, reason: "piece-not-eligible" };
-    }
-    const beforeAttackMap = buildAttackMap(beforeBoard);
-    const afterAttackMap = buildAttackMap(afterBoard);
-    const beforeRisk = computeSEE(beforeBoard, parsed.from, enemyCode, beforeAttackMap);
-    const afterRisk = bestLegalExchangeGainOnSquare(afterFen, parsed.to);
-    const enemyHasLegalCapture = opponentHasLegalCapture(afterFen, parsed.to);
-    if (!enemyHasLegalCapture) {
-      return {
-        result: false,
-        reason: "not-capturable",
-        beforeRisk,
-        afterRisk,
-      };
-    }
-    const newRiskCp = afterRisk - beforeRisk;
-    const exchangeOfferCp = afterRisk;
-    const capturedTarget = captureTargetFromMove(beforeGame, played);
-    const movedPieceValueCp = pieceValueCp(movedPiece.type);
-    const capturedValueCp = pieceValueCp(capturedTarget?.type || "");
-    const sacrificeNetCp = afterRisk - capturedValueCp;
-    const clearMaterialSacrifice =
-      movedPieceValueCp > capturedValueCp && sacrificeNetCp >= 100;
-    const exchangeSacrifice = exchangeOfferCp >= 100;
-    const isSacrifice = clearMaterialSacrifice || exchangeSacrifice;
-    const bestEval = moverSidedEval(row, fen);
-    const secondEval = rows[1] ? moverSidedEval(rows[1], fen) : bestEval;
-    const evalGap = rows[1] ? bestEval - secondEval : 0;
-    // Was the piece already trapped before the move? Reject unless check/mate overrides.
-    const beforeLegalMoves = legalMovesForColor(fen, moverCode);
-    const beforeTrapped = new Set(
-      detectTrappedPieces(
-        beforeBoard,
-        moverCode,
-        beforeLegalMoves,
-        beforeAttackMap,
-      ).map((entry) => entry.square),
-    );
-    if (beforeTrapped.has(parsed.from) && !(/[+#]/.test(played.san || "") || Number(row?.mate || 0) > 0)) {
-      return { result: false, reason: "already-trapped", evalGap };
-    }
-    const afterEval = moverSidedEvalForAfterMove(row, afterFen);
-    if (afterEval < -1.25) {
-      return { result: false, reason: "losing-after-move", afterEval, evalGap };
-    }
-    const positiveMate = Number(row?.mate || 0) > 0;
-    const isCheck = /[+#]/.test(played.san || "");
-    const safeThreat = computeSafeThreatSummary(
-      afterFen,
-      afterBoard,
-      moverCode,
-      afterAttackMap,
-    );
-    const critical = looksCritical(row, rows);
-    const forcingCompensation =
-      positiveMate ||
-      safeThreat.maxCp >= movedPieceValueCp ||
-      evalGap >= 0.9 ||
-      critical;
-    const sacrificialCheck =
-      isCheck && (clearMaterialSacrifice || positiveMate || evalGap >= 0.9);
-    let result = false;
-    if (clearMaterialSacrifice) {
-      // Material sacrifice: need forcing compensation or sacrificial check
-      result = forcingCompensation || sacrificialCheck;
-    } else if (capturedValueCp >= movedPieceValueCp) {
-      // Non-sacrifice or capture of equal/greater value: need mate or eval advantage
-      result = positiveMate || safeThreat.maxCp > movedPieceValueCp || evalGap >= 1.0;
-    } else {
-      // Speculative sac (legal capture exists but unprofitable, or quiet move with exchange risk):
-      // require strong compensation signals — forcing moves, mate, or critical position
-      result = forcingCompensation || (isCheck && safeThreat.maxCp >= 300);
-    }
-    return {
-      result,
-      reason: result ? "passed" : "compensation-too-weak",
-      beforeRisk,
-      afterRisk,
-      newRiskCp,
-      exchangeOfferCp,
-      enemyHasLegalCapture,
-      movedPieceValueCp,
-      capturedValueCp,
-      sacrificeNetCp,
-      clearMaterialSacrifice,
-      exchangeSacrifice,
-      isSacrifice,
-      bestEval,
-      secondEval,
-      evalGap,
-      afterEval,
-      positiveMate,
-      isCheck,
-      safeThreat,
-      critical,
-      san: played.san || "",
-    };
-  }
-
-  function brilliantDiagnosticsForFenAndUci(
-    fen,
-    uci,
-    game = readOnlyGameForFen(fen),
-  ) {
-    if (!fen || !uci || !game) return null;
-    const rows = fullPositionRowsForFen(fen);
-    if (!rows.length) return null;
-    const rowIndex = rows.findIndex((candidate) => candidate.bestUci === uci);
-    if (rowIndex < 0) return null;
-    return brilliantDiagnostics(rows[rowIndex], rows, fen);
-  }
-
-  function looksBrilliant(row, rows, fen) {
-    return !!brilliantDiagnostics(row, rows, fen)?.result;
-  }
-
   function bestDestinationNodeUci(square, game = currentGame()) {
     const candidates = visibleAnalysisRows(game)
       .map((row, index) => ({ row, index, parsed: parseUci(row.bestUci) }))
@@ -4905,8 +4724,6 @@
     const best = rows[0] || row;
 
     if (index === 0) {
-      const fen = game?.fen?.() || state.current?.fen || "";
-      if (looksBrilliant(row, rows, fen)) return MOVE_CLASS_STYLES.brilliant;
       if (looksCritical(row, rows)) return MOVE_CLASS_STYLES.critical;
       return MOVE_CLASS_STYLES.best;
     }
@@ -8170,7 +7987,6 @@
       .filter(Boolean)
       .join(" • ");
     const iconClasses = new Set([
-      MOVE_CLASS_STYLES.brilliant,
       MOVE_CLASS_STYLES.critical,
       MOVE_CLASS_STYLES.inaccuracy,
       MOVE_CLASS_STYLES.mistake,
