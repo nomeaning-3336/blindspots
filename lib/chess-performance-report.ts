@@ -107,10 +107,12 @@ export interface PieceErrorDistributionEntry {
   mistakes: number;
   blunders: number;
   total: number;
-  share: number;
-  qualityMoveCount: number;
+  moveCount: number;
+  blunderCount: number;
+  blunderRatePct: number;
   accuracyPct: number | null;
   avgCpl: number | null;
+  lowSample: boolean;
 }
 
 export interface PieceErrorDistributionSummary {
@@ -451,19 +453,17 @@ function summarizeMostBlunderedPieces(
       if (!bucket) continue;
 
       const normalizedCpLoss = normalizeCpLoss(cpLoss);
+      gameUsed = true;
       bucket.qualityMoveCount += 1;
       bucket.accuracyTotal += cpLossToAccuracy(normalizedCpLoss);
       bucket.cpLossTotal += normalizedCpLoss;
 
       if (normalizedCpLoss >= BLUNDER_CP_THRESHOLD) {
         bucket.blunders += 1;
-        gameUsed = true;
       } else if (normalizedCpLoss >= MISTAKE_CP_THRESHOLD) {
         bucket.mistakes += 1;
-        gameUsed = true;
       } else if (normalizedCpLoss >= INACCURACY_CP_THRESHOLD) {
         bucket.inaccuracies += 1;
-        gameUsed = true;
       }
     }
 
@@ -472,6 +472,10 @@ function summarizeMostBlunderedPieces(
 
   const totalClassifiedErrors = Array.from(buckets.values()).reduce(
     (sum, entry) => sum + entry.inaccuracies + entry.mistakes + entry.blunders,
+    0,
+  );
+  const totalAnalyzedMoves = Array.from(buckets.values()).reduce(
+    (sum, entry) => sum + entry.qualityMoveCount,
     0,
   );
 
@@ -493,11 +497,12 @@ function summarizeMostBlunderedPieces(
         mistakes: bucket.mistakes,
         blunders: bucket.blunders,
         total,
-        share:
-          totalClassifiedErrors > 0
-            ? roundToTenths((total / totalClassifiedErrors) * 100)
+        moveCount: bucket.qualityMoveCount,
+        blunderCount: bucket.blunders,
+        blunderRatePct:
+          bucket.qualityMoveCount > 0
+            ? roundToTenths((bucket.blunders / bucket.qualityMoveCount) * 100)
             : 0,
-        qualityMoveCount: bucket.qualityMoveCount,
         accuracyPct:
           bucket.qualityMoveCount > 0
             ? roundToTenths(bucket.accuracyTotal / bucket.qualityMoveCount)
@@ -506,18 +511,25 @@ function summarizeMostBlunderedPieces(
           bucket.qualityMoveCount > 0
             ? roundToTenths(bucket.cpLossTotal / bucket.qualityMoveCount)
             : null,
+        lowSample: bucket.qualityMoveCount < 10,
       };
     })
-    .filter((entry) => entry.total > 0)
+    .filter((entry) => entry.moveCount > 0)
     .sort((left, right) => {
-      if (left.total !== right.total) return right.total - left.total;
-      if (left.blunders !== right.blunders) return right.blunders - left.blunders;
-      if (left.mistakes !== right.mistakes) return right.mistakes - left.mistakes;
+      if (left.blunderRatePct !== right.blunderRatePct) {
+        return right.blunderRatePct - left.blunderRatePct;
+      }
+      if ((left.avgCpl ?? -1) !== (right.avgCpl ?? -1)) {
+        return (right.avgCpl ?? -1) - (left.avgCpl ?? -1);
+      }
+      if (left.blunderCount !== right.blunderCount) {
+        return right.blunderCount - left.blunderCount;
+      }
       return left.piece.localeCompare(right.piece);
     });
 
   return {
-    supported: totalClassifiedErrors > 0,
+    supported: totalAnalyzedMoves > 0,
     sampleSize,
     totalClassifiedErrors,
     pieces: entries,

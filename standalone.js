@@ -2048,16 +2048,21 @@
   }
 
   function renderEvalChart() {
-    const nodes = currentPath().slice(1);
-    if (state.awaitingImportedPgnAnalysis) {
-      renderEvalBar(null, "0.0");
+    const currentEval = currentPositionEval();
+    renderEvalBar(currentEval?.value ?? null, currentEval?.label || "0.0");
+    if (!reportRailVisible()) {
       if (ui.evalChart.innerHTML) ui.evalChart.innerHTML = "";
       _lastEvalChartHtml = "";
       hideEvalTooltip();
       return;
     }
-    const currentEval = currentPositionEval();
-    renderEvalBar(currentEval?.value ?? null, currentEval?.label || "0.0");
+    const nodes = currentPath().slice(1);
+    if (state.awaitingImportedPgnAnalysis) {
+      if (ui.evalChart.innerHTML) ui.evalChart.innerHTML = "";
+      _lastEvalChartHtml = "";
+      hideEvalTooltip();
+      return;
+    }
     if (nodes.length < 3) {
       if (ui.evalChart.innerHTML) ui.evalChart.innerHTML = "";
       _lastEvalChartHtml = "";
@@ -4475,11 +4480,6 @@
   }
 
   function reportRailVisible() {
-    if (isArcadeMode()) return false;
-    // Report is visible if imported PGN analysis is complete
-    if (state.importedPgnReportReady && !state.awaitingImportedPgnAnalysis) return true;
-    // Or if we have a restored imported PGN game tree with cached analysis (after page refresh)
-    if (Array.isArray(state.importPlaybackNodeIds) && state.importPlaybackNodeIds.length > 0 && state.positionAnalysisCache?.size > 0 && !state.awaitingImportedPgnAnalysis) return true;
     return false;
   }
 
@@ -8640,13 +8640,13 @@
           black: blackClock,
         });
       }
-      const importedPgnAnalysisMoves = [];
       let cursor = rootNode;
+      let ply = 0;
       for (const san of sanMoves) {
+        ply += 1;
         const parentFen = replay.fen();
         const move = replay.move(san, { sloppy: true });
         if (!move) throw new Error(`PGN move could not be replayed: ${san}`);
-        const ply = importedPgnAnalysisMoves.length + 1;
         const clockTag = normalizeClockDisplay(pgnClockTags[ply - 1] || "");
         const movingColor =
           String(move.color || "").toLowerCase() === "b" ? "black" : "white";
@@ -8666,12 +8666,6 @@
             black: blackClock,
           });
         }
-        importedPgnAnalysisMoves.push({
-          ply,
-          parentFen,
-          moveUci,
-          nodeId: cursor.id,
-        });
       }
       if (cursor && timeoutLoserColor) {
         const finalSnapshot = nodeClockById.get(cursor.id) || {
@@ -8690,8 +8684,9 @@
         });
       }
       state.root = rootNode;
-      // Start imported game review from the first position of the imported game.
-      state.current = rootNode;
+      // PGN import now behaves like loading a position with move history attached:
+      // land on the final position and analyze only the currently selected board.
+      state.current = cursor || rootNode;
       resetAssistantSession();
       invalidateGameCache();
       invalidateLegalUciSetCache();
@@ -8704,19 +8699,10 @@
       const restored = restoreBestCachedAnalysisForCurrentPosition();
       const reusableCache =
         restored && hasReusableCachedAnalysisForCurrentPosition();
-      const importedPgnAnalysisFens = [];
-      const seenImportedPgnFens = new Set();
-      let pathNode = cursor;
-      while (pathNode) {
-        if (pathNode.fen && !seenImportedPgnFens.has(pathNode.fen)) {
-          seenImportedPgnFens.add(pathNode.fen);
-          importedPgnAnalysisFens.push(pathNode.fen);
-        }
-        pathNode = pathNode.parent;
-      }
-      state.importedPgnAnalysisFens = importedPgnAnalysisFens.reverse();
-      state.importedPgnAnalysisMoves = importedPgnAnalysisMoves;
       state.playerClockByNodeId = nodeClockById;
+      state.awaitingImportedPgnAnalysis = false;
+      state.importedPgnAnalysisFens = [];
+      state.importedPgnAnalysisMoves = [];
       state.importedGameReviewMode = false;
       state.importedGameReviewLoading = false;
       state.importedGameReviewComments = new Map();
@@ -8733,18 +8719,13 @@
       }
       state.importedGameReviewThinkingDots = 0;
       state.importedPgnReportReady = false;
-      state.importPlaybackNodeIds = pathToNode(cursor).map((node) => node.id);
-      state.importPlaybackIndex = 0;
-      clearTimeout(state.importPlaybackTimer);
-      state.importPlaybackTimer = null;
-      updateImportedPgnAnalysisState();
+      clearImportedPgnPlayback(true);
       refreshPieceAnalysisCache();
       refreshOpeningData();
       flipBoardToTurn();
       if (ui.importInput) ui.importInput.value = "";
       renderAll();
 
-      syncImportedPgnPlayback(true);
       if (reusableCache) {
         holdCachedAnalysisResult();
       } else {

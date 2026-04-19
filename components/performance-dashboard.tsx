@@ -296,19 +296,17 @@ function summarizeMostBlunderedPiecesFromGames(
       if (!bucket) continue;
 
       const normalizedCpLoss = normalizeCpLoss(cpLoss);
+      usedGame = true;
       bucket.qualityMoveCount += 1;
       bucket.accuracyTotal += cpLossToAccuracy(normalizedCpLoss);
       bucket.cpLossTotal += normalizedCpLoss;
 
       if (normalizedCpLoss >= BLUNDER_CP_THRESHOLD) {
         bucket.blunders += 1;
-        usedGame = true;
       } else if (normalizedCpLoss >= MISTAKE_CP_THRESHOLD) {
         bucket.mistakes += 1;
-        usedGame = true;
       } else if (normalizedCpLoss >= INACCURACY_CP_THRESHOLD) {
         bucket.inaccuracies += 1;
-        usedGame = true;
       }
     }
 
@@ -317,6 +315,10 @@ function summarizeMostBlunderedPiecesFromGames(
 
   const totalClassifiedErrors = Array.from(buckets.values()).reduce(
     (sum, entry) => sum + entry.inaccuracies + entry.mistakes + entry.blunders,
+    0,
+  );
+  const totalAnalyzedMoves = Array.from(buckets.values()).reduce(
+    (sum, entry) => sum + entry.qualityMoveCount,
     0,
   );
 
@@ -338,11 +340,12 @@ function summarizeMostBlunderedPiecesFromGames(
         mistakes: bucket.mistakes,
         blunders: bucket.blunders,
         total,
-        share:
-          totalClassifiedErrors > 0
-            ? Math.round((total / totalClassifiedErrors) * 1000) / 10
+        moveCount: bucket.qualityMoveCount,
+        blunderCount: bucket.blunders,
+        blunderRatePct:
+          bucket.qualityMoveCount > 0
+            ? Math.round((bucket.blunders / bucket.qualityMoveCount) * 1000) / 10
             : 0,
-        qualityMoveCount: bucket.qualityMoveCount,
         accuracyPct:
           bucket.qualityMoveCount > 0
             ? Math.round((bucket.accuracyTotal / bucket.qualityMoveCount) * 10) / 10
@@ -351,18 +354,25 @@ function summarizeMostBlunderedPiecesFromGames(
           bucket.qualityMoveCount > 0
             ? Math.round((bucket.cpLossTotal / bucket.qualityMoveCount) * 10) / 10
             : null,
+        lowSample: bucket.qualityMoveCount < 10,
       };
     })
-    .filter((entry) => entry.total > 0)
+    .filter((entry) => entry.moveCount > 0)
     .sort((left, right) => {
-      if (left.total !== right.total) return right.total - left.total;
-      if (left.blunders !== right.blunders) return right.blunders - left.blunders;
-      if (left.mistakes !== right.mistakes) return right.mistakes - left.mistakes;
+      if (left.blunderRatePct !== right.blunderRatePct) {
+        return right.blunderRatePct - left.blunderRatePct;
+      }
+      if ((left.avgCpl ?? -1) !== (right.avgCpl ?? -1)) {
+        return (right.avgCpl ?? -1) - (left.avgCpl ?? -1);
+      }
+      if (left.blunderCount !== right.blunderCount) {
+        return right.blunderCount - left.blunderCount;
+      }
       return left.piece.localeCompare(right.piece);
     });
 
   return {
-    supported: totalClassifiedErrors > 0,
+    supported: totalAnalyzedMoves > 0,
     sampleSize,
     totalClassifiedErrors,
     pieces: entries,
@@ -918,15 +928,19 @@ function renderMostBlunderedPieces(
   const shouldShowProgress =
     processing.running || (processing.phase === "done" && processing.failedGames > 0);
   const shouldShowEta = processing.running && processing.etaMinutes !== null;
+  const analyzedMoveCount = summary.pieces.reduce(
+    (sum, entry) => sum + entry.moveCount,
+    0,
+  );
 
   return (
     <article className="app-brutal-card p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-bold uppercase tracking-[0.18em] text-white">
-          Most Blundered Pieces
+          Most Blunder-Prone Pieces
         </h2>
         <p className="text-xs uppercase tracking-[0.16em] text-[var(--app-muted)]">
-          Inaccuracy 50+ cp, Mistake 100+ cp, Blunder 300+ cp
+          Sorted by blunder rate per piece type
         </p>
       </div>
       {shouldShowProgress ? (
@@ -944,30 +958,58 @@ function renderMostBlunderedPieces(
       ) : null}
       {hasSummary ? (
         <div className="mt-5 grid gap-3">
-          {summary.pieces.map((entry) => (
+          {summary.pieces.map((entry) => {
+            const barWidth =
+              entry.blunderRatePct > 0
+                ? Math.min(100, Math.max(3, entry.blunderRatePct))
+                : 0;
+
+            return (
             <div key={entry.piece} className="app-brutal-inset p-4">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-bold text-white">{getPieceLabel(entry.piece)}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-bold text-white">{getPieceLabel(entry.piece)}</p>
+                  {entry.lowSample ? (
+                    <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-200">
+                      Low Sample
+                    </span>
+                  ) : null}
+                </div>
                 <p className="text-xs uppercase tracking-[0.16em] text-[var(--app-muted)]">
-                  Accuracy {formatPercent(entry.accuracyPct)} / {formatCpl(entry.avgCpl)} CPL
+                  {formatPercent(entry.blunderRatePct)} blunder rate / {formatCpl(entry.avgCpl)} CPL
                 </p>
               </div>
               <div className="mt-3 h-2 w-full bg-[var(--app-panel-solid)]">
                 <div
                   className="h-2 bg-[var(--app-accent)]"
-                  style={{ width: `${Math.max(4, entry.share)}%` }}
+                  style={{ width: `${barWidth}%` }}
                 />
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-[var(--app-muted)]">
+                <span>
+                  {entry.blunderCount} blunder{entry.blunderCount === 1 ? "" : "s"} across{" "}
+                  {entry.moveCount} analyzed move{entry.moveCount === 1 ? "" : "s"}
+                </span>
+                {entry.lowSample ? (
+                  <span>Low sample: fewer than 10 analyzed moves</span>
+                ) : null}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-[var(--app-muted)]">
                 <span>Inaccuracies: {entry.inaccuracies}</span>
                 <span>Mistakes: {entry.mistakes}</span>
                 <span>Blunders: {entry.blunders}</span>
               </div>
             </div>
-          ))}
+          )})}
           <p className="text-xs uppercase tracking-[0.16em] text-[var(--app-muted-soft)]">
             {summary.totalClassifiedErrors} moves flagged as inaccuracy, mistake, or
-            blunder across {summary.sampleSize} game{summary.sampleSize === 1 ? "" : "s"}
+            blunder across {summary.sampleSize} in-range game
+            {summary.sampleSize === 1 ? "" : "s"} with analyzed move quality
+          </p>
+          <p className="text-xs uppercase tracking-[0.16em] text-[var(--app-muted-soft)]">
+            {analyzedMoveCount} analyzed move{analyzedMoveCount === 1 ? "" : "s"} contributed
+            to this ranking. Client enrichment stays capped to the{" "}
+            {CLIENT_ANALYSIS_MAX_GAMES} most recent games that need local eval data.
           </p>
         </div>
       ) : (
