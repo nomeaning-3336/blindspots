@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { getLinkedChessProfile } from "@/lib/chess-profile-store";
+import { getLinkedChessProfiles } from "@/lib/chess-profile-store";
 import { getRecentImportGames } from "@/lib/analyze-recent-games-server";
-import { getChessProviderLabel } from "@/lib/chess-profile";
 import { getOptionalAppUserId, normalizeNextPath } from "@/lib/app-auth";
 
 export async function GET() {
@@ -21,8 +20,8 @@ export async function GET() {
     );
   }
 
-  const linkedProfile = await getLinkedChessProfile();
-  if (!linkedProfile) {
+  const linkedProfiles = await getLinkedChessProfiles();
+  if (!linkedProfiles.length) {
     return NextResponse.json(
       {
         status: "missing-profile" as const,
@@ -33,15 +32,10 @@ export async function GET() {
   }
 
   try {
-    const games = await getRecentImportGames(linkedProfile);
+    const games = await getRecentImportGames(linkedProfiles);
     return NextResponse.json(
       {
         status: "ok" as const,
-        profile: {
-          provider: linkedProfile.provider,
-          providerLabel: getChessProviderLabel(linkedProfile.provider),
-          username: linkedProfile.username,
-        },
         games,
       },
       { headers },

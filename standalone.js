@@ -1215,26 +1215,28 @@
             <button class="btn subtle" id="closeImportBtn" type="button">Close</button>
           </div>
           <div class="import-body import-body-split">
-            <section class="import-manual-section">
-              <div class="import-section-head">
-                <h4>Import from FEN / PGN</h4>
-              </div>
-              <textarea id="importInput" class="textarea import-paste mono" placeholder="Paste a full PGN or a FEN string" spellcheck="false"></textarea>
-              <div class="import-actions">
-                <button class="btn primary" id="submitImportBtn" type="button">Import Game</button>
-              </div>
-            </section>
-            <section class="import-recent-section">
+            <div class="import-left-stack">
+              <section class="import-manual-section">
+                <div class="import-section-head">
+                  <h4>Import from FEN / PGN</h4>
+                </div>
+                <textarea id="importInput" class="textarea import-paste mono" placeholder="Paste a full PGN or a FEN string" spellcheck="false"></textarea>
+                <div class="import-actions">
+                  <button class="btn primary" id="submitImportBtn" type="button">Import Game</button>
+                </div>
+              </section>
+              <section class="import-recent-section import-random-section">
+                <div class="import-section-head">
+                  <h4>Random game of the day</h4>
+                </div>
+                <div id="importRandomGameList" class="import-recent-list"></div>
+              </section>
+            </div>
+            <section class="import-recent-section import-recent-column">
               <div class="import-section-head">
                 <h4>Import from recent games</h4>
               </div>
               <div id="importRecentList" class="import-recent-list"></div>
-            </section>
-            <section class="import-recent-section">
-              <div class="import-section-head">
-                <h4>Random game of the day</h4>
-              </div>
-              <div id="importRandomGameList" class="import-recent-list"></div>
             </section>
           </div>
         </div>
@@ -6282,6 +6284,32 @@
     }
   }
 
+  function formatRecentImportRating(value) {
+    const rating = Number(value);
+    if (!Number.isFinite(rating) || rating <= 0) return "";
+    return String(Math.round(rating));
+  }
+
+  function getRecentImportResultClass(result) {
+    if (result === "win") return "import-recent-game-result--win";
+    if (result === "loss") return "import-recent-game-result--loss";
+    return "import-recent-game-result--draw";
+  }
+
+  function formatRandomGameOfTheDayDateLabel(value) {
+    const label = String(value || "").trim();
+    if (!label) return "";
+    if (/\b\d{4}\b/.test(label)) return label;
+
+    const legacyMatch = label.match(/^([A-Za-z]{3})-(\d{1,2})$/);
+    if (legacyMatch) {
+      const [, month, day] = legacyMatch;
+      return `${month} ${Number(day)}, ${new Date().getFullYear()}`;
+    }
+
+    return label;
+  }
+
   function renderRecentImportSection() {
     if (!ui.importRecentList) return;
 
@@ -6290,7 +6318,7 @@
     if (stateKey === "loading") {
       ui.importRecentList.innerHTML = `
         <div class="import-recent-empty">
-          <p>Loading recent games from your linked profile…</p>
+          <p>Loading recent games from your linked profiles…</p>
         </div>
       `;
       return;
@@ -6299,7 +6327,7 @@
     if (stateKey === "signed-out") {
       ui.importRecentList.innerHTML = `
         <div class="import-recent-empty">
-          <p>Sign in to load recent games from your linked chess profile.</p>
+          <p>Sign in to load recent games from your linked chess profiles.</p>
           <a class="btn primary" href="${escapeHtml(state.recentImportSignInHref)}">Sign In</a>
         </div>
       `;
@@ -6329,7 +6357,7 @@
     if (stateKey !== "ready" || !state.recentImportGames.length) {
       ui.importRecentList.innerHTML = `
         <div class="import-recent-empty">
-          <p>No recent importable games were found for this linked profile yet.</p>
+          <p>No recent importable games were found across your linked profiles yet.</p>
         </div>
       `;
       return;
@@ -6338,14 +6366,25 @@
     ui.importRecentList.innerHTML = state.recentImportGames
       .map((game) => {
         const title = game.openingName || `vs ${game.opponentName}`;
+        const opponentRating = formatRecentImportRating(game.opponentRating);
+        const opponentInfo = opponentRating
+          ? `vs ${game.opponentName} (${opponentRating})`
+          : `vs ${game.opponentName}`;
         const meta = [
-          `vs ${game.opponentName}`,
-          formatRecentImportColor(game.userColor),
-          formatRecentImportResult(game.result),
-        ].join(" • ");
-        const sub = [game.providerLabel, game.timeLabel, formatRecentImportPlayedAt(game.playedAtMs)]
+          `<span class="import-recent-game-meta-item">${escapeHtml(opponentInfo)}</span>`,
+          `<span class="import-recent-game-meta-item">${escapeHtml(formatRecentImportColor(game.userColor))}</span>`,
+          `<span class="import-recent-game-result ${getRecentImportResultClass(game.result)}">${escapeHtml(formatRecentImportResult(game.result))}</span>`,
+        ].join('<span class="import-recent-game-meta-sep">•</span>');
+        const providerLabel = game.profileLabel || game.providerLabel;
+        const sub = [
+          `<span class="import-recent-game-provider">${escapeHtml(providerLabel)}</span>`,
+          game.timeLabel
+            ? `<span class="import-recent-game-sub-item">${escapeHtml(game.timeLabel)}</span>`
+            : "",
+          `<span class="import-recent-game-sub-item">${escapeHtml(formatRecentImportPlayedAt(game.playedAtMs))}</span>`,
+        ]
           .filter(Boolean)
-          .join(" • ");
+          .join('<span class="import-recent-game-sub-sep">•</span>');
 
         return `
           <button
@@ -6358,8 +6397,8 @@
               <span class="import-recent-game-title">${escapeHtml(title)}</span>
               <span class="import-recent-game-action">Import</span>
             </span>
-            <span class="import-recent-game-meta">${escapeHtml(meta)}</span>
-            <span class="import-recent-game-sub">${escapeHtml(sub)}</span>
+            <span class="import-recent-game-meta">${meta}</span>
+            <span class="import-recent-game-sub">${sub}</span>
           </button>
         `;
       })
@@ -6402,7 +6441,7 @@
     const game = state.randomGameOfTheDayGame;
     const title = game.title || "Game of the Day";
     const meta = game.players || "";
-    const sub = game.date || "";
+    const sub = formatRandomGameOfTheDayDateLabel(game.date);
 
     ui.importRandomGameList.innerHTML = `
       <button
@@ -6487,12 +6526,6 @@
                     typeof game.pgn === "string",
                 )
               : [];
-            state.recentImportProfileLabel =
-              data.profile &&
-              typeof data.profile.providerLabel === "string" &&
-              typeof data.profile.username === "string"
-                ? `${data.profile.providerLabel} · ${data.profile.username}`
-                : "";
             break;
           default:
             state.recentImportState = "error";

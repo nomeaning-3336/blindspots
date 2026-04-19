@@ -3,7 +3,11 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-export function AccountLinkedProfileForm() {
+export function AccountLinkedProfileForm({
+  onLinked,
+}: {
+  onLinked?: () => void;
+}) {
   const router = useRouter();
   const [provider, setProvider] = useState<"chesscom" | "lichess">("chesscom");
   const [username, setUsername] = useState("");
@@ -50,6 +54,9 @@ export function AccountLinkedProfileForm() {
             case "invalid-username":
               setMessage("That username format does not look valid yet.");
               break;
+            case "storage-needs-migration":
+              setMessage("The linked-profile table needs the latest migration first.");
+              break;
             default:
               setMessage("Profile could not be linked right now.");
           }
@@ -58,12 +65,13 @@ export function AccountLinkedProfileForm() {
 
         lastSubmittedRef.current = submissionKey;
         setMessage("Profile linked.");
+        onLinked?.();
         router.refresh();
       });
     }, 600);
 
     return () => window.clearTimeout(timeoutId);
-  }, [provider, router, startTransition, username]);
+  }, [onLinked, provider, router, startTransition, username]);
 
   return (
     <div className="mt-4 grid max-w-[520px] gap-4">

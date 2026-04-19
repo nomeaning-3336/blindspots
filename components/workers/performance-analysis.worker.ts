@@ -1,58 +1,53 @@
 /// <reference lib="webworker" />
 
-import { Chess } from "chess.js";
+import {
+  calculateEtaMinutes,
+  TimeoutError,
+  withTimeout,
+  type ClientAnalysisDoneMessage,
+  type ClientAnalysisErrorMessage,
+  type ClientAnalysisProgressMessage,
+  type ClientAnalysisTaskGame,
+} from "@/lib/performance-client-analysis";
+import {
+  resolveClientAnalysisGame,
+  resolveClientAnalysisMoveCount,
+} from "@/lib/performance-analysis-game";
+import type { PieceType } from "@/lib/chess-performance-report";
 
-type PieceType = "pawn" | "knight" | "bishop" | "rook" | "queen" | "king";
 type PlayerColor = "white" | "black";
-
-interface AnalysisTaskGame {
-  id: string;
-  userColor: PlayerColor;
-  movesUci?: string;
-  pgn?: string;
-  userMovePieceTypes?: PieceType[];
-}
 
 interface StartMessage {
   type: "start";
-  games: AnalysisTaskGame[];
-  chunkSize: number;
+  games: ClientAnalysisTaskGame[];
   movetimeMs: number;
   idleBetweenMovesMs: number;
   idleBetweenGamesMs: number;
+  engineInitTimeoutMs: number;
+  evaluationTimeoutMs: number;
 }
 
-interface ChunkMessage {
-  type: "chunk";
-  processedGames: number;
-  totalGames: number;
-  etaMinutes: number;
-  chunk: Array<{
-    id: string;
-    userMoveCpLosses: Array<number | null>;
-    userMovePieceTypes: PieceType[];
-  }>;
-}
-
-interface DoneMessage {
-  type: "done";
-  processedGames: number;
-  totalGames: number;
-}
-
-interface ErrorMessage {
-  type: "error";
-  message: string;
-}
+type AnalysisResult =
+  | {
+      status: "complete";
+      entry: {
+        id: string;
+        userMoveCpLosses: Array<number | null>;
+        userMovePieceTypes: PieceType[];
+      };
+    }
+  | { status: "failed" }
+  | { status: "stopped" };
 
 const scope = self as DedicatedWorkerGlobalScope;
 let stopped = false;
 
 scope.addEventListener("message", (event: MessageEvent<StartMessage>) => {
   if (event.data.type !== "start") return;
+  stopped = false;
   void runAnalysis(event.data).catch((error) => {
     const message = error instanceof Error ? error.message : "Worker analysis failed";
-    scope.postMessage({ type: "error", message } satisfies ErrorMessage);
+    postError(message, 0, event.data.games.length, event.data.games.length);
   });
 });
 
@@ -61,46 +56,109 @@ scope.addEventListener("close", () => {
 });
 
 async function runAnalysis(message: StartMessage) {
-  const engine = createStockfishEngine();
-  await engine.init();
-
   const totalGames = message.games.length;
-  const chunkSize = Math.max(1, message.chunkSize);
-  const startTime = performance.now();
-  const chunk: ChunkMessage["chunk"] = [];
   let processedGames = 0;
+  let failedGames = 0;
+  const startTime = performance.now();
+  const engine = createStockfishEngine();
 
-  for (const game of message.games) {
+  postProgress({
+    type: "progress",
+    phase: "starting",
+    processedGames,
+    totalGames,
+    failedGames,
+    etaMinutes: null,
+    currentGameIndex: totalGames > 0 ? 1 : null,
+    currentMoveIndex: null,
+    currentMoveCount: null,
+    chunk: [],
+  });
+
+  try {
+    await engine.init(message.engineInitTimeoutMs);
+  } catch {
+    engine.dispose();
+    postError(
+      "Move-by-move piece error analysis is unavailable right now.",
+      processedGames,
+      totalGames,
+      totalGames,
+    );
+    return;
+  }
+
+  for (let gameIndex = 0; gameIndex < message.games.length; gameIndex += 1) {
     if (stopped) break;
 
-    const analyzed = await analyzeSingleGame(
-      game,
-      engine,
-      message.movetimeMs,
-      message.idleBetweenMovesMs,
-    );
+    const game = message.games[gameIndex]!;
+    const resolvedMoveCount = resolveClientAnalysisMoveCount(game);
 
-    if (analyzed) chunk.push(analyzed);
-    processedGames += 1;
+    postProgress({
+      type: "progress",
+      phase: "running",
+      processedGames,
+      totalGames,
+      failedGames,
+      etaMinutes: calculateEtaMinutes(performance.now() - startTime, processedGames, totalGames),
+      currentGameIndex: gameIndex + 1,
+      currentMoveIndex: 0,
+      currentMoveCount: resolvedMoveCount,
+      chunk: [],
+    });
 
-    const shouldFlushChunk =
-      chunk.length >= chunkSize || processedGames === totalGames;
+    const analyzed = await analyzeSingleGame(game, engine, {
+      movetimeMs: message.movetimeMs,
+      idleBetweenMovesMs: message.idleBetweenMovesMs,
+      evaluationTimeoutMs: message.evaluationTimeoutMs,
+      onHeartbeat(moveIndex, moveCount) {
+        // Heartbeats keep the dashboard visibly alive even before a game finishes.
+        postProgress({
+          type: "progress",
+          phase: "running",
+          processedGames,
+          totalGames,
+          failedGames,
+          etaMinutes: calculateEtaMinutes(
+            performance.now() - startTime,
+            processedGames,
+            totalGames,
+          ),
+          currentGameIndex: gameIndex + 1,
+          currentMoveIndex: moveIndex,
+          currentMoveCount: moveCount,
+          chunk: [],
+        });
+      },
+    });
 
-    if (shouldFlushChunk) {
-      const elapsed = performance.now() - startTime;
-      const avgPerGame = processedGames > 0 ? elapsed / processedGames : 0;
-      const remainingGames = Math.max(0, totalGames - processedGames);
-      const etaMinutes = roundToTenths((avgPerGame * remainingGames) / 60000);
-
-      scope.postMessage({
-        type: "chunk",
-        processedGames,
-        totalGames,
-        etaMinutes,
-        chunk: [...chunk],
-      } satisfies ChunkMessage);
-      chunk.length = 0;
+    if (analyzed.status === "stopped") {
+      break;
     }
+
+    processedGames += 1;
+    const chunk =
+      analyzed.status === "complete"
+        ? [analyzed.entry]
+        : [];
+
+    if (analyzed.status === "failed") {
+      failedGames += 1;
+    }
+
+    postProgress({
+      type: "progress",
+      phase: "running",
+      processedGames,
+      totalGames,
+      failedGames,
+      etaMinutes: calculateEtaMinutes(performance.now() - startTime, processedGames, totalGames),
+      currentGameIndex:
+        processedGames < totalGames ? Math.min(totalGames, gameIndex + 2) : null,
+      currentMoveIndex: null,
+      currentMoveCount: null,
+      chunk,
+    });
 
     if (message.idleBetweenGamesMs > 0) {
       await sleep(message.idleBetweenGamesMs);
@@ -113,33 +171,58 @@ async function runAnalysis(message: StartMessage) {
     type: "done",
     processedGames,
     totalGames,
-  } satisfies DoneMessage);
+    failedGames,
+  } satisfies ClientAnalysisDoneMessage);
 }
 
 async function analyzeSingleGame(
-  game: AnalysisTaskGame,
+  game: ClientAnalysisTaskGame,
   engine: ReturnType<typeof createStockfishEngine>,
-  movetimeMs: number,
-  idleBetweenMovesMs: number,
-) {
-  const resolved = resolveGameMovesAndPieces(game);
-  if (!resolved) return null;
+  options: {
+    movetimeMs: number;
+    idleBetweenMovesMs: number;
+    evaluationTimeoutMs: number;
+    onHeartbeat: (moveIndex: number, moveCount: number) => void;
+  },
+): Promise<AnalysisResult> {
+  const resolved = resolveClientAnalysisGame(game);
+  if (!resolved) return { status: "failed" };
+
+  if (game.userMoveCpLosses.length > 0) {
+    return {
+      status: "complete",
+      entry: {
+        id: game.id,
+        userMoveCpLosses: [...game.userMoveCpLosses],
+        userMovePieceTypes: resolved.userMovePieceTypes,
+      },
+    };
+  }
 
   const userMoveCpLosses: Array<number | null> = [];
   let previousEval = 0;
 
   for (let moveIndex = 0; moveIndex < resolved.movesUci.length; moveIndex += 1) {
-    if (stopped) return null;
+    if (stopped) return { status: "stopped" };
+
+    if (moveIndex === 0 || moveIndex % 6 === 0) {
+      options.onHeartbeat(moveIndex + 1, resolved.movesUci.length);
+    }
 
     const currentLine = resolved.movesUci.slice(0, moveIndex + 1);
-    const currentEval = await engine.evaluatePosition(currentLine, movetimeMs);
+    const currentEval = await engine.evaluatePosition(
+      currentLine,
+      options.movetimeMs,
+      options.evaluationTimeoutMs,
+    );
 
     if (currentEval === null) {
-      if ((moveIndex % 2 === 0 && game.userColor === "white") ||
-          (moveIndex % 2 === 1 && game.userColor === "black")) {
+      if (isUserMoveIndex(moveIndex, game.userColor)) {
         userMoveCpLosses.push(null);
       }
-      if (idleBetweenMovesMs > 0) await sleep(idleBetweenMovesMs);
+      if (options.idleBetweenMovesMs > 0) {
+        await sleep(options.idleBetweenMovesMs);
+      }
       continue;
     }
 
@@ -148,120 +231,213 @@ async function analyzeSingleGame(
         ? Math.max(0, previousEval - currentEval)
         : Math.max(0, currentEval - previousEval);
 
-    if (moveIndex % 2 === 0) {
-      if (game.userColor === "white") userMoveCpLosses.push(cpLoss);
-    } else if (game.userColor === "black") {
+    if (isUserMoveIndex(moveIndex, game.userColor)) {
       userMoveCpLosses.push(cpLoss);
     }
 
     previousEval = currentEval;
 
-    if (idleBetweenMovesMs > 0) await sleep(idleBetweenMovesMs);
+    if (options.idleBetweenMovesMs > 0) {
+      await sleep(options.idleBetweenMovesMs);
+    }
+  }
+
+  if (!userMoveCpLosses.some((cpLoss) => typeof cpLoss === "number")) {
+    return { status: "failed" };
   }
 
   return {
-    id: game.id,
-    userMoveCpLosses,
-    userMovePieceTypes: resolved.userMovePieceTypes,
+    status: "complete",
+    entry: {
+      id: game.id,
+      userMoveCpLosses,
+      userMovePieceTypes: resolved.userMovePieceTypes,
+    },
   };
 }
 
-function resolveGameMovesAndPieces(game: AnalysisTaskGame) {
-  let movesUci = game.movesUci
-    ?.split(/\s+/)
-    .map((token) => token.trim())
-    .filter(Boolean) ?? [];
-  let userMovePieceTypes = game.userMovePieceTypes ?? [];
-
-  if (movesUci.length > 0 && userMovePieceTypes.length > 0) {
-    return { movesUci, userMovePieceTypes };
-  }
-
-  if (!game.pgn) return null;
-
-  try {
-    const chess = new Chess();
-    chess.loadPgn(game.pgn, { strict: false });
-    const history = chess.history({ verbose: true });
-    movesUci = history.map((entry) => `${entry.from}${entry.to}${entry.promotion ?? ""}`);
-
-    if (userMovePieceTypes.length === 0) {
-      const whitePieces: PieceType[] = [];
-      const blackPieces: PieceType[] = [];
-
-      history.forEach((entry, index) => {
-        const piece = pieceTypeFromLetter(entry.piece);
-        if (!piece) return;
-        if (index % 2 === 0) whitePieces.push(piece);
-        else blackPieces.push(piece);
-      });
-
-      userMovePieceTypes = game.userColor === "white" ? whitePieces : blackPieces;
-    }
-
-    return { movesUci, userMovePieceTypes };
-  } catch {
-    return null;
-  }
-}
-
-function pieceTypeFromLetter(piece: string | undefined): PieceType | null {
-  if (!piece) return null;
-  if (piece === "p") return "pawn";
-  if (piece === "n") return "knight";
-  if (piece === "b") return "bishop";
-  if (piece === "r") return "rook";
-  if (piece === "q") return "queen";
-  if (piece === "k") return "king";
-  return null;
+function isUserMoveIndex(moveIndex: number, userColor: PlayerColor) {
+  return (moveIndex % 2 === 0 && userColor === "white") || (moveIndex % 2 === 1 && userColor === "black");
 }
 
 function createStockfishEngine() {
   let worker: Worker | null = null;
   let pendingResolve: ((value: number | null) => void) | null = null;
+  let pendingReject: ((reason?: unknown) => void) | null = null;
   let pendingScore: number | null = null;
+  let uciOkResolve: (() => void) | null = null;
+  let uciOkReject: ((reason?: unknown) => void) | null = null;
+  let readyResolve: (() => void) | null = null;
+  let readyReject: ((reason?: unknown) => void) | null = null;
+  let restartPromise: Promise<void> | null = null;
+
+  function rejectPending(error: Error) {
+    if (pendingReject) {
+      pendingReject(error);
+      pendingReject = null;
+      pendingResolve = null;
+    }
+    if (uciOkReject) {
+      uciOkReject(error);
+      uciOkReject = null;
+      uciOkResolve = null;
+    }
+    if (readyReject) {
+      readyReject(error);
+      readyReject = null;
+      readyResolve = null;
+    }
+  }
+
+  function attachWorker(nextWorker: Worker) {
+    nextWorker.onmessage = (event: MessageEvent<unknown>) => {
+      const line = String(event.data ?? "");
+
+      if (line === "uciok" && uciOkResolve) {
+        const resolve = uciOkResolve;
+        uciOkResolve = null;
+        uciOkReject = null;
+        resolve();
+        return;
+      }
+
+      if (line === "readyok" && readyResolve) {
+        const resolve = readyResolve;
+        readyResolve = null;
+        readyReject = null;
+        resolve();
+        return;
+      }
+
+      const parsedScore = parseStockfishScore(line);
+      if (parsedScore !== null) pendingScore = parsedScore;
+      if (line.startsWith("bestmove") && pendingResolve) {
+        const resolve = pendingResolve;
+        pendingResolve = null;
+        pendingReject = null;
+        resolve(pendingScore);
+        pendingScore = null;
+      }
+    };
+
+    nextWorker.onerror = (event) => {
+      event.preventDefault();
+      rejectPending(new Error("Stockfish worker failed."));
+    };
+
+    nextWorker.onmessageerror = () => {
+      rejectPending(new Error("Stockfish worker sent an unreadable message."));
+    };
+  }
+
+  async function spawnAndInit(timeoutMs: number) {
+    const nextWorker = new Worker("/analyze/stockfish.js");
+    attachWorker(nextWorker);
+    worker = nextWorker;
+
+    nextWorker.postMessage("uci");
+    await withTimeout(
+      new Promise<void>((resolve, reject) => {
+        uciOkResolve = resolve;
+        uciOkReject = reject;
+      }),
+      timeoutMs,
+      "Stockfish engine init",
+    );
+
+    nextWorker.postMessage("setoption name Threads value 1");
+    nextWorker.postMessage("setoption name Hash value 16");
+    nextWorker.postMessage("isready");
+    await withTimeout(
+      new Promise<void>((resolve, reject) => {
+        readyResolve = resolve;
+        readyReject = reject;
+      }),
+      timeoutMs,
+      "Stockfish engine ready",
+    );
+  }
+
+  async function restart(timeoutMs: number) {
+    if (restartPromise) {
+      await restartPromise;
+      return;
+    }
+
+    restartPromise = (async () => {
+      disposeWorker();
+      await spawnAndInit(timeoutMs);
+    })();
+
+    try {
+      await restartPromise;
+    } finally {
+      restartPromise = null;
+    }
+  }
+
+  function disposeWorker() {
+    if (worker) {
+      worker.terminate();
+      worker = null;
+    }
+    pendingResolve = null;
+    pendingReject = null;
+    pendingScore = null;
+    uciOkResolve = null;
+    uciOkReject = null;
+    readyResolve = null;
+    readyReject = null;
+  }
 
   return {
-    async init() {
-      worker = new Worker("/analyze/stockfish.js");
-      worker.onmessage = (event: MessageEvent<unknown>) => {
-        const line = String(event.data ?? "");
-        const parsedScore = parseStockfishScore(line);
-        if (parsedScore !== null) pendingScore = parsedScore;
-        if (line.startsWith("bestmove") && pendingResolve) {
-          const resolve = pendingResolve;
-          pendingResolve = null;
-          resolve(pendingScore);
-          pendingScore = null;
-        }
-      };
-
-      worker.postMessage("uci");
-      worker.postMessage("setoption name Threads value 1");
-      worker.postMessage("setoption name Hash value 16");
-      worker.postMessage("isready");
-      await sleep(50);
+    async init(timeoutMs: number) {
+      await spawnAndInit(timeoutMs);
     },
-    async evaluatePosition(movesUci: string[], movetimeMs: number) {
-      if (!worker) return null;
-      if (pendingResolve) return null;
+    async evaluatePosition(
+      movesUci: string[],
+      movetimeMs: number,
+      evaluationTimeoutMs: number,
+    ) {
+      if (!worker || pendingResolve) return null;
 
       const movesPart = movesUci.length > 0 ? ` moves ${movesUci.join(" ")}` : "";
-      worker.postMessage("ucinewgame");
-      worker.postMessage(`position startpos${movesPart}`);
-      worker.postMessage(`go movetime ${Math.max(20, movetimeMs)}`);
 
-      return await new Promise<number | null>((resolve) => {
-        pendingResolve = resolve;
-      });
+      try {
+        worker.postMessage("ucinewgame");
+        worker.postMessage(`position startpos${movesPart}`);
+        worker.postMessage(`go movetime ${Math.max(20, movetimeMs)}`);
+
+        return await withTimeout(
+          new Promise<number | null>((resolve, reject) => {
+            pendingResolve = resolve;
+            pendingReject = reject;
+          }),
+          evaluationTimeoutMs,
+          "Stockfish position evaluation",
+        );
+      } catch (error) {
+        try {
+          worker.postMessage("stop");
+        } catch {}
+
+        try {
+          await restart(Math.max(evaluationTimeoutMs, 1500));
+        } catch {}
+
+        if (error instanceof TimeoutError) {
+          return null;
+        }
+
+        return null;
+      } finally {
+        pendingResolve = null;
+        pendingReject = null;
+        pendingScore = null;
+      }
     },
     dispose() {
-      if (worker) {
-        worker.terminate();
-        worker = null;
-      }
-      pendingResolve = null;
-      pendingScore = null;
+      disposeWorker();
     },
   };
 }
@@ -283,8 +459,23 @@ function parseStockfishScore(line: string) {
   return null;
 }
 
-function roundToTenths(value: number) {
-  return Math.round(value * 10) / 10;
+function postProgress(message: ClientAnalysisProgressMessage) {
+  scope.postMessage(message);
+}
+
+function postError(
+  message: string,
+  processedGames: number,
+  totalGames: number,
+  failedGames: number,
+) {
+  scope.postMessage({
+    type: "error",
+    message,
+    processedGames,
+    totalGames,
+    failedGames,
+  } satisfies ClientAnalysisErrorMessage);
 }
 
 function sleep(ms: number) {

@@ -79,10 +79,23 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Failed to persist linked chess profile", error);
+    const isSchemaMismatch =
+      error instanceof Error &&
+      error.message === "linked-chess-profile-schema-outdated";
     if (isJsonRequest(request)) {
-      return NextResponse.json({ ok: false, error: "storage-unavailable" }, { status: 500 });
+      return NextResponse.json(
+        {
+          ok: false,
+          error: isSchemaMismatch ? "storage-needs-migration" : "storage-unavailable",
+        },
+        { status: 500 },
+      );
     }
-    return redirectWithStatus(request, nextPath, "error=storage-unavailable");
+    return redirectWithStatus(
+      request,
+      nextPath,
+      `error=${isSchemaMismatch ? "storage-needs-migration" : "storage-unavailable"}`,
+    );
   }
 
   cookieStore.set(CHESS_PROFILE_COOKIE, "", {

@@ -18,28 +18,37 @@ import {
   type PerformanceReport,
   type RatingTrendSummary,
   type RecordSummary,
-  type TimeManagementSummary,
 } from "@/lib/chess-performance-report";
-
-const INACCURACY_CP_THRESHOLD = 50;
-const MISTAKE_CP_THRESHOLD = 100;
-const BLUNDER_CP_THRESHOLD = 300;
-const CLIENT_ANALYSIS_CHUNK_SIZE = 10;
-const CLIENT_ANALYSIS_CACHE_VERSION = 1;
-
-interface ClientAnalyzedGame {
-  id: string;
-  userMoveCpLosses: Array<number | null>;
-  userMovePieceTypes: PieceType[];
-  analyzedAt: number;
-}
-
-interface ClientProcessingStatus {
-  running: boolean;
-  processedGames: number;
-  totalGames: number;
-  etaMinutes: number | null;
-}
+import {
+  BLUNDER_CP_THRESHOLD,
+  INACCURACY_CP_THRESHOLD,
+  MISTAKE_CP_THRESHOLD,
+  cpLossToAccuracy,
+  normalizeCpLoss,
+  type ThinkTimeBucketSummary,
+  type TimeManagementSideSummary,
+} from "@/lib/performance-time-management";
+import {
+  CLIENT_ANALYSIS_IDLE_BETWEEN_GAMES_MS,
+  CLIENT_ANALYSIS_IDLE_BETWEEN_MOVES_MS,
+  CLIENT_ANALYSIS_ENGINE_INIT_TIMEOUT_MS,
+  CLIENT_ANALYSIS_EVALUATION_TIMEOUT_MS,
+  CLIENT_ANALYSIS_MAX_GAMES,
+  CLIENT_ANALYSIS_MOVETIME_MS,
+  applyClientAnalysisDone,
+  applyClientAnalysisError,
+  applyClientAnalysisProgress,
+  buildAnalysisCacheKey,
+  createIdleClientProcessingStatus,
+  createStartingClientProcessingStatus,
+  mergeClientAnalysisEntries,
+  parseClientAnalysisCache,
+  serializeClientAnalysisCache,
+  selectPendingClientAnalysisGames,
+  type ClientAnalyzedGame,
+  type ClientAnalysisWorkerMessage,
+  type ClientProcessingStatus,
+} from "@/lib/performance-client-analysis";
 
 function filterButtonClass(isActive: boolean) {
   return [
@@ -66,6 +75,88 @@ function formatSignedNumber(value: number | null) {
   return `${rounded > 0 ? "+" : ""}${rounded}`;
 }
 
+function formatCpl(value: number | null) {
+  if (value === null) return "N/A";
+  return value.toFixed(1);
+}
+
+function renderMetricHelp(text: string) {
+  return (
+    <span
+      title={text}
+      className="inline-flex h-5 w-5 items-center justify-center border border-[var(--app-border)] text-[10px] font-bold text-[var(--app-muted)]"
+      aria-label={text}
+    >
+      ?
+    </span>
+  );
+}
+
+function summarizeBestThinkZone(summary: TimeManagementSideSummary) {
+  const bestBucket = summary.bestThinkZone;
+  if (!bestBucket) {
+    return {
+      value: "Quality unavailable",
+      detail: "Need move-by-move eval data to compare which time zone performs best.",
+    };
+  }
+
+  if (summary.bestThinkZoneSignal === "accuracy" && bestBucket.accuracyPct !== null) {
+    return {
+      value: bestBucket.label,
+      detail: `Best average move accuracy: ${formatPercent(bestBucket.accuracyPct)}.`,
+    };
+  }
+
+  if (summary.bestThinkZoneSignal === "avgCpl" && bestBucket.avgCpl !== null) {
+    return {
+      value: bestBucket.label,
+      detail: `Lowest average centipawn loss: ${formatCpl(bestBucket.avgCpl)} CPL.`,
+    };
+  }
+
+  return {
+    value: "Quality unavailable",
+    detail: "Need move-by-move eval data to compare which time zone performs best.",
+  };
+}
+
+function summarizeRushErrors(summary: TimeManagementSideSummary) {
+  if (summary.rushErrorRatePct === null) {
+    return {
+      value: "No errors logged",
+      detail: "No mistakes or blunders were recorded in the available quality data.",
+    };
+  }
+
+  return {
+    value: formatPercent(summary.rushErrorRatePct),
+    detail: "Share of all mistakes and blunders that happened in the 0-5 second bucket.",
+  };
+}
+
+function summarizeLongThinkPayoff(summary: TimeManagementSideSummary) {
+  const longThinkBucket = summary.buckets.find((bucket) => bucket.key === "30plus");
+  if ((longThinkBucket?.moveCount ?? 0) === 0) {
+    return {
+      value: "No 30s+ moves",
+      detail: "This side did not have any moves in the 30 seconds or longer bucket.",
+    };
+  }
+
+  if (summary.longThinkPayoffPct === null) {
+    return {
+      value: "Quality unavailable",
+      detail: "Long-think payoff needs move-by-move eval data for the 30s+ bucket.",
+    };
+  }
+
+  return {
+    value: formatPercent(summary.longThinkPayoffPct),
+    detail: "Share of 30s+ moves that beat this side's own overall quality baseline.",
+  };
+}
+
 function ratingChangeClass(change: number | null) {
   if (change === null) return "text-[var(--app-muted)]";
   if (change > 0) return "text-emerald-300";
@@ -73,25 +164,80 @@ function ratingChangeClass(change: number | null) {
   return "text-[var(--app-text)]";
 }
 
-function buildAnalysisCacheKey(report: PerformanceReport) {
-  return [
-    "perf-client-analysis",
-    CLIENT_ANALYSIS_CACHE_VERSION,
-    report.provider,
-    report.username.toLowerCase(),
-  ].join(":");
+function resolveInitialProfileKeys(
+  report: PerformanceReport,
+  initialProfileKeys: string[],
+) {
+  const availableProfileKeys = report.profiles.map((profile) => profile.key);
+  if (!initialProfileKeys.length) return availableProfileKeys;
+
+  const allowedKeys = new Set(availableProfileKeys);
+  const normalized = Array.from(
+    new Set(initialProfileKeys.filter((key) => allowedKeys.has(key))),
+  );
+
+  return normalized.length > 0
+    ? availableProfileKeys.filter((key) => normalized.includes(key))
+    : availableProfileKeys;
+}
+
+function toggleProfileSelection(
+  current: string[],
+  key: string,
+  allProfileKeys: string[],
+) {
+  const next = new Set(current.length > 0 ? current : allProfileKeys);
+
+  if (next.has(key)) {
+    if (next.size === 1) return current;
+    next.delete(key);
+  } else {
+    next.add(key);
+  }
+
+  return allProfileKeys.filter((candidate) => next.has(candidate));
+}
+
+function buildPerformanceTitle(
+  selectedProfiles: PerformanceReport["profiles"],
+  totalLinkedProfiles: number,
+) {
+  if (selectedProfiles.length === 1) {
+    return selectedProfiles[0]?.username ?? "Performance";
+  }
+
+  if (selectedProfiles.length === totalLinkedProfiles) {
+    return "All Linked Accounts";
+  }
+
+  if (selectedProfiles.length > 1) {
+    return `${selectedProfiles.length} Linked Accounts`;
+  }
+
+  return "Performance";
+}
+
+function buildPerformanceSubtitle(
+  selectedProfiles: PerformanceReport["profiles"],
+  totalLinkedProfiles: number,
+  rangeDays: PerformanceRangeDays,
+  gameType: PerformanceGameType,
+) {
+  if (selectedProfiles.length === 1) {
+    return `Pulling standard ${selectedProfiles[0]?.providerLabel ?? "linked"} games from the last ${getRangeLabel(rangeDays).toLowerCase()} and filtering for ${getGameTypeLabel(gameType).toLowerCase()} time controls.`;
+  }
+
+  const accountCount =
+    selectedProfiles.length === totalLinkedProfiles
+      ? "all linked accounts"
+      : `${selectedProfiles.length} linked accounts`;
+
+  return `Pulling standard games from ${accountCount} over the last ${getRangeLabel(rangeDays).toLowerCase()} and filtering for ${getGameTypeLabel(gameType).toLowerCase()} time controls.`;
 }
 
 function matchesDashboardGameType(game: NormalizedGame, gameType: PerformanceGameType) {
   if (gameType === "all") return true;
   return game.timeType === gameType;
-}
-
-function parseMovesUci(movesUci?: string) {
-  return movesUci
-    ?.split(/\s+/)
-    .map((token) => token.trim())
-    .filter(Boolean) ?? [];
 }
 
 function summarizeMostBlunderedPiecesFromGames(
@@ -101,11 +247,25 @@ function summarizeMostBlunderedPiecesFromGames(
   const pieces: PieceType[] = ["pawn", "knight", "bishop", "rook", "queen", "king"];
   const buckets = new Map<
     PieceType,
-    { inaccuracies: number; mistakes: number; blunders: number }
+    {
+      inaccuracies: number;
+      mistakes: number;
+      blunders: number;
+      qualityMoveCount: number;
+      accuracyTotal: number;
+      cpLossTotal: number;
+    }
   >(
     pieces.map((piece) => [
       piece,
-      { inaccuracies: 0, mistakes: 0, blunders: 0 },
+      {
+        inaccuracies: 0,
+        mistakes: 0,
+        blunders: 0,
+        qualityMoveCount: 0,
+        accuracyTotal: 0,
+        cpLossTotal: 0,
+      },
     ]),
   );
 
@@ -135,13 +295,18 @@ function summarizeMostBlunderedPiecesFromGames(
       const bucket = buckets.get(piece);
       if (!bucket) continue;
 
-      if (cpLoss >= BLUNDER_CP_THRESHOLD) {
+      const normalizedCpLoss = normalizeCpLoss(cpLoss);
+      bucket.qualityMoveCount += 1;
+      bucket.accuracyTotal += cpLossToAccuracy(normalizedCpLoss);
+      bucket.cpLossTotal += normalizedCpLoss;
+
+      if (normalizedCpLoss >= BLUNDER_CP_THRESHOLD) {
         bucket.blunders += 1;
         usedGame = true;
-      } else if (cpLoss >= MISTAKE_CP_THRESHOLD) {
+      } else if (normalizedCpLoss >= MISTAKE_CP_THRESHOLD) {
         bucket.mistakes += 1;
         usedGame = true;
-      } else if (cpLoss >= INACCURACY_CP_THRESHOLD) {
+      } else if (normalizedCpLoss >= INACCURACY_CP_THRESHOLD) {
         bucket.inaccuracies += 1;
         usedGame = true;
       }
@@ -161,6 +326,9 @@ function summarizeMostBlunderedPiecesFromGames(
         inaccuracies: 0,
         mistakes: 0,
         blunders: 0,
+        qualityMoveCount: 0,
+        accuracyTotal: 0,
+        cpLossTotal: 0,
       };
       const total = bucket.inaccuracies + bucket.mistakes + bucket.blunders;
 
@@ -174,6 +342,15 @@ function summarizeMostBlunderedPiecesFromGames(
           totalClassifiedErrors > 0
             ? Math.round((total / totalClassifiedErrors) * 1000) / 10
             : 0,
+        qualityMoveCount: bucket.qualityMoveCount,
+        accuracyPct:
+          bucket.qualityMoveCount > 0
+            ? Math.round((bucket.accuracyTotal / bucket.qualityMoveCount) * 10) / 10
+            : null,
+        avgCpl:
+          bucket.qualityMoveCount > 0
+            ? Math.round((bucket.cpLossTotal / bucket.qualityMoveCount) * 10) / 10
+            : null,
       };
     })
     .filter((entry) => entry.total > 0)
@@ -196,6 +373,67 @@ function formatEtaMinutes(value: number | null) {
   if (value === null) return "estimating";
   if (value <= 0.1) return "< 0.1";
   return value.toFixed(1);
+}
+
+function describeClientAnalysisProgress(status: ClientProcessingStatus) {
+  if (
+    status.phase === "done" &&
+    status.processedGames > 0 &&
+    status.failedGames === status.processedGames
+  ) {
+    return "Recent-game analysis finished, but none of the sampled games could be enriched locally.";
+  }
+
+  if (status.phase === "done" && status.failedGames > 0) {
+    return "Recent-game analysis finished with some skipped or timed-out games.";
+  }
+
+  if (status.reason === "starting-engine") {
+    return "Analyzing recent games. Starting the local engine.";
+  }
+
+  if (status.currentGameIndex !== null && status.totalGames > 0) {
+    const gameLabel = `Game ${status.currentGameIndex} of ${status.totalGames}`;
+    if (status.currentMoveIndex !== null && status.currentMoveCount !== null) {
+      return `Analyzing recent games. ${gameLabel}, move ${status.currentMoveIndex} of ${status.currentMoveCount}.`;
+    }
+    return `Analyzing recent games. ${gameLabel}.`;
+  }
+
+  return "Analyzing recent games.";
+}
+
+function describeClientAnalysisFallback(
+  status: ClientProcessingStatus,
+  hasSummary: boolean,
+) {
+  if (status.phase === "error" && hasSummary) {
+    return status.errorMessage
+      ? `${status.errorMessage} Showing partial results from the games that were processed.`
+      : "Client enrichment stopped early. Showing partial results from the games that were processed.";
+  }
+
+  if (status.phase === "done" && status.failedGames > 0 && hasSummary) {
+    return "Showing the results that were available. Some recent games could not be enriched locally.";
+  }
+
+  if (
+    status.phase === "done" &&
+    status.processedGames > 0 &&
+    status.failedGames === status.processedGames
+  ) {
+    return "The recent-game sample could not be enriched locally right now.";
+  }
+
+  if (status.phase === "done" && status.failedGames > 0) {
+    return "Move-by-move piece error analysis is unavailable right now.";
+  }
+
+  if (status.phase === "error") {
+    return status.errorMessage ?? "Move-by-move piece error analysis is unavailable right now.";
+  }
+
+  return "No move-by-move eval and piece data matched this filter yet.";
 }
 
 function renderRecordCard(title: string, summary: RecordSummary) {
@@ -341,12 +579,12 @@ function renderRatingTrend(summary: RatingTrendSummary) {
           role="img"
           aria-label="Rating over time"
         >
-          {guideRatings.map((rating) => {
+          {guideRatings.map((rating, index) => {
             const y =
               paddingY + ((maxRating - rating) / ratingRange) * verticalSpace;
 
             return (
-              <g key={rating}>
+              <g key={`guide-${index}-${rating}`}>
                 <line
                   x1={paddingX}
                   y1={y}
@@ -507,37 +745,148 @@ function renderOpeningList(title: string, openings: OpeningSummary[], emptyCopy:
   );
 }
 
-function renderTimeManagementColumn(title: string, summary: TimeManagementSummary) {
+function renderTimeManagementColumn(title: string, summary: TimeManagementSideSummary) {
+  const bestThinkZone = summarizeBestThinkZone(summary);
+  const rushErrors = summarizeRushErrors(summary);
+  const longThinkPayoff = summarizeLongThinkPayoff(summary);
+
+  if (!summary.supported) {
+    return (
+      <div className="app-brutal-inset p-4">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-white">{title}</p>
+        <p className="mt-4 text-sm leading-7 text-[var(--app-muted)]">
+          No usable move clocks were available for this side in the current filter.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="app-brutal-inset p-4">
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-white">{title}</p>
-      <dl className="mt-4 grid gap-3 text-sm">
-        <div className="flex items-center justify-between gap-3">
-          <dt className="text-[var(--app-muted)]">Good Think</dt>
-          <dd className="font-bold text-white">{formatPercent(summary.goodThink)}</dd>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-white">{title}</p>
+        <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--app-muted)]">
+          {summary.totalMoves} clocked move{summary.totalMoves === 1 ? "" : "s"}
+        </p>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="border border-[var(--app-border)] bg-[var(--app-panel-solid)]/35 p-3">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
+              Best Think-Time Zone
+            </p>
+            {renderMetricHelp(
+              "The bucket with the strongest move quality. We rank buckets by average move accuracy when eval data exists, then by lower average centipawn loss, with move count as the tiebreaker.",
+            )}
+          </div>
+          <p className="mt-3 text-lg font-bold text-white">{bestThinkZone.value}</p>
+          <p className="mt-2 text-xs leading-6 text-[var(--app-muted)]">
+            {bestThinkZone.detail}
+          </p>
         </div>
-        <div className="flex items-center justify-between gap-3">
-          <dt className="text-[var(--app-muted)]">Wasted</dt>
-          <dd className="font-bold text-white">{formatPercent(summary.wasted)}</dd>
+
+        <div className="border border-[var(--app-border)] bg-[var(--app-panel-solid)]/35 p-3">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
+              Rush Error Rate
+            </p>
+            {renderMetricHelp(
+              "Share of all mistakes and blunders that happened in the 0-5 second bucket. Higher means this side's errors are clustering in rushed moves.",
+            )}
+          </div>
+          <p className="mt-3 text-lg font-bold text-white">{rushErrors.value}</p>
+          <p className="mt-2 text-xs leading-6 text-[var(--app-muted)]">
+            {rushErrors.detail}
+          </p>
         </div>
-        <div className="flex items-center justify-between gap-3">
-          <dt className="text-[var(--app-muted)]">Fast Blunder</dt>
-          <dd className="font-bold text-white">{formatPercent(summary.fastBlunder)}</dd>
+
+        <div className="border border-[var(--app-border)] bg-[var(--app-panel-solid)]/35 p-3">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
+              Long-Think Payoff
+            </p>
+            {renderMetricHelp(
+              "Among 30s+ moves with eval data, the share that beat this side's own overall quality baseline. Lower values suggest that longer thinks are not consistently paying off.",
+            )}
+          </div>
+          <p className="mt-3 text-lg font-bold text-white">{longThinkPayoff.value}</p>
+          <p className="mt-2 text-xs leading-6 text-[var(--app-muted)]">
+            {longThinkPayoff.detail}
+          </p>
         </div>
-        <div className="flex items-center justify-between gap-3">
-          <dt className="text-[var(--app-muted)]">Efficiency</dt>
-          <dd className="font-bold text-white">{formatPercent(summary.efficiency)}</dd>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <dt className="text-[var(--app-muted)]">Slow/Fast</dt>
-          <dd className="font-bold text-white">
-            {summary.slowMoves}/{summary.fastMoves}
-          </dd>
-        </div>
-      </dl>
-      <p className="mt-4 text-xs uppercase tracking-[0.16em] text-[var(--app-muted-soft)]">
-        {summary.sampleSize} live game{summary.sampleSize === 1 ? "" : "s"}
-      </p>
+      </div>
+
+      <div className="mt-5 overflow-x-auto">
+        <table className="min-w-full border-collapse text-xs">
+          <thead>
+            <tr className="border-b border-[var(--app-border)]/70 text-left uppercase tracking-[0.16em] text-[var(--app-muted)]">
+              <th className="py-2 pr-4 font-bold">Think Time</th>
+              <th className="py-2 pr-4 font-bold">Moves</th>
+              <th className="py-2 pr-4 font-bold">Share</th>
+              <th className="py-2 pr-4 font-bold">Accuracy</th>
+              <th className="py-2 pr-4 font-bold">Blunder</th>
+              <th className="py-2 pr-4 font-bold">Mistake</th>
+              <th className="py-2 font-bold">Avg CPL</th>
+            </tr>
+          </thead>
+          <tbody>
+            {summary.buckets.map((bucket: ThinkTimeBucketSummary) => {
+              const isBestBucket = summary.bestThinkZone?.key === bucket.key;
+
+              return (
+                <tr
+                  key={bucket.key}
+                  className={`border-b border-[var(--app-border)]/40 ${
+                    isBestBucket ? "bg-[var(--app-accent)]/8" : ""
+                  }`}
+                >
+                  <td className="py-3 pr-4 font-bold text-white">{bucket.label}</td>
+                  <td className="py-3 pr-4 text-[var(--app-text)]">{bucket.moveCount}</td>
+                  <td className="py-3 pr-4 text-[var(--app-text)]">
+                    {formatPercent(bucket.moveSharePct)}
+                  </td>
+                  <td className="py-3 pr-4 text-[var(--app-text)]">
+                    {formatPercent(bucket.accuracyPct)}
+                  </td>
+                  <td className="py-3 pr-4 text-[var(--app-text)]">
+                    {formatPercent(bucket.blunderRatePct)}
+                  </td>
+                  <td className="py-3 pr-4 text-[var(--app-text)]">
+                    {formatPercent(bucket.mistakeRatePct)}
+                  </td>
+                  <td className="py-3 text-[var(--app-text)]">{formatCpl(bucket.avgCpl)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-4 grid gap-2 text-xs leading-6 text-[var(--app-muted)]">
+        <p>
+          {summary.sampleSize} live game{summary.sampleSize === 1 ? "" : "s"} contributed
+          usable clock data.
+        </p>
+        {summary.excludedMoveCount > 0 ? (
+          <p>
+            {summary.excludedMoveCount} move{summary.excludedMoveCount === 1 ? "" : "s"}{" "}
+            were excluded because the clock was missing or unusable.
+          </p>
+        ) : null}
+        {summary.qualitySampleSize > 0 && summary.qualitySampleSize < summary.totalMoves ? (
+          <p>
+            Quality metrics were available on {summary.qualitySampleSize} of{" "}
+            {summary.totalMoves} clocked moves.
+          </p>
+        ) : null}
+        {summary.qualitySampleSize === 0 ? (
+          <p>
+            Move-quality columns need per-move eval data, so this side currently only
+            shows clock distribution.
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -565,6 +914,11 @@ function renderMostBlunderedPieces(
   summary: PieceErrorDistributionSummary,
   processing: ClientProcessingStatus,
 ) {
+  const hasSummary = summary.supported;
+  const shouldShowProgress =
+    processing.running || (processing.phase === "done" && processing.failedGames > 0);
+  const shouldShowEta = processing.running && processing.etaMinutes !== null;
+
   return (
     <article className="app-brutal-card p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -575,21 +929,27 @@ function renderMostBlunderedPieces(
           Inaccuracy 50+ cp, Mistake 100+ cp, Blunder 300+ cp
         </p>
       </div>
-      {processing.running ? (
-        <p className="mt-4 text-xs uppercase tracking-[0.16em] text-[var(--app-muted)]">
-          Processing past games. ETA: {formatEtaMinutes(processing.etaMinutes)} minutes.
-          Progress {processing.processedGames}/{processing.totalGames}. Updating every{" "}
-          {CLIENT_ANALYSIS_CHUNK_SIZE} games.
-        </p>
+      {shouldShowProgress ? (
+        <div className="mt-4 grid gap-2 text-xs uppercase tracking-[0.16em] text-[var(--app-muted)]">
+          <p>{describeClientAnalysisProgress(processing)}</p>
+          <p>
+            Progress {processing.processedGames}/{processing.totalGames}
+            {processing.failedGames > 0 ? ` • ${processing.failedGames} failed` : ""}
+            {shouldShowEta
+              ? ` • ETA ${formatEtaMinutes(processing.etaMinutes)} minutes`
+              : ""}
+          </p>
+          <p>Client enrichment is capped to the {CLIENT_ANALYSIS_MAX_GAMES} most recent games.</p>
+        </div>
       ) : null}
-      {summary.supported ? (
+      {hasSummary ? (
         <div className="mt-5 grid gap-3">
           {summary.pieces.map((entry) => (
             <div key={entry.piece} className="app-brutal-inset p-4">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-bold text-white">{getPieceLabel(entry.piece)}</p>
                 <p className="text-xs uppercase tracking-[0.16em] text-[var(--app-muted)]">
-                  {entry.total} errors ({entry.share.toFixed(1)}%)
+                  Accuracy {formatPercent(entry.accuracyPct)} / {formatCpl(entry.avgCpl)} CPL
                 </p>
               </div>
               <div className="mt-3 h-2 w-full bg-[var(--app-panel-solid)]">
@@ -606,15 +966,13 @@ function renderMostBlunderedPieces(
             </div>
           ))}
           <p className="text-xs uppercase tracking-[0.16em] text-[var(--app-muted-soft)]">
-            {summary.totalClassifiedErrors} classified errors across {summary.sampleSize} game
-            {summary.sampleSize === 1 ? "" : "s"}
+            {summary.totalClassifiedErrors} moves flagged as inaccuracy, mistake, or
+            blunder across {summary.sampleSize} game{summary.sampleSize === 1 ? "" : "s"}
           </p>
         </div>
       ) : (
         <p className="mt-5 text-sm leading-7 text-[var(--app-muted)]">
-          {processing.running
-            ? `Processing past games. ETA: ${formatEtaMinutes(processing.etaMinutes)} minutes.`
-            : "No move-by-move eval and piece data matched this filter yet."}
+          {describeClientAnalysisFallback(processing, hasSummary)}
         </p>
       )}
     </article>
@@ -625,45 +983,81 @@ export function PerformanceDashboard({
   report,
   initialRangeDays,
   initialGameType,
+  initialProfileKeys,
 }: {
   report: PerformanceReport;
   initialRangeDays: PerformanceRangeDays;
   initialGameType: PerformanceGameType;
+  initialProfileKeys: string[];
 }) {
   const [rangeDays, setRangeDays] = useState(initialRangeDays);
   const [gameType, setGameType] = useState(initialGameType);
+  const [selectedProfileKeys, setSelectedProfileKeys] = useState(() =>
+    resolveInitialProfileKeys(report, initialProfileKeys),
+  );
+  const [activeAnalysisIds, setActiveAnalysisIds] = useState<string[]>([]);
   const [clientAnalyzedByGame, setClientAnalyzedByGame] = useState<
     Record<string, ClientAnalyzedGame>
   >({});
-  const [processingStatus, setProcessingStatus] = useState<ClientProcessingStatus>({
-    running: false,
-    processedGames: 0,
-    totalGames: 0,
-    etaMinutes: null,
-  });
+  const [processingStatus, setProcessingStatus] = useState<ClientProcessingStatus>(
+    createIdleClientProcessingStatus(),
+  );
   const workerRef = useRef<Worker | null>(null);
+  const activeAnalysisContextRef = useRef<string | null>(null);
+  const lastAnalysisContextKeyRef = useRef<string | null>(null);
+  const completedAnalysisContextRef = useRef<string | null>(null);
+  const allProfileKeys = useMemo(
+    () => report.profiles.map((profile) => profile.key),
+    [report.profiles],
+  );
+  const selectedProfileKeySet = useMemo(
+    () => new Set(selectedProfileKeys),
+    [selectedProfileKeys],
+  );
+  const activeAnalysisIdSet = useMemo(
+    () => new Set(activeAnalysisIds),
+    [activeAnalysisIds],
+  );
 
-  const snapshot = buildPerformanceSnapshot(report, { rangeDays, gameType });
-  const analysisCacheKey = useMemo(() => buildAnalysisCacheKey(report), [report]);
+  const snapshot = buildPerformanceSnapshot(report, {
+    rangeDays,
+    gameType,
+    profileKeys: selectedProfileKeys,
+  });
+  const analysisCacheKey = useMemo(
+    () => buildAnalysisCacheKey(report.profiles.map((profile) => profile.key)),
+    [report.profiles],
+  );
   const filteredGames = useMemo(
     () =>
       report.games
+        .filter((game) => selectedProfileKeySet.has(game.profileKey))
         .filter((game) => game.endTimeMs >= Date.now() - rangeDays * 24 * 60 * 60 * 1000)
         .filter((game) => matchesDashboardGameType(game, gameType))
         .sort((left, right) => right.endTimeMs - left.endTimeMs),
-    [gameType, rangeDays, report.games],
+    [gameType, rangeDays, report.games, selectedProfileKeySet],
+  );
+  const totalLinkedProfiles = report.profiles.length;
+  const performanceTitle = buildPerformanceTitle(
+    snapshot.selectedProfiles,
+    totalLinkedProfiles,
+  );
+  const performanceSubtitle = buildPerformanceSubtitle(
+    snapshot.selectedProfiles,
+    totalLinkedProfiles,
+    rangeDays,
+    gameType,
+  );
+  const analysisContextKey = useMemo(
+    () => `${analysisCacheKey}:${rangeDays}:${gameType}:${selectedProfileKeys.join(",")}`,
+    [analysisCacheKey, gameType, rangeDays, selectedProfileKeys],
   );
 
   const pendingClientAnalysisGames = useMemo(() => {
-    return filteredGames
-      .filter((game) => game.userMoveCpLosses.length === 0)
-      .filter(
-        (game) =>
-          parseMovesUci(game.movesUci).length > 0 ||
-          typeof game.pgn === "string",
-      )
-      .filter((game) => !clientAnalyzedByGame[game.id]);
-  }, [clientAnalyzedByGame, filteredGames]);
+    return selectPendingClientAnalysisGames(filteredGames, clientAnalyzedByGame).filter(
+      (game) => !activeAnalysisIdSet.has(game.id),
+    );
+  }, [activeAnalysisIdSet, clientAnalyzedByGame, filteredGames]);
 
   const mostBlunderedPiecesSummary = useMemo(
     () => summarizeMostBlunderedPiecesFromGames(filteredGames, clientAnalyzedByGame),
@@ -671,88 +1065,74 @@ export function PerformanceDashboard({
   );
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(analysisCacheKey);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as {
-        entries?: Record<string, ClientAnalyzedGame>;
-      };
-      if (!parsed || typeof parsed !== "object" || !parsed.entries) return;
-      setClientAnalyzedByGame(parsed.entries);
-    } catch {
-      // Corrupt local cache should not block the dashboard.
-    }
+    const parsedEntries = parseClientAnalysisCache(localStorage.getItem(analysisCacheKey));
+    setClientAnalyzedByGame(parsedEntries);
   }, [analysisCacheKey]);
 
   useEffect(() => {
-    if (pendingClientAnalysisGames.length === 0) {
-      setProcessingStatus((current) => ({
-        ...current,
-        running: false,
-        processedGames: 0,
-        totalGames: 0,
-        etaMinutes: null,
-      }));
+    return () => {
+      workerRef.current?.terminate();
+      workerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (lastAnalysisContextKeyRef.current === analysisContextKey) {
       return;
     }
 
+    lastAnalysisContextKeyRef.current = analysisContextKey;
+    completedAnalysisContextRef.current = null;
+
+    if (workerRef.current) {
+      workerRef.current.terminate();
+      workerRef.current = null;
+    }
+
+    if (
+      activeAnalysisContextRef.current &&
+      activeAnalysisContextRef.current !== analysisContextKey
+    ) {
+      activeAnalysisContextRef.current = null;
+    }
+
+    if (activeAnalysisIds.length > 0 || processingStatus.phase !== "idle") {
+      setActiveAnalysisIds([]);
+      setProcessingStatus(createIdleClientProcessingStatus());
+    }
+  }, [activeAnalysisIds.length, analysisContextKey, processingStatus.phase]);
+
+  useEffect(() => {
     if (workerRef.current) return;
+    if (completedAnalysisContextRef.current === analysisContextKey) return;
+
+    if (pendingClientAnalysisGames.length === 0) {
+      return;
+    }
 
     const worker = new Worker(
       new URL("./workers/performance-analysis.worker.ts", import.meta.url),
     );
     workerRef.current = worker;
+    activeAnalysisContextRef.current = analysisContextKey;
+    setActiveAnalysisIds(pendingClientAnalysisGames.map((game) => game.id));
 
-    setProcessingStatus({
-      running: true,
-      processedGames: 0,
-      totalGames: pendingClientAnalysisGames.length,
-      etaMinutes: null,
-    });
+    setProcessingStatus(
+      createStartingClientProcessingStatus(pendingClientAnalysisGames.length),
+    );
 
     worker.onmessage = (event: MessageEvent<unknown>) => {
-      const data = event.data as
-        | {
-            type: "chunk";
-            processedGames: number;
-            totalGames: number;
-            etaMinutes: number;
-            chunk: Array<{
-              id: string;
-              userMoveCpLosses: Array<number | null>;
-              userMovePieceTypes: PieceType[];
-            }>;
-          }
-        | { type: "done"; processedGames: number; totalGames: number }
-        | { type: "error"; message: string };
+      const data = event.data as ClientAnalysisWorkerMessage;
 
-      if (data.type === "chunk") {
-        setProcessingStatus({
-          running: true,
-          processedGames: data.processedGames,
-          totalGames: data.totalGames,
-          etaMinutes: data.etaMinutes,
-        });
+      if (data.type === "progress") {
+        setProcessingStatus((current) => applyClientAnalysisProgress(current, data));
 
         if (data.chunk.length > 0) {
           setClientAnalyzedByGame((current) => {
-            const next = { ...current };
-            const analyzedAt = Date.now();
-
-            data.chunk.forEach((entry) => {
-              next[entry.id] = {
-                id: entry.id,
-                userMoveCpLosses: entry.userMoveCpLosses,
-                userMovePieceTypes: entry.userMovePieceTypes,
-                analyzedAt,
-              };
-            });
+            const next = mergeClientAnalysisEntries(current, data.chunk, Date.now());
 
             try {
-              localStorage.setItem(
-                analysisCacheKey,
-                JSON.stringify({ entries: next }),
-              );
+              localStorage.setItem(analysisCacheKey, serializeClientAnalysisCache(next));
             } catch {
               // Best-effort cache only.
             }
@@ -765,57 +1145,102 @@ export function PerformanceDashboard({
       }
 
       if (data.type === "done") {
-        setProcessingStatus({
-          running: false,
-          processedGames: data.processedGames,
-          totalGames: data.totalGames,
-          etaMinutes: 0,
-        });
+        setProcessingStatus((current) => applyClientAnalysisDone(current, data));
         worker.terminate();
         workerRef.current = null;
+        activeAnalysisContextRef.current = null;
+        completedAnalysisContextRef.current = analysisContextKey;
+        setActiveAnalysisIds([]);
         return;
       }
 
       if (data.type === "error") {
-        setProcessingStatus({
-          running: false,
-          processedGames: 0,
-          totalGames: pendingClientAnalysisGames.length,
-          etaMinutes: null,
-        });
+        setProcessingStatus((current) =>
+          applyClientAnalysisError(
+            current,
+            data,
+            current.processedGames > 0 || mostBlunderedPiecesSummary.supported,
+          ),
+        );
         worker.terminate();
         workerRef.current = null;
+        activeAnalysisContextRef.current = null;
+        completedAnalysisContextRef.current = analysisContextKey;
+        setActiveAnalysisIds([]);
       }
+    };
+
+    worker.onerror = () => {
+      setProcessingStatus((current) =>
+        applyClientAnalysisError(
+          current,
+          {
+            type: "error",
+            message: "Move-by-move piece error analysis is unavailable right now.",
+            processedGames: current.processedGames,
+            totalGames: current.totalGames,
+            failedGames: current.failedGames,
+          },
+          current.processedGames > 0 || mostBlunderedPiecesSummary.supported,
+        ),
+      );
+      worker.terminate();
+      workerRef.current = null;
+      activeAnalysisContextRef.current = null;
+      completedAnalysisContextRef.current = analysisContextKey;
+      setActiveAnalysisIds([]);
+    };
+
+    worker.onmessageerror = () => {
+      setProcessingStatus((current) =>
+        applyClientAnalysisError(
+          current,
+          {
+            type: "error",
+            message: "The analysis worker sent an unreadable message.",
+            processedGames: current.processedGames,
+            totalGames: current.totalGames,
+            failedGames: current.failedGames,
+          },
+          current.processedGames > 0 || mostBlunderedPiecesSummary.supported,
+        ),
+      );
+      worker.terminate();
+      workerRef.current = null;
+      activeAnalysisContextRef.current = null;
+      completedAnalysisContextRef.current = analysisContextKey;
+      setActiveAnalysisIds([]);
     };
 
     worker.postMessage({
       type: "start",
-      games: pendingClientAnalysisGames.map((game) => ({
-        id: game.id,
-        userColor: game.userColor,
-        movesUci: game.movesUci,
-        pgn: game.pgn,
-        userMovePieceTypes: game.userMovePieceTypes,
-      })),
-      chunkSize: CLIENT_ANALYSIS_CHUNK_SIZE,
-      movetimeMs: 35,
-      idleBetweenMovesMs: 75,
-      idleBetweenGamesMs: 250,
+      games: pendingClientAnalysisGames,
+      movetimeMs: CLIENT_ANALYSIS_MOVETIME_MS,
+      idleBetweenMovesMs: CLIENT_ANALYSIS_IDLE_BETWEEN_MOVES_MS,
+      idleBetweenGamesMs: CLIENT_ANALYSIS_IDLE_BETWEEN_GAMES_MS,
+      engineInitTimeoutMs: CLIENT_ANALYSIS_ENGINE_INIT_TIMEOUT_MS,
+      evaluationTimeoutMs: CLIENT_ANALYSIS_EVALUATION_TIMEOUT_MS,
     });
-
-    return () => {
-      worker.terminate();
-      workerRef.current = null;
-    };
-  }, [analysisCacheKey, pendingClientAnalysisGames]);
+  }, [
+    activeAnalysisIds.length,
+    analysisCacheKey,
+    analysisContextKey,
+    mostBlunderedPiecesSummary.supported,
+    pendingClientAnalysisGames,
+  ]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     params.set("range", String(rangeDays));
     params.set("type", gameType);
+    if (selectedProfileKeys.length > 0 && selectedProfileKeys.length < allProfileKeys.length) {
+      params.set("profiles", selectedProfileKeys.join(","));
+    } else {
+      params.delete("profiles");
+    }
     const nextUrl = `/performance?${params.toString()}`;
     window.history.replaceState(window.history.state, "", nextUrl);
-  }, [gameType, rangeDays]);
+  }, [allProfileKeys.length, gameType, rangeDays, selectedProfileKeys]);
 
   useEffect(() => {
     void fetch("/api/performance/preferences", {
@@ -838,21 +1263,20 @@ export function PerformanceDashboard({
         <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.28em] text-[var(--app-muted)]">
-              Statistics
+              Performance
             </p>
             <h1 className="mt-3 text-3xl font-bold uppercase tracking-[0.16em] text-white">
-              {report.username}
+              {performanceTitle}
             </h1>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--app-muted)]">
-              Pulling standard {snapshot.providerLabel} games from the last{" "}
-              {getRangeLabel(rangeDays).toLowerCase()} and filtering for{" "}
-              {getGameTypeLabel(gameType).toLowerCase()} time controls.
+              {performanceSubtitle}
             </p>
           </div>
 
           <div className="app-brutal-inset grid gap-3 p-5 text-sm text-[var(--app-muted)]">
             <p>
-              Provider: <span className="font-bold text-white">{snapshot.providerLabel}</span>
+              Selected accounts:{" "}
+              <span className="font-bold text-white">{snapshot.selectedProfiles.length}</span>
             </p>
             <p>
               Cached games:{" "}
@@ -865,21 +1289,70 @@ export function PerformanceDashboard({
             <p>
               Total played:{" "}
               <span className="font-bold text-white">
-                {report.totalGameCount ?? "Unknown"}
+                {snapshot.totalGameCount ?? "Unknown"}
               </span>
             </p>
-            <a
-              href={snapshot.profileUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-accent)] transition hover:text-white"
-            >
-              View Public Profile
-            </a>
+            <div className="grid gap-2 pt-1">
+              {snapshot.selectedProfiles.map((profile) => (
+                <a
+                  key={profile.key}
+                  href={profile.profileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-accent)] transition hover:text-white"
+                >
+                  {profile.providerLabel} - {profile.username}
+                </a>
+              ))}
+            </div>
           </div>
         </div>
 
         <div className="mt-8 grid gap-5">
+          {report.profiles.length > 1 ? (
+            <div>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-[var(--app-muted)]">
+                    Linked Accounts
+                  </p>
+                  <p className="mt-2 max-w-3xl text-sm leading-7 text-[var(--app-muted)]">
+                    Select one or more linked profiles to focus the stats on a single
+                    account or mix them together.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {report.profiles.map((profile) => {
+                  const isActive = selectedProfileKeySet.has(profile.key);
+
+                  return (
+                    <button
+                      key={profile.key}
+                      type="button"
+                      onClick={() =>
+                        setSelectedProfileKeys((current) =>
+                          toggleProfileSelection(current, profile.key, allProfileKeys),
+                        )
+                      }
+                      className={`${filterButtonClass(isActive)} h-auto justify-start px-3 py-3`}
+                      aria-pressed={isActive}
+                    >
+                      <span className="flex flex-col items-start text-left leading-tight">
+                        <span className="text-sm font-bold normal-case tracking-normal">
+                          {profile.username}
+                        </span>
+                        <span className="mt-1 text-[10px] font-bold normal-case tracking-[0.18em] opacity-80">
+                          {profile.providerLabel}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
           <div>
             <p className="text-xs uppercase tracking-[0.18em] text-[var(--app-muted)]">
               Date Range
@@ -965,16 +1438,16 @@ export function PerformanceDashboard({
       <article className="app-brutal-card p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-sm font-bold uppercase tracking-[0.18em] text-white">
-            Time Management
+            Performance by Think Time
           </h2>
           <p className="text-xs uppercase tracking-[0.16em] text-[var(--app-muted)]">
-            Heuristic from public move clocks
+            See which think-time buckets produce better moves, more rushed errors, or wasted long thinks.
           </p>
         </div>
         {snapshot.timeManagement.supported ? (
           <div className="mt-5 grid gap-4 xl:grid-cols-2">
             {renderTimeManagementColumn("You", snapshot.timeManagement.user)}
-            {renderTimeManagementColumn("Opp", snapshot.timeManagement.opponent)}
+            {renderTimeManagementColumn("Opponent", snapshot.timeManagement.opponent)}
           </div>
         ) : (
           <p className="mt-5 text-sm leading-7 text-[var(--app-muted)]">

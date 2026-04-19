@@ -3,15 +3,20 @@ import {
   type PerformanceGameType,
   type PerformanceRangeDays,
 } from "@/lib/chess-profile";
+import {
+  BLUNDER_CP_THRESHOLD,
+  INACCURACY_CP_THRESHOLD,
+  MISTAKE_CP_THRESHOLD,
+  cpLossToAccuracy,
+  normalizeCpLoss,
+  summarizeTimeManagementOverview,
+  type TimeManagementOverview,
+} from "@/lib/performance-time-management";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_OPENING_END_PLY = 12;
 const ENDGAME_WINDOW_PLIES = 12;
 const CENTIPAWNS_PER_PAWN = 100;
-const MAX_CP_LOSS_PER_MOVE = 600;
-const INACCURACY_CP_THRESHOLD = 50;
-const MISTAKE_CP_THRESHOLD = 100;
-const BLUNDER_CP_THRESHOLD = 300;
 
 export type PieceType = "pawn" | "knight" | "bishop" | "rook" | "queen" | "king";
 
@@ -23,6 +28,10 @@ export interface NormalizedGame {
   id: string;
   url: string;
   provider: ChessProvider;
+  profileKey: string;
+  profileUsername: string;
+  profileLabel: string;
+  profileUrl: string;
   endTimeMs: number;
   timeType: NormalizedTimeType;
   userColor: PlayerColor;
@@ -68,16 +77,6 @@ export interface OpeningSummary {
   children?: OpeningSummary[];
 }
 
-export interface TimeManagementSummary {
-  sampleSize: number;
-  goodThink: number | null;
-  wasted: number | null;
-  fastBlunder: number | null;
-  efficiency: number | null;
-  slowMoves: number;
-  fastMoves: number;
-}
-
 export interface PhaseEvalLeakSummary {
   supported: boolean;
   sampleSize: number;
@@ -109,6 +108,9 @@ export interface PieceErrorDistributionEntry {
   blunders: number;
   total: number;
   share: number;
+  qualityMoveCount: number;
+  accuracyPct: number | null;
+  avgCpl: number | null;
 }
 
 export interface PieceErrorDistributionSummary {
@@ -119,8 +121,8 @@ export interface PieceErrorDistributionSummary {
 }
 
 export interface PerformanceSnapshot {
-  providerLabel: string;
-  profileUrl: string;
+  selectedProfiles: PerformanceProfileSource[];
+  totalGameCount: number | null;
   totalFetchedGames: number;
   totalFilteredGames: number;
   liveGames: number;
@@ -134,11 +136,7 @@ export interface PerformanceSnapshot {
     white: OpeningSummary[];
     black: OpeningSummary[];
   };
-  timeManagement: {
-    supported: boolean;
-    user: TimeManagementSummary;
-    opponent: TimeManagementSummary;
-  };
+  timeManagement: TimeManagementOverview;
   mostBlunderedPieces: PieceErrorDistributionSummary;
   phaseEvalLeak: PhaseEvalLeakSummary;
   ratingTrend: RatingTrendSummary;
@@ -147,13 +145,22 @@ export interface PerformanceSnapshot {
 export interface SnapshotFilters {
   rangeDays: PerformanceRangeDays;
   gameType: PerformanceGameType;
+  profileKeys?: string[];
+}
+
+export interface PerformanceProfileSource {
+  key: string;
+  provider: ChessProvider;
+  providerLabel: string;
+  username: string;
+  profileUrl: string;
+  totalGameCount: number | null;
+  totalFetchedGames: number;
+  fetchedAt: string;
 }
 
 export interface PerformanceReport {
-  username: string;
-  provider: ChessProvider;
-  providerLabel: string;
-  profileUrl: string;
+  profiles: PerformanceProfileSource[];
   totalGameCount: number | null;
   totalFetchedGames: number;
   rangeDaysCovered: number;
@@ -165,21 +172,37 @@ export function buildPerformanceSnapshot(
   report: PerformanceReport,
   filters: SnapshotFilters,
 ): PerformanceSnapshot {
+  const selectedProfileKeys = new Set(
+    (filters.profileKeys?.length ? filters.profileKeys : report.profiles.map((profile) => profile.key))
+      .filter(Boolean),
+  );
+  const selectedProfiles = report.profiles.filter((profile) =>
+    selectedProfileKeys.has(profile.key),
+  );
   const sinceMs = Date.now() - filters.rangeDays * DAY_MS;
   const filteredGames = report.games
+    .filter((game) => selectedProfileKeys.has(game.profileKey))
     .filter((game) => game.endTimeMs >= sinceMs)
     .filter((game) => matchesGameType(game, filters.gameType))
     .sort((left, right) => right.endTimeMs - left.endTimeMs);
 
   return {
-    providerLabel: report.providerLabel,
-    profileUrl: report.profileUrl,
-    totalFetchedGames: report.totalFetchedGames,
+    selectedProfiles,
+    totalGameCount: selectedProfiles.every((profile) => profile.totalGameCount !== null)
+      ? selectedProfiles.reduce(
+          (sum, profile) => sum + (profile.totalGameCount ?? 0),
+          0,
+        )
+      : null,
+    totalFetchedGames: selectedProfiles.reduce(
+      (sum, profile) => sum + profile.totalFetchedGames,
+      0,
+    ),
     totalFilteredGames: filteredGames.length,
     liveGames: filteredGames.filter(
       (game) => game.timeType !== "daily" && game.initialSeconds !== null,
     ).length,
-    notes: buildNotes(report.provider, filteredGames),
+    notes: buildNotes(filteredGames),
     winRates: {
       overall: summarizeRecord(filteredGames),
       white: summarizeRecord(filteredGames.filter((game) => game.userColor === "white")),
@@ -322,101 +345,10 @@ function getTopMostPlayedOpenings(
 
 function summarizeTimeManagement(games: NormalizedGame[]) {
   const liveGames = games.filter(
-    (game) =>
-      game.timeType !== "daily" &&
-      game.initialSeconds !== null &&
-      game.userMoveDurations.length > 0 &&
-      game.opponentMoveDurations.length > 0,
+    (game) => game.timeType !== "daily" && game.initialSeconds !== null,
   );
 
-  return {
-    supported: liveGames.length > 0,
-    user: summarizeTimeManagementForSide(liveGames, "user"),
-    opponent: summarizeTimeManagementForSide(liveGames, "opponent"),
-  };
-}
-
-function summarizeTimeManagementForSide(
-  games: NormalizedGame[],
-  side: "user" | "opponent",
-): TimeManagementSummary {
-  let consideredMoves = 0;
-  let goodThinkMoves = 0;
-  let wastedMoves = 0;
-  let fastBlunderMoves = 0;
-  let slowMoves = 0;
-  let fastMoves = 0;
-  let sampleSize = 0;
-  let sawBlunderSignal = false;
-
-  for (const game of games) {
-    const durations =
-      side === "user" ? game.userMoveDurations : game.opponentMoveDurations;
-    const cpLosses =
-      side === "user" ? game.userMoveCpLosses : game.opponentMoveCpLosses;
-
-    if (durations.length === 0) continue;
-
-    sampleSize += 1;
-    const thresholds = getTimeThresholds(game.initialSeconds ?? 300);
-
-    for (let moveIndex = 0; moveIndex < durations.length; moveIndex += 1) {
-      const duration = durations[moveIndex];
-      const cpLoss = cpLosses[moveIndex] ?? null;
-
-      consideredMoves += 1;
-      if (duration <= thresholds.fast) fastMoves += 1;
-      if (duration >= thresholds.slow) slowMoves += 1;
-
-      if (
-        duration >= thresholds.fast &&
-        duration <= thresholds.slow &&
-        (cpLoss === null || cpLoss <= 60)
-      ) {
-        goodThinkMoves += 1;
-      }
-
-      if (
-        duration >= thresholds.slow &&
-        (cpLoss === null ? duration >= thresholds.slow * 1.6 : cpLoss >= 80)
-      ) {
-        wastedMoves += 1;
-      }
-
-      if (cpLoss !== null) {
-        sawBlunderSignal = true;
-
-        if (duration <= thresholds.fast && cpLoss >= 140) {
-          fastBlunderMoves += 1;
-        }
-      }
-    }
-  }
-
-  return {
-    sampleSize,
-    goodThink:
-      consideredMoves > 0 ? toPercent((goodThinkMoves / consideredMoves) * 100) : null,
-    wasted:
-      consideredMoves > 0 ? toPercent((wastedMoves / consideredMoves) * 100) : null,
-    fastBlunder:
-      consideredMoves > 0 && sawBlunderSignal
-        ? toPercent((fastBlunderMoves / consideredMoves) * 100)
-        : null,
-    efficiency:
-      consideredMoves > 0
-        ? toPercent(
-            Math.max(
-              0,
-              ((goodThinkMoves - wastedMoves * 0.5 - fastBlunderMoves) /
-                consideredMoves) *
-                100,
-            ),
-          )
-        : null,
-    slowMoves,
-    fastMoves,
-  };
+  return summarizeTimeManagementOverview(liveGames);
 }
 
 function summarizePhaseEvalLeak(games: NormalizedGame[]): PhaseEvalLeakSummary {
@@ -480,11 +412,25 @@ function summarizeMostBlunderedPieces(
   const pieces: PieceType[] = ["pawn", "knight", "bishop", "rook", "queen", "king"];
   const buckets = new Map<
     PieceType,
-    { inaccuracies: number; mistakes: number; blunders: number }
+    {
+      inaccuracies: number;
+      mistakes: number;
+      blunders: number;
+      qualityMoveCount: number;
+      accuracyTotal: number;
+      cpLossTotal: number;
+    }
   >(
     pieces.map((piece) => [
       piece,
-      { inaccuracies: 0, mistakes: 0, blunders: 0 },
+      {
+        inaccuracies: 0,
+        mistakes: 0,
+        blunders: 0,
+        qualityMoveCount: 0,
+        accuracyTotal: 0,
+        cpLossTotal: 0,
+      },
     ]),
   );
   let sampleSize = 0;
@@ -504,13 +450,18 @@ function summarizeMostBlunderedPieces(
       const bucket = buckets.get(piece);
       if (!bucket) continue;
 
-      if (cpLoss >= BLUNDER_CP_THRESHOLD) {
+      const normalizedCpLoss = normalizeCpLoss(cpLoss);
+      bucket.qualityMoveCount += 1;
+      bucket.accuracyTotal += cpLossToAccuracy(normalizedCpLoss);
+      bucket.cpLossTotal += normalizedCpLoss;
+
+      if (normalizedCpLoss >= BLUNDER_CP_THRESHOLD) {
         bucket.blunders += 1;
         gameUsed = true;
-      } else if (cpLoss >= MISTAKE_CP_THRESHOLD) {
+      } else if (normalizedCpLoss >= MISTAKE_CP_THRESHOLD) {
         bucket.mistakes += 1;
         gameUsed = true;
-      } else if (cpLoss >= INACCURACY_CP_THRESHOLD) {
+      } else if (normalizedCpLoss >= INACCURACY_CP_THRESHOLD) {
         bucket.inaccuracies += 1;
         gameUsed = true;
       }
@@ -530,6 +481,9 @@ function summarizeMostBlunderedPieces(
         inaccuracies: 0,
         mistakes: 0,
         blunders: 0,
+        qualityMoveCount: 0,
+        accuracyTotal: 0,
+        cpLossTotal: 0,
       };
       const total = bucket.inaccuracies + bucket.mistakes + bucket.blunders;
 
@@ -543,6 +497,15 @@ function summarizeMostBlunderedPieces(
           totalClassifiedErrors > 0
             ? roundToTenths((total / totalClassifiedErrors) * 100)
             : 0,
+        qualityMoveCount: bucket.qualityMoveCount,
+        accuracyPct:
+          bucket.qualityMoveCount > 0
+            ? roundToTenths(bucket.accuracyTotal / bucket.qualityMoveCount)
+            : null,
+        avgCpl:
+          bucket.qualityMoveCount > 0
+            ? roundToTenths(bucket.cpLossTotal / bucket.qualityMoveCount)
+            : null,
       };
     })
     .filter((entry) => entry.total > 0)
@@ -598,10 +561,10 @@ function summarizeRatingTrend(games: NormalizedGame[]): RatingTrendSummary {
   };
 }
 
-function buildNotes(provider: ChessProvider, games: NormalizedGame[]) {
+function buildNotes(games: NormalizedGame[]) {
   const notes: string[] = [];
 
-  if (provider === "chesscom") {
+  if (games.some((game) => game.provider === "chesscom")) {
     notes.push(
       "Phase accuracy and fast blunder metrics stay limited on Chess.com because the public archive exposes overall accuracy but not move-by-move engine evals.",
     );
@@ -623,19 +586,6 @@ function buildNotes(provider: ChessProvider, games: NormalizedGame[]) {
 function phaseLossToEvalPawns(totalCpLoss: number, sampleSize: number) {
   if (sampleSize === 0) return null;
   return roundToTenths(totalCpLoss / sampleSize / CENTIPAWNS_PER_PAWN);
-}
-
-function normalizeCpLoss(cpLoss: number) {
-  return Math.min(Math.max(cpLoss, 0), MAX_CP_LOSS_PER_MOVE);
-}
-
-function getTimeThresholds(initialSeconds: number) {
-  if (initialSeconds <= 60) return { fast: 1.5, slow: 6 };
-  if (initialSeconds <= 180) return { fast: 2.5, slow: 10 };
-  if (initialSeconds <= 300) return { fast: 4, slow: 16 };
-  if (initialSeconds <= 600) return { fast: 7, slow: 24 };
-  if (initialSeconds <= 1800) return { fast: 12, slow: 40 };
-  return { fast: 20, slow: 70 };
 }
 
 function downsampleRatingPoints(points: RatingPoint[], maxPoints: number) {

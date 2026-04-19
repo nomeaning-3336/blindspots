@@ -1,5 +1,5 @@
 import type { PerformanceGameType } from "@/lib/chess-profile";
-import { getLinkedChessProfileForUser } from "@/lib/chess-profile-store";
+import { getLinkedChessProfilesForUser } from "@/lib/chess-profile-store";
 
 interface CachedSkillLevel {
   value: string | null;
@@ -121,7 +121,7 @@ export async function getPlayerSkillLevelForUser(userId: string): Promise<string
   const cached = skillCache.get(userId);
   if (cached && cached.expiresAt > now) return cached.value;
 
-  const linkedProfile = await getLinkedChessProfileForUser(userId);
+  const linkedProfile = (await getLinkedChessProfilesForUser(userId))[0] ?? null;
   if (!linkedProfile) {
     skillCache.set(userId, { value: null, expiresAt: now + SKILL_CACHE_TTL_MS });
     return null;
