@@ -7,6 +7,7 @@ import { AuthSignOutButton } from "@/components/auth-sign-out-button";
 
 const appLinks = [
   { href: "/analysis", label: "Analysis" },
+  { href: "/memos", label: "Memos" },
   { href: "/performance", label: "Performance" },
   { href: "/account", label: "Account" },
 ];
@@ -87,13 +88,14 @@ export function PublicHeaderClient({
   const nextPath =
     pathname &&
     (pathname.startsWith("/analysis") ||
+      pathname.startsWith("/memos") ||
       pathname.startsWith("/performance") ||
       pathname.startsWith("/account"))
       ? pathname
       : "/analysis";
 
   return (
-    <header className="relative z-40 shrink-0 bg-transparent px-4 pt-4 md:px-6">
+    <header className="relative z-40 shrink-0 bg-transparent px-4 md:px-6">
       <div
         className="w-full px-5 py-4"
         style={{
@@ -109,7 +111,7 @@ export function PublicHeaderClient({
               className="font-bold uppercase tracking-[0.24em] text-[var(--app-text)] transition hover:text-[var(--app-accent)]"
               style={{ fontSize: "20px", lineHeight: 1 }}
             >
-              chessview.ai
+              chessmemo.ai
             </Link>
           </h1>
           <nav className="app-shell-nav flex flex-wrap items-center justify-end gap-2 md:gap-3">
