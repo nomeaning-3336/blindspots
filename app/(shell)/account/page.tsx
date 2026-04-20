@@ -145,9 +145,16 @@ export default async function AccountPage({
 
         {userId && (
           <article className="app-brutal-card p-6">
-            <p className="text-xs uppercase tracking-[0.24em] text-[var(--app-muted)]">
-              Linked Profiles
-            </p>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.24em] text-[var(--app-muted)]">
+                  Linked Profiles
+                </p>
+                <h2 className="mt-3 text-2xl font-bold uppercase tracking-[0.14em] text-white">
+                  Linked Profiles
+                </h2>
+              </div>
+            </div>
 
             <AccountLinkedProfilesManager profiles={linkedProfiles} />
           </article>

@@ -51,101 +51,33 @@ export default async function SignUpPage({
   const errorMessage = resolveErrorMessage(error);
 
   return (
-    <div className="min-h-screen bg-transparent">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-transparent">
       <PublicHeaderClient isSignedIn={false} />
-      <main className="mx-auto flex min-h-[calc(100vh-84px)] w-full max-w-[1220px] items-center px-6 py-10 md:px-10">
-        <section className="grid w-full gap-6 xl:grid-cols-[0.92fr_1.08fr]">
-          <div className="app-brutal-card-auth relative overflow-hidden p-8 md:p-10">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--app-accent)_18%,transparent),transparent_68%)]" />
-            <div className="relative z-10 grid gap-8">
-              <div className="space-y-4">
-                <p className="text-xs uppercase tracking-[0.32em] text-[var(--app-muted)]">
-                  Create Account
-                </p>
-                <h1 className="max-w-[14ch] text-4xl font-bold uppercase tracking-[0.18em] text-white md:text-5xl">
-                  Join Chessview
-                </h1>
-                <p className="max-w-2xl text-sm leading-8 text-[var(--app-muted)] md:text-[15px]">
-                  Create an account to save your app theme, sync analysis defaults,
-                  link a public chess profile, and jump back into your board shell
-                  without losing momentum.
-                </p>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="app-brutal-auth-tile p-4">
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--app-muted)]">
-                    One Identity
-                  </p>
-                  <p className="mt-3 text-sm leading-7 text-white">
-                    Your Chessview account is keyed directly to the Supabase auth user id.
-                  </p>
-                </div>
-                <div className="app-brutal-auth-tile p-4">
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--app-muted)]">
-                    Faster Return
-                  </p>
-                  <p className="mt-3 text-sm leading-7 text-white">
-                    Sign back in with email and password and land exactly where you left off.
-                  </p>
-                </div>
-                <div className="app-brutal-auth-tile p-4">
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--app-muted)]">
-                    Theme Fidelity
-                  </p>
-                  <p className="mt-3 text-sm leading-7 text-white">
-                    Your selected shell theme stays aligned with the rest of Chessview.
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid gap-4 border-t border-white/10 pt-6 md:grid-cols-2">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--app-muted)]">
-                    Redirect After Sign-Up
-                  </p>
-                  <p className="mt-3 text-sm font-bold uppercase tracking-[0.14em] text-white">
-                    {nextPath}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--app-muted)]">
-                    Auth Flow
-                  </p>
-                  <p className="mt-3 text-sm leading-7 text-white">
-                    Email confirmation is supported if it is enabled in your Supabase auth settings.
-                  </p>
-                </div>
-              </div>
+      <main className="flex min-h-0 w-full flex-1 overflow-auto px-4 pb-4 pt-3 md:px-6">
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-center">
+          <section className="grid w-full max-w-[720px] gap-8">
+            <div className="space-y-5 text-center">
+              <p className="text-[10px] uppercase tracking-[0.34em] text-[var(--app-accent)]">
+                Sign Up
+              </p>
+              <h1 className="text-5xl font-bold tracking-[-0.04em] text-white md:text-6xl">
+                Create Account
+              </h1>
+              <p className="mx-auto max-w-xl text-sm leading-8 text-[var(--app-muted)]">
+                Join ChessMemo to save your preferences, memo threads, and analysis across sessions.
+              </p>
             </div>
-          </div>
 
-          <div className="app-brutal-card-auth relative overflow-hidden p-3 md:p-4">
-            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--app-accent)_8%,transparent),transparent_28%,transparent_72%,rgba(255,255,255,0.03))]" />
-            <div className="relative z-10 h-full border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] p-5 md:p-7">
-              <div className="mb-6 flex items-end justify-between gap-4 border-b border-white/10 pb-5">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--app-muted)]">
-                    chessview.ai
-                  </p>
-                  <p className="mt-3 text-2xl font-bold uppercase tracking-[0.16em] text-white">
-                    Create Your Account
-                  </p>
-                </div>
-                <div className="hidden border border-[var(--app-accent)] bg-[var(--app-accent-soft)] px-3 py-2 text-[11px] font-bold uppercase tracking-[0.22em] text-white md:block">
-                  Email Auth
-                </div>
-              </div>
-
+            <div className="app-brutal-card-auth grid gap-6 border border-white/10 p-6 md:p-8">
               {errorMessage ? (
-                <div className="mb-5 border border-rose-400/35 bg-rose-400/10 px-4 py-3 text-sm leading-6 text-rose-100">
+                <div className="border border-rose-400/35 bg-rose-400/10 px-4 py-3 text-sm leading-6 text-rose-100">
                   {errorMessage}
                 </div>
               ) : null}
 
               <a
                 href={`/auth/google?next=${encodeURIComponent(nextPath)}`}
-                className="inline-flex h-12 w-full items-center justify-center gap-3 border border-[var(--app-border)] bg-[var(--app-surface-input)] px-4 text-sm font-bold tracking-[0.08em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:bg-[var(--app-accent-soft)]"
+                className="inline-flex h-12 items-center justify-center gap-3 border border-[var(--app-border)] bg-[var(--app-surface-input)] px-4 text-sm font-bold tracking-[0.08em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:bg-[var(--app-accent-soft)]"
               >
                 <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
                   <path fill="#4285F4" d="M23.745 12.27c0-.79-.07-1.54-.19-2.27h-11.3v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"/>
@@ -212,13 +144,13 @@ export default async function SignUpPage({
 
                 <button
                   type="submit"
-                  className="h-12 border-2 border-[var(--app-accent)] bg-[var(--app-accent)] text-[13px] font-bold uppercase tracking-[0.18em] text-[var(--app-accent-contrast)] transition hover:border-[var(--app-text)] hover:bg-[var(--app-text)] hover:text-[var(--app-bg)]"
+                  className="mt-2 h-12 border-2 border-[var(--app-accent)] bg-[var(--app-accent)] text-[13px] font-bold uppercase tracking-[0.18em] text-[var(--app-accent-contrast)] transition hover:border-[var(--app-text)] hover:bg-[var(--app-text)] hover:text-[var(--app-bg)]"
                 >
                   Create Account
                 </button>
               </form>
 
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--app-border)] pt-5">
+              <div className="flex flex-col items-center gap-3 border-t border-[var(--app-border)] pt-5 text-center">
                 <p className="text-sm leading-6 text-[var(--app-muted)]">
                   Already have an account?
                 </p>
@@ -230,8 +162,17 @@ export default async function SignUpPage({
                 </Link>
               </div>
             </div>
-          </div>
-        </section>
+
+            <div className="flex justify-center">
+              <Link
+                href="/"
+                className="text-sm text-[var(--app-muted)] transition hover:text-[var(--app-text)]"
+              >
+                Back to Home
+              </Link>
+            </div>
+          </section>
+        </div>
       </main>
     </div>
   );
