@@ -6,16 +6,17 @@ import { AuthSignOutButton } from "@/components/auth-sign-out-button";
 
 const appLinks = [
   { href: "/analysis", label: "Analysis" },
+  { href: "/train", label: "Train" },
   { href: "/performance", label: "Performance" },
   { href: "/account", label: "Account" },
 ];
 
 function linkClassName(isActive: boolean) {
   return [
-    "border-2 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] transition",
+    "inline-flex min-h-9 items-center justify-center rounded border px-4 py-2 text-xs font-bold uppercase transition",
     isActive
-      ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-accent-contrast)]"
-      : "border-[color:var(--app-border)] text-[var(--app-text)]",
+      ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-text)]"
+      : "border-[var(--app-border)] bg-transparent text-[var(--app-text)]",
   ].join(" ");
 }
 
@@ -54,7 +55,7 @@ function AppShellLink({
 function AppShellSignOutButton() {
   return (
     <AuthSignOutButton
-      className="border-2 border-[color:var(--app-border)] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--app-text)] transition"
+      className="inline-flex min-h-9 items-center justify-center rounded border border-[var(--app-border)] bg-transparent px-4 py-2 text-[10px] font-bold uppercase text-[var(--app-text)] transition"
     />
   );
 }
@@ -65,7 +66,7 @@ function AppShellSignInLink({ nextPath }: { nextPath: string }) {
   return (
     <a
       href={`/sign-in?next=${encodeURIComponent(nextPath)}`}
-      className="rounded-none border-2 border-[var(--app-accent)] bg-[var(--app-accent)] px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-[var(--app-accent-contrast)] transition hover:border-white hover:bg-white hover:text-black"
+      className="inline-flex min-h-9 items-center justify-center rounded border border-[var(--app-accent)] bg-[var(--app-accent)] px-4 py-2 text-xs font-bold uppercase !text-black transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
       style={isForcedHover ? forcedHoverStyle : undefined}
       onMouseEnter={() => setIsForcedHover(true)}
       onMouseLeave={() => setIsForcedHover(false)}
@@ -87,11 +88,12 @@ export function AppShellNav({
   const pathname = usePathname();
   const nextPath =
     pathname &&
-    (pathname.startsWith("/analysis") ||
+    (pathname.startsWith("/train") ||
+      pathname.startsWith("/analysis") ||
       pathname.startsWith("/performance") ||
       pathname.startsWith("/account"))
       ? pathname
-      : "/analysis";
+      : "/train";
 
   return (
     <div

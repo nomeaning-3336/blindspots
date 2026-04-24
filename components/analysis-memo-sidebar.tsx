@@ -185,7 +185,7 @@ export function AnalysisMemoSidebar({ isSignedIn }: { isSignedIn: boolean }) {
                   className={[
                     "border px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition",
                     mode === "new"
-                      ? "border-[var(--app-accent)] bg-[var(--app-accent)] text-[var(--app-accent-contrast)]"
+                      ? "border-[var(--app-accent)] bg-[var(--app-accent)] !text-black"
                       : "border-[var(--app-border)] text-[var(--app-text)]",
                   ].join(" ")}
                 >
@@ -198,7 +198,7 @@ export function AnalysisMemoSidebar({ isSignedIn }: { isSignedIn: boolean }) {
                   className={[
                     "border px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition disabled:cursor-not-allowed disabled:opacity-50",
                     mode === "append"
-                      ? "border-[var(--app-accent)] bg-[var(--app-accent)] text-[var(--app-accent-contrast)]"
+                      ? "border-[var(--app-accent)] bg-[var(--app-accent)] !text-black"
                       : "border-[var(--app-border)] text-[var(--app-text)]",
                   ].join(" ")}
                 >
@@ -267,7 +267,7 @@ export function AnalysisMemoSidebar({ isSignedIn }: { isSignedIn: boolean }) {
               type="button"
               onClick={handleSave}
               disabled={!isReady || !snapshot || isPending}
-              className="border-2 border-[var(--app-accent)] bg-[var(--app-accent)] px-4 py-3 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--app-accent-contrast)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="border-2 border-[var(--app-accent)] bg-[var(--app-accent)] px-4 py-3 text-[11px] font-bold uppercase tracking-[0.2em] !text-black transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isPending ? "Saving..." : mode === "append" ? "Append Memo Entry" : "Save Memo Thread"}
             </button>

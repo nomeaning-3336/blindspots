@@ -12,27 +12,47 @@ export default async function ProtectedAppLayout({
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-transparent">
-      <header className="relative z-40 shrink-0 px-4 md:px-6">
-        <div
-          className="w-full px-5 py-4"
-          style={{
-            border: "2px solid var(--app-shell-border)",
-            background: "var(--app-panel-solid)",
-            boxShadow: "4px 4px 0 var(--app-shell-shadow)",
-          }}
-        >
-          <div className="flex items-center justify-between gap-4">
-            <h1>
-              <a
-                href="/"
-                className="font-bold uppercase tracking-[0.24em] text-[var(--app-text)] transition hover:text-[var(--app-accent)]"
-                style={{ fontSize: "20px", lineHeight: 1 }}
+      <header
+        className="relative z-40 shrink-0 border-b border-[var(--app-border)] px-4 py-3 backdrop-blur md:px-7"
+        style={{ background: "color-mix(in srgb, var(--app-panel-solid) 78%, transparent)" }}
+      >
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="flex items-center leading-none">
+            <a
+              href="/"
+              className="inline-flex items-center gap-3 leading-none transition hover:text-[var(--app-accent)]"
+            >
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden="true"
+                className="shrink-0"
               >
-                chessview.ai
-              </a>
-            </h1>
-            <AppShellNav isSignedIn={isSignedIn} />
-          </div>
+                <rect
+                  x="2"
+                  y="2"
+                  width="20"
+                  height="20"
+                  rx="3"
+                  stroke="var(--app-text)"
+                  strokeWidth="1.6"
+                />
+                <circle cx="12" cy="12" r="3.2" fill="var(--app-accent)" />
+                <path
+                  d="M12 4.5v3M12 16.5v3M4.5 12h3M16.5 12h3"
+                  stroke="var(--app-text)"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span className="text-sm font-bold uppercase leading-none text-[var(--app-text)]">
+                Blindspots<span className="text-[var(--app-accent)]">.gg</span>
+              </span>
+            </a>
+          </h1>
+          <AppShellNav isSignedIn={isSignedIn} />
         </div>
       </header>
       <main className="flex min-h-0 w-full flex-1 overflow-hidden px-4 pb-4 md:px-6">

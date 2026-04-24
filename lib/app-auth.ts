@@ -11,9 +11,11 @@ export function normalizeNextPath(value?: string | null) {
   if (value.startsWith("/app/")) return normalizeNextPath(value.slice(4) || DEFAULT_APP_ROUTE);
   if (
     value === "/analysis" ||
+    value === "/train" ||
     value === "/performance" ||
     value === "/account" ||
     value.startsWith("/analysis/") ||
+    value.startsWith("/train/") ||
     value.startsWith("/performance/") ||
     value.startsWith("/account/")
   ) {
