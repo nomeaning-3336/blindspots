@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import type { AnalyzePreferences } from "@/lib/analyze-preferences";
+import type { AnalysisMemoSnapshot } from "@/lib/memos/types";
 
 export interface AnalyzeNode {
   id: string;
@@ -81,6 +82,7 @@ export interface AnalyzeApi {
   currentUci: () => string | null;
   parentFen: () => string;
   parentUci: () => string | null;
+  getMemoSnapshot?: () => AnalysisMemoSnapshot | null;
 }
 
 declare global {

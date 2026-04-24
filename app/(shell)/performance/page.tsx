@@ -92,7 +92,7 @@ export default async function PerformancePage({
             <div className="mt-6">
               <a
                 href="/account"
-                className="inline-flex items-center justify-center border border-[var(--app-accent)] bg-[var(--app-accent)] px-5 py-3 text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-accent-contrast)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
+                className="inline-flex items-center justify-center border border-[var(--app-accent)] bg-[var(--app-accent)] px-5 py-3 text-xs font-bold uppercase tracking-[0.18em] !text-black transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
               >
                 Open Account Linking
               </a>
@@ -140,7 +140,7 @@ export default async function PerformancePage({
             <div className="mt-6 flex flex-wrap gap-3">
               <a
                 href={buildFilterHref(rangeDays, gameType, selectedProfileKeys)}
-                className="inline-flex items-center justify-center border border-[var(--app-accent)] bg-[var(--app-accent)] px-5 py-3 text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-accent-contrast)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
+                className="inline-flex items-center justify-center border border-[var(--app-accent)] bg-[var(--app-accent)] px-5 py-3 text-xs font-bold uppercase tracking-[0.18em] !text-black transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
               >
                 Retry
               </a>

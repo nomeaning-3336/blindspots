@@ -49,7 +49,7 @@ export function AccountLinkedProfilesManager({
                   href={getChessProfileUrl(profile)}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center justify-center border border-[var(--app-accent)] bg-[var(--app-accent)] px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-accent-contrast)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
+                  className="inline-flex items-center justify-center border border-[var(--app-accent)] bg-[var(--app-accent)] px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] !text-black transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
                 >
                   Open Profile
                 </a>

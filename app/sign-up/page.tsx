@@ -144,7 +144,7 @@ export default async function SignUpPage({
 
                 <button
                   type="submit"
-                  className="mt-2 h-12 border-2 border-[var(--app-accent)] bg-[var(--app-accent)] text-[13px] font-bold uppercase tracking-[0.18em] text-[var(--app-accent-contrast)] transition hover:border-[var(--app-text)] hover:bg-[var(--app-text)] hover:text-[var(--app-bg)]"
+                  className="mt-2 h-12 border-2 border-[var(--app-accent)] bg-[var(--app-accent)] text-[13px] font-bold uppercase tracking-[0.18em] !text-black transition hover:border-[var(--app-text)] hover:bg-[var(--app-text)] hover:text-[var(--app-bg)]"
                 >
                   Create Account
                 </button>

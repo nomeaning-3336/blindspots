@@ -57,7 +57,7 @@ function EmptyState() {
       <div className="mt-6">
         <Link
           href="/analysis"
-          className="inline-flex items-center justify-center border-2 border-[var(--app-accent)] bg-[var(--app-accent)] px-5 py-3 text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-accent-contrast)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
+          className="inline-flex items-center justify-center border-2 border-[var(--app-accent)] bg-[var(--app-accent)] px-5 py-3 text-xs font-bold uppercase tracking-[0.18em] !text-black transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
         >
           Open Analysis
         </Link>
@@ -328,7 +328,7 @@ export function MemosWorkspace({
           <div className="flex gap-3">
             <button
               type="submit"
-              className="flex-1 border-2 border-[var(--app-accent)] bg-[var(--app-accent)] px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-accent-contrast)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
+              className="flex-1 border-2 border-[var(--app-accent)] bg-[var(--app-accent)] px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] !text-black transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
             >
               Apply Filters
             </button>
@@ -499,7 +499,7 @@ export function MemosWorkspace({
           <button
             type="button"
             onClick={askAssistant}
-            className="mt-4 border-2 border-[var(--app-accent)] bg-[var(--app-accent)] px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-accent-contrast)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
+            className="mt-4 border-2 border-[var(--app-accent)] bg-[var(--app-accent)] px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] !text-black transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
           >
             Ask
           </button>
@@ -652,7 +652,7 @@ function MemoEntryCard({
             type="button"
             onClick={saveEntry}
             disabled={isPending}
-            className="border-2 border-[var(--app-accent)] bg-[var(--app-accent)] px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-accent-contrast)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)] disabled:opacity-50"
+            className="border-2 border-[var(--app-accent)] bg-[var(--app-accent)] px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] !text-black transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)] disabled:opacity-50"
           >
             Save Entry
           </button>

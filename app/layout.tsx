@@ -12,11 +12,11 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Chessview",
-    template: "%s | Chessview",
+    default: "Blindspots.gg",
+    template: "%s | Blindspots.gg",
   },
   description:
-    "Incremental local-first Next.js shell for the Chessview analysis app.",
+    "Position-based chess training for finding and drilling blindspots.",
 };
 
 export default async function RootLayout({

@@ -1,136 +1,100 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AuthSignOutButton } from "@/components/auth-sign-out-button";
+import { AppShellNav } from "@/components/app-shell-nav";
 
-const appLinks = [
-  { href: "/analysis", label: "Analysis" },
-  { href: "/memos", label: "Memos" },
-  { href: "/performance", label: "Performance" },
-  { href: "/account", label: "Account" },
-];
-
-function linkClassName(isActive: boolean) {
-  return [
-    "border-2 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] transition",
-    isActive
-      ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-accent-contrast)]"
-      : "border-[color:var(--app-border)] text-[var(--app-text)]",
-  ].join(" ");
+function LogoMark() {
+  return (
+    <span className="inline-flex items-center gap-3 leading-none">
+      <svg
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true"
+        className="shrink-0"
+      >
+        <rect
+          x="2"
+          y="2"
+          width="20"
+          height="20"
+          rx="3"
+          stroke="var(--app-text)"
+          strokeWidth="1.6"
+        />
+        <circle cx="12" cy="12" r="3.2" fill="var(--app-accent)" />
+        <path
+          d="M12 4.5v3M12 16.5v3M4.5 12h3M16.5 12h3"
+          stroke="var(--app-text)"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+      </svg>
+      <span className="text-sm font-bold uppercase leading-none text-[var(--app-text)]">
+        Blindspots<span className="text-[var(--app-accent)]">.gg</span>
+      </span>
+    </span>
+  );
 }
 
-const forcedHoverStyle = {
-  borderColor: "var(--app-nav-hover-bg)",
-  background: "var(--app-nav-hover-bg)",
-  color: "var(--app-nav-hover-text)",
-} as const;
-
-function AppShellLink({
+function HeaderLink({
   href,
-  label,
-  isActive,
+  children,
+  primary = false,
 }: {
   href: string;
-  label: string;
-  isActive: boolean;
+  children: React.ReactNode;
+  primary?: boolean;
 }) {
-  const [isForcedHover, setIsForcedHover] = useState(false);
-
   return (
-    <a
+    <Link
       href={href}
-      className={linkClassName(isActive)}
-      style={isForcedHover ? forcedHoverStyle : undefined}
-      onMouseEnter={() => setIsForcedHover(true)}
-      onMouseLeave={() => setIsForcedHover(false)}
-      onFocus={() => setIsForcedHover(true)}
-      onBlur={() => setIsForcedHover(false)}
+      className={[
+        "inline-flex min-h-9 items-center justify-center rounded border px-4 py-2 text-xs font-bold uppercase transition",
+        primary
+          ? "border-[var(--app-accent)] bg-[var(--app-accent)] !text-black"
+          : "border-[var(--app-border)] bg-transparent text-[var(--app-text)]",
+      ].join(" ")}
     >
-      {label}
-    </a>
+      {children}
+    </Link>
   );
 }
 
-function AppShellSignOutButton() {
-  return (
-    <AuthSignOutButton
-      className="border-2 border-[color:var(--app-border)] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--app-text)] transition"
-    />
-  );
-}
-
-function AppShellSignInLink({ nextPath }: { nextPath: string }) {
-  const [isForcedHover, setIsForcedHover] = useState(false);
-
-  return (
-    <a
-      href={`/sign-in?next=${encodeURIComponent(nextPath)}`}
-      className="rounded-none border-2 border-[var(--app-accent)] bg-[var(--app-accent)] px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-black transition hover:border-white hover:bg-white hover:text-black"
-      style={isForcedHover ? forcedHoverStyle : undefined}
-      onMouseEnter={() => setIsForcedHover(true)}
-      onMouseLeave={() => setIsForcedHover(false)}
-      onFocus={() => setIsForcedHover(true)}
-      onBlur={() => setIsForcedHover(false)}
-    >
-      Sign In
-    </a>
-  );
-}
-
-export function PublicHeaderClient({
-  isSignedIn,
-}: {
-  isSignedIn: boolean;
-}) {
+export function PublicHeaderClient({ isSignedIn }: { isSignedIn: boolean }) {
   const pathname = usePathname();
   const nextPath =
-    pathname &&
-    (pathname.startsWith("/analysis") ||
-      pathname.startsWith("/memos") ||
-      pathname.startsWith("/performance") ||
-      pathname.startsWith("/account"))
-      ? pathname
-      : "/analysis";
+    pathname && pathname !== "/" ? pathname : "/train";
+  const signInHref = `/sign-in?next=${encodeURIComponent(nextPath)}`;
+  const signUpHref = `/sign-up?next=${encodeURIComponent("/train")}`;
 
   return (
-    <header className="relative z-40 shrink-0 bg-transparent px-4 md:px-6">
-      <div
-        className="w-full px-5 py-4"
-        style={{
-          border: "2px solid var(--app-shell-border)",
-          background: "var(--app-panel-solid)",
-          boxShadow: "4px 4px 0 var(--app-shell-shadow)",
-        }}
-      >
-        <div className="flex items-center justify-between gap-4">
-          <h1>
-            <Link
-              href="/"
-              className="font-bold uppercase tracking-[0.24em] text-[var(--app-text)] transition hover:text-[var(--app-accent)]"
-              style={{ fontSize: "20px", lineHeight: 1 }}
-            >
-              chessmemo.ai
-            </Link>
-          </h1>
-          <nav className="app-shell-nav flex flex-wrap items-center justify-end gap-2 md:gap-3">
-            {appLinks.map((link) => {
-              const isActive =
-                pathname === link.href || pathname.startsWith(`${link.href}/`);
-
-              return (
-                <AppShellLink
-                  key={link.href}
-                  href={link.href}
-                  label={link.label}
-                  isActive={isActive}
-                />
-              );
-            })}
-            {isSignedIn && <AppShellSignOutButton />}
-            {!isSignedIn && <AppShellSignInLink nextPath={nextPath} />}
-          </nav>
+    <header
+      className="relative z-40 shrink-0 border-b border-[var(--app-border)] px-4 py-3 backdrop-blur md:px-7"
+      style={{ background: "color-mix(in srgb, var(--app-panel-solid) 78%, transparent)" }}
+    >
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="flex items-center leading-none">
+          <Link
+            href="/"
+            className="inline-flex items-center leading-none transition hover:text-[var(--app-accent)]"
+          >
+            <LogoMark />
+          </Link>
+        </h1>
+        <div className="app-shell-nav flex flex-wrap items-center justify-end gap-2">
+          {isSignedIn ? (
+            <AppShellNav isSignedIn />
+          ) : (
+            <>
+              <HeaderLink href={signInHref}>Sign in</HeaderLink>
+              <HeaderLink href={signUpHref} primary>
+                Start training
+              </HeaderLink>
+            </>
+          )}
         </div>
       </div>
     </header>

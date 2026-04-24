@@ -54,7 +54,7 @@ function filterButtonClass(isActive: boolean) {
   return [
     "inline-flex items-center justify-center border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition",
     isActive
-      ? "border-[var(--app-accent)] bg-[var(--app-accent)] text-[var(--app-accent-contrast)]"
+      ? "border-[var(--app-accent)] bg-[var(--app-accent)] !text-black"
       : "border-[var(--app-border)] text-[var(--app-text)] hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]",
   ].join(" ");
 }

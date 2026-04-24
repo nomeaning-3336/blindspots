@@ -237,6 +237,113 @@ export type Database = {
         };
         Relationships: [];
       };
+      memo_groups: {
+        Row: {
+          id: string;
+          user_id: string;
+          game_id: string | null;
+          title: string | null;
+          opening_name: string | null;
+          eco: string | null;
+          color: "white" | "black" | null;
+          result: "win" | "draw" | "loss" | null;
+          opponent: string | null;
+          played_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          game_id?: string | null;
+          title?: string | null;
+          opening_name?: string | null;
+          eco?: string | null;
+          color?: "white" | "black" | null;
+          result?: "win" | "draw" | "loss" | null;
+          opponent?: string | null;
+          played_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          game_id?: string | null;
+          title?: string | null;
+          opening_name?: string | null;
+          eco?: string | null;
+          color?: "white" | "black" | null;
+          result?: "win" | "draw" | "loss" | null;
+          opponent?: string | null;
+          played_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      memo_entries: {
+        Row: {
+          id: string;
+          memo_group_id: string;
+          user_id: string;
+          fen: string;
+          ply: number | null;
+          turn_color: "white" | "black" | null;
+          last_move_san: string | null;
+          last_move_uci: string | null;
+          note_text: string;
+          tags: Json;
+          arrows: Json;
+          highlighted_squares: Json;
+          orientation: "white" | "black" | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          memo_group_id: string;
+          user_id: string;
+          fen: string;
+          ply?: number | null;
+          turn_color?: "white" | "black" | null;
+          last_move_san?: string | null;
+          last_move_uci?: string | null;
+          note_text?: string;
+          tags?: Json;
+          arrows?: Json;
+          highlighted_squares?: Json;
+          orientation?: "white" | "black" | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          memo_group_id?: string;
+          user_id?: string;
+          fen?: string;
+          ply?: number | null;
+          turn_color?: "white" | "black" | null;
+          last_move_san?: string | null;
+          last_move_uci?: string | null;
+          note_text?: string;
+          tags?: Json;
+          arrows?: Json;
+          highlighted_squares?: Json;
+          orientation?: "white" | "black" | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "memo_entries_memo_group_id_fkey";
+            columns: ["memo_group_id"];
+            isOneToOne: false;
+            referencedRelation: "memo_groups";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
