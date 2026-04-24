@@ -1,74 +1,97 @@
-# Chessview
+# Blindspots.gg
 
-Chessview is a chess web app focused on three core product surfaces:
+Blindspots.gg is a position-based chess training simulator.
 
-- Analysis
-- Statistics / Performance
-- Settings
+Users play short N-move sequences from a given position against a configurable opponent model. Stockfish evaluates each move silently during the sequence. When the sequence ends, the user sees an evaluation graph and can write a short reflection note.
 
-The project previously experimented with LLM coaching, RAG, SAE tooling, and review flows. That direction has been intentionally removed for now so the app can stay focused on a smaller, clearer product.
+The product does not ask users to choose themes, openings, motifs, or mistake categories. It infers weak position patterns from repeated behavior, groups similar positions, and serves more positions from the areas where the user is losing evaluation. Those positions are the user's blindspots.
 
 ## Product Direction
 
-### 1. Analysis
-The analysis board is the heart of the app.
+The core training signal is eval preservation across a sequence.
 
-Current goals:
-- import FEN and PGN
-- import recent games from linked Lichess or Chess.com profiles
-- inspect moves, engine lines, move list, opening info, and board state
-- preserve a strong visual identity across themes
+Blindspots.gg is not a puzzle trainer. There are no right or wrong answers, forcing lines, or one-move solutions. The user plays the position out against an opponent model, and the system measures how well they preserve the position over the full sequence.
 
-### 2. Statistics / Performance
-Performance is the progress page.
+The main loop is:
 
-Current goals:
-- aggregate recent games from linked profiles
-- surface trends and rating context
-- show a useful, readable dashboard instead of raw dumps
+1. Select a position from the user's current blindspot profile.
+2. Play a short sequence against the configured opponent model.
+3. Track the hidden Stockfish evaluation after every move.
+4. Score the sequence by evaluation preservation, not by tactic completion.
+5. Store the result, reflection, and position embedding.
+6. Update the user's blindspot profile and serve the next targeted position.
 
-### 3. Settings
-Settings is where users manage the practical parts of the app.
-
-Current goals:
-- analysis defaults
-- board and piece visuals
-- linked profile management
-- app theme preferences
-
-## Possible Later Surface
-A future `Library` page may hold articles, books, notes, or a lightweight blog. That is not part of the active scope right now.
-
-## Tech Shape
-
-- Next.js App Router shell for the signed-in app
-- Supabase for authentication and persistence
-- `standalone.js` remains the source of truth for the embedded analysis runtime
-- `public/analyze/` is the synced runtime copy served by Next.js
+The system should learn structural weakness patterns from play data, not self-reporting.
 
 ## Main Routes
 
-- `/analysis` — main analysis experience
-- `/analyze` — compatibility alias to the analysis experience
-- `/performance` — statistics / performance dashboard
-- `/account` — settings page
+- `/train` - core training session with board, configurable opponent, sequence loop, hidden eval tracking, post-sequence graph, and reflection note.
+- `/profile` - blindspot profile with weakness clusters over time, session history, model confidence, and Blindspots Elo.
+- `/analysis` - standalone analysis board kept as a secondary surface for inspection and review.
+- `/account` - settings, linked chess profiles, analysis preferences, board/piece preferences, and theme preferences.
+
+Compatibility aliases may exist during migration, but new product work should target the routes above.
+
+## Tech Shape
+
+- Next.js App Router for the web app and API routes.
+- Supabase for authentication, persistence, linked chess profiles, user preferences, training sessions, blindspot clusters, and reflection notes.
+- Existing standalone analysis runtime for the `/analysis` surface.
+- Stockfish for silent evaluation tracking during training sequences and analysis-board evaluation.
+- Configurable opponent move generation during training:
+  Maia-2 by default for human-like play near the user's Elo, Stockfish at reduced strength for principled engine opposition, or Leela as a middle-ground opponent.
+- Vector store for position embeddings and similarity search across prior failures, training positions, and blindspot clusters.
+
+## Training Model
+
+Training positions can come from linked user games, imported games, curated source pools, or generated positions that match a known weakness cluster.
+
+Each training sequence should persist:
+
+- starting FEN and side to move
+- move sequence played by the user and opponent model
+- Stockfish evaluation trace
+- eval-preservation score
+- opponent model and strength settings
+- sequence length and timing metadata
+- optional user reflection
+- position vector or lookup key for similarity search
+- blindspot cluster assignment, if known
+
+Blindspot profiles should be derived from stored sequences and position similarity. The user should not need to manually label a position as an opening issue, endgame issue, tactic issue, or structure issue.
+
+## Position Sourcing
+
+Training positions can be sourced from:
+
+- user's own games from linked profiles, which become the primary source once enough data is available
+- imported PGNs
+- curated position pools for cold-start users
+- opening-constrained pools based on openings the user has configured in their profile or account settings
+- positions generated to match a known blindspot cluster derived from behavior
+
+Opening-constrained pools let users specify openings they actually play, such as `1.e4 e5 Nc3` as White, `1.e4 c5` as Black, or `1.d4 Nf6` as either side. Positions are then drawn from games that reached those openings.
+
+Opening preferences are profile-level configuration, not per-session choices. Training should feel continuous across sessions: if the user has told the system they play the Caro-Kann, every session can factor that into position selection.
 
 ## Project Structure
 
 - `app/`
-  Next.js routes, API handlers, and auth entry points.
+  Next.js routes, API handlers, auth entry points, and app-shell pages. Product routes should converge on `/train`, `/profile`, `/analysis`, and `/account`.
 - `components/`
-  App shell, settings forms, performance UI, and analyze bridge components.
+  Shared UI components for the app shell, training board, eval graph, blindspot profile, account settings, linked profiles, and analysis bridge.
 - `lib/`
-  persistence helpers, theme helpers, profile linking, and performance logic.
+  Domain logic for auth, linked profiles, training sessions, Stockfish evaluation, opponent move generation, position normalization, embeddings, similarity search, and persistence helpers.
 - `public/analyze/`
-  synced browser assets used by the embedded analysis app.
+  Synced browser assets used by the embedded standalone analysis runtime.
 - `standalone.js`, `standalone.css`, `standalone.html`
-  source files for the embedded analysis runtime.
+  Source files for the embedded analysis runtime.
 - `scripts/sync-analyze-assets.mjs`
-  syncs root analyze assets into `public/analyze/`.
+  Syncs root analysis assets into `public/analyze/`.
 - `supabase/`
-  database migrations for the active app features.
+  Database migrations for auth-backed product data, linked profiles, training sessions, blindspot profiles, and user preferences.
+- `tests/`
+  Unit and integration tests for chess-domain scoring, profile updates, persistence helpers, and analysis/training utilities.
 
 ## Local Development
 
@@ -86,13 +109,18 @@ npm run dev
 
 3. Open the main routes.
 
+- `/train`
+- `/profile`
 - `/analysis`
-- `/performance`
 - `/account`
+
+The app expects the usual Supabase environment variables in `.env.local`. Training also requires local or remote access to Stockfish, configured opponent move generation, and the configured vector store once those services are wired into the route handlers.
 
 ## Analyze Asset Workflow
 
-If you change `standalone.js`, `standalone.css`, `standalone.html`, or the supporting board assets, resync them with:
+The analysis board still uses the existing standalone runtime.
+
+If you change `standalone.js`, `standalone.css`, `standalone.html`, or supporting board assets, resync them with:
 
 ```bash
 npm run sync:analyze
@@ -105,14 +133,15 @@ npm run build:css
 npm run sync:analyze
 ```
 
-## What Was Removed On Purpose
+## Removed Product Areas
 
-The repo no longer treats these as active product areas:
+The repo should not reintroduce these as primary product surfaces:
 
-- LLM coach / chat flows
-- RAG pipelines and transcript tooling
-- SAE pages and related API routes
-- review-specific routes and supporting backend code
-- provider API-key storage flows for assistant models
+- LLM coach and chat flows
+- RAG pipelines
+- SAE pages
+- review flows and peer-review backend
+- Chessmemo note-taking as the primary surface
+- generic performance dashboards disconnected from the blindspot training loop
 
-That cleanup is intentional. The current goal is to build a strong chess product first, not a fragile AI coach wrapper.
+Reflection notes can exist inside completed training sequences, but the product is the simulator and blindspot profile, not a general chess notebook.
