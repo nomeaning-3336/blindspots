@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AuthSignOutButton } from "@/components/auth-sign-out-button";
 
@@ -38,8 +39,9 @@ function AppShellLink({
   const [isForcedHover, setIsForcedHover] = useState(false);
 
   return (
-    <a
+    <Link
       href={href}
+      prefetch
       className={linkClassName(isActive)}
       style={isForcedHover ? forcedHoverStyle : undefined}
       onMouseEnter={() => setIsForcedHover(true)}
@@ -48,7 +50,7 @@ function AppShellLink({
       onBlur={() => setIsForcedHover(false)}
     >
       {label}
-    </a>
+    </Link>
   );
 }
 
@@ -64,8 +66,9 @@ function AppShellSignInLink({ nextPath }: { nextPath: string }) {
   const [isForcedHover, setIsForcedHover] = useState(false);
 
   return (
-    <a
+    <Link
       href={`/sign-in?next=${encodeURIComponent(nextPath)}`}
+      prefetch
       className="inline-flex min-h-9 items-center justify-center rounded border border-[var(--app-accent)] bg-[var(--app-accent)] px-4 py-2 text-xs font-bold uppercase !text-black transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
       style={isForcedHover ? forcedHoverStyle : undefined}
       onMouseEnter={() => setIsForcedHover(true)}
@@ -74,7 +77,7 @@ function AppShellSignInLink({ nextPath }: { nextPath: string }) {
       onBlur={() => setIsForcedHover(false)}
     >
       Sign In
-    </a>
+    </Link>
   );
 }
 

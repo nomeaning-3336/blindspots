@@ -2,7 +2,7 @@
   "name": "chessview",
   "private": true,
   "scripts": {
-    "dev": "npm run build:css && npm run sync:analyze && next dev",
+    "dev": "npm run build:css && npm run sync:analyze && next dev --webpack",
     "build": "npm run build:css && npm run sync:analyze && next build",
     "start": "next start",
     "sync:analyze": "node scripts/sync-analyze-assets.mjs",
@@ -13,7 +13,12 @@
     "test:theme-backgrounds": "node scripts/check-theme-backgrounds.mjs",
     "test:analysis-multipv": "node scripts/check-analysis-multipv-snapshots.mjs",
     "test:performance-time-management": "node --test --experimental-strip-types tests/performance-time-management.test.ts",
-    "test:performance-client-analysis": "node --test --experimental-strip-types tests/performance-client-analysis.test.ts"
+    "test:performance-client-analysis": "node --test --experimental-strip-types tests/performance-client-analysis.test.ts",
+    "index:build:10k": "python scripts/build-position-index-sample.py --limit 10000 && node --experimental-strip-types scripts/fingerprint-position-index.ts && node --experimental-strip-types scripts/build-compact-position-index.ts",
+    "index:build:50k-games": "node scripts/build-50k-games-position-index.mjs",
+    "index:build:full": "node scripts/build-full-position-index.mjs",
+    "index:search": "node --experimental-strip-types scripts/search-position-index.ts",
+    "index:benchmark:10k": "node --experimental-strip-types scripts/benchmark-position-index-search.ts"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.2.2",
