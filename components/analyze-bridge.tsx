@@ -592,6 +592,139 @@ function ensureOverrideStyle() {
       border: none !important;
     }
 
+    /* ============================================================
+       POLISH LAYER — sensual analyze surface.
+       Lifts flat panels to match landing's graphite+glow aesthetic.
+       ============================================================ */
+    #analyze-app-host::before {
+      content: "";
+      position: absolute;
+      inset: -12% -8% -8% -8%;
+      z-index: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(720px 340px at 78% 6%, color-mix(in srgb, var(--app-accent) 10%, transparent), transparent 64%),
+        radial-gradient(520px 320px at 10% 104%, color-mix(in srgb, var(--app-accent) 5%, transparent), transparent 70%);
+      opacity: 0.9;
+    }
+    #analyze-app-host > * { position: relative; z-index: 1; }
+
+    #analyze-app-host #app .board-shell-wrap,
+    #analyze-app-host #app .board-analysis,
+    #analyze-app-host #app .board-history-panel,
+    #analyze-app-host #app .section-head {
+      background:
+        linear-gradient(
+          180deg,
+          color-mix(in srgb, var(--app-panel-strong) 94%, transparent) 0%,
+          color-mix(in srgb, var(--app-panel-deep) 96%, transparent) 100%
+        ) !important;
+      border-color: color-mix(in srgb, var(--app-border-strong) 10%, transparent) !important;
+      box-shadow:
+        inset 0 1px 0 color-mix(in srgb, var(--app-border-strong) 6%, transparent),
+        0 22px 60px -36px color-mix(in srgb, var(--app-bg) 95%, transparent);
+      transition: border-color 200ms ease, box-shadow 240ms ease;
+    }
+
+    #analyze-app-host #app .board-shell-wrap {
+      border-radius: 10px !important;
+      box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--app-border-strong) 7%, transparent),
+        0 0 0 1px color-mix(in srgb, var(--app-accent) 5%, transparent),
+        0 36px 90px -38px color-mix(in srgb, var(--app-bg) 96%, transparent),
+        0 0 60px -30px color-mix(in srgb, var(--app-accent) 40%, transparent) !important;
+    }
+
+    #analyze-app-host #app .section-head {
+      letter-spacing: 0.22em !important;
+      text-transform: uppercase;
+      font-size: 0.64rem !important;
+      color: color-mix(in srgb, var(--app-text) 72%, var(--app-muted) 28%) !important;
+    }
+
+    #analyze-app-host #app .board-options .btn,
+    #analyze-app-host #app .settings-trigger {
+      transition:
+        border-color 160ms ease,
+        background 160ms ease,
+        color 160ms ease,
+        box-shadow 220ms ease,
+        transform 160ms ease !important;
+      border-radius: 4px !important;
+    }
+    #analyze-app-host #app .board-options .btn:hover,
+    #analyze-app-host #app .board-options .btn:focus-visible,
+    #analyze-app-host #app .board-options .btn[data-visual-hover="true"] {
+      box-shadow:
+        0 10px 26px -10px color-mix(in srgb, var(--app-accent) 55%, transparent),
+        inset 0 0 0 1px color-mix(in srgb, var(--app-accent) 18%, transparent) !important;
+      transform: translateY(-1px);
+    }
+    #analyze-app-host #app .board-options .btn.primary,
+    #analyze-app-host #app .board-options .btn[data-primary="true"] {
+      background: var(--app-accent) !important;
+      color: var(--app-accent-contrast) !important;
+      border-color: var(--app-accent) !important;
+      box-shadow: 0 12px 32px -12px color-mix(in srgb, var(--app-accent) 50%, transparent) !important;
+    }
+
+    #analyze-app-host #app .board-history-move.is-active,
+    #analyze-app-host #app .board-history-move[aria-selected="true"],
+    #analyze-app-host #app .analysis-row.is-active {
+      background: color-mix(in srgb, var(--app-accent) 10%, transparent) !important;
+      box-shadow: inset 3px 0 0 0 var(--app-accent) !important;
+    }
+
+    #analyze-app-host #app .eval-bar {
+      border-radius: 3px !important;
+      box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--app-border-strong) 9%, transparent),
+        0 10px 24px -16px color-mix(in srgb, var(--app-bg) 95%, transparent) !important;
+    }
+
+    #analyze-app-host #app #coachPill input:focus,
+    #analyze-app-host #app #assistantInput:focus {
+      outline: none !important;
+      border-color: var(--app-accent) !important;
+      box-shadow:
+        0 0 0 3px color-mix(in srgb, var(--app-accent) 22%, transparent),
+        inset 0 1px 0 color-mix(in srgb, var(--app-border-strong) 8%, transparent) !important;
+    }
+
+    #analyze-app-host #app ::-webkit-scrollbar { width: 10px; height: 10px; }
+    #analyze-app-host #app ::-webkit-scrollbar-track { background: transparent; }
+    #analyze-app-host #app ::-webkit-scrollbar-thumb {
+      background: color-mix(in srgb, var(--app-border-strong) 12%, transparent);
+      border-radius: 10px;
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
+    #analyze-app-host #app ::-webkit-scrollbar-thumb:hover {
+      background: color-mix(in srgb, var(--app-accent) 40%, var(--app-border-strong) 28%);
+      background-clip: padding-box;
+    }
+
+    #analyze-app-host #app .settings-trigger:hover,
+    #analyze-app-host #app .settings-trigger[data-visual-hover="true"] {
+      transform: translateY(-1px);
+      box-shadow:
+        0 10px 26px -12px color-mix(in srgb, var(--app-accent) 50%, transparent) !important;
+    }
+
+    #analyze-app-host #app .analysis-score,
+    #analyze-app-host #app .board-history-eval,
+    #analyze-app-host #app .move-eval {
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.01em;
+    }
+
+    #analyze-app-host #app .chip,
+    #analyze-app-host #app .badge {
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      border-radius: 3px !important;
+    }
+
   `;
   if (!existing) {
     document.head.appendChild(style);

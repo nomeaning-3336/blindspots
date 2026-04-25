@@ -240,6 +240,87 @@ body {
   overflow: hidden;
   color: var(--app-text);
   font-family: var(--font-mono), monospace;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ambient page backdrop — mirrors landing's radial wash + graphite grid.
+   Layer sits behind shell chrome; pointer-events none. */
+.app-ambient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(1100px 520px at 82% -8%, color-mix(in srgb, var(--app-accent) 10%, transparent), transparent 62%),
+    radial-gradient(820px 460px at 6% 108%, color-mix(in srgb, var(--app-accent) 6%, transparent), transparent 66%);
+}
+
+.app-ambient::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--app-border-strong) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--app-border-strong) 4%, transparent) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(ellipse at 50% 35%, #000 0%, #000 40%, transparent 85%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 35%, #000 0%, #000 40%, transparent 85%);
+  opacity: 0.8;
+}
+
+/* Custom scrollbar for surfaces inside the app shell. */
+.app-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.app-scroll::-webkit-scrollbar-track { background: transparent; }
+.app-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--app-border-strong) 12%, transparent);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.app-scroll::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--app-accent) 45%, var(--app-border-strong) 25%);
+  background-clip: padding-box;
+}
+
+/* Pulse dot used for "live" indicators on the shell. */
+.app-pulse-dot {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--app-accent);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-accent) 60%, transparent);
+  animation: app-pulse 1.9s ease-in-out infinite;
+}
+@keyframes app-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 12px color-mix(in srgb, var(--app-accent) 55%, transparent); }
+  50%      { opacity: 0.55; box-shadow: 0 0 0 6px color-mix(in srgb, var(--app-accent) 0%, transparent); }
+}
+
+/* Eyebrow label — mono, wide-tracked, accent tint. */
+.app-eyebrow {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--app-accent);
+}
+
+/* Soft glow card surface — for hero surfaces and stat tiles. */
+.app-glow-card {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-panel-strong) 92%, transparent), color-mix(in srgb, var(--app-panel-deep) 96%, transparent));
+  border: 1px solid var(--app-border);
+  box-shadow:
+    0 24px 60px -28px color-mix(in srgb, var(--app-bg) 95%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--app-border-strong) 6%, transparent);
 }
 
 a {
@@ -423,5 +504,364 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
     width: auto;
     object-fit: contain;
     filter: drop-shadow(0 5px 10px color-mix(in srgb, var(--app-bg) 55%, transparent));
+  }
+}
+
+.route-transition-shell {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  width: 100%;
+  flex: 1 1 auto;
+  overflow: hidden;
+  --route-scan: var(--app-accent);
+  --route-scan-soft: color-mix(in srgb, var(--route-scan) 24%, transparent);
+  --route-wipe-duration: 620ms;
+}
+
+.route-transition-content {
+  display: flex;
+  min-height: 0;
+  width: 100%;
+  flex: 1 1 auto;
+  will-change: opacity, transform, filter;
+}
+
+.route-transition-shell[data-route-phase="leaving"] .route-transition-content {
+  opacity: 0.62;
+  filter: saturate(0.82) brightness(0.76);
+  transform: translateY(2px) scale(0.998);
+  transition:
+    opacity 140ms ease,
+    filter 140ms ease,
+    transform 140ms ease;
+}
+
+.route-transition-shell[data-route-phase="entering"] .route-transition-content {
+  animation: routeContentReveal 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.route-transition-shell[data-route-phase="entering"] .route-transition-content :is(section, aside, article, form, .app-brutal-card, .app-brutal-card-auth) {
+  animation: routePanelReveal 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.route-transition-shell[data-route-phase="entering"] .route-transition-content :is(section, aside, article, form, .app-brutal-card, .app-brutal-card-auth):nth-child(2) {
+  animation-delay: 48ms;
+}
+
+.route-transition-shell[data-route-phase="entering"] .route-transition-content :is(section, aside, article, form, .app-brutal-card, .app-brutal-card-auth):nth-child(3) {
+  animation-delay: 86ms;
+}
+
+.route-transition-shell[data-route-flavor="analysis"][data-route-phase="entering"] .route-transition-content :is(canvas, iframe, .analysis-board, [class*="board"]) {
+  animation: routeBoardReconstruct 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.route-transition-shell[data-route-flavor="train"][data-route-phase="entering"] .route-transition-content aside {
+  animation-name: routePanelSnapIn;
+}
+
+.route-transition-shell[data-route-flavor="train"][data-route-phase="entering"] .route-transition-content :is(button, [class*="pill"], [class*="Metric"]) {
+  animation: routeSubtlePulse 520ms ease both;
+}
+
+.route-transition-shell[data-route-flavor="blindspots"][data-route-phase="entering"] .route-transition-content :is(article, section, .app-brutal-card) {
+  animation-name: routeSharpenReveal;
+}
+
+.route-transition-shell[data-route-flavor="history"][data-route-phase="entering"] .route-transition-content :is(svg, canvas, [class*="chart"], [class*="timeline"]) {
+  animation: routeChartSweep 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.route-transition-shell[data-route-flavor="account"][data-route-phase="entering"] .route-transition-content :is(section, form, .app-brutal-card, .app-brutal-card-auth) {
+  animation: routeControlFade 380ms ease both;
+}
+
+.blindspot-wipe {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 72% 28%, color-mix(in srgb, var(--route-scan) 14%, transparent), transparent 24%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.78) 42%, rgba(0, 0, 0, 0.26));
+}
+
+.blindspot-wipe[data-active="true"] {
+  visibility: visible;
+  animation: blindspotWipeVeil var(--route-wipe-duration) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.blindspot-wipe__grid {
+  position: absolute;
+  inset: -8%;
+  opacity: 0.54;
+  background:
+    linear-gradient(90deg, transparent 0 11.8%, color-mix(in srgb, var(--route-scan) 20%, transparent) 12%, transparent 12.4%),
+    linear-gradient(0deg, transparent 0 11.8%, color-mix(in srgb, var(--route-scan) 14%, transparent) 12%, transparent 12.4%),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.025) 25%, transparent 25% 50%, rgba(255, 255, 255, 0.025) 50% 75%, transparent 75%);
+  background-size: 80px 80px, 80px 80px, 160px 160px;
+  mask-image: linear-gradient(90deg, transparent, #000 16%, #000 82%, transparent);
+  transform: translateX(-10%);
+}
+
+.blindspot-wipe[data-active="true"] .blindspot-wipe__grid {
+  animation: blindspotGridSweep var(--route-wipe-duration) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.blindspot-wipe__scan {
+  position: absolute;
+  top: -10%;
+  bottom: -10%;
+  left: 0;
+  width: 2px;
+  background:
+    linear-gradient(
+      180deg,
+      transparent,
+      var(--route-scan) 18%,
+      color-mix(in srgb, var(--route-scan) 42%, var(--app-text) 58%) 50%,
+      var(--route-scan) 82%,
+      transparent
+    );
+  box-shadow:
+    0 0 18px color-mix(in srgb, var(--route-scan) 82%, transparent),
+    22px 0 42px color-mix(in srgb, var(--route-scan) 24%, transparent),
+    -18px 0 48px rgba(0, 0, 0, 0.72);
+  opacity: 0;
+}
+
+.blindspot-wipe[data-active="true"] .blindspot-wipe__scan {
+  animation: blindspotScanLine var(--route-wipe-duration) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.blindspot-wipe__square {
+  position: absolute;
+  width: clamp(44px, 6vw, 84px);
+  aspect-ratio: 1;
+  border: 1px solid color-mix(in srgb, var(--route-scan) 48%, transparent);
+  background: color-mix(in srgb, var(--route-scan) 16%, transparent);
+  box-shadow: inset 0 0 18px color-mix(in srgb, var(--route-scan) 18%, transparent);
+  opacity: 0;
+}
+
+.blindspot-wipe__square--a {
+  top: 23%;
+  left: 20%;
+}
+
+.blindspot-wipe__square--b {
+  top: 58%;
+  left: 53%;
+}
+
+.blindspot-wipe__square--c {
+  top: 36%;
+  left: 78%;
+}
+
+.blindspot-wipe[data-active="true"] .blindspot-wipe__square--a {
+  animation: blindspotSquareHit 360ms ease-out 90ms both;
+}
+
+.blindspot-wipe[data-active="true"] .blindspot-wipe__square--b {
+  animation: blindspotSquareHit 340ms ease-out 190ms both;
+}
+
+.blindspot-wipe[data-active="true"] .blindspot-wipe__square--c {
+  animation: blindspotSquareHit 300ms ease-out 280ms both;
+}
+
+@keyframes blindspotWipeVeil {
+  0% {
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  58% {
+    opacity: 0.92;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes blindspotGridSweep {
+  0% {
+    transform: translateX(-14%) skewX(-7deg);
+    clip-path: inset(0 100% 0 0);
+  }
+  48% {
+    transform: translateX(0) skewX(-7deg);
+    clip-path: inset(0 0 0 0);
+  }
+  100% {
+    transform: translateX(8%) skewX(-7deg);
+    clip-path: inset(0 0 0 100%);
+  }
+}
+
+@keyframes blindspotScanLine {
+  0% {
+    opacity: 0;
+    transform: translateX(-5vw) skewX(-7deg);
+  }
+  12% {
+    opacity: 1;
+  }
+  72% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(105vw) skewX(-7deg);
+  }
+}
+
+@keyframes blindspotSquareHit {
+  0% {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  34% {
+    opacity: 0.95;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.18);
+  }
+}
+
+@keyframes routeContentReveal {
+  0% {
+    opacity: 0.72;
+    filter: blur(3px) brightness(0.82);
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0) brightness(1);
+    transform: translateY(0);
+  }
+}
+
+@keyframes routePanelReveal {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.992);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes routeBoardReconstruct {
+  0% {
+    opacity: 0.65;
+    filter: contrast(1.18) saturate(0.72);
+    transform: scale(0.988);
+  }
+  52% {
+    filter: contrast(1.28) saturate(1.08);
+  }
+  100% {
+    opacity: 1;
+    filter: contrast(1) saturate(1);
+    transform: scale(1);
+  }
+}
+
+@keyframes routePanelSnapIn {
+  0% {
+    opacity: 0;
+    transform: translateX(16px) scale(0.992);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes routeSubtlePulse {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  46% {
+    filter: brightness(1.18);
+  }
+}
+
+@keyframes routeSharpenReveal {
+  0% {
+    opacity: 0;
+    filter: blur(5px) saturate(0.72);
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0) saturate(1);
+    transform: translateY(0);
+  }
+}
+
+@keyframes routeChartSweep {
+  0% {
+    opacity: 0.35;
+    clip-path: inset(0 100% 0 0);
+  }
+  100% {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes routeControlFade {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-transition-shell *,
+  .route-transition-shell *::before,
+  .route-transition-shell *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+
+  .blindspot-wipe[data-active="true"] {
+    animation: blindspotReducedFade 140ms ease both;
+  }
+
+  .blindspot-wipe__grid,
+  .blindspot-wipe__scan,
+  .blindspot-wipe__square {
+    display: none;
+  }
+}
+
+@keyframes blindspotReducedFade {
+  0% {
+    opacity: 0;
+  }
+  45% {
+    opacity: 0.28;
+  }
+  100% {
+    opacity: 0;
   }
 }

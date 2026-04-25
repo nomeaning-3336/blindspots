@@ -64,7 +64,7 @@ export default async function SignUpPage({
                 Create Account
               </h1>
               <p className="mx-auto max-w-xl text-sm leading-8 text-[var(--app-muted)]">
-                Join ChessMemo to save your preferences, memo threads, and analysis across sessions.
+                Join Blindspots to save your preferences and analysis across sessions.
               </p>
             </div>
 
@@ -144,7 +144,7 @@ export default async function SignUpPage({
 
                 <button
                   type="submit"
-                  className="mt-2 h-12 border-2 border-[var(--app-accent)] bg-[var(--app-accent)] text-[13px] font-bold uppercase tracking-[0.18em] !text-black transition hover:border-[var(--app-text)] hover:bg-[var(--app-text)] hover:text-[var(--app-bg)]"
+                  className="mt-2 h-12 border-2 border-[var(--app-accent)] bg-[var(--app-accent)] text-[13px] font-bold uppercase tracking-[0.18em] text-[var(--app-accent-contrast)] transition hover:border-[var(--app-text)] hover:bg-[var(--app-text)] hover:text-[var(--app-bg)]"
                 >
                   Create Account
                 </button>
