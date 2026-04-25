@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Chess, type Move } from "chess.js";
+import { Chess, type Move, type Square } from "chess.js";
 import { AnalysisBoard, type BoardMove, type EngineArrow } from "@/components/chess/analysis-board";
 import {
   analyzeBoardThemeForAppTheme,
@@ -258,6 +258,8 @@ export default function TrainPage() {
   const [exploratoryLastMove, setExploratoryLastMove] = useState<{ from: string; to: string } | null>(null);
   const [exploratoryHistory, setExploratoryHistory] = useState<ExploratoryPosition[]>([]);
   const [exploratoryHistoryIndex, setExploratoryHistoryIndex] = useState(-1);
+  const [exploreSelectedSquare, setExploreSelectedSquare] = useState<string | null>(null);
+  const [selectedMoveIndex, setSelectedMoveIndex] = useState<number | null>(null);
   const [boundaryFlash, setBoundaryFlash] = useState<"start" | "end" | null>(null);
   const [engineLineCache, setEngineLineCache] = useState<Record<string, EngineLineResult[]>>({});
   const [engineLineLoadingFen, setEngineLineLoadingFen] = useState<string | null>(null);
@@ -381,6 +383,7 @@ export default function TrainPage() {
     setResultMode("results");
     setExploreIndex(0);
     resetExploratoryLine();
+    setSelectedMoveIndex(null);
     setBoundaryFlash(null);
     setEngineLineCache({});
     setEngineLineLoadingFen(null);
@@ -820,6 +823,12 @@ export default function TrainPage() {
   const boardLastMove = isExploringResults
     ? (activeExploratoryPosition?.lastMove ?? exploratoryLastMove ?? lastMoveForPosition(explorePosition))
     : lastMove;
+  const selectedMove =
+    selectedMoveIndex != null && selectedMoveIndex > 0 && selectedMoveIndex <= moves.length
+      ? moves[selectedMoveIndex - 1]
+      : null;
+  const selectedMoveSquares = selectedMove ? moveFromUci(selectedMove.uci) : null;
+  const selectedMoveUci = selectedMove?.uci ?? null;
   const currentEngineLines = isExploringResults
     ? engineLineCache[boardFen] ?? []
     : [];
@@ -982,7 +991,7 @@ export default function TrainPage() {
                       mode="training"
                       orientation={boardOrientation}
                       coordinates
-                      showLegalTargets
+                      showLegalTargets={!exploreSelectedSquare}
                       lastMove={boardLastMove}
                       boardTheme={visualPreferences.boardTheme}
                       pieceTheme={visualPreferences.pieceTheme}
@@ -998,11 +1007,40 @@ export default function TrainPage() {
                                 color: "color-mix(in srgb, var(--app-accent) 36%, transparent)",
                               },
                             ]
-                          : undefined
+                          : selectedMoveSquares
+                            ? [
+                                {
+                                  square: selectedMoveSquares.from,
+                                  color: "color-mix(in srgb, var(--app-accent) 24%, transparent)",
+                                },
+                                {
+                                  square: selectedMoveSquares.to,
+                                  color: "color-mix(in srgb, var(--app-accent) 36%, transparent)",
+                                },
+                              ]
+                            : undefined
                       }
-                      engineArrows={buildEngineArrows(currentEngineLines, hoveredEngineLineIndex)}
-                      onMove={handleExploreMove}
+                      engineArrows={buildEngineArrows(currentEngineLines, hoveredEngineLineIndex, exploreSelectedSquare)}
+                      onMove={(move) => {
+                        setExploreSelectedSquare(null);
+                        setSelectedMoveIndex(null);
+                        handleExploreMove(move);
+                      }}
+                      onSquareClick={(square) => {
+                        try {
+                          const chess = new Chess(boardFen);
+                          const piece = chess.get(square as Square);
+                          if (piece && piece.color === chess.turn() && square !== exploreSelectedSquare) {
+                            setExploreSelectedSquare(square);
+                          } else {
+                            setExploreSelectedSquare(null);
+                          }
+                        } catch {
+                          setExploreSelectedSquare(null);
+                        }
+                      }}
                       onCircleHover={setHoveredAnnotationSquare}
+                      onEngineArrowClick={handleExploreMove}
                     />
                   </BoardWithEvalBar>
                 ) : (
@@ -1065,6 +1103,12 @@ export default function TrainPage() {
               onMoveHover={setHoveredMoveSquares}
               onNavigate={navigateExploreTo}
               onNextPosition={() => switchState("active")}
+              selectedMoveIndex={selectedMoveIndex}
+              selectedMoveUci={selectedMoveUci}
+              onSelectMove={(positionIndex) => {
+                setSelectedMoveIndex(positionIndex);
+                navigateExploreTo(positionIndex);
+              }}
             />
           ) : (
             <>
@@ -1091,7 +1135,7 @@ export default function TrainPage() {
                 />
               ) : (
                 moves.length === 0 ? (
-                  <PromptCard prompt={mockRep.prompt} />
+                  <PromptCard side={userMoveSide} />
                 ) : null
               )}
 
@@ -1342,18 +1386,11 @@ function PlayerTurnStrip({ label, isActive }: { label: string; isActive: boolean
   );
 }
 
-function PromptCard({ prompt }: { prompt: string }) {
+function PromptCard({ side }: { side: "white" | "black" }) {
+  const label = side === "white" ? "White to play" : "Black to play";
   return (
     <div className="mt-8 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-5 py-5">
-      <div className="flex items-center gap-5">
-        <KingIcon />
-        <div className="min-w-0">
-          <p className="text-lg font-bold text-[var(--app-text)]">Your move</p>
-          <p className="mt-1 text-sm text-[var(--app-muted)]">
-            {prompt}
-          </p>
-        </div>
-      </div>
+      <p className="text-lg font-bold text-[var(--app-text)]">{label}</p>
     </div>
   );
 }
@@ -1767,12 +1804,14 @@ function EngineLinesSection({
   hoveredDestinationSquare,
   hoveredIndex,
   onHoverLine,
+  selectedMoveUci,
 }: {
   lines: EngineLineResult[];
   isLoading: boolean;
   hoveredDestinationSquare?: string | null;
   hoveredIndex?: number | null;
   onHoverLine?: (index: number | null) => void;
+  selectedMoveUci?: string | null;
 }) {
   return (
     <section className="grid gap-2" aria-live="polite">
@@ -1798,6 +1837,7 @@ function EngineLinesSection({
           const isHovered =
             hoveredIndex === index ||
             (hoveredDestinationSquare ? line.bestMove.slice(2, 4) === hoveredDestinationSquare : false);
+          const isSelectedUserMove = selectedMoveUci ? line.bestMove === selectedMoveUci : false;
           return (
             <div
               key={`${line.rank}-${line.bestMove}-${index}`}
@@ -1810,14 +1850,20 @@ function EngineLinesSection({
               onPointerEnter={() => onHoverLine?.(index)}
               onPointerLeave={() => onHoverLine?.(null)}
             >
-              <div className="grid grid-cols-[26px_minmax(0,1fr)_auto_72px] items-center gap-2">
+              <div className="grid grid-cols-[26px_minmax(0,1fr)_auto_auto_72px] items-center gap-2">
                 <span className="text-right text-[10px] font-bold text-[var(--app-muted-soft)]">
                   #{index + 1}
                 </span>
                 <strong className="min-w-0 truncate text-sm font-bold" style={{ color: lineColor }}>
                   {lead}
                 </strong>
-                {cls ? <ClassificationBadge classification={cls} /> : null}
+                {isSelectedUserMove ? (
+                  <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--app-accent)]">
+                    Your move
+                  </span>
+                ) : cls ? (
+                  <ClassificationBadge classification={cls} />
+                ) : null}
                 <span className="justify-self-end text-[10px] font-bold tabular-nums text-[var(--app-muted-soft)]">
                   {formatEval(line.cp)} d{line.depth || 18}
                 </span>
@@ -1890,6 +1936,9 @@ function ResultsPanel({
   onMoveHover,
   onNavigate,
   onNextPosition,
+  selectedMoveIndex,
+  selectedMoveUci,
+  onSelectMove,
 }: {
   eloResult: EloResult | null;
   isSaving: boolean;
@@ -1907,6 +1956,9 @@ function ResultsPanel({
   onMoveHover: (move: { from: string; to: string } | null) => void;
   onNavigate: (index: number) => void;
   onNextPosition: () => void;
+  selectedMoveIndex: number | null;
+  selectedMoveUci: string | null;
+  onSelectMove?: (positionIndex: number) => void;
 }) {
   const userMoves = moves
     .map((move, index) => ({ ...move, absoluteIndex: index }))
@@ -1923,6 +1975,7 @@ function ResultsPanel({
           hoveredDestinationSquare={hoveredAnnotationSquare}
           hoveredIndex={hoveredEngineLineIndex}
           onHoverLine={onEngineLineHover}
+          selectedMoveUci={selectedMoveUci}
         />
         <EvalGraph
           points={graphPoints}
@@ -1933,8 +1986,14 @@ function ResultsPanel({
         <AnalysisMoveTable
           moves={userMoves}
           currentIndex={currentIndex}
+          selectedMoveIndex={selectedMoveIndex}
+          engineLines={engineLines}
           compact
-          onSelectPosition={(index) => onNavigate(index)}
+          onSelectPosition={
+            onSelectMove
+              ? (index) => onSelectMove(index)
+              : undefined
+          }
           onHoverMove={onMoveHover}
         />
         <div className="mt-auto pt-1">
@@ -2038,16 +2097,24 @@ function EvalGraph({
                 <circle
                   cx={point.x}
                   cy={point.y}
+                  r={12}
+                  fill="transparent"
+                  className={onSelectPosition ? "cursor-pointer" : ""}
+                />
+                <circle
+                  cx={point.x}
+                  cy={point.y}
                   r={point.positionIndex === currentIndex ? 6 : 4}
                   fill={index === 0 ? "var(--app-muted)" : classificationColor(point.classification)}
                   stroke={point.positionIndex === currentIndex ? "var(--app-text)" : "var(--app-panel-solid)"}
                   strokeWidth={point.positionIndex === currentIndex ? 2.5 : 2}
+                  className="pointer-events-none"
                 />
                 <text
                   x={point.x}
                   y={point.y - 9}
                   textAnchor="middle"
-                  className="fill-[var(--app-muted)] text-[9px] font-bold"
+                  className="pointer-events-none fill-[var(--app-muted)] text-[9px] font-bold"
                 >
                   {formatEval(point.value)}
                 </text>
@@ -2067,16 +2134,21 @@ function EvalGraph({
 function AnalysisMoveTable({
   moves,
   currentIndex,
+  selectedMoveIndex,
+  engineLines,
   compact = false,
   onSelectPosition,
   onHoverMove,
 }: {
   moves: Array<TrainingMove & { absoluteIndex?: number }>;
   currentIndex?: number;
+  selectedMoveIndex?: number | null;
+  engineLines?: EngineLineResult[];
   compact?: boolean;
   onSelectPosition?: (index: number) => void;
   onHoverMove?: (move: { from: string; to: string } | null) => void;
 }) {
+  const bestEngineUci = engineLines?.[0]?.bestMove ?? null;
   return (
     <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)]">
       <div className="grid min-h-8 grid-cols-[minmax(0,1.1fr)_68px_68px_76px] items-center border-b border-[var(--app-border-soft)] px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
@@ -2088,18 +2160,22 @@ function AnalysisMoveTable({
       {moves.length === 0 ? (
         <div className="px-3 py-4 text-sm text-[var(--app-muted)]">Analysis unavailable</div>
       ) : null}
-      {moves.map((move, index) => (
+      {moves.map((move, index) => {
+        const positionIndex = (move.absoluteIndex ?? index) + 1;
+        const isSelected = selectedMoveIndex != null && selectedMoveIndex === positionIndex;
+        const isEngineMove = bestEngineUci ? move.uci === bestEngineUci : false;
+        return (
         <button
           type="button"
           key={`${move.uci}-${index}`}
           className={[
             "grid w-full grid-cols-[minmax(0,1.1fr)_68px_68px_76px] items-center border-b border-[var(--app-border-soft)] px-3 text-left last:border-b-0",
             compact ? "min-h-9 text-xs" : "min-h-10 text-sm",
-            onSelectPosition ? "transition hover:bg-[var(--app-highlight-soft)]" : "cursor-default",
-            currentIndex === (move.absoluteIndex ?? index) + 1 ? "bg-[var(--app-highlight-soft)]" : "",
+            onSelectPosition ? "cursor-pointer transition hover:bg-[var(--app-highlight-soft)]" : "cursor-default",
+            currentIndex === positionIndex || isSelected ? "bg-[var(--app-highlight-soft)]" : "",
           ].join(" ")}
           disabled={!onSelectPosition}
-          onClick={() => onSelectPosition?.((move.absoluteIndex ?? index) + 1)}
+          onClick={() => onSelectPosition?.(positionIndex)}
           onPointerEnter={() => onHoverMove?.(moveFromUci(move.uci))}
           onPointerLeave={() => onHoverMove?.(null)}
         >
@@ -2108,6 +2184,11 @@ function AnalysisMoveTable({
             <span className="truncate" style={{ color: classificationColor(move.classification) }}>
               {move.san}
             </span>
+            {isEngineMove ? (
+              <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--app-class-best)]">
+                Engine move
+              </span>
+            ) : null}
           </span>
           <span className="text-right text-[var(--app-muted)]">
             {typeof move.evalBefore === "number" ? formatEval(move.evalBefore) : "--"}
@@ -2119,7 +2200,8 @@ function AnalysisMoveTable({
             {typeof move.cpLoss === "number" ? `${move.cpLoss}cp` : "--"}
           </span>
         </button>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -2263,13 +2345,22 @@ function formatEval(cp: number) {
   return `${pawns > 0 ? "+" : ""}${pawns.toFixed(1)}`;
 }
 
-function buildEngineArrows(lines: EngineLineResult[], emphasizedIndex: number | null = null): EngineArrow[] {
-  return lines.slice(0, 3).map((line, index) => ({
+function buildEngineArrows(
+  lines: EngineLineResult[],
+  emphasizedIndex: number | null = null,
+  selectedSquare?: string | null,
+): EngineArrow[] {
+  const relevant = selectedSquare
+    ? lines.filter((line) => line.bestMove.slice(0, 2) === selectedSquare)
+    : lines.slice(0, 3);
+
+  return relevant.map((line, index) => ({
     from: line.bestMove.slice(0, 2),
     to: line.bestMove.slice(2, 4),
     label: formatEval(line.cp),
     rank: index + 1,
-    emphasis: emphasizedIndex === index,
+    emphasis: emphasizedIndex === lines.indexOf(line),
+    color: selectedSquare ? classificationColor(engineLineClassification(lines.indexOf(line), lines)) : undefined,
   }));
 }
 
