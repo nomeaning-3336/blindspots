@@ -28,6 +28,7 @@ export type EngineArrow = {
   label?: string;
   rank?: number;
   emphasis?: boolean;
+  color?: string;
 };
 
 export type AnalysisBoardProps = {
@@ -48,6 +49,7 @@ export type AnalysisBoardProps = {
   onMove?: (move: BoardMove) => void;
   onSquareClick?: (square: string) => void;
   onCircleHover?: (square: string | null) => void;
+  onEngineArrowClick?: (move: BoardMove) => void;
   className?: string;
 };
 
@@ -92,6 +94,7 @@ export function AnalysisBoard({
   onMove,
   onSquareClick,
   onCircleHover,
+  onEngineArrowClick,
   className = "",
 }: AnalysisBoardProps) {
   const chess = useMemo(() => safeChess(fen), [fen]);
@@ -478,6 +481,7 @@ export function AnalysisBoard({
         hoveredSquare={hoveredSquare}
         orientation={orientation}
         previewArrow={previewArrow}
+        onEngineArrowClick={onEngineArrowClick}
       />
       {dragFrom && dragPosition ? (
         <DraggedPiece
@@ -543,6 +547,7 @@ function BoardAnnotations({
   hoveredSquare,
   orientation,
   previewArrow,
+  onEngineArrowClick,
 }: {
   arrows: BoardAnnotationArrow[];
   circles: string[];
@@ -550,7 +555,9 @@ function BoardAnnotations({
   hoveredSquare: string | null;
   orientation: BoardOrientation;
   previewArrow: BoardAnnotationArrow | null;
+  onEngineArrowClick?: (move: BoardMove) => void;
 }) {
+  const [localHoveredEngineIndex, setLocalHoveredEngineIndex] = useState<number | null>(null);
   const hasEngineArrows = (engineArrows?.length ?? 0) > 0;
   if (arrows.length === 0 && circles.length === 0 && !hasEngineArrows && !previewArrow) return null;
 
@@ -565,8 +572,8 @@ function BoardAnnotations({
         const to = squareCenter(arrow.to, orientation);
         if (!from || !to) return null;
         const rank = arrow.rank ?? index + 1;
-        const color = engineArrowColor(rank);
-        const isHoveredTarget = hoveredSquare === arrow.to;
+        const color = arrow.color ?? engineArrowColor(rank);
+        const isHoveredTarget = hoveredSquare === arrow.to || index === localHoveredEngineIndex;
         const opacity = arrow.emphasis || isHoveredTarget ? 1 : engineArrowOpacity(rank);
         const nodeRadius = arrow.emphasis || isHoveredTarget ? 0.18 : 0.14;
         const dx = to.x - from.x;
@@ -590,7 +597,16 @@ function BoardAnnotations({
             />
             {label ? (
               <>
-                <circle cx={to.x} cy={to.y} r={nodeRadius} fill={color} />
+                <circle
+                  cx={to.x}
+                  cy={to.y}
+                  r={nodeRadius}
+                  fill={color}
+                  className="pointer-events-auto cursor-pointer"
+                  onPointerEnter={() => setLocalHoveredEngineIndex(index)}
+                  onPointerLeave={() => setLocalHoveredEngineIndex(null)}
+                  onClick={() => onEngineArrowClick?.({ from: arrow.from, to: arrow.to })}
+                />
                 <text
                   x={to.x}
                   y={to.y}
@@ -598,6 +614,7 @@ function BoardAnnotations({
                   dominantBaseline="middle"
                   fontSize={label.startsWith("−") ? 0.125 : 0.145}
                   fontWeight={800}
+                  className="pointer-events-none"
                   letterSpacing={label.startsWith("−") ? 0 : "0.02em"}
                   fill="#050505"
                   fontFamily="JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
