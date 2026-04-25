@@ -318,7 +318,7 @@ function getPerformanceCachePath(profile: LinkedChessProfile) {
   );
 }
 
-async function fetchGamesForProfile(
+export async function fetchGamesForProfile(
   profile: LinkedChessProfile,
   sinceMs: number,
 ): Promise<NormalizedGame[]> {

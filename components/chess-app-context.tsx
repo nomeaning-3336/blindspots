@@ -74,6 +74,7 @@ export interface AnalyzeApi {
   selectSquare: (square: string) => void;
   startAnalysis: (mode: string) => void;
   haltEngine: (explicit?: boolean) => void;
+  pauseForNavigation?: () => void;
   nodeRegistry: {
     get: (id: string) => AnalyzeNode | null;
   };

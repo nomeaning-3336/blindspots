@@ -17,7 +17,7 @@ declare global {
 }
 
 const ANALYZE_BASE_PATH = "/analyze";
-const ANALYZE_ASSET_VERSION = "2026-04-13-bugfix-v88";
+const ANALYZE_ASSET_VERSION = "2026-04-25-nav-pause-v1";
 const ANALYZE_STYLE_ID = "analyze-style";
 const ANALYZE_OVERRIDE_ID = "analyze-react-override";
 const ANALYZE_CHESS_SCRIPT_ID = "analyze-chess-js";
@@ -879,6 +879,13 @@ export function AnalyzeBridge({
       resetAnalyzeBootAssets();
     }
 
+    const appContainer = host?.querySelector("#app");
+    if (bootState.loaded && appContainer && !appContainer.hasChildNodes()) {
+      bootState.promise = null;
+      bootState.loaded = false;
+      document.getElementById(ANALYZE_APP_SCRIPT_ID)?.remove();
+    }
+
     if (!bootState.promise) {
       bootState.promise = bootAnalyzeRuntime()
         .then(() => {
@@ -896,7 +903,12 @@ export function AnalyzeBridge({
         if (cancelled) return;
         syncAppTheme();
         wireVisualHoverState();
-        setStatus("ready");
+        if (host?.querySelector("#app")?.hasChildNodes()) {
+          setStatus("ready");
+        } else {
+          setStatus("error");
+          setError("Analyze runtime loaded without mounting the board.");
+        }
       })
       .catch((bootError) => {
         if (cancelled) return;
@@ -918,6 +930,7 @@ export function AnalyzeBridge({
 
     return () => {
       cancelled = true;
+      window.__chessSomething?.pauseForNavigation?.();
       window.cancelAnimationFrame(syncLater);
       window.removeEventListener("resize", syncViewportRoom);
       themeObserver?.disconnect();

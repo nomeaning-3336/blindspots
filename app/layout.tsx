@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import type { ReactNode } from "react";
+import { PageTransition } from "@/components/navigation/page-transition";
 import { getUserAppTheme } from "@/lib/app-theme-store";
 import "./globals.css";
 
@@ -33,7 +34,7 @@ export default async function RootLayout({
       data-theme={theme ?? undefined}
     >
       <body>
-        {children}
+        <PageTransition>{children}</PageTransition>
       </body>
     </html>
   );

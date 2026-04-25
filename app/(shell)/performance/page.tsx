@@ -79,10 +79,7 @@ export default async function PerformancePage({
       <section className={PERFORMANCE_PAGE_SCROLL_CLASS}>
         <div className="mx-auto grid w-full max-w-[1180px] gap-6">
           <div className="app-brutal-card-strong p-8">
-            <p className="text-xs uppercase tracking-[0.28em] text-[var(--app-muted)]">
-              Performance
-            </p>
-            <h1 className="mt-3 text-3xl font-bold uppercase tracking-[0.16em] text-white">
+            <h1 className="text-3xl font-bold uppercase tracking-[0.16em] text-white">
               Link A Chess Profile First
             </h1>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--app-muted)]">
@@ -124,10 +121,7 @@ export default async function PerformancePage({
       <section className={PERFORMANCE_PAGE_SCROLL_CLASS}>
         <div className="mx-auto grid w-full max-w-[1180px] gap-6">
           <div className="app-brutal-card-strong p-8">
-            <p className="text-xs uppercase tracking-[0.28em] text-[var(--app-muted)]">
-              Performance
-            </p>
-            <h1 className="mt-3 text-3xl font-bold uppercase tracking-[0.16em] text-white">
+            <h1 className="text-3xl font-bold uppercase tracking-[0.16em] text-white">
               Data Fetch Failed
             </h1>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--app-muted)]">

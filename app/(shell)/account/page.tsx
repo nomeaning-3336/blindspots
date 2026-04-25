@@ -128,10 +128,7 @@ export default async function AccountPage({
         <article className="app-brutal-card p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-[var(--app-muted)]">
-                Analyze
-              </p>
-              <h2 className="mt-3 text-2xl font-bold uppercase tracking-[0.14em] text-white">
+              <h2 className="text-2xl font-bold uppercase tracking-[0.14em] text-white">
                 Engine Search Settings
               </h2>
             </div>
@@ -147,10 +144,7 @@ export default async function AccountPage({
           <article className="app-brutal-card p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="text-xs uppercase tracking-[0.24em] text-[var(--app-muted)]">
-                  Linked Profiles
-                </p>
-                <h2 className="mt-3 text-2xl font-bold uppercase tracking-[0.14em] text-white">
+                <h2 className="text-2xl font-bold uppercase tracking-[0.14em] text-white">
                   Linked Profiles
                 </h2>
               </div>
@@ -163,10 +157,7 @@ export default async function AccountPage({
         <article className="app-brutal-card p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-[var(--app-muted)]">
-                Appearance
-              </p>
-              <h2 className="mt-3 text-2xl font-bold uppercase tracking-[0.14em] text-white">
+              <h2 className="text-2xl font-bold uppercase tracking-[0.14em] text-white">
                 Themes & Visuals
               </h2>
               <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--app-muted)]">
@@ -177,9 +168,6 @@ export default async function AccountPage({
 
           <div className="mt-6 grid gap-5">
             <section className="app-brutal-inset p-5">
-              <p className="text-xs uppercase tracking-[0.24em] text-[var(--app-muted)]">
-                App Theme
-              </p>
               <AccountThemeForm currentTheme={currentTheme} />
             </section>
 

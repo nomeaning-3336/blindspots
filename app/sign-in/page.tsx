@@ -71,9 +71,6 @@ export default async function SignInPage({
         <div className="mx-auto flex w-full max-w-5xl items-center justify-center">
           <section className="grid w-full max-w-[720px] gap-8">
             <div className="space-y-5 text-center">
-              <p className="text-[10px] uppercase tracking-[0.34em] text-[var(--app-accent)]">
-                Sign In
-              </p>
               <h1 className="text-5xl font-bold tracking-[-0.04em] text-white md:text-6xl">
                 Welcome Back
               </h1>
