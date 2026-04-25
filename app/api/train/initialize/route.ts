@@ -6,9 +6,14 @@ import {
   buildTrainInitializationSummary,
   type TrainInitializationSummary,
 } from "@/lib/train-initialization";
+import { getSeededStartingElo } from "@/lib/training/elo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const DEFAULT_SEQUENCE_LENGTH = 4;
+const MIN_SEQUENCE_LENGTH = 1;
+const MAX_SEQUENCE_LENGTH = 9;
 
 type InitializationStatus =
   | "pending"
@@ -21,8 +26,6 @@ type InitializationStatus =
 interface InitializePayload {
   action?: "skip" | "analyze" | "save_settings";
   sequenceLength?: number;
-  opponentMode?: string;
-  engineStyle?: string;
   timePressureMode?: string;
   openingFilter?: unknown;
 }
@@ -62,6 +65,10 @@ export async function POST(request: Request) {
       profile_initialized: false,
       weakness_vector: {},
       mastery_vector: {},
+      exploit_queue: [],
+      explore_queue: [],
+      revisit_queue: [],
+      mastered_queue: [],
     });
 
     return NextResponse.json({ ok: true, status: "skipped" });
@@ -78,6 +85,10 @@ export async function POST(request: Request) {
         profile_initialized: false,
         weakness_vector: {},
         mastery_vector: {},
+        exploit_queue: [],
+        explore_queue: [],
+        revisit_queue: [],
+        mastered_queue: [],
       });
     }
 
@@ -100,6 +111,10 @@ async function runInitialization(userId: string) {
       profile_initialized: false,
       weakness_vector: {},
       mastery_vector: {},
+      exploit_queue: [],
+      explore_queue: [],
+      revisit_queue: [],
+      mastered_queue: [],
     });
     return NextResponse.json({ ok: true, status: "no_games" });
   }
@@ -115,6 +130,10 @@ async function runInitialization(userId: string) {
         profile_initialized: false,
         weakness_vector: {},
         mastery_vector: {},
+        exploit_queue: [],
+        explore_queue: [],
+        revisit_queue: [],
+        mastered_queue: [],
       });
       await updateLinkedProfileInitialization(userId, "no_games");
       return NextResponse.json({ ok: true, status: "no_games" });
@@ -143,11 +162,16 @@ async function persistSuccessfulInitialization(
 ) {
   const completedAt = new Date().toISOString();
   await upsertBlindspotProfile(userId, {
+    blindspots_elo: getSeededStartingElo(summary.totalCpLoss, summary.totalMoves),
     initialization_status: "complete",
     initialization_completed_at: completedAt,
     profile_initialized: true,
     weakness_vector: summary.weaknessVector,
     mastery_vector: {},
+    exploit_queue: summary.exploitQueue,
+    explore_queue: [],
+    revisit_queue: [],
+    mastered_queue: [],
     total_sequences: 0,
   });
   await updateLinkedProfileInitialization(userId, "complete", completedAt);
@@ -159,6 +183,10 @@ async function setProfileAndLinkedStatus(userId: string, status: InitializationS
     profile_initialized: false,
     weakness_vector: {},
     mastery_vector: {},
+    exploit_queue: [],
+    explore_queue: [],
+    revisit_queue: [],
+    mastered_queue: [],
   });
   await updateLinkedProfileInitialization(userId, status);
 }
@@ -168,7 +196,7 @@ async function getBlindspotProfile(userId: string) {
   const { data, error } = await supabase
     .from("user_blindspot_profile")
     .select(
-      "user_id, blindspots_elo, weakness_vector, mastery_vector, total_sequences, last_session_at, profile_initialized, initialization_status, initialization_completed_at, created_at, updated_at",
+      "user_id, blindspots_elo, weakness_vector, mastery_vector, exploit_queue, explore_queue, revisit_queue, mastered_queue, total_sequences, last_session_at, profile_initialized, initialization_status, initialization_completed_at, created_at, updated_at",
     )
     .eq("user_id", userId)
     .maybeSingle();
@@ -259,7 +287,7 @@ async function saveTrainingPreferences(
   const { error } = await supabase.from("user_training_preferences").upsert({
     user_id: userId,
     sequence_length: preferences.sequenceLength,
-    opponent_mode: preferences.opponentMode,
+    opponent_mode: "standard",
     time_pressure_mode: preferences.timePressureMode,
     opening_filter: preferences.openingFilter,
   });
@@ -270,18 +298,7 @@ async function saveTrainingPreferences(
 }
 
 function normalizeTrainingPreferences(payload: InitializePayload | null) {
-  const sequenceLength =
-    payload?.sequenceLength === 3 ||
-    payload?.sequenceLength === 5 ||
-    payload?.sequenceLength === 8
-      ? payload.sequenceLength
-      : 5;
-  const opponentMode =
-    payload?.opponentMode === "comfort" ||
-    payload?.opponentMode === "stretch" ||
-    payload?.opponentMode === "pressure"
-      ? payload.opponentMode
-      : "stretch";
+  const sequenceLength = normalizeSequenceLength(payload?.sequenceLength);
   const timePressureMode =
     typeof payload?.timePressureMode === "string" && payload.timePressureMode.length > 0
       ? payload.timePressureMode
@@ -289,21 +306,17 @@ function normalizeTrainingPreferences(payload: InitializePayload | null) {
   const openingFilter = Array.isArray(payload?.openingFilter)
     ? payload.openingFilter
     : [];
-  const engineStyle =
-    payload?.engineStyle === "leela" || payload?.engineStyle === "stockfish"
-      ? payload.engineStyle
-      : "maia";
-
   return {
     sequenceLength,
-    opponentMode,
-    engineStyle,
     timePressureMode,
-    openingFilter: {
-      engineStyle,
-      filters: openingFilter,
-    },
+    openingFilter,
   };
+}
+
+function normalizeSequenceLength(value: unknown) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_SEQUENCE_LENGTH;
+  return Math.max(MIN_SEQUENCE_LENGTH, Math.min(MAX_SEQUENCE_LENGTH, Math.round(parsed)));
 }
 
 function shouldShowOnboarding(

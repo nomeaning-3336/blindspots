@@ -23,7 +23,9 @@ export function PageTransition({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [phase, setPhase] = useState<TransitionPhase>("entering");
   const [showSpinner, setShowSpinner] = useState(false);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const previousPathname = useRef(pathname);
+  const sawRouteLoading = useRef(false);
   const navigationTimer = useRef<number | null>(null);
   const leaveTimer = useRef<number | null>(null);
   const enterTimer = useRef<number | null>(null);
@@ -50,6 +52,33 @@ export function PageTransition({ children }: { children: ReactNode }) {
       if (enterTimer.current) window.clearTimeout(enterTimer.current);
       if (spinnerTimer.current) window.clearTimeout(spinnerTimer.current);
     };
+  }, []);
+
+  useEffect(() => {
+    const element = contentRef.current;
+    if (!element) return;
+    const root = element;
+
+    function restartEnterTransition() {
+      if (enterTimer.current) window.clearTimeout(enterTimer.current);
+      if (spinnerTimer.current) window.clearTimeout(spinnerTimer.current);
+      setShowSpinner(false);
+      setPhase("entering");
+      enterTimer.current = window.setTimeout(() => setPhase("idle"), ENTER_TIMEOUT_MS);
+    }
+
+    function checkLoadingState() {
+      const isRouteLoading = Boolean(root.querySelector("[data-route-loading='true']"));
+      if (sawRouteLoading.current && !isRouteLoading) {
+        restartEnterTransition();
+      }
+      sawRouteLoading.current = isRouteLoading;
+    }
+
+    checkLoadingState();
+    const observer = new MutationObserver(checkLoadingState);
+    observer.observe(root, { childList: true, subtree: true });
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -106,7 +135,7 @@ export function PageTransition({ children }: { children: ReactNode }) {
       className="route-transition-shell"
       data-route-phase={phase}
     >
-      <div className="route-transition-content" key={pathname}>
+      <div className="route-transition-content" key={pathname} ref={contentRef}>
         {children}
       </div>
       <div

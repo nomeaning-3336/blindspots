@@ -1,7 +1,23 @@
 import { NextResponse } from "next/server";
 import { normalizeAnalyzePreferences } from "@/lib/analyze-preferences";
-import { upsertAnalyzePreferencesForUser } from "@/lib/analyze-preferences-store";
+import {
+  getAnalyzePreferencesForUser,
+  upsertAnalyzePreferencesForUser,
+} from "@/lib/analyze-preferences-store";
 import { getOptionalAppUserId } from "@/lib/app-auth";
+
+export async function GET() {
+  const userId = await getOptionalAppUserId();
+
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const preferences = await getAnalyzePreferencesForUser(userId);
+  return NextResponse.json({
+    preferences: normalizeAnalyzePreferences(preferences),
+  });
+}
 
 export async function POST(request: Request) {
   const userId = await getOptionalAppUserId();

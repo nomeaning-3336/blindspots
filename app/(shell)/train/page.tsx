@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useState } from "react";
-import { Chess } from "chess.js";
-import { AnalysisBoard, type BoardMove } from "@/components/chess/analysis-board";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Chess, type Move } from "chess.js";
+import { AnalysisBoard, type BoardMove, type EngineArrow } from "@/components/chess/analysis-board";
 import {
   analyzeBoardThemeForAppTheme,
   normalizeAnalyzePreferences,
@@ -12,20 +12,92 @@ import {
 } from "@/lib/analyze-preferences";
 
 type TrainingState = "active" | "complete" | "drift";
-type OpponentMode = "Comfort" | "Stretch" | "Pressure";
-type EngineStyle = "Human-like" | "Hybrid" | "Computer";
-type OnboardingScreen = "loading" | "connect" | "analysis" | "summary" | "settings" | "done";
+type OnboardingScreen = "loading" | "connect" | "analysis" | "summary" | "done";
 type ProfileProvider = "chesscom" | "lichess";
+type MoveClassification = "best" | "excellent" | "good" | "inaccuracy" | "mistake" | "blunder";
 
 type TrainingMove = {
   san: string;
+  uci: string;
   side: "white" | "black";
+  fenBefore?: string;
+  fenAfter?: string;
+  cpLoss?: number;
+  evalBefore?: number;
+  evalAfter?: number;
+  classification?: MoveClassification;
+};
+
+type EloResult = {
+  eloBefore: number;
+  eloAfter: number;
+  eloDelta: number;
+  kFactor: number;
+  opponentElo: number;
+  expectedScore: number;
+  actualScore: number;
+  rawDelta: number;
+  clampedDelta: number;
+  skipped: boolean;
+};
+
+type OpponentMoveResponse = {
+  move?: {
+    san: string;
+    uci: string;
+  };
+  error?: string;
+};
+
+type MoveScore = {
+  userMoveIndex: number;
+  cpLoss: number;
+  evalBefore?: number;
+  evalAfter?: number;
+  classification?: MoveClassification;
+};
+
+type ResultMode = "results" | "explore";
+
+type SequencePosition = {
+  index: number;
+  fen: string;
+  label: string;
+  move?: TrainingMove;
+};
+
+type EngineLineResult = {
+  cp: number;
+  depth: number;
+  rank: number;
+  bestMove: string;
+  bestSan: string;
+  pv: string[];
+  pvSan: string[];
+};
+
+type EvalGraphPoint = {
+  value: number;
+  positionIndex: number;
+  classification?: MoveClassification;
+};
+
+type ExploratoryPosition = {
+  fen: string;
+  lastMove: { from: string; to: string } | null;
+};
+
+type NextPositionResponse = {
+  fen?: string;
+  sequenceLength?: number;
+  source?: string;
+  error?: string;
 };
 
 interface InitializationSummary {
   mistakesFound: number;
   gamesAnalyzed: number;
-  averageCpLossPerGame: number;
+  averageCpLossPerMove: number;
 }
 
 interface OnboardingStatePayload {
@@ -36,24 +108,114 @@ interface OnboardingStatePayload {
     time_pressure_mode: string;
     opening_filter?: unknown;
   } | null;
+  profile: {
+    blindspots_elo: number;
+    total_sequences: number;
+  } | null;
 }
 
 const ANALYZE_PREFERENCES_STORAGE_KEY = "chessview-analyze-preferences";
+const ANALYZE_RUNTIME_SETTINGS_STORAGE_KEY = "chess-something:settings";
+const MIN_ONBOARDING_EVALUATION_MS = 1200;
+const ONBOARDING_BUILD_PROFILE_MS = 900;
+const ANALYSIS_FAILURE_MESSAGE = "Analysis didn't complete — continuing anyway";
+const DEFAULT_SEQUENCE_LENGTH = 4;
+const MIN_SEQUENCE_LENGTH = 1;
+const MAX_SEQUENCE_LENGTH = 9;
+const TRAIN_SOUND_SOURCES = {
+  move: "/analyze/sounds/move-self.mp3",
+  capture: "/analyze/sounds/capture.mp3",
+} as const;
+const primaryActionClassName =
+  "min-h-11 rounded-[8px] border border-[var(--app-accent)] bg-[var(--app-accent)] px-4 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]";
+const trainSoundBank = new Map<keyof typeof TRAIN_SOUND_SOURCES, HTMLAudioElement>();
 
 function readVisualPreferences() {
-  let stored: unknown = null;
+  let storedPreferences: Partial<AnalyzePreferences> | null = null;
   try {
-    const raw = window.localStorage.getItem(ANALYZE_PREFERENCES_STORAGE_KEY);
-    stored = raw ? JSON.parse(raw) : null;
+    const raw =
+      window.localStorage.getItem(ANALYZE_RUNTIME_SETTINGS_STORAGE_KEY) ??
+      window.localStorage.getItem(ANALYZE_PREFERENCES_STORAGE_KEY);
+    storedPreferences = raw ? (JSON.parse(raw) as Partial<AnalyzePreferences>) : null;
   } catch {
-    stored = null;
+    storedPreferences = null;
   }
 
-  const storedPreferences =
-    stored && typeof stored === "object"
-      ? (stored as Partial<AnalyzePreferences>)
-      : null;
   const normalized = normalizeAnalyzePreferences(storedPreferences);
+  const appTheme = document.documentElement.dataset.theme;
+
+  return {
+    boardTheme: analyzeBoardThemeForAppTheme(appTheme),
+    pieceTheme: normalized.pieceTheme,
+  };
+}
+
+function hasAnalyzeRuntimeSettings() {
+  try {
+    return Boolean(window.localStorage.getItem(ANALYZE_RUNTIME_SETTINGS_STORAGE_KEY));
+  } catch {
+    return false;
+  }
+}
+
+type TrainSoundMove = {
+  san?: unknown;
+  captured?: unknown;
+  flags?: unknown;
+};
+
+function primeTrainSounds() {
+  if (typeof Audio === "undefined") return;
+
+  (Object.entries(TRAIN_SOUND_SOURCES) as Array<[keyof typeof TRAIN_SOUND_SOURCES, string]>)
+    .forEach(([name, src]) => {
+      if (trainSoundBank.has(name)) return;
+      const audio = new Audio(src);
+      audio.preload = "auto";
+      audio.volume = 1;
+      trainSoundBank.set(name, audio);
+      audio.load();
+    });
+}
+
+function trainMoveIsCapture(move?: TrainSoundMove | null) {
+  if (!move) return false;
+  if (move.captured) return true;
+  if (typeof move.flags === "string" && /[ce]/.test(move.flags)) return true;
+  return typeof move.san === "string" && move.san.includes("x");
+}
+
+function playTrainMoveSound(move?: TrainSoundMove | null) {
+  if (!move) return;
+  primeTrainSounds();
+  const name = trainMoveIsCapture(move) ? "capture" : "move";
+  const audio = trainSoundBank.get(name);
+  if (!audio) return;
+
+  try {
+    const instance = audio.cloneNode(true) as HTMLAudioElement;
+    instance.volume = audio.volume;
+    void instance.play().catch(() => {});
+  } catch {}
+}
+
+function moveForExploreSound(
+  positions: SequencePosition[],
+  currentIndex: number,
+  nextIndex: number,
+) {
+  if (nextIndex < currentIndex) return positions[currentIndex]?.move ?? null;
+  if (nextIndex > currentIndex) return positions[nextIndex]?.move ?? null;
+  return null;
+}
+
+async function readServerVisualPreferences() {
+  const response = await fetch("/api/analyze/preferences", { cache: "no-store" });
+  if (!response.ok) return null;
+  const payload = (await response.json().catch(() => null)) as
+    | { preferences?: Partial<AnalyzePreferences> }
+    | null;
+  const normalized = normalizeAnalyzePreferences(payload?.preferences ?? null);
   const appTheme = document.documentElement.dataset.theme;
 
   return {
@@ -67,28 +229,45 @@ const mockRep = {
   completedFen: "8/1k4pp/p2K4/4p3/1R2Pp2/P4P2/6PP/8 b - - 2 58",
   sideToMove: "White",
   prompt: "Play it out",
-  sequenceLength: 5,
+  sequenceLength: DEFAULT_SEQUENCE_LENGTH,
   rating: 1647,
   completedRating: 1656,
   moveHistory: [
   ] satisfies TrainingMove[],
   completedMoves: [
-    { san: "Kc7", side: "white" },
-    { san: "Rxd4", side: "black" },
-    { san: "Rb7+", side: "white" },
-    { san: "Kxb7", side: "black" },
-    { san: "Kxd6", side: "white" },
+    { san: "Kc7", uci: "c5c7", side: "white" },
+    { san: "Rxd4", uci: "d6d4", side: "black" },
+    { san: "Rb7+", uci: "b4b7", side: "white" },
+    { san: "Kxb7", uci: "c7b7", side: "black" },
+    { san: "Kxd6", uci: "c5d6", side: "white" },
   ] satisfies TrainingMove[],
 };
 
 export default function TrainPage() {
   const [state, setState] = useState<TrainingState>("active");
+  const [startingFen, setStartingFen] = useState(mockRep.fen);
   const [fen, setFen] = useState(mockRep.fen);
   const [moves, setMoves] = useState<TrainingMove[]>(mockRep.moveHistory);
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(null);
   const [sequenceLength, setSequenceLength] = useState(mockRep.sequenceLength);
-  const [opponentMode, setOpponentMode] = useState<OpponentMode>("Stretch");
-  const [engineStyle, setEngineStyle] = useState<EngineStyle>("Human-like");
+  const [blindspotsElo, setBlindspotsElo] = useState(mockRep.rating);
+  const [eloResult, setEloResult] = useState<EloResult | null>(null);
+  const [resultMode, setResultMode] = useState<ResultMode>("results");
+  const [exploreIndex, setExploreIndex] = useState(0);
+  const [exploratoryFen, setExploratoryFen] = useState<string | null>(null);
+  const [exploratoryLastMove, setExploratoryLastMove] = useState<{ from: string; to: string } | null>(null);
+  const [exploratoryHistory, setExploratoryHistory] = useState<ExploratoryPosition[]>([]);
+  const [exploratoryHistoryIndex, setExploratoryHistoryIndex] = useState(-1);
+  const [boundaryFlash, setBoundaryFlash] = useState<"start" | "end" | null>(null);
+  const [engineLineCache, setEngineLineCache] = useState<Record<string, EngineLineResult[]>>({});
+  const [engineLineLoadingFen, setEngineLineLoadingFen] = useState<string | null>(null);
+  const [cachedNextPosition, setCachedNextPosition] = useState<NextPositionResponse | null>(null);
+  const [isOpponentThinking, setIsOpponentThinking] = useState(false);
+  const [isCompletingSequence, setIsCompletingSequence] = useState(false);
+  const [isPositionLoading, setIsPositionLoading] = useState(true);
+  const [hoveredAnnotationSquare, setHoveredAnnotationSquare] = useState<string | null>(null);
+  const [hoveredEngineLineIndex, setHoveredEngineLineIndex] = useState<number | null>(null);
+  const [hoveredMoveSquares, setHoveredMoveSquares] = useState<{ from: string; to: string } | null>(null);
   const [onboardingScreen, setOnboardingScreen] = useState<OnboardingScreen>("loading");
   const [selectedProvider, setSelectedProvider] = useState<ProfileProvider | null>(null);
   const [profileUsername, setProfileUsername] = useState("");
@@ -96,6 +275,7 @@ export default function TrainPage() {
   const [isConnectingProfile, setIsConnectingProfile] = useState(false);
   const [analysisStep, setAnalysisStep] = useState(0);
   const [analysisError, setAnalysisError] = useState("");
+  const [analysisElapsedMs, setAnalysisElapsedMs] = useState(0);
   const [initializationSummary, setInitializationSummary] =
     useState<InitializationSummary | null>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -103,6 +283,14 @@ export default function TrainPage() {
     boardTheme: AnalyzeBoardTheme;
     pieceTheme: AnalyzePieceTheme;
   } | null>(null);
+  const completionRequestRef = useRef(0);
+  const nextPositionPrefetchRef = useRef<Promise<NextPositionResponse | null> | null>(null);
+  const engineLineCacheRef = useRef<Record<string, EngineLineResult[]>>({});
+  const engineLinePrefetchRef = useRef<Map<string, Promise<void>>>(new Map());
+
+  useEffect(() => {
+    engineLineCacheRef.current = engineLineCache;
+  }, [engineLineCache]);
 
   useEffect(() => {
     let alive = true;
@@ -117,14 +305,18 @@ export default function TrainPage() {
         if (!alive) return;
 
         if (payload.preferences) {
-          if ([3, 5, 8].includes(payload.preferences.sequence_length)) {
-            setSequenceLength(payload.preferences.sequence_length);
-          }
-          setOpponentMode(toOpponentMode(payload.preferences.opponent_mode));
-          setEngineStyle(toEngineStyle(readEngineStylePreference(payload.preferences.opening_filter)));
+          setSequenceLength(normalizeSequenceLength(payload.preferences.sequence_length));
+        }
+        if (payload.profile?.blindspots_elo) {
+          setBlindspotsElo(payload.profile.blindspots_elo);
         }
 
-        setOnboardingScreen(payload.shouldShowOnboarding ? "connect" : "done");
+        if (payload.shouldShowOnboarding) {
+          setOnboardingScreen("connect");
+        } else {
+          setOnboardingScreen("done");
+          void loadNextPosition();
+        }
       } catch {
         if (alive) setOnboardingScreen("connect");
       }
@@ -138,49 +330,352 @@ export default function TrainPage() {
   }, []);
 
   useLayoutEffect(() => {
+    let alive = true;
+
     function syncVisualPreferences() {
-      setVisualPreferences(readVisualPreferences());
+      if (alive) setVisualPreferences(readVisualPreferences());
     }
 
     setVisualPreferences(readVisualPreferences());
+    if (!hasAnalyzeRuntimeSettings()) {
+      void readServerVisualPreferences().then((preferences) => {
+        if (alive && preferences) setVisualPreferences(preferences);
+      });
+    }
     window.addEventListener("storage", syncVisualPreferences);
     const observer = new MutationObserver(syncVisualPreferences);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     return () => {
+      alive = false;
       window.removeEventListener("storage", syncVisualPreferences);
       observer.disconnect();
     };
   }, []);
 
+  useEffect(() => {
+    function primeSounds() {
+      primeTrainSounds();
+    }
+
+    window.addEventListener("pointerdown", primeSounds, { once: true });
+    window.addEventListener("keydown", primeSounds, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", primeSounds);
+      window.removeEventListener("keydown", primeSounds);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (onboardingScreen !== "analysis") return;
+
+    const startedAt = performance.now();
+    setAnalysisElapsedMs(0);
+    const timer = window.setInterval(() => {
+      setAnalysisElapsedMs(performance.now() - startedAt);
+    }, 500);
+    return () => window.clearInterval(timer);
+  }, [onboardingScreen]);
+
   function switchState(nextState: TrainingState) {
     setState(nextState);
-    setLastMove(nextState === "complete" ? { from: "c5", to: "d6" } : null);
+    setResultMode("results");
+    setExploreIndex(0);
+    resetExploratoryLine();
+    setBoundaryFlash(null);
+    setEngineLineCache({});
+    setEngineLineLoadingFen(null);
+    setIsOpponentThinking(false);
+    setIsCompletingSequence(false);
+    setEloResult(null);
+    setLastMove(null);
     if (nextState === "active") {
-      setFen(mockRep.fen);
-      setMoves(mockRep.moveHistory);
+      void loadNextPosition();
     }
     if (nextState === "complete") {
-      setFen(mockRep.completedFen);
-      setMoves(mockRep.completedMoves);
+      return;
     }
     if (nextState === "drift") {
-      setFen(mockRep.fen);
-      setMoves([...mockRep.moveHistory, { san: "Rb8?", side: "white" }]);
+      setFen(startingFen);
+      setMoves([...mockRep.moveHistory, { san: "Rb8?", uci: "b4b8", side: "white" }]);
     }
   }
 
+  async function loadNextPosition() {
+    const cachedPosition = cachedNextPosition;
+    if (cachedPosition?.fen) {
+      setCachedNextPosition(null);
+      nextPositionPrefetchRef.current = null;
+      applyNextPosition(cachedPosition);
+      setIsPositionLoading(false);
+      return;
+    }
+
+    const pendingPrefetch = nextPositionPrefetchRef.current;
+    if (!pendingPrefetch) {
+      setIsPositionLoading(true);
+    }
+
+    try {
+      const payload = pendingPrefetch
+        ? await pendingPrefetch
+        : await fetchNextPosition();
+      nextPositionPrefetchRef.current = null;
+      setCachedNextPosition(null);
+
+      if (!payload?.fen) {
+        setStartingFen(mockRep.fen);
+        setFen(mockRep.fen);
+        setMoves([]);
+        setSequenceLength(DEFAULT_SEQUENCE_LENGTH);
+        return;
+      }
+
+      applyNextPosition(payload);
+    } finally {
+      setIsPositionLoading(false);
+    }
+  }
+
+  async function fetchNextPosition() {
+    const response = await fetch("/api/train/next-position", { cache: "no-store" });
+    const payload = (await response.json().catch(() => null)) as NextPositionResponse | null;
+    if (!response.ok || !payload?.fen) return null;
+    return payload;
+  }
+
+  function applyNextPosition(payload: NextPositionResponse) {
+    if (!payload.fen) return;
+    setStartingFen(payload.fen);
+    setFen(payload.fen);
+    setMoves([]);
+    setLastMove(null);
+    setResultMode("results");
+    setExploreIndex(0);
+    resetExploratoryLine();
+    setBoundaryFlash(null);
+    setEngineLineCache({});
+    setEngineLineLoadingFen(null);
+    setSequenceLength(normalizeSequenceLength(payload.sequenceLength));
+  }
+
+  function prefetchNextPosition() {
+    if (nextPositionPrefetchRef.current) return;
+    const promise = fetchNextPosition();
+    nextPositionPrefetchRef.current = promise;
+    void promise.then((payload) => {
+      if (payload?.fen && nextPositionPrefetchRef.current === promise) {
+        setCachedNextPosition(payload);
+      }
+    });
+  }
+
+  async function fetchEngineLinesForFen(fenToAnalyze: string) {
+    const cached = engineLineCacheRef.current[fenToAnalyze];
+    if (cached) return;
+    const pending = engineLinePrefetchRef.current.get(fenToAnalyze);
+    if (pending) return pending;
+
+    const promise = (async () => {
+      const response = await fetch("/api/train/engine-lines", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fen: fenToAnalyze }),
+      });
+      const payload = (await response.json().catch(() => null)) as { lines?: EngineLineResult[] } | null;
+      const lines = response.ok && Array.isArray(payload?.lines) ? payload.lines : [];
+      setEngineLineCache((current) => {
+        if (current[fenToAnalyze]) return current;
+        const next = { ...current, [fenToAnalyze]: lines };
+        engineLineCacheRef.current = next;
+        return next;
+      });
+    })().catch(() => {
+      setEngineLineCache((current) => {
+        if (current[fenToAnalyze]) return current;
+        const next = { ...current, [fenToAnalyze]: [] };
+        engineLineCacheRef.current = next;
+        return next;
+      });
+    }).finally(() => {
+      engineLinePrefetchRef.current.delete(fenToAnalyze);
+    });
+
+    engineLinePrefetchRef.current.set(fenToAnalyze, promise);
+    return promise;
+  }
+
+  function warmEngineLinesForSequence(nextMoves: TrainingMove[]) {
+    const fens = collectOnePlyAnalysisFens(startingFen, nextMoves)
+      .filter((fenToAnalyze) => !engineLineCacheRef.current[fenToAnalyze]);
+    if (fens.length === 0) return;
+
+    void (async () => {
+      const concurrency = 2;
+      for (let index = 0; index < fens.length; index += concurrency) {
+        await Promise.all(fens.slice(index, index + concurrency).map((fenToAnalyze) => fetchEngineLinesForFen(fenToAnalyze)));
+      }
+    })();
+  }
+
+  function resetExploratoryLine() {
+    setExploratoryFen(null);
+    setExploratoryLastMove(null);
+    setExploratoryHistory([]);
+    setExploratoryHistoryIndex(-1);
+  }
+
   function handleMove(move: BoardMove) {
+    if (state !== "active" || isOpponentThinking) return;
+
     try {
       const chess = new Chess(fen);
-      chess.move({ from: move.from, to: move.to, promotion: "q" });
-      setFen(chess.fen());
+      const playedMove = chess.move({ from: move.from, to: move.to, promotion: "q" });
+      if (!playedMove) return;
+
+      const fenAfterUserMove = chess.fen();
+      const userMoveCountAfterMove = Math.floor(moves.length / 2) + 1;
+      const userTrainingMove: TrainingMove = {
+        san: playedMove.san,
+        uci: `${playedMove.from}${playedMove.to}${playedMove.promotion ?? ""}`,
+        side: playedMove.color === "w" ? "white" : "black",
+        fenBefore: fen,
+        fenAfter: fenAfterUserMove,
+      };
+      const movesAfterUserMove = [...moves, userTrainingMove];
+
+      playTrainMoveSound(playedMove);
+      setFen(fenAfterUserMove);
       setLastMove({ from: move.from, to: move.to });
-      setMoves((current) => [...current, { san: move.san ?? move.uci ?? `${move.from}${move.to}`, side: chess.turn() === "w" ? "black" : "white" }]);
-      if (moves.length + 1 >= sequenceLength) {
+      setMoves(movesAfterUserMove);
+      warmEngineLinesForSequence(movesAfterUserMove);
+
+      if (chess.isGameOver()) {
         setState("complete");
+        void completeSequence(movesAfterUserMove);
+        return;
       }
+
+      void requestOpponentMove(
+        fenAfterUserMove,
+        movesAfterUserMove,
+        userMoveCountAfterMove >= sequenceLength,
+      );
     } catch {
       // The board only emits legal moves, but keep the page resilient to stale FEN.
+    }
+  }
+
+  function handleExploreMove(move: BoardMove) {
+    if (!isExploringResults) return;
+
+    try {
+      const chess = new Chess(boardFen);
+      const playedMove = chess.move({ from: move.from, to: move.to, promotion: "q" });
+      if (!playedMove) return;
+
+      playTrainMoveSound(playedMove);
+      const nextExploratoryPosition = {
+        fen: chess.fen(),
+        lastMove: { from: playedMove.from, to: playedMove.to },
+      };
+      const nextHistory = [
+        ...exploratoryHistory.slice(0, exploratoryHistoryIndex + 1),
+        nextExploratoryPosition,
+      ];
+      setExploratoryHistory(nextHistory);
+      setExploratoryHistoryIndex(nextHistory.length - 1);
+      setExploratoryFen(nextExploratoryPosition.fen);
+      setExploratoryLastMove(nextExploratoryPosition.lastMove);
+      setHoveredEngineLineIndex(null);
+      setHoveredMoveSquares(null);
+    } catch {
+      // The board only emits legal moves, but ignore stale exploratory FENs.
+    }
+  }
+
+  async function requestOpponentMove(
+    fenAfterUserMove: string,
+    movesAfterUserMove: TrainingMove[],
+    completeAfterOpponentMove = false,
+  ) {
+    setIsOpponentThinking(true);
+
+    try {
+      const response = await fetch("/api/train/opponent-move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fen: fenAfterUserMove,
+          userBlindspotElo: blindspotsElo,
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as OpponentMoveResponse | null;
+      const opponentMove = payload?.move;
+      if (!response.ok || !opponentMove) return;
+
+      const chess = new Chess(fenAfterUserMove);
+      const playedMove = chess.move({
+        from: opponentMove.uci.slice(0, 2),
+        to: opponentMove.uci.slice(2, 4),
+        promotion: opponentMove.uci[4],
+      });
+      if (!playedMove) return;
+
+      playTrainMoveSound(playedMove);
+      setFen(chess.fen());
+      setLastMove({ from: playedMove.from, to: playedMove.to });
+      const finalMoves = [
+        ...movesAfterUserMove,
+        {
+          san: opponentMove.san || playedMove.san,
+          uci: `${playedMove.from}${playedMove.to}${playedMove.promotion ?? ""}`,
+          side: playedMove.color === "w" ? "white" : "black",
+          fenBefore: fenAfterUserMove,
+          fenAfter: chess.fen(),
+        } satisfies TrainingMove,
+      ];
+      setMoves(finalMoves);
+      warmEngineLinesForSequence(finalMoves);
+
+      if (completeAfterOpponentMove || chess.isGameOver()) {
+        setState("complete");
+        void completeSequence(finalMoves);
+      }
+    } finally {
+      setIsOpponentThinking(false);
+    }
+  }
+
+  async function completeSequence(finalMoves: TrainingMove[]) {
+    const requestId = completionRequestRef.current + 1;
+    completionRequestRef.current = requestId;
+    setIsCompletingSequence(true);
+
+    try {
+      const response = await fetch("/api/train/complete-sequence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startingFen,
+          moves: finalMoves,
+          sequenceLength,
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | { elo?: EloResult; moveScores?: MoveScore[] }
+        | null;
+      if (completionRequestRef.current !== requestId || !response.ok || !payload?.elo) return;
+
+      setEloResult(payload.elo);
+      setBlindspotsElo(payload.elo.eloAfter);
+      if (Array.isArray(payload.moveScores)) {
+        setMoves((current) => applyMoveScores(current, payload.moveScores ?? [], startingFen));
+      }
+      prefetchNextPosition();
+    } finally {
+      if (completionRequestRef.current === requestId) {
+        setIsCompletingSequence(false);
+      }
     }
   }
 
@@ -229,21 +724,22 @@ export default function TrainPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "skip" }),
     });
-    setOnboardingScreen("settings");
+    await startFirstSession();
   }
 
   function beginAnalysis() {
     setAnalysisStep(0);
     setAnalysisError("");
+    setAnalysisElapsedMs(0);
     setInitializationSummary(null);
     setOnboardingScreen("analysis");
 
     window.setTimeout(() => setAnalysisStep((current) => Math.max(current, 1)), 450);
-    window.setTimeout(() => setAnalysisStep((current) => Math.max(current, 2)), 1300);
     void runAnalysis();
   }
 
   async function runAnalysis() {
+    const startedAt = performance.now();
     const response = await fetch("/api/train/initialize", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -258,6 +754,9 @@ export default function TrainPage() {
       | null;
 
     if (payload?.status === "complete" && payload.summary) {
+      await waitForMinimumElapsed(startedAt, MIN_ONBOARDING_EVALUATION_MS);
+      setAnalysisStep(2);
+      await sleep(ONBOARDING_BUILD_PROFILE_MS);
       setAnalysisStep(3);
       setInitializationSummary(payload.summary);
       window.setTimeout(() => setOnboardingScreen("summary"), 450);
@@ -265,15 +764,21 @@ export default function TrainPage() {
     }
 
     if (payload?.status === "no_games") {
+      await waitForMinimumElapsed(startedAt, 1200);
       setAnalysisStep(3);
-      window.setTimeout(() => setOnboardingScreen("settings"), 450);
+      window.setTimeout(() => {
+        void startFirstSession();
+      }, 450);
       return;
     }
 
-    setAnalysisError(
-      "Analysis didn't complete — your profile will build from your training sessions instead",
-    );
-    window.setTimeout(() => setOnboardingScreen("settings"), 3000);
+    await waitForMinimumElapsed(startedAt, MIN_ONBOARDING_EVALUATION_MS);
+    setAnalysisStep(2);
+    await sleep(ONBOARDING_BUILD_PROFILE_MS);
+    setAnalysisError(ANALYSIS_FAILURE_MESSAGE);
+    window.setTimeout(() => {
+      void startFirstSession();
+    }, 3000);
   }
 
   async function startFirstSession() {
@@ -285,23 +790,141 @@ export default function TrainPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "save_settings",
-          sequenceLength,
-          opponentMode: opponentMode.toLowerCase(),
-          engineStyle: serializeEngineStyle(engineStyle),
+          sequenceLength: normalizeSequenceLength(sequenceLength),
           timePressureMode: "none",
           openingFilter: [],
         }),
       });
       setOnboardingScreen("done");
+      void loadNextPosition();
     } finally {
       setIsSavingSettings(false);
     }
   }
 
-  const rating = state === "complete" ? mockRep.completedRating : mockRep.rating;
-  const userMoveCount = moves.filter((move) => move.side === "white").length;
+  const rating = state === "complete" ? (eloResult?.eloAfter ?? blindspotsElo) : blindspotsElo;
+  const userMoveSide = getFenTurnSide(startingFen);
+  const boardOrientation = userMoveSide;
+  const userMoveCount = moves.filter((move) => move.side === userMoveSide).length;
   const moveProgress = Math.min(userMoveCount + 1, sequenceLength);
-  const controlsLocked = state === "active" && moves.length > 0;
+  const sequencePositions = useMemo(
+    () => buildSequencePositions(startingFen, moves),
+    [startingFen, moves],
+  );
+  const activeExploreIndex = Math.min(exploreIndex, Math.max(0, sequencePositions.length - 1));
+  const explorePosition = sequencePositions[activeExploreIndex] ?? sequencePositions[0];
+  const isExploringResults = state === "complete" && resultMode === "explore";
+  const activeExploratoryPosition =
+    exploratoryHistoryIndex >= 0 ? exploratoryHistory[exploratoryHistoryIndex] : null;
+  const boardFen = isExploringResults ? (activeExploratoryPosition?.fen ?? exploratoryFen ?? explorePosition?.fen ?? fen) : fen;
+  const boardLastMove = isExploringResults
+    ? (activeExploratoryPosition?.lastMove ?? exploratoryLastMove ?? lastMoveForPosition(explorePosition))
+    : lastMove;
+  const currentEngineLines = isExploringResults
+    ? engineLineCache[boardFen] ?? []
+    : [];
+  const currentEngineEval = currentEngineLines[0]?.cp;
+  const isEngineLinesLoading = Boolean(
+    isExploringResults && engineLineLoadingFen === boardFen,
+  );
+
+  useEffect(() => {
+    const exploreFen = isExploringResults ? boardFen : null;
+    if (!isExploringResults || !exploreFen) return;
+    if (engineLineCache[exploreFen]) {
+      return;
+    }
+
+    let cancelled = false;
+    setEngineLineLoadingFen(exploreFen);
+    void fetchEngineLinesForFen(exploreFen).finally(() => {
+      if (!cancelled) setEngineLineLoadingFen(null);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [boardFen, isExploringResults]);
+
+  useEffect(() => {
+    if (!isExploringResults) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+      event.preventDefault();
+
+      if (exploratoryHistory.length > 0) {
+        if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+          navigateExploratoryLine(exploratoryHistoryIndex - 1);
+        } else {
+          navigateExploratoryLine(exploratoryHistoryIndex + 1);
+        }
+        return;
+      }
+
+      if (event.key === "ArrowLeft") {
+        navigateExploreTo(activeExploreIndex - 1, "start");
+      } else if (event.key === "ArrowRight") {
+        navigateExploreTo(activeExploreIndex + 1, "end");
+      } else if (event.key === "ArrowUp") {
+        navigateExploreTo(0, "start");
+      } else {
+        navigateExploreTo(sequencePositions.length - 1, "end");
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeExploreIndex, exploratoryHistory.length, exploratoryHistoryIndex, isExploringResults, sequencePositions.length]);
+
+  useEffect(() => {
+    if (state !== "complete" || resultMode === "explore") return;
+    const timer = window.setTimeout(() => {
+      setExploreIndex(Math.max(0, sequencePositions.length - 1));
+      resetExploratoryLine();
+      setResultMode("explore");
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [resultMode, sequencePositions.length, state]);
+
+  function navigateExploratoryLine(nextIndex: number) {
+    if (nextIndex < -1) {
+      setBoundaryFlash("start");
+      window.setTimeout(() => setBoundaryFlash(null), 180);
+      return;
+    }
+    if (nextIndex >= exploratoryHistory.length) {
+      setBoundaryFlash("end");
+      window.setTimeout(() => setBoundaryFlash(null), 180);
+      return;
+    }
+
+    setBoundaryFlash(null);
+    setHoveredEngineLineIndex(null);
+    setHoveredMoveSquares(null);
+    setExploratoryHistoryIndex(nextIndex);
+
+    const position = nextIndex >= 0 ? exploratoryHistory[nextIndex] : null;
+    setExploratoryFen(position?.fen ?? null);
+    setExploratoryLastMove(position?.lastMove ?? null);
+  }
+
+  function navigateExploreTo(nextIndex: number, boundary: "start" | "end" = "end") {
+    const maxIndex = Math.max(0, sequencePositions.length - 1);
+    const boundedIndex = Math.max(0, Math.min(maxIndex, nextIndex));
+    if (boundedIndex === activeExploreIndex && nextIndex !== activeExploreIndex) {
+      setBoundaryFlash(boundary);
+      window.setTimeout(() => setBoundaryFlash(null), 180);
+      return;
+    }
+    setBoundaryFlash(null);
+    resetExploratoryLine();
+    setHoveredEngineLineIndex(null);
+    setHoveredMoveSquares(null);
+    playTrainMoveSound(moveForExploreSound(sequencePositions, activeExploreIndex, boundedIndex));
+    setExploreIndex(boundedIndex);
+  }
 
   if (onboardingScreen !== "done") {
     return (
@@ -313,124 +936,173 @@ export default function TrainPage() {
         isConnectingProfile={isConnectingProfile}
         analysisStep={analysisStep}
         analysisError={analysisError}
+        analysisElapsedMs={analysisElapsedMs}
         summary={initializationSummary}
-        sequenceLength={sequenceLength}
-        opponentMode={opponentMode}
-        engineStyle={engineStyle}
-        isSavingSettings={isSavingSettings}
         onSelectProvider={setSelectedProvider}
         onUsernameChange={setProfileUsername}
         onConnectProfile={connectProfile}
         onSkip={skipConnection}
-        onStartTraining={() => setOnboardingScreen("settings")}
-        onSequenceLengthChange={setSequenceLength}
-        onOpponentModeChange={setOpponentMode}
-        onEngineStyleChange={setEngineStyle}
-        onStartFirstSession={startFirstSession}
+        onStartTraining={() => void startFirstSession()}
       />
     );
   }
 
   return (
     <div className="flex min-h-0 w-full flex-1 overflow-auto py-4">
-      <div className="grid w-full gap-5 lg:min-h-[780px] lg:grid-cols-[minmax(0,1.36fr)_minmax(360px,0.88fr)]">
-        <section className="flex items-center justify-center rounded-[14px] border border-[var(--app-border-soft)] bg-[var(--app-panel-strong)] p-3 sm:p-5 lg:min-h-0 lg:p-8">
+      <div
+        className={[
+          "grid w-full gap-5 transition-opacity duration-200",
+          "lg:min-h-[780px] lg:grid-cols-[minmax(0,1.36fr)_minmax(360px,0.88fr)]",
+        ].join(" ")}
+      >
+        <section
+          className={[
+            "flex items-center justify-center rounded-[14px] border bg-[var(--app-panel-strong)] p-3 transition-colors sm:p-5 lg:min-h-0 lg:p-8",
+            boundaryFlash
+              ? "border-[var(--app-muted)]"
+              : "border-[var(--app-border-soft)]",
+          ].join(" ")}
+        >
           <div className="w-full max-w-[min(92vw,74vh,920px)]">
-            {visualPreferences ? (
-              <AnalysisBoard
-                fen={fen}
-                mode="training"
-                orientation="white"
-                coordinates
-                lastMove={lastMove}
-                boardTheme={visualPreferences.boardTheme}
-                pieceTheme={visualPreferences.pieceTheme}
-                highlightedSquares={
-                  state === "complete"
-                    ? { d6: "color-mix(in srgb, var(--app-accent) 44%, var(--app-selection) 56%)" }
-                    : state === "drift"
-                      ? { b8: "color-mix(in srgb, var(--app-class-mistake) 42%, #7f8190 58%)" }
-                      : { c7: "color-mix(in srgb, var(--app-accent) 30%, var(--app-selection) 70%)" }
-                }
-                onMove={handleMove}
-              />
+            {visualPreferences && !isPositionLoading ? (
+              <BoardWithPlayerStrips
+                userSide={userMoveSide}
+                boardFen={boardFen}
+                isOpponentThinking={isOpponentThinking}
+                isTrainingActive={state === "active"}
+                isExploring={isExploringResults}
+              >
+                {isExploringResults ? (
+                  <BoardWithEvalBar
+                    evalCp={currentEngineEval}
+                    isLoading={isEngineLinesLoading}
+                  >
+                    <AnalysisBoard
+                      fen={boardFen}
+                      mode="training"
+                      orientation={boardOrientation}
+                      coordinates
+                      showLegalTargets
+                      lastMove={boardLastMove}
+                      boardTheme={visualPreferences.boardTheme}
+                      pieceTheme={visualPreferences.pieceTheme}
+                      highlightedSquares={
+                        hoveredMoveSquares
+                          ? [
+                              {
+                                square: hoveredMoveSquares.from,
+                                color: "color-mix(in srgb, var(--app-accent) 24%, transparent)",
+                              },
+                              {
+                                square: hoveredMoveSquares.to,
+                                color: "color-mix(in srgb, var(--app-accent) 36%, transparent)",
+                              },
+                            ]
+                          : undefined
+                      }
+                      engineArrows={buildEngineArrows(currentEngineLines, hoveredEngineLineIndex)}
+                      onMove={handleExploreMove}
+                      onCircleHover={setHoveredAnnotationSquare}
+                    />
+                  </BoardWithEvalBar>
+                ) : (
+                  <AnalysisBoard
+                    fen={boardFen}
+                    mode="training"
+                    orientation={boardOrientation}
+                    coordinates
+                    showLegalTargets
+                    lastMove={boardLastMove}
+                    boardTheme={visualPreferences.boardTheme}
+                    pieceTheme={visualPreferences.pieceTheme}
+                    disabled={state !== "active" || isOpponentThinking}
+                    annotationsDisabled={false}
+                    highlightedSquares={
+                      state === "complete"
+                        ? undefined
+                        : state === "drift"
+                          ? { b8: "color-mix(in srgb, var(--app-class-mistake) 42%, #7f8190 58%)" }
+                          : { c7: "color-mix(in srgb, var(--app-accent) 30%, var(--app-selection) 70%)" }
+                    }
+                    onMove={handleMove}
+                  />
+                )}
+              </BoardWithPlayerStrips>
             ) : (
               <div
-                className="aspect-square w-full rounded-[10px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)]"
-                aria-hidden="true"
-              />
+                className="grid aspect-square w-full place-items-center rounded-[10px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] text-sm font-bold text-[var(--app-muted)]"
+                aria-live="polite"
+              >
+                Loading position...
+              </div>
             )}
           </div>
         </section>
 
-        <aside className="flex flex-col rounded-[14px] border border-[var(--app-border-soft)] bg-[var(--app-panel-strong)] p-5 sm:p-6 lg:min-h-[720px]">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="flex items-end gap-3" aria-label="Blindspots Elo">
-                <span className="text-5xl font-bold leading-none text-[var(--app-text)]">{rating}</span>
-                {state === "complete" ? (
-                  <span className="mb-1 rounded-[5px] bg-[var(--app-accent)] px-2 py-1 text-xs font-bold text-black">
-                    +9
-                  </span>
-                ) : null}
-              </div>
-            </div>
-            <div className="rounded border border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-4 py-3 text-right">
-              <p className="text-lg font-bold text-[var(--app-text)]">
-                Move {moveProgress} of {sequenceLength}
-              </p>
-            </div>
-          </div>
-
+        <aside
+          className={[
+            "flex flex-col rounded-[14px] border border-[var(--app-border-soft)] bg-[var(--app-panel-strong)]",
+            state === "complete" && resultMode === "results"
+              ? "p-4 sm:p-5"
+              : "p-5 sm:p-6 lg:min-h-[720px]",
+          ].join(" ")}
+        >
           {state === "complete" ? (
-            <StatusBanner
-              title="Rep complete"
-              detail="Eval preserved"
-              action="Next position"
-              tone="success"
-              onAction={() => switchState("active")}
-            />
-          ) : state === "drift" ? (
-            <StatusBanner
-              title="Eval dropped"
-              detail="Rep saved for review"
-              action="Retry"
-              tone="warning"
-              onAction={() => switchState("active")}
+            <ResultsPanel
+              eloResult={eloResult}
+              isSaving={isCompletingSequence}
+              moves={moves}
+              userSide={userMoveSide}
+              startingFen={startingFen}
+              mode={resultMode}
+              positions={sequencePositions}
+              currentIndex={activeExploreIndex}
+              engineLines={currentEngineLines}
+              isEngineLinesLoading={isEngineLinesLoading}
+              hoveredAnnotationSquare={hoveredAnnotationSquare}
+              hoveredEngineLineIndex={hoveredEngineLineIndex}
+              onEngineLineHover={setHoveredEngineLineIndex}
+              onMoveHover={setHoveredMoveSquares}
+              onNavigate={navigateExploreTo}
+              onNextPosition={() => switchState("active")}
             />
           ) : (
-            moves.length === 0 ? (
-              <PromptCard prompt={mockRep.prompt} />
-            ) : null
+            <>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-end gap-3" aria-label="Blindspots Elo">
+                    <span className="text-5xl font-bold leading-none text-[var(--app-text)]">{rating}</span>
+                  </div>
+                </div>
+                <div className="rounded border border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-4 py-3 text-right">
+                  <p className="text-lg font-bold text-[var(--app-text)]">
+                    Move {moveProgress} of {sequenceLength}
+                  </p>
+                </div>
+              </div>
+
+              {state === "drift" ? (
+                <StatusBanner
+                  title="Eval dropped"
+                  detail="Rep saved for review"
+                  action="Retry"
+                  tone="warning"
+                  onAction={() => switchState("active")}
+                />
+              ) : (
+                moves.length === 0 ? (
+                  <PromptCard prompt={mockRep.prompt} />
+                ) : null
+              )}
+
+              <MoveList
+                moves={moves}
+                userSide={userMoveSide}
+                isOpponentThinking={isOpponentThinking}
+                showHeaders={false}
+              />
+            </>
           )}
-
-          <MoveList moves={moves} />
-
-          <div className="mt-6">
-            <div className="grid gap-3 border-t border-[var(--app-border-soft)] pt-5">
-              <SegmentedControl
-                label="Sequence length"
-                value={String(sequenceLength)}
-                options={["3", "5", "8"]}
-                onChange={(value) => setSequenceLength(Number(value))}
-                disabled={controlsLocked}
-              />
-              <SegmentedControl
-                label="Opponent"
-                value={opponentMode}
-                options={["Comfort", "Stretch", "Pressure"]}
-                onChange={(value) => setOpponentMode(value as OpponentMode)}
-                disabled={controlsLocked}
-              />
-              <SegmentedControl
-                label="Engine style"
-                value={engineStyle}
-                options={["Human-like", "Hybrid", "Computer"]}
-                onChange={(value) => setEngineStyle(value as EngineStyle)}
-                disabled={controlsLocked}
-              />
-            </div>
-          </div>
         </aside>
       </div>
     </div>
@@ -445,20 +1117,13 @@ function TrainOnboarding({
   isConnectingProfile,
   analysisStep,
   analysisError,
+  analysisElapsedMs,
   summary,
-  sequenceLength,
-  opponentMode,
-  engineStyle,
-  isSavingSettings,
   onSelectProvider,
   onUsernameChange,
   onConnectProfile,
   onSkip,
   onStartTraining,
-  onSequenceLengthChange,
-  onOpponentModeChange,
-  onEngineStyleChange,
-  onStartFirstSession,
 }: {
   screen: OnboardingScreen;
   selectedProvider: ProfileProvider | null;
@@ -467,26 +1132,24 @@ function TrainOnboarding({
   isConnectingProfile: boolean;
   analysisStep: number;
   analysisError: string;
+  analysisElapsedMs: number;
   summary: InitializationSummary | null;
-  sequenceLength: number;
-  opponentMode: OpponentMode;
-  engineStyle: EngineStyle;
-  isSavingSettings: boolean;
   onSelectProvider: (provider: ProfileProvider | null) => void;
   onUsernameChange: (value: string) => void;
   onConnectProfile: (provider: ProfileProvider) => void;
   onSkip: () => void;
   onStartTraining: () => void;
-  onSequenceLengthChange: (value: number) => void;
-  onOpponentModeChange: (value: OpponentMode) => void;
-  onEngineStyleChange: (value: EngineStyle) => void;
-  onStartFirstSession: () => void;
 }) {
   return (
-    <div className="grid min-h-[calc(100dvh-92px)] w-full place-items-center px-4 py-8">
+    <div
+      className={[
+        "grid min-h-[calc(100dvh-92px)] w-full place-items-center px-4 py-8",
+        screen === "analysis" ? "bg-[var(--app-bg)]" : "",
+      ].join(" ")}
+    >
       <section className="w-full max-w-[620px] text-center">
         {screen === "loading" ? (
-          <LinearProgress />
+          <LinearProgress completedSteps={0} />
         ) : null}
 
         {screen === "connect" ? (
@@ -521,7 +1184,15 @@ function TrainOnboarding({
             </div>
 
             {selectedProvider ? (
-              <div className="mx-auto grid w-full max-w-[420px] gap-3 text-left">
+              <form
+                className="mx-auto grid w-full max-w-[420px] gap-3 text-left"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!isConnectingProfile && username.trim().length > 0) {
+                    void onConnectProfile(selectedProvider);
+                  }
+                }}
+              >
                 <label className="grid gap-2">
                   <span className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
                     Public username
@@ -540,14 +1211,13 @@ function TrainOnboarding({
                   <p className="text-sm text-[var(--app-muted)]">{connectionMessage}</p>
                 ) : null}
                 <button
-                  type="button"
+                  type="submit"
                   disabled={isConnectingProfile || username.trim().length === 0}
                   className="min-h-12 rounded-[8px] border border-[var(--app-accent)] bg-[var(--app-accent)] px-5 text-sm font-bold uppercase tracking-[0.12em] text-black transition hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)] disabled:cursor-not-allowed disabled:border-[var(--app-border)] disabled:bg-[var(--app-surface-subtle)] disabled:text-[var(--app-muted)]"
-                  onClick={() => void onConnectProfile(selectedProvider)}
                 >
                   {isConnectingProfile ? "Connecting..." : "Continue"}
                 </button>
-              </div>
+              </form>
             ) : null}
 
             <button
@@ -561,19 +1231,32 @@ function TrainOnboarding({
         ) : null}
 
         {screen === "analysis" ? (
-          <div className="mx-auto grid w-full max-w-[620px] gap-8">
-            <LinearProgress />
-            <div className="grid gap-4 text-left">
-              <AnalysisLine done={analysisStep >= 1} label="Fetching your recent games" />
-              <AnalysisLine done={analysisStep >= 2} label="Running evaluation analysis" />
-              <AnalysisLine done={analysisStep >= 3} label="Building your blindspot profile" />
+          <div className="mx-auto grid w-full max-w-[430px] gap-8">
+            <LinearProgress completedSteps={analysisStep} />
+            <div className="mx-auto grid w-fit max-w-full gap-4 text-left">
+              {analysisError ? (
+                <AnalysisLine active={false} done={false} failed label={analysisError} />
+              ) : (
+                <>
+                  <AnalysisLine
+                    active={analysisStep === 0}
+                    done={analysisStep >= 1}
+                    label="Fetching your recent games"
+                  />
+                  <AnalysisLine
+                    active={analysisStep === 1}
+                    done={analysisStep >= 2}
+                    label="Analyzing games"
+                  />
+                  <AnalysisLine
+                    active={analysisStep === 2}
+                    done={analysisStep >= 3}
+                    label="Building your blindspots.gg profile"
+                  />
+                </>
+              )}
             </div>
-            <p className="text-sm text-[var(--app-muted)]">This takes about 30 seconds</p>
-            {analysisError ? (
-              <p className="rounded border border-[var(--app-class-mistake-border)] bg-[var(--app-class-mistake-soft)] px-4 py-3 text-sm text-[var(--app-text)]">
-                {analysisError}
-              </p>
-            ) : null}
+            <AnalysisElapsedMessage elapsedMs={analysisElapsedMs} />
           </div>
         ) : null}
 
@@ -585,7 +1268,7 @@ function TrainOnboarding({
             <div className="grid gap-3 border-y border-[var(--app-border-soft)] py-6 text-left sm:grid-cols-3">
               <SummaryStat value={`${summary.mistakesFound}`} label="mistakes found" />
               <SummaryStat value={`${summary.gamesAnalyzed}`} label="across games" />
-              <SummaryStat value={`${summary.averageCpLossPerGame}cp`} label="avg loss per game" />
+              <SummaryStat value={`${summary.averageCpLossPerMove}cp`} label="avg loss per move" />
             </div>
             <button
               type="button"
@@ -597,37 +1280,64 @@ function TrainOnboarding({
           </div>
         ) : null}
 
-        {screen === "settings" ? (
-          <div className="mx-auto grid max-w-[520px] gap-6 rounded-[14px] border border-[var(--app-border-soft)] bg-[var(--app-panel-strong)] p-6 text-left">
-            <SegmentedControl
-              label="Sequence length"
-              value={String(sequenceLength)}
-              options={["3", "5", "8"]}
-              onChange={(value) => onSequenceLengthChange(Number(value))}
-            />
-            <SegmentedControl
-              label="Opponent"
-              value={opponentMode}
-              options={["Comfort", "Stretch", "Pressure"]}
-              onChange={(value) => onOpponentModeChange(value as OpponentMode)}
-            />
-            <SegmentedControl
-              label="Engine style"
-              value={engineStyle}
-              options={["Human-like", "Hybrid", "Computer"]}
-              onChange={(value) => onEngineStyleChange(value as EngineStyle)}
-            />
-            <button
-              type="button"
-              disabled={isSavingSettings}
-              className="min-h-12 rounded-[8px] border border-[var(--app-accent)] bg-[var(--app-accent)] px-5 text-sm font-bold uppercase tracking-[0.12em] text-black transition hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)] disabled:cursor-wait disabled:opacity-70"
-              onClick={() => void onStartFirstSession()}
-            >
-              Start first session →
-            </button>
-          </div>
-        ) : null}
       </section>
+    </div>
+  );
+}
+
+function BoardWithPlayerStrips({
+  userSide,
+  boardFen,
+  isOpponentThinking,
+  isTrainingActive,
+  isExploring,
+  children,
+}: {
+  userSide: TrainingMove["side"];
+  boardFen: string;
+  isOpponentThinking: boolean;
+  isTrainingActive: boolean;
+  isExploring: boolean;
+  children: import("react").ReactNode;
+}) {
+  const opponentSide = userSide === "white" ? "black" : "white";
+  const userLabel = userSide === "white" ? "White" : "Black";
+  const opponentLabel = userSide === "white" ? "Black" : "White";
+
+  let isUserActive = false;
+  let isOpponentActive = false;
+
+  if (isExploring) {
+    const turnSide = getFenTurnSide(boardFen);
+    isUserActive = turnSide === userSide;
+    isOpponentActive = turnSide === opponentSide;
+  } else if (isTrainingActive) {
+    isUserActive = !isOpponentThinking;
+    isOpponentActive = isOpponentThinking;
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <PlayerTurnStrip label={opponentLabel} isActive={isOpponentActive} />
+      {children}
+      <PlayerTurnStrip label={userLabel} isActive={isUserActive} />
+    </div>
+  );
+}
+
+function PlayerTurnStrip({ label, isActive }: { label: string; isActive: boolean }) {
+  return (
+    <div className="flex h-7 items-center gap-2 px-0.5">
+      <span
+        className="h-2.5 w-2.5 shrink-0 rounded-full transition-colors duration-300"
+        style={{ background: isActive ? "var(--app-class-best)" : "var(--app-border)" }}
+      />
+      <span
+        className="text-sm font-bold transition-colors duration-300"
+        style={{ color: isActive ? "var(--app-text)" : "var(--app-muted)" }}
+      >
+        {label}
+      </span>
     </div>
   );
 }
@@ -648,33 +1358,80 @@ function PromptCard({ prompt }: { prompt: string }) {
   );
 }
 
-function LinearProgress() {
+function LinearProgress({ completedSteps }: { completedSteps: number }) {
+  const progress = Math.max(0, Math.min(3, completedSteps));
+  const progressPercent = [0, 30, 70, 100][progress] ?? 0;
+
   return (
     <div
       className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--app-surface-subtle)]"
       role="progressbar"
       aria-label="Analysis progress"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={progressPercent}
     >
-      <div className="train-onboarding-progress h-full w-full origin-left rounded-full bg-[var(--app-accent)]" />
+      <div
+        className="train-onboarding-progress h-full origin-left rounded-full bg-[var(--app-accent)]"
+        style={{ width: `${progressPercent}%` }}
+      />
     </div>
   );
 }
 
-function AnalysisLine({ done, label }: { done: boolean; label: string }) {
+function AnalysisElapsedMessage({ elapsedMs }: { elapsedMs: number }) {
+  const message =
+    elapsedMs >= 45_000
+      ? "Almost done..."
+      : elapsedMs >= 15_000
+        ? "Still working..."
+        : elapsedMs >= 5_000
+          ? "This takes about 30 seconds"
+          : "";
+
+  return <p className="min-h-5 text-sm text-[var(--app-muted)]">{message}</p>;
+}
+
+function AnalysisLine({
+  active,
+  done,
+  failed = false,
+  label,
+}: {
+  active: boolean;
+  done: boolean;
+  failed?: boolean;
+  label: string;
+}) {
   return (
-    <div className="flex min-h-11 items-center gap-3 text-[var(--app-text)]">
+    <div
+      className={[
+        "flex min-h-11 items-center gap-3",
+        failed
+          ? "text-[var(--app-class-blunder)]"
+          : active || done
+            ? "text-[var(--app-text)]"
+            : "text-[var(--app-muted)]",
+      ].join(" ")}
+    >
       <span
         className={[
           "grid h-6 w-6 shrink-0 place-items-center rounded-full border text-xs font-bold",
-          done
+          failed
+            ? "border-[var(--app-class-blunder)] bg-[var(--app-class-blunder-soft)] text-[var(--app-class-blunder)]"
+            : done
             ? "border-[var(--app-accent)] bg-[var(--app-accent)] text-black"
-            : "border-[var(--app-border)] text-[var(--app-muted)]",
+            : active
+              ? "train-onboarding-step-active border-[var(--app-accent)] text-[var(--app-accent)]"
+              : "border-[var(--app-border)] text-[var(--app-muted)]",
         ].join(" ")}
         aria-hidden="true"
       >
-        {done ? "✓" : ""}
+        {failed ? "!" : done ? "✓" : active ? "•" : ""}
       </span>
-      <span className="text-base font-bold">{label}</span>
+      <span className={["text-base", active || done || failed ? "font-bold" : "font-normal"].join(" ")}>
+        {label}
+      </span>
     </div>
   );
 }
@@ -682,7 +1439,7 @@ function AnalysisLine({ done, label }: { done: boolean; label: string }) {
 function SummaryStat({ value, label }: { value: string; label: string }) {
   return (
     <div>
-      <p className="text-4xl font-bold text-[var(--app-text)]">{value}</p>
+      <p className="font-mono text-4xl font-bold tabular-nums text-[var(--app-text)]">{value}</p>
       <p className="mt-2 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
         {label}
       </p>
@@ -714,28 +1471,172 @@ function resolveProfileConnectionError(error?: string) {
   }
 }
 
-function toOpponentMode(value: string | null | undefined): OpponentMode {
-  if (value === "comfort") return "Comfort";
-  if (value === "pressure") return "Pressure";
-  return "Stretch";
+function waitForMinimumElapsed(startedAt: number, minimumMs: number) {
+  return sleep(Math.max(0, minimumMs - (performance.now() - startedAt)));
 }
 
-function toEngineStyle(value: string | null | undefined): EngineStyle {
-  if (value === "leela" || value === "hybrid") return "Hybrid";
-  if (value === "stockfish" || value === "computer") return "Computer";
-  return "Human-like";
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
-function serializeEngineStyle(value: EngineStyle) {
-  if (value === "Hybrid") return "leela";
-  if (value === "Computer") return "stockfish";
-  return "maia";
+function getFenTurnSide(fen: string): TrainingMove["side"] {
+  try {
+    return new Chess(fen).turn() === "w" ? "white" : "black";
+  } catch {
+    return "white";
+  }
 }
 
-function readEngineStylePreference(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const candidate = (value as { engineStyle?: unknown }).engineStyle;
-  return typeof candidate === "string" ? candidate : null;
+function normalizeSequenceLength(value: unknown) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_SEQUENCE_LENGTH;
+  return Math.max(MIN_SEQUENCE_LENGTH, Math.min(MAX_SEQUENCE_LENGTH, Math.round(parsed)));
+}
+
+function applyMoveScores(
+  moves: TrainingMove[],
+  scores: MoveScore[],
+  startingFen: string,
+) {
+  const scoresByIndex = new Map(scores.map((score) => [score.userMoveIndex, score]));
+  const userSide = getFenTurnSide(startingFen);
+  let userMoveIndex = 0;
+
+  return moves.map((move) => {
+    if (move.side !== userSide) return move;
+
+    const score = scoresByIndex.get(userMoveIndex);
+    userMoveIndex += 1;
+
+    return score
+      ? {
+          ...move,
+          cpLoss: score.cpLoss,
+          evalBefore: score.evalBefore,
+          evalAfter: score.evalAfter,
+          classification: score.classification,
+        }
+      : move;
+  });
+}
+
+function buildSequencePositions(startingFen: string, moves: TrainingMove[]): SequencePosition[] {
+  const positions: SequencePosition[] = [{ index: 0, fen: startingFen, label: "Start" }];
+  let chess: Chess;
+  try {
+    chess = new Chess(startingFen);
+  } catch {
+    return positions;
+  }
+
+  moves.forEach((move, index) => {
+    const fenBefore = move.fenBefore ?? chess.fen();
+    const fenAfter = move.fenAfter ?? fenAfterUci(fenBefore, move.uci);
+    if (fenAfter) {
+      positions.push({
+        index: index + 1,
+        fen: fenAfter,
+        label: move.san,
+        move,
+      });
+      try {
+        chess = new Chess(fenAfter);
+      } catch {
+        // Keep positions gathered so far if a stale record cannot be replayed.
+      }
+    }
+  });
+
+  return positions;
+}
+
+function collectOnePlyAnalysisFens(startingFen: string, moves: TrainingMove[]) {
+  const fens = new Set<string>();
+  const positions = buildSequencePositions(startingFen, moves);
+
+  for (const position of positions) {
+    fens.add(position.fen);
+    try {
+      const chess = new Chess(position.fen);
+      const legalMoves = chess.moves({ verbose: true }) as Move[];
+      for (const move of legalMoves) {
+        const branch = new Chess(position.fen);
+        const playedMove = branch.move({
+          from: move.from,
+          to: move.to,
+          promotion: move.promotion ?? "q",
+        });
+        if (playedMove) fens.add(branch.fen());
+      }
+    } catch {
+      // Skip stale or terminal positions; the visible sequence positions are still cached.
+    }
+  }
+
+  return [...fens];
+}
+
+function fenAfterUci(fen: string, uci: string) {
+  try {
+    const chess = new Chess(fen);
+    const move = chess.move({
+      from: uci.slice(0, 2),
+      to: uci.slice(2, 4),
+      promotion: uci[4],
+    });
+    return move ? chess.fen() : null;
+  } catch {
+    return null;
+  }
+}
+
+function lastMoveForPosition(position?: SequencePosition) {
+  const uci = position?.move?.uci;
+  if (!uci) return null;
+  return { from: uci.slice(0, 2), to: uci.slice(2, 4) };
+}
+
+function buildEvalGraphPoints(
+  moves: TrainingMove[],
+  userSide: TrainingMove["side"],
+  startingFen: string,
+): EvalGraphPoint[] {
+  const points: EvalGraphPoint[] = [];
+  let chess: Chess | null = null;
+  try {
+    chess = new Chess(startingFen);
+  } catch {
+    chess = null;
+  }
+
+  moves.forEach((move, index) => {
+    const fenBefore = move.fenBefore ?? chess?.fen();
+    if (move.side === userSide) {
+      if (points.length === 0 && typeof move.evalBefore === "number") {
+        points.push({ value: move.evalBefore, positionIndex: index });
+      }
+      if (typeof move.evalAfter === "number") {
+        points.push({
+          value: move.evalAfter,
+          positionIndex: index + 1,
+          classification: move.classification,
+        });
+      }
+    }
+
+    const fenAfter = move.fenAfter ?? (fenBefore ? fenAfterUci(fenBefore, move.uci) : null);
+    if (fenAfter) {
+      try {
+        chess = new Chess(fenAfter);
+      } catch {
+        chess = null;
+      }
+    }
+  });
+
+  return points;
 }
 
 function StatusBanner({
@@ -780,78 +1681,601 @@ function StatusBanner({
   );
 }
 
-function MoveList({ moves }: { moves: TrainingMove[] }) {
-  const rows = moves.reduce<Array<{ white?: string; black?: string }>>((acc, move) => {
-    if (move.side === "white" || acc.length === 0) {
-      acc.push(move.side === "white" ? { white: move.san } : { black: move.san });
+function EloResultCard({ result, isLoading }: { result: EloResult | null; isLoading: boolean }) {
+  if (isLoading && !result) {
+    return (
+      <div className="rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-5">
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
+          Blindspots Elo
+        </p>
+        <p className="mt-3 text-lg font-bold text-[var(--app-muted)]">Saving result...</p>
+      </div>
+    );
+  }
+
+  if (!result) return null;
+
+  const deltaTone =
+    result.eloDelta > 0
+      ? "text-[var(--app-class-good)]"
+      : result.eloDelta < 0
+        ? "text-[var(--app-class-blunder)]"
+        : "text-[var(--app-muted)]";
+  const signedDelta = result.eloDelta > 0 ? `+${result.eloDelta}` : String(result.eloDelta);
+
+  return (
+    <div className="rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-5">
+      <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
+        Blindspots Elo
+      </p>
+      <div className="mt-6 flex flex-wrap items-baseline gap-3">
+        <span className="text-3xl font-bold text-[var(--app-text)]">{result.eloBefore}</span>
+        <span className="text-xl font-bold text-[var(--app-muted)]">→</span>
+        <span className="text-3xl font-bold text-[var(--app-text)]">{result.eloAfter}</span>
+        <span className={`text-xl font-bold ${deltaTone}`}>{signedDelta}</span>
+      </div>
+    </div>
+  );
+}
+
+function CompactEloLine({ result, isLoading }: { result: EloResult | null; isLoading: boolean }) {
+  if (isLoading && !result) {
+    return (
+      <div className="text-sm font-bold text-[var(--app-muted)]">Saving result...</div>
+    );
+  }
+
+  if (!result) return null;
+
+  const deltaTone =
+    result.eloDelta > 0
+      ? "text-[var(--app-class-good)]"
+      : result.eloDelta < 0
+        ? "text-[var(--app-class-blunder)]"
+        : "text-[var(--app-muted)]";
+  const signedDelta = result.eloDelta > 0 ? `+${result.eloDelta}` : String(result.eloDelta);
+
+  return (
+    <div className="flex items-baseline gap-2 text-sm font-bold text-[var(--app-muted)]">
+      <span>{result.eloBefore}</span>
+      <span>→</span>
+      <span>{result.eloAfter}</span>
+      <span className={deltaTone}>{signedDelta}</span>
+    </div>
+  );
+}
+
+function engineLineClassification(index: number, lines: EngineLineResult[]): MoveClassification | undefined {
+  if (lines.length === 0) return undefined;
+  const bestCp = lines[0]!.cp;
+  const loss = Math.abs(lines[index]!.cp - bestCp);
+  if (loss === 0) return "best";
+  if (loss <= 30) return "excellent";
+  if (loss <= 80) return "good";
+  if (loss <= 200) return "inaccuracy";
+  if (loss <= 500) return "mistake";
+  return "blunder";
+}
+
+function engineLineColor(cls: MoveClassification | undefined): string {
+  return classificationColor(cls);
+}
+
+function EngineLinesSection({
+  lines,
+  isLoading,
+  hoveredDestinationSquare,
+  hoveredIndex,
+  onHoverLine,
+}: {
+  lines: EngineLineResult[];
+  isLoading: boolean;
+  hoveredDestinationSquare?: string | null;
+  hoveredIndex?: number | null;
+  onHoverLine?: (index: number | null) => void;
+}) {
+  return (
+    <section className="grid gap-2" aria-live="polite">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">
+          Engine lines
+        </h2>
+        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted-soft)]">
+          {isLoading ? "Depth 18" : `${lines.length || 0} lines`}
+        </span>
+      </div>
+      <div className={["grid gap-2", isLoading ? "opacity-60" : ""].join(" ")}>
+        {lines.length === 0 ? (
+          <div className="rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] px-3 py-4 text-xs font-bold text-[var(--app-muted)]">
+            {isLoading ? "Receiving engine lines..." : "Engine lines unavailable"}
+          </div>
+        ) : null}
+        {lines.map((line, index) => {
+          const lead = line.bestSan || line.bestMove;
+          const pv = line.pvSan.slice(1).join(" ");
+          const cls = engineLineClassification(index, lines);
+          const lineColor = engineLineColor(cls);
+          const isHovered =
+            hoveredIndex === index ||
+            (hoveredDestinationSquare ? line.bestMove.slice(2, 4) === hoveredDestinationSquare : false);
+          return (
+            <div
+              key={`${line.rank}-${line.bestMove}-${index}`}
+              className="relative cursor-default overflow-hidden rounded-none border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] py-2 pl-4 pr-3 transition-colors duration-100"
+              style={{
+                borderLeftColor: lineColor,
+                borderLeftWidth: 3,
+                background: isHovered ? "color-mix(in srgb, var(--app-accent) 6%, var(--app-surface-subtle))" : undefined,
+              }}
+              onPointerEnter={() => onHoverLine?.(index)}
+              onPointerLeave={() => onHoverLine?.(null)}
+            >
+              <div className="grid grid-cols-[26px_minmax(0,1fr)_auto_72px] items-center gap-2">
+                <span className="text-right text-[10px] font-bold text-[var(--app-muted-soft)]">
+                  #{index + 1}
+                </span>
+                <strong className="min-w-0 truncate text-sm font-bold" style={{ color: lineColor }}>
+                  {lead}
+                </strong>
+                {cls ? <ClassificationBadge classification={cls} /> : null}
+                <span className="justify-self-end text-[10px] font-bold tabular-nums text-[var(--app-muted-soft)]">
+                  {formatEval(line.cp)} d{line.depth || 18}
+                </span>
+              </div>
+              <div className="mt-1 truncate pl-[34px] text-[11px] text-[var(--app-muted-soft)]">
+                {pv || lead}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function BoardWithEvalBar({
+  evalCp,
+  isLoading,
+  children,
+}: {
+  evalCp?: number;
+  isLoading: boolean;
+  children: ReactNode;
+}) {
+  const [lastEvalCp, setLastEvalCp] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (typeof evalCp === "number") setLastEvalCp(evalCp);
+  }, [evalCp]);
+
+  const displayEvalCp = typeof evalCp === "number" ? evalCp : isLoading ? lastEvalCp : null;
+  const clamped = typeof displayEvalCp === "number" ? Math.max(-600, Math.min(600, displayEvalCp)) : 0;
+  const whitePct = 50 + (clamped / 600) * 42;
+  const blackPct = 100 - whitePct;
+
+  return (
+    <div className="grid grid-cols-[18px_minmax(0,1fr)] gap-3">
+      <div className="relative overflow-hidden rounded-[4px] border border-[var(--app-border-soft)] bg-black">
+        <div
+          className="absolute left-0 right-0 top-0 bg-white transition-[height] duration-200"
+          style={{ height: `${whitePct}%` }}
+        />
+        <div
+          className="absolute left-0 right-0 bottom-0 bg-black transition-[height] duration-200"
+          style={{ height: `${blackPct}%` }}
+        />
+        <span className="absolute inset-x-0 top-1 text-center text-[9px] font-bold text-black">
+          {typeof displayEvalCp === "number" ? formatEval(displayEvalCp) : isLoading ? "..." : "--"}
+        </span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ResultsPanel({
+  eloResult,
+  isSaving,
+  moves,
+  userSide,
+  startingFen,
+  mode,
+  positions,
+  currentIndex,
+  engineLines,
+  isEngineLinesLoading,
+  hoveredAnnotationSquare,
+  hoveredEngineLineIndex,
+  onEngineLineHover,
+  onMoveHover,
+  onNavigate,
+  onNextPosition,
+}: {
+  eloResult: EloResult | null;
+  isSaving: boolean;
+  moves: TrainingMove[];
+  userSide: TrainingMove["side"];
+  startingFen: string;
+  mode: ResultMode;
+  positions: SequencePosition[];
+  currentIndex: number;
+  engineLines: EngineLineResult[];
+  isEngineLinesLoading: boolean;
+  hoveredAnnotationSquare: string | null;
+  hoveredEngineLineIndex: number | null;
+  onEngineLineHover: (index: number | null) => void;
+  onMoveHover: (move: { from: string; to: string } | null) => void;
+  onNavigate: (index: number) => void;
+  onNextPosition: () => void;
+}) {
+  const userMoves = moves
+    .map((move, index) => ({ ...move, absoluteIndex: index }))
+    .filter((move) => move.side === userSide);
+  const graphPoints = buildEvalGraphPoints(moves, userSide, startingFen);
+
+  if (mode === "explore") {
+    return (
+      <div className="flex flex-1 flex-col gap-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
+        <CompactEloLine result={eloResult} isLoading={isSaving} />
+        <EngineLinesSection
+          lines={engineLines}
+          isLoading={isEngineLinesLoading}
+          hoveredDestinationSquare={hoveredAnnotationSquare}
+          hoveredIndex={hoveredEngineLineIndex}
+          onHoverLine={onEngineLineHover}
+        />
+        <EvalGraph
+          points={graphPoints}
+          currentIndex={currentIndex}
+          compact
+          onSelectPosition={onNavigate}
+        />
+        <AnalysisMoveTable
+          moves={userMoves}
+          currentIndex={currentIndex}
+          compact
+          onSelectPosition={(index) => onNavigate(index)}
+          onHoverMove={onMoveHover}
+        />
+        <div className="mt-auto pt-1">
+          <button
+            type="button"
+            className={`${primaryActionClassName} w-full`}
+            onClick={onNextPosition}
+          >
+            Next position
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-1 flex-col gap-4 opacity-80 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
+      <EloResultCard result={eloResult} isLoading={isSaving} />
+      <EvalGraph points={graphPoints} currentIndex={positions.length - 1} compact />
+      <AnalysisMoveTable moves={userMoves} compact onHoverMove={onMoveHover} />
+      <div className="pt-1">
+        <button
+          type="button"
+          className={`${primaryActionClassName} w-full`}
+          onClick={onNextPosition}
+        >
+          Next position
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EvalGraph({
+  points: graphPoints,
+  currentIndex,
+  compact = false,
+  onSelectPosition,
+}: {
+  points: EvalGraphPoint[];
+  currentIndex: number;
+  compact?: boolean;
+  onSelectPosition?: (index: number) => void;
+}) {
+  const clampedValues = graphPoints.map((point) => Math.max(-600, Math.min(600, point.value)));
+  const width = 520;
+  const height = compact ? 108 : 128;
+  const padding = 18;
+  const usableWidth = width - padding * 2;
+  const usableHeight = height - padding * 2;
+  const points = clampedValues.map((value, index) => {
+    const x = padding + (clampedValues.length <= 1 ? 0 : (index / (clampedValues.length - 1)) * usableWidth);
+    const y = padding + ((600 - value) / 1200) * usableHeight;
+    return { ...graphPoints[index]!, x, y, value: graphPoints[index]!.value };
+  });
+
+  return (
+    <div className="grid gap-2">
+      <div className={[compact ? "h-28" : "h-36", "overflow-hidden rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)]"].join(" ")}>
+        {points.length >= 2 ? (
+          <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" role="img" aria-label="Sequence eval graph">
+            <line
+              x1={padding}
+              x2={width - padding}
+              y1={height / 2}
+              y2={height / 2}
+              stroke="color-mix(in srgb, var(--app-border-strong) 16%, transparent)"
+              strokeDasharray="5 6"
+            />
+            {points.slice(1).map((point, index) => {
+              const previous = points[index]!;
+              const color = classificationColor(point.classification);
+              return (
+                <line
+                  key={`${point.x}-${point.y}-${index}`}
+                  x1={previous.x}
+                  y1={previous.y}
+                  x2={point.x}
+                  y2={point.y}
+                  stroke={color}
+                  strokeWidth={3}
+                  strokeLinecap="round"
+                />
+              );
+            })}
+            {points.map((point, index) => (
+              <g
+                key={`${point.x}-${point.y}-node`}
+                role={onSelectPosition ? "button" : undefined}
+                tabIndex={onSelectPosition ? 0 : undefined}
+                className={onSelectPosition ? "cursor-pointer outline-none" : ""}
+                onClick={() => onSelectPosition?.(point.positionIndex)}
+                onKeyDown={(event) => {
+                  if (!onSelectPosition) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelectPosition(point.positionIndex);
+                  }
+                }}
+              >
+                <circle
+                  cx={point.x}
+                  cy={point.y}
+                  r={point.positionIndex === currentIndex ? 6 : 4}
+                  fill={index === 0 ? "var(--app-muted)" : classificationColor(point.classification)}
+                  stroke={point.positionIndex === currentIndex ? "var(--app-text)" : "var(--app-panel-solid)"}
+                  strokeWidth={point.positionIndex === currentIndex ? 2.5 : 2}
+                />
+                <text
+                  x={point.x}
+                  y={point.y - 9}
+                  textAnchor="middle"
+                  className="fill-[var(--app-muted)] text-[9px] font-bold"
+                >
+                  {formatEval(point.value)}
+                </text>
+              </g>
+            ))}
+          </svg>
+        ) : (
+          <div className="grid h-full place-items-center text-xs text-[var(--app-muted)]">
+            Eval data unavailable
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AnalysisMoveTable({
+  moves,
+  currentIndex,
+  compact = false,
+  onSelectPosition,
+  onHoverMove,
+}: {
+  moves: Array<TrainingMove & { absoluteIndex?: number }>;
+  currentIndex?: number;
+  compact?: boolean;
+  onSelectPosition?: (index: number) => void;
+  onHoverMove?: (move: { from: string; to: string } | null) => void;
+}) {
+  return (
+    <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)]">
+      <div className="grid min-h-8 grid-cols-[minmax(0,1.1fr)_68px_68px_76px] items-center border-b border-[var(--app-border-soft)] px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
+        <span>Move</span>
+        <span className="text-right">Before</span>
+        <span className="text-right">After</span>
+        <span className="text-right">Loss</span>
+      </div>
+      {moves.length === 0 ? (
+        <div className="px-3 py-4 text-sm text-[var(--app-muted)]">Analysis unavailable</div>
+      ) : null}
+      {moves.map((move, index) => (
+        <button
+          type="button"
+          key={`${move.uci}-${index}`}
+          className={[
+            "grid w-full grid-cols-[minmax(0,1.1fr)_68px_68px_76px] items-center border-b border-[var(--app-border-soft)] px-3 text-left last:border-b-0",
+            compact ? "min-h-9 text-xs" : "min-h-10 text-sm",
+            onSelectPosition ? "transition hover:bg-[var(--app-highlight-soft)]" : "cursor-default",
+            currentIndex === (move.absoluteIndex ?? index) + 1 ? "bg-[var(--app-highlight-soft)]" : "",
+          ].join(" ")}
+          disabled={!onSelectPosition}
+          onClick={() => onSelectPosition?.((move.absoluteIndex ?? index) + 1)}
+          onPointerEnter={() => onHoverMove?.(moveFromUci(move.uci))}
+          onPointerLeave={() => onHoverMove?.(null)}
+        >
+          <span className="flex min-w-0 items-center gap-2 font-bold">
+            {move.classification ? <ClassificationBadge classification={move.classification} /> : null}
+            <span className="truncate" style={{ color: classificationColor(move.classification) }}>
+              {move.san}
+            </span>
+          </span>
+          <span className="text-right text-[var(--app-muted)]">
+            {typeof move.evalBefore === "number" ? formatEval(move.evalBefore) : "--"}
+          </span>
+          <span className="text-right text-[var(--app-muted)]">
+            {typeof move.evalAfter === "number" ? formatEval(move.evalAfter) : "--"}
+          </span>
+          <span className="text-right text-[var(--app-muted)]">
+            {typeof move.cpLoss === "number" ? `${move.cpLoss}cp` : "--"}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function MoveList({
+  moves,
+  userSide,
+  isOpponentThinking,
+  showHeaders = false,
+}: {
+  moves: TrainingMove[];
+  userSide: TrainingMove["side"];
+  isOpponentThinking: boolean;
+  showHeaders?: boolean;
+}) {
+  const rows = moves.reduce<Array<{ user?: TrainingMove; opponent?: TrainingMove }>>((acc, move) => {
+    if (move.side === userSide || acc.length === 0) {
+      acc.push(move.side === userSide ? { user: move } : { opponent: move });
       return acc;
     }
 
-    acc[acc.length - 1].black = move.san;
+    acc[acc.length - 1].opponent = move;
     return acc;
   }, []);
 
   return (
     <div className="mt-8 overflow-hidden border-y border-[var(--app-border-soft)] py-2">
+      {showHeaders ? (
+        <div className="grid min-h-9 grid-cols-[46px_minmax(0,1fr)_minmax(0,1fr)] items-center px-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
+          <span />
+          <span className="pl-8">You</span>
+          <span>Opponent</span>
+        </div>
+      ) : null}
       {moves.length === 0 ? (
         <p className="py-8 text-center text-sm text-[var(--app-muted)]">No moves played yet</p>
       ) : null}
       {rows.map((row, index) => (
         <div
-          key={`${index}-${row.white ?? ""}-${row.black ?? ""}`}
+          key={`${index}-${row.user?.uci ?? ""}-${row.opponent?.uci ?? ""}`}
           className={[
             "grid min-h-12 grid-cols-[46px_minmax(0,1fr)_minmax(0,1fr)] items-center border-b border-[var(--app-border-soft)] px-2 text-sm last:border-b-0",
             index === rows.length - 1 ? "bg-white/[0.03]" : "",
           ].join(" ")}
         >
           <span className="text-right text-[var(--app-muted)]">{index + 1}.</span>
-          <span className="pl-8 font-bold text-[var(--app-text)]">{row.white ?? ""}</span>
-          <span className="font-bold text-[var(--app-muted)]">{row.black ?? ""}</span>
+          <span className="flex min-w-0 items-center gap-2 pl-8 font-bold">
+            {row.user?.classification ? <ClassificationBadge classification={row.user.classification} /> : null}
+            <span className="truncate" style={{ color: classificationColor(row.user?.classification) }}>
+              {row.user?.san ?? ""}
+            </span>
+            {typeof row.user?.cpLoss === "number" ? (
+              <span className="shrink-0 text-[11px] font-normal text-[var(--app-muted)]">
+                {row.user.cpLoss}cp
+              </span>
+            ) : null}
+          </span>
+          <span className="font-bold text-[var(--app-muted)]">{row.opponent?.san ?? ""}</span>
         </div>
       ))}
+      {isOpponentThinking ? (
+        <div className="grid min-h-12 grid-cols-[46px_minmax(0,1fr)] items-center px-2 text-sm">
+          <span />
+          <span className="pl-8 font-bold text-[var(--app-muted)]">Opponent thinking...</span>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function SegmentedControl({
-  label,
-  value,
-  options,
-  onChange,
-  disabled = false,
-}: {
-  label: string;
-  value: string;
-  options: string[];
-  onChange: (value: string) => void;
-  disabled?: boolean;
-}) {
+function ClassificationBadge({ classification }: { classification: MoveClassification }) {
   return (
-    <div className={["grid gap-2", disabled ? "opacity-55" : ""].join(" ")}>
-      <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
-        {label}
-      </p>
-      <div className="grid grid-cols-3 gap-1 rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-1">
-        {options.map((option) => (
-          <button
-            key={option}
-            type="button"
-            disabled={disabled}
-            className={[
-              "min-h-9 rounded-[7px] border px-3 text-xs font-bold uppercase transition",
-              option === value
-                ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-text)]"
-                : "border-transparent text-[var(--app-muted)] hover:bg-white/10 hover:text-[var(--app-text)]",
-              disabled ? "cursor-not-allowed hover:bg-transparent hover:text-[var(--app-muted)]" : "",
-            ].join(" ")}
-            onClick={() => onChange(option)}
-          >
-            {option}
-          </button>
-        ))}
-      </div>
-    </div>
+    <span
+      className="grid h-4 w-4 shrink-0 place-items-center rounded-full text-[10px] font-bold text-black"
+      style={{ background: classificationColor(classification) }}
+      title={classificationLabel(classification)}
+      aria-label={classificationLabel(classification)}
+    >
+      {classificationGlyph(classification)}
+    </span>
   );
+}
+
+function classificationColor(classification?: MoveClassification) {
+  switch (classification) {
+    case "best":
+      return "var(--app-class-best)";
+    case "excellent":
+      return "var(--app-class-excellent)";
+    case "good":
+      return "var(--app-class-good)";
+    case "inaccuracy":
+      return "var(--app-class-inaccuracy)";
+    case "mistake":
+      return "var(--app-class-mistake)";
+    case "blunder":
+      return "var(--app-class-blunder)";
+    default:
+      return "var(--app-text)";
+  }
+}
+
+function classificationGlyph(classification: MoveClassification) {
+  switch (classification) {
+    case "best":
+      return "B";
+    case "excellent":
+      return "✓";
+    case "good":
+      return "•";
+    case "inaccuracy":
+      return "?";
+    case "mistake":
+      return "!";
+    case "blunder":
+      return "??";
+  }
+}
+
+function classificationLabel(classification: MoveClassification) {
+  switch (classification) {
+    case "best":
+      return "Best";
+    case "excellent":
+      return "Excellent";
+    case "good":
+      return "Good";
+    case "inaccuracy":
+      return "Inaccuracy";
+    case "mistake":
+      return "Mistake";
+    case "blunder":
+      return "Blunder";
+  }
+}
+
+function formatEval(cp: number) {
+  if (Math.abs(cp) >= 600) return cp > 0 ? "+6.0" : "-6.0";
+  const pawns = cp / 100;
+  if (Math.abs(pawns) < 0.05) return "0.0";
+  return `${pawns > 0 ? "+" : ""}${pawns.toFixed(1)}`;
+}
+
+function buildEngineArrows(lines: EngineLineResult[], emphasizedIndex: number | null = null): EngineArrow[] {
+  return lines.slice(0, 3).map((line, index) => ({
+    from: line.bestMove.slice(0, 2),
+    to: line.bestMove.slice(2, 4),
+    label: formatEval(line.cp),
+    rank: index + 1,
+    emphasis: emphasizedIndex === index,
+  }));
+}
+
+function moveFromUci(uci?: string) {
+  if (!uci || uci.length < 4) return null;
+  return { from: uci.slice(0, 2), to: uci.slice(2, 4) };
 }
 
 function TargetIcon() {

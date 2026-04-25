@@ -58,6 +58,9 @@
   --app-class-excellent: #84cc16;
   --app-class-excellent-soft: rgba(132, 204, 22, 0.15);
   --app-class-excellent-border: rgba(132, 204, 22, 0.26);
+  --app-class-good: #22c55e;
+  --app-class-good-soft: rgba(34, 197, 94, 0.15);
+  --app-class-good-border: rgba(34, 197, 94, 0.26);
   --app-class-okay: #cbd5a1;
   --app-class-okay-soft: rgba(203, 213, 161, 0.14);
   --app-class-okay-border: rgba(203, 213, 161, 0.24);
@@ -610,28 +613,36 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
 }
 
 .train-onboarding-progress {
-  animation: train-onboarding-progress 1.35s cubic-bezier(0.66, 0, 0.34, 1) infinite;
+  transition: width 520ms cubic-bezier(0.66, 0, 0.34, 1), opacity 180ms ease;
 }
 
-@keyframes train-onboarding-progress {
+.train-onboarding-step-active {
+  animation: train-onboarding-step-active 900ms ease-in-out infinite;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-accent) 34%, transparent);
+}
+
+@keyframes train-onboarding-step-active {
   0% {
-    opacity: 0.38;
-    transform: scaleX(0.22);
+    transform: scale(0.96);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-accent) 34%, transparent);
   }
-  52% {
-    opacity: 1;
-    transform: scaleX(1);
+  55% {
+    transform: scale(1);
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--app-accent) 0%, transparent);
   }
   100% {
-    opacity: 0.38;
-    transform: scaleX(0.22);
+    transform: scale(0.96);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-accent) 0%, transparent);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .train-onboarding-progress {
+    transition: none;
+  }
+
+  .train-onboarding-step-active {
     animation: none;
-    transform: none;
-    width: 100%;
+    box-shadow: none;
   }
 }

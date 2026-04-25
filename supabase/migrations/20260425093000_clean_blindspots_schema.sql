@@ -17,7 +17,7 @@ drop column if exists auto_coach_enabled;
 
 create table if not exists public.user_training_preferences (
   user_id text primary key,
-  sequence_length integer not null default 5,
+  sequence_length integer not null default 4,
   opponent_mode text not null default 'stretch',
   time_pressure_mode text not null default 'none',
   opening_filter jsonb not null default '[]'::jsonb,
