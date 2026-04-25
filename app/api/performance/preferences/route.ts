@@ -6,7 +6,6 @@ import {
   type PerformanceRangeDays,
 } from "@/lib/chess-profile";
 import { getOptionalAppUserId } from "@/lib/app-auth";
-import { updatePerformancePreferencesForUser } from "@/lib/chess-profile-store";
 
 interface PerformancePreferencesPayload {
   rangeDays?: PerformanceRangeDays | string;
@@ -35,13 +34,5 @@ export async function POST(request: Request) {
   );
   const gameType = normalizeGameType(payload.gameType);
 
-  try {
-    await updatePerformancePreferencesForUser(userId, { rangeDays, gameType });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to save preferences";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
-
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, rangeDays, gameType });
 }

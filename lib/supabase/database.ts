@@ -48,57 +48,6 @@ export type Database = {
         };
         Relationships: [];
       };
-      user_llm_api_keys: {
-        Row: {
-          user_id: string;
-          claude_api_key: string | null;
-          gemini_api_key: string | null;
-          minimax_api_key: string | null;
-          openai_api_key: string | null;
-          puter_api_key: string | null;
-          claude_model: string | null;
-          gemini_model: string | null;
-          minimax_model: string | null;
-          openai_model: string | null;
-          puter_model: string | null;
-          preferred_llm_provider: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          user_id: string;
-          claude_api_key?: string | null;
-          gemini_api_key?: string | null;
-          minimax_api_key?: string | null;
-          openai_api_key?: string | null;
-          puter_api_key?: string | null;
-          claude_model?: string | null;
-          gemini_model?: string | null;
-          minimax_model?: string | null;
-          openai_model?: string | null;
-          puter_model?: string | null;
-          preferred_llm_provider?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          user_id?: string;
-          claude_api_key?: string | null;
-          gemini_api_key?: string | null;
-          minimax_api_key?: string | null;
-          openai_api_key?: string | null;
-          puter_api_key?: string | null;
-          claude_model?: string | null;
-          gemini_model?: string | null;
-          minimax_model?: string | null;
-          openai_model?: string | null;
-          puter_model?: string | null;
-          preferred_llm_provider?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
       user_analyze_preferences: {
         Row: {
           user_id: string;
@@ -123,7 +72,6 @@ export type Database = {
             | "staunty-wood"
             | "governor"
             | "companion";
-          auto_coach_enabled: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -150,7 +98,6 @@ export type Database = {
             | "staunty-wood"
             | "governor"
             | "companion";
-          coach_enabled?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -177,7 +124,6 @@ export type Database = {
             | "staunty-wood"
             | "governor"
             | "companion";
-          coach_enabled?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -189,15 +135,9 @@ export type Database = {
           provider: "chesscom" | "lichess";
           username: string;
           linked_at: string;
-          preferred_performance_range_days: 15 | 30 | 90 | 365 | null;
-          preferred_performance_game_type:
-            | "all"
-            | "bullet"
-            | "blitz"
-            | "rapid"
-            | "classical"
-            | "daily"
-            | null;
+          raw_elo: number | null;
+          initialization_status: string;
+          initialization_completed_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -206,15 +146,9 @@ export type Database = {
           provider: "chesscom" | "lichess";
           username: string;
           linked_at: string;
-          preferred_performance_range_days?: 15 | 30 | 90 | 365 | null;
-          preferred_performance_game_type?:
-            | "all"
-            | "bullet"
-            | "blitz"
-            | "rapid"
-            | "classical"
-            | "daily"
-            | null;
+          raw_elo?: number | null;
+          initialization_status?: string;
+          initialization_completed_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -223,19 +157,150 @@ export type Database = {
           provider?: "chesscom" | "lichess";
           username?: string;
           linked_at?: string;
-          preferred_performance_range_days?: 15 | 30 | 90 | 365 | null;
-          preferred_performance_game_type?:
-            | "all"
-            | "bullet"
-            | "blitz"
-            | "rapid"
-            | "classical"
-            | "daily"
-            | null;
+          raw_elo?: number | null;
+          initialization_status?: string;
+          initialization_completed_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Relationships: [];
+      };
+      user_training_preferences: {
+        Row: {
+          user_id: string;
+          sequence_length: number;
+          opponent_mode: string;
+          time_pressure_mode: string;
+          opening_filter: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          sequence_length?: number;
+          opponent_mode?: string;
+          time_pressure_mode?: string;
+          opening_filter?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          sequence_length?: number;
+          opponent_mode?: string;
+          time_pressure_mode?: string;
+          opening_filter?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      training_sessions: {
+        Row: {
+          id: string;
+          user_id: string;
+          starting_fen: string;
+          moves_played: Json;
+          eval_preservation_score: number | null;
+          opponent_mode: string;
+          sequence_length: number;
+          time_pressure_mode: string;
+          reflection_note: string | null;
+          position_fingerprint: Json | null;
+          blindspot_cluster_id: string | null;
+          started_at: string;
+          completed_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          starting_fen: string;
+          moves_played?: Json;
+          eval_preservation_score?: number | null;
+          opponent_mode: string;
+          sequence_length: number;
+          time_pressure_mode?: string;
+          reflection_note?: string | null;
+          position_fingerprint?: Json | null;
+          blindspot_cluster_id?: string | null;
+          started_at?: string;
+          completed_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          starting_fen?: string;
+          moves_played?: Json;
+          eval_preservation_score?: number | null;
+          opponent_mode?: string;
+          sequence_length?: number;
+          time_pressure_mode?: string;
+          reflection_note?: string | null;
+          position_fingerprint?: Json | null;
+          blindspot_cluster_id?: string | null;
+          started_at?: string;
+          completed_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "training_sessions_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      user_blindspot_profile: {
+        Row: {
+          user_id: string;
+          blindspots_elo: number;
+          weakness_vector: Json;
+          mastery_vector: Json;
+          total_sequences: number;
+          last_session_at: string | null;
+          profile_initialized: boolean;
+          initialization_status: string;
+          initialization_completed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          blindspots_elo?: number;
+          weakness_vector?: Json;
+          mastery_vector?: Json;
+          total_sequences?: number;
+          last_session_at?: string | null;
+          profile_initialized?: boolean;
+          initialization_status?: string;
+          initialization_completed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          blindspots_elo?: number;
+          weakness_vector?: Json;
+          mastery_vector?: Json;
+          total_sequences?: number;
+          last_session_at?: string | null;
+          profile_initialized?: boolean;
+          initialization_status?: string;
+          initialization_completed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "user_blindspot_profile_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
       };
     };
     Views: Record<string, never>;

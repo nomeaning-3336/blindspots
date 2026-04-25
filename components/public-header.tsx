@@ -67,7 +67,6 @@ export function PublicHeaderClient({ isSignedIn }: { isSignedIn: boolean }) {
   const pathname = usePathname();
   const nextPath =
     pathname && pathname !== "/" ? pathname : "/train";
-  const signInHref = `/sign-in?next=${encodeURIComponent(nextPath)}`;
   const signUpHref = `/sign-up?next=${encodeURIComponent("/train")}`;
 
   return (
@@ -88,12 +87,9 @@ export function PublicHeaderClient({ isSignedIn }: { isSignedIn: boolean }) {
           {isSignedIn ? (
             <AppShellNav isSignedIn />
           ) : (
-            <>
-              <HeaderLink href={signInHref}>Sign in</HeaderLink>
-              <HeaderLink href={signUpHref} primary>
-                Start training
-              </HeaderLink>
-            </>
+            <HeaderLink href={signUpHref} primary>
+              Start training
+            </HeaderLink>
           )}
         </div>
       </div>

@@ -65,6 +65,13 @@ export function AccountLinkedProfileForm({
 
         lastSubmittedRef.current = submissionKey;
         setMessage("Profile linked.");
+        if (window.location.pathname !== "/train") {
+          void fetch("/api/train/initialize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "analyze" }),
+          }).catch(() => {});
+        }
         onLinked?.();
         router.refresh();
       });

@@ -135,14 +135,6 @@ function SecondaryLink({ href, children }: { href: string; children: React.React
   );
 }
 
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-[10px] font-bold uppercase text-[var(--app-accent)]">
-      {children}
-    </p>
-  );
-}
-
 function Dot({ pulse = false }: { pulse?: boolean }) {
   return (
     <span
@@ -398,8 +390,7 @@ export default async function HomePage() {
 
         <section className="mx-auto w-full max-w-7xl px-6 py-14 md:px-10">
           <div className="mb-10 text-center">
-            <Eyebrow>How training works</Eyebrow>
-            <h2 className="mt-4 text-4xl font-bold text-[var(--app-text)] md:text-5xl">
+            <h2 className="text-4xl font-bold text-[var(--app-text)] md:text-5xl">
               Four steps, repeated across sessions.
             </h2>
           </div>
@@ -425,8 +416,7 @@ export default async function HomePage() {
 
         <section className="mx-auto w-full max-w-4xl px-6 py-14 md:px-10">
           <div className="mb-8 text-center">
-            <Eyebrow>FAQ</Eyebrow>
-            <h2 className="mt-3 text-4xl font-bold text-[var(--app-text)]">
+            <h2 className="text-4xl font-bold text-[var(--app-text)]">
               Questions we get
             </h2>
           </div>
@@ -462,8 +452,7 @@ export default async function HomePage() {
                 "radial-gradient(640px 220px at 50% 0%, var(--app-accent-soft), transparent 64%), var(--app-panel-strong)",
             }}
           >
-            <Eyebrow>Closed beta</Eyebrow>
-            <h2 className="mx-auto mt-4 max-w-5xl text-4xl font-bold text-[var(--app-text)] md:text-5xl">
+            <h2 className="mx-auto max-w-5xl text-4xl font-bold text-[var(--app-text)] md:text-5xl">
               Start with positions from games you actually play.
             </h2>
             <p className="mx-auto mt-5 max-w-xl text-sm leading-7 text-[var(--app-muted)]">
@@ -472,7 +461,6 @@ export default async function HomePage() {
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <PrimaryLink href={startHref}>Start training</PrimaryLink>
-              <SecondaryLink href="/sign-in?next=%2Ftrain">Sign in</SecondaryLink>
             </div>
           </div>
         </section>

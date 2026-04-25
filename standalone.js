@@ -1671,6 +1671,7 @@
       selectSquare: (square) => handleSquareSelection(square),
       startAnalysis: (mode) => startAnalysis(mode),
       haltEngine: (explicit) => haltEngine(explicit),
+      pauseForNavigation: () => pauseEngineWorkForNavigation(),
       nodeRegistry: {
         get: (id) => nodeRegistry.get(id) || null,
         entries: () => nodeRegistry.entries(),
@@ -9602,6 +9603,48 @@
       : `${ENGINE_NAME} is ready.`;
     renderEngineStatus();
     maybeStartPieceCacheTask();
+  }
+
+  function pauseEngineWorkForNavigation() {
+    cancelAnimationFrame(state.searchRaf || 0);
+    state.searchRaf = 0;
+    clearAnalysisPublishTimer();
+    state.engineMode = "halt";
+    state.terminalAutoHalt = false;
+    state.pendingSearch = false;
+    state.silentSearchRetries = 0;
+    state.awaitingFinalAnalysis = false;
+    state.positionCacheQueue = [];
+    state.pieceCacheQueue = [];
+    state.nextPlyCacheQueue = [];
+    state.playedMoveCacheQueue = [];
+    state.cacheTask = null;
+    state.cacheTaskMap = new Map();
+    state.cacheQueueRefreshToken += 1;
+
+    if (state.engine) {
+      state.discardEngineInfo = true;
+      state.stopRequested = true;
+      sendEngine("stop");
+    }
+
+    if (state.cacheEngine) {
+      state.cacheStopRequested = true;
+      state.cacheEngineBusy = false;
+      sendCacheEngine("stop");
+    }
+
+    if (state.toolEngine) {
+      state.toolEngineStopRequested = true;
+      state.toolEngineBusy = false;
+      sendToolEngine("stop");
+    }
+
+    if (_toolEngineTask) {
+      clearTimeout(_toolEngineTask.timeout);
+      _toolEngineTask.reject(new Error("Analysis navigation interrupted."));
+      _toolEngineTask = null;
+    }
   }
 
   function restartSearchIfNeeded() {

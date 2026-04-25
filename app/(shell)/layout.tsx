@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { AppShellNav } from "@/components/app-shell-nav";
-import { PageTransition } from "@/components/navigation/page-transition";
 import { getOptionalAppUserId } from "@/lib/app-auth";
 
 export default async function ProtectedAppLayout({
@@ -65,7 +64,7 @@ export default async function ProtectedAppLayout({
         </div>
       </header>
       <main className="relative z-10 flex min-h-0 w-full flex-1 overflow-hidden px-4 pb-4 md:px-6">
-        <PageTransition>{children}</PageTransition>
+        {children}
       </main>
     </div>
   );

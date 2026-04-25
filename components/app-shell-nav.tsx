@@ -1,9 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AuthSignOutButton } from "@/components/auth-sign-out-button";
+
+const ANALYZE_ASSET_VERSION = "2026-04-25-nav-pause-v1";
+const analyzePrefetchLinks = [
+  {
+    rel: "preconnect",
+    href: "https://cdnjs.cloudflare.com",
+    crossOrigin: "anonymous",
+  },
+  {
+    rel: "prefetch",
+    as: "style",
+    href: `/analyze/standalone.css?v=${encodeURIComponent(ANALYZE_ASSET_VERSION)}`,
+  },
+  {
+    rel: "prefetch",
+    as: "script",
+    href: `/analyze/standalone.js?v=${encodeURIComponent(ANALYZE_ASSET_VERSION)}`,
+  },
+  {
+    rel: "prefetch",
+    as: "script",
+    href: "https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js",
+    crossOrigin: "anonymous",
+  },
+] as const;
 
 const appLinks = [
   { href: "/analysis", label: "Analysis" },
@@ -81,6 +106,22 @@ function AppShellSignInLink({ nextPath }: { nextPath: string }) {
   );
 }
 
+function prefetchAnalyzeAssets() {
+  for (const link of analyzePrefetchLinks) {
+    const existing = document.querySelector<HTMLLinkElement>(
+      `link[rel="${link.rel}"][href="${link.href}"]`,
+    );
+    if (existing) continue;
+
+    const element = document.createElement("link");
+    element.rel = link.rel;
+    element.href = link.href;
+    if ("as" in link) element.as = link.as;
+    if ("crossOrigin" in link) element.crossOrigin = link.crossOrigin;
+    document.head.appendChild(element);
+  }
+}
+
 export function AppShellNav({
   className = "",
   isSignedIn = false,
@@ -97,6 +138,14 @@ export function AppShellNav({
       pathname.startsWith("/account"))
       ? pathname
       : "/train";
+
+  useEffect(() => {
+    const scheduleIdle = window.requestIdleCallback ?? window.setTimeout;
+    const cancelIdle = window.cancelIdleCallback ?? window.clearTimeout;
+    const idleId = scheduleIdle(prefetchAnalyzeAssets, { timeout: 1500 });
+
+    return () => cancelIdle(idleId);
+  }, []);
 
   return (
     <div

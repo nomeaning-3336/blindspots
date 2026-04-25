@@ -1,12 +1,5 @@
-import type {
-  LinkedChessProfile,
-  PerformancePreferences,
-} from "@/lib/chess-profile";
-import {
-  isPerformanceGameType,
-  isPerformanceRangeDays,
-  normalizeChessProvider,
-} from "@/lib/chess-profile";
+import type { LinkedChessProfile, PerformancePreferences } from "@/lib/chess-profile";
+import { normalizeChessProvider } from "@/lib/chess-profile";
 import { getOptionalAppUserId } from "@/lib/app-auth";
 import type { Database } from "@/lib/supabase/database";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
@@ -18,27 +11,20 @@ export interface LinkedChessProfileRecord extends LinkedChessProfile {
   performancePreferences: PerformancePreferences | null;
 }
 
-function mapLinkedChessProfileRow(data: LinkedChessProfileRow) {
+function mapLinkedChessProfileRow(
+  data: LinkedChessProfileRow,
+): LinkedChessProfileRecord | null {
   const provider = normalizeChessProvider(data.provider);
 
   if (!provider) {
     return null;
   }
 
-  const performancePreferences =
-    isPerformanceRangeDays(data.preferred_performance_range_days) &&
-    isPerformanceGameType(data.preferred_performance_game_type)
-      ? {
-          rangeDays: data.preferred_performance_range_days,
-          gameType: data.preferred_performance_game_type,
-        }
-      : null;
-
   return {
     provider,
     username: data.username,
     linkedAt: data.linked_at,
-    performancePreferences,
+    performancePreferences: null,
   } satisfies LinkedChessProfileRecord;
 }
 
@@ -61,9 +47,7 @@ export async function getLinkedChessProfilesForUser(userId: string) {
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("linked_chess_profiles")
-    .select(
-      "user_id, provider, username, linked_at, preferred_performance_range_days, preferred_performance_game_type",
-    )
+    .select("user_id, provider, username, linked_at")
     .eq("user_id", userId)
     .order("linked_at", { ascending: false });
 
@@ -109,24 +93,6 @@ export async function upsertLinkedChessProfileForUser(
     }
 
     throw new Error(`Failed to save linked chess profile: ${error.message}`);
-  }
-}
-
-export async function updatePerformancePreferencesForUser(
-  userId: string,
-  preferences: PerformancePreferences,
-) {
-  const supabase = getSupabaseAdminClient();
-  const { error } = await supabase
-    .from("linked_chess_profiles")
-    .update({
-      preferred_performance_range_days: preferences.rangeDays,
-      preferred_performance_game_type: preferences.gameType,
-    })
-    .eq("user_id", userId);
-
-  if (error) {
-    throw new Error(`Failed to save performance preferences: ${error.message}`);
   }
 }
 
