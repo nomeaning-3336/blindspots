@@ -4,6 +4,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { resolve } from "node:path";
 import { Chess } from "chess.js";
 import { extractFenConsequenceFingerprint } from "@/lib/fen-consequence-similarity";
+import { buildInitializationExploitQueue } from "@/lib/training/queues";
 import { fetchGamesForProfile } from "@/lib/chess-performance-server";
 import { resolveClientAnalysisGame } from "@/lib/performance-analysis-game";
 import type { LinkedChessProfile } from "@/lib/chess-profile";
@@ -12,15 +13,19 @@ import type { ClientAnalysisTaskGame } from "@/lib/performance-client-analysis";
 import type { Json } from "@/lib/supabase/database";
 
 const INITIALIZATION_LOOKBACK_DAYS = 60;
-const INITIALIZATION_GAME_LIMIT = 15;
+const INITIALIZATION_GAME_LIMIT = 10;
 const INITIALIZATION_TIMEOUT_MS = 60000;
-const STOCKFISH_DEPTH = 15;
+const STOCKFISH_DEPTH = 11;
+const MAX_AVERAGE_CP_LOSS = 500;
 
 export interface TrainInitializationSummary {
   mistakesFound: number;
   gamesAnalyzed: number;
-  averageCpLossPerGame: number;
+  averageCpLossPerMove: number;
+  totalCpLoss: number;
+  totalMoves: number;
   weaknessVector: Json;
+  exploitQueue: Json;
 }
 
 type UserColor = NormalizedGame["userColor"];
@@ -49,6 +54,7 @@ async function analyzeGames(games: NormalizedGame[]): Promise<TrainInitializatio
   const highLossPositions: Array<{ fen: string; cpLoss: number }> = [];
   let gamesAnalyzed = 0;
   let totalCpLoss = 0;
+  let totalMoves = 0;
   let mistakesFound = 0;
 
   try {
@@ -66,6 +72,7 @@ async function analyzeGames(games: NormalizedGame[]): Promise<TrainInitializatio
         (sum, cpLoss) => sum + (typeof cpLoss === "number" ? cpLoss : 0),
         0,
       );
+      totalMoves += analyzed.cpLosses.filter((cpLoss) => typeof cpLoss === "number").length;
 
       analyzed.highLossPositions.forEach((position) => {
         if (position.cpLoss > 50) mistakesFound += 1;
@@ -83,8 +90,11 @@ async function analyzeGames(games: NormalizedGame[]): Promise<TrainInitializatio
   return {
     mistakesFound,
     gamesAnalyzed,
-    averageCpLossPerGame: Math.round(totalCpLoss / gamesAnalyzed),
+    averageCpLossPerMove: Math.round(totalCpLoss / Math.max(1, totalMoves)),
+    totalCpLoss,
+    totalMoves,
     weaknessVector: buildWeaknessVector(highLossPositions),
+    exploitQueue: buildInitializationExploitQueue(highLossPositions) as unknown as Json,
   };
 }
 
@@ -125,11 +135,12 @@ async function analyzeGameMoves(
       moveIndex % 2 === 0
         ? Math.max(0, previousEval - currentEval)
         : Math.max(0, currentEval - previousEval);
+    const clampedCpLoss = clampAverageCpLoss(cpLoss);
 
     if (isUserMoveIndex(moveIndex, userColor)) {
-      cpLosses.push(cpLoss);
-      if (cpLoss > 50) {
-        highLossPositions.push({ fen: beforeFen, cpLoss });
+      cpLosses.push(clampedCpLoss);
+      if (clampedCpLoss > 50) {
+        highLossPositions.push({ fen: beforeFen, cpLoss: clampedCpLoss });
       }
     }
 
@@ -137,6 +148,11 @@ async function analyzeGameMoves(
   }
 
   return { cpLosses, highLossPositions };
+}
+
+function clampAverageCpLoss(cpLoss: number) {
+  if (!Number.isFinite(cpLoss)) return MAX_AVERAGE_CP_LOSS;
+  return Math.max(0, Math.min(MAX_AVERAGE_CP_LOSS, Math.round(cpLoss)));
 }
 
 function buildWeaknessVector(positions: Array<{ fen: string; cpLoss: number }>): Json {

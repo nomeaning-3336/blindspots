@@ -1,6 +1,9 @@
 export default function AnalysisLoading() {
   return (
-    <div className="relative flex h-full w-full items-center justify-center">
+    <div
+      className="relative flex h-full w-full items-center justify-center"
+      data-route-loading="true"
+    >
       <div
         className="h-10 w-10 animate-spin rounded-full border-2"
         style={{

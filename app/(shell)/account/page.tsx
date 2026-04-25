@@ -4,8 +4,10 @@ import { getAnalyzePreferences } from "@/lib/analyze-preferences-store";
 import { syncAnalyzePreferencesWithAppTheme } from "@/lib/analyze-preferences";
 import { AccountThemeForm } from "@/components/account-theme-form";
 import { AnalyzeSettingsForm } from "@/components/analyze-settings-form";
+import { AccountTrainingPreferencesForm } from "@/components/account-training-preferences-form";
 import { AccountLinkedProfilesManager } from "@/components/account-linked-profiles-manager";
 import { getOptionalAppUserId } from "@/lib/app-auth";
+import { getTrainingPreferences } from "@/lib/training-preferences-store";
 
 function bannerCopy(status?: string | null, error?: string | null, provider?: string | null) {
   if (error === "invalid-provider") {
@@ -81,10 +83,17 @@ export default async function AccountPage({
 }) {
   const userId = await getOptionalAppUserId();
 
-  const [linkedProfiles, currentTheme, analyzePreferences, resolvedSearchParams] = await Promise.all([
+  const [
+    linkedProfiles,
+    currentTheme,
+    analyzePreferences,
+    trainingPreferences,
+    resolvedSearchParams,
+  ] = await Promise.all([
     getLinkedChessProfiles(),
     getUserAppTheme(),
     getAnalyzePreferences(),
+    getTrainingPreferences(),
     searchParams,
   ]);
 
@@ -151,6 +160,22 @@ export default async function AccountPage({
             </div>
 
             <AccountLinkedProfilesManager profiles={linkedProfiles} />
+          </article>
+        )}
+
+        {userId && (
+          <article className="app-brutal-card p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold uppercase tracking-[0.14em] text-white">
+                  Training Settings
+                </h2>
+              </div>
+            </div>
+
+            <AccountTrainingPreferencesForm
+              currentPreferences={trainingPreferences ?? { sequenceLength: 4 }}
+            />
           </article>
         )}
 

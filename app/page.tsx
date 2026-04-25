@@ -270,7 +270,7 @@ function HeroVisual() {
               Opponent
             </p>
             <p className="mt-1 text-sm font-bold text-[var(--app-text)]">
-              Human-like / 1920
+              Stockfish
             </p>
           </div>
           <div className="text-right">
