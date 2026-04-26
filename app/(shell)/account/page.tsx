@@ -6,8 +6,9 @@ import { AccountThemeForm } from "@/components/account-theme-form";
 import { AnalyzeSettingsForm } from "@/components/analyze-settings-form";
 import { AccountTrainingPreferencesForm } from "@/components/account-training-preferences-form";
 import { AccountLinkedProfilesManager } from "@/components/account-linked-profiles-manager";
-import { getOptionalAppUserId } from "@/lib/app-auth";
+import { getVerifiedAppUserId } from "@/lib/app-auth";
 import { getTrainingPreferences } from "@/lib/training-preferences-store";
+import { redirect } from "next/navigation";
 
 function bannerCopy(status?: string | null, error?: string | null, provider?: string | null) {
   if (error === "invalid-provider") {
@@ -81,7 +82,16 @@ export default async function AccountPage({
     provider?: string | string[];
   }>;
 }) {
-  const userId = await getOptionalAppUserId();
+  const userIdResult = await getVerifiedAppUserId();
+
+  if (userIdResult.status !== "valid") {
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[auth] /account redirecting — status:", userIdResult.status);
+    }
+    redirect("/sign-in?next=/account");
+  }
+
+  const userId = userIdResult.userId;
 
   const [
     linkedProfiles,

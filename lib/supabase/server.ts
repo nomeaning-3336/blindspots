@@ -98,7 +98,31 @@ export async function getSupabaseServerUser(): Promise<User | null> {
   const { data, error } = await supabase.auth.getUser();
 
   if (error) {
-    if (error.message.toLowerCase().includes("auth session missing")) {
+    const message = error.message.toLowerCase();
+    const isMissing = message.includes("auth session missing");
+    const isDeleted =
+      message.includes("user not found") ||
+      message.includes("user from sub claim in jwt does not exist") ||
+      message.includes("user does not exist");
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[auth] getUser error — missing:", isMissing, "deleted:", isDeleted, "message:", error.message);
+    }
+
+    if (isMissing) {
+      return null;
+    }
+
+    if (isDeleted) {
+      try {
+        const cookieStore = await cookies();
+        for (const cookie of cookieStore.getAll()) {
+          if (cookie.name.startsWith("sb-") && cookie.name.includes("auth-token")) {
+            cookieStore.delete(cookie.name);
+          }
+        }
+      } catch { /* cookie cleanup best-effort */ }
+
       return null;
     }
 
