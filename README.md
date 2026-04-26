@@ -1,3 +1,7 @@
+# Future TODOs (maybe):
+
+I want to implement an animated background feature for my site. Instead of only having the board theme and the piece set, I also want a feature that changes the background into something like e.g. an aquarium with fishes or a sky with clouds, or a valley with sheep, or space but these wallpapers need to be simple svg animations, basically some front end worker will be controlling these svg's to create this background
+
 # Blindspots.gg
 
 Blindspots.gg is a position-based chess training simulator.
