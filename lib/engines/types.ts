@@ -22,6 +22,7 @@ export interface EngineEvalOptions {
 
 export interface EngineLineOptions extends EngineEvalOptions {
   multiPv?: number;
+  searchMoves?: string[];
 }
 
 export interface EngineMove {
