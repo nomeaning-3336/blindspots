@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PublicHeaderClient } from "@/components/public-header";
+import { PublicFaq } from "@/components/public-faq";
 import { getOptionalAppUserId } from "@/lib/app-auth";
 
 const loopSteps = [
@@ -418,28 +419,7 @@ export default async function HomePage() {
               Questions people keep asking
             </h2>
           </div>
-          <div className="border-t border-[var(--app-border)]">
-            {faqItems.map((item, index) => (
-              <details
-                key={item.question}
-                open={index === 0}
-                className="group border-b border-[var(--app-border)] py-5"
-              >
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-5 text-left text-base font-bold text-[var(--app-text)]">
-                  {item.question}
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--app-border)] text-[var(--app-accent)] group-open:hidden">
-                    +
-                  </span>
-                  <span className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--app-border)] text-[var(--app-accent)] group-open:flex">
-                    -
-                  </span>
-                </summary>
-                <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--app-muted)]">
-                  {item.answer}
-                </p>
-              </details>
-            ))}
-          </div>
+          <PublicFaq items={faqItems} />
         </section>
 
         <section className="mx-auto w-full max-w-7xl px-6 py-14 md:px-10">

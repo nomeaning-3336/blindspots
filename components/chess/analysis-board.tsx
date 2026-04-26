@@ -54,6 +54,7 @@ export type AnalysisBoardProps = {
   onCircleHover?: (square: string | null) => void;
   onEngineArrowClick?: (move: BoardMove) => void;
   className?: string;
+  dataTestId?: string;
 };
 
 const BOARD_THEMES: Record<AnalyzeBoardTheme, { light: string; dark: string; coord: string }> = {
@@ -100,6 +101,7 @@ export function AnalysisBoard({
   onCircleHover,
   onEngineArrowClick,
   className = "",
+  dataTestId,
 }: AnalysisBoardProps) {
   const chess = useMemo(() => safeChess(fen), [fen]);
   const [internalSelected, setInternalSelected] = useState<string | null>(null);
@@ -384,6 +386,7 @@ export function AnalysisBoard({
 
   return (
     <div
+      data-testid={dataTestId}
       className={[
         "relative aspect-square w-full overflow-hidden rounded-[10px] border border-[var(--app-border)] bg-[var(--app-panel-deep)] shadow-[var(--app-shadow)]",
         disabled && annotationsDisabled ? "pointer-events-none" : "",
