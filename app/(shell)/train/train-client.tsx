@@ -98,6 +98,8 @@ type ExploratoryPosition = {
 
 type NextPositionResponse = {
   fen?: string;
+  previousFen?: string;
+  playedMove?: string;
   sequenceLength?: number;
   source?: string;
   error?: string;
@@ -283,16 +285,17 @@ function playTrainMoveSound(
     const source = context.createBufferSource();
     source.buffer = buffer;
     if (pitchStepRef && pitchForExplore) {
-      // Explore traversal: normalize pitch across sequence length, reset on first move
+      // Explore traversal: derive pitch from the move's display position.
+      // position 1 -> displayMoves[0] -> pitch 0, position 2 -> pitch 1, etc.
+      const pitchIndex = Math.max(0, pitchForExplore.targetIndex - 1);
       if (pitchForExplore.targetIndex === 0) {
         pitchStepRef.current = 0;
       }
       source.playbackRate.value = normalizedMovePitch(
-        pitchForExplore.targetIndex,
+        pitchIndex,
         pitchForExplore.sequenceLength,
       );
       if (pitchForExplore.targetIndex === pitchForExplore.sequenceLength - 1) {
-        // At end move — advance step so next position starts at beginning of scale
         pitchStepRef.current += 1;
       }
     } else if (pitchStepRef) {
@@ -399,11 +402,13 @@ export default function TrainPage() {
   } | null>(null);
   const [pieceLineCache, setPieceLineCache] = useState<Record<string, EngineLineResult[]>>({});
   const [pieceLinesLoadingKey, setPieceLinesLoadingKey] = useState<string | null>(null);
-  const moveSoundStepRef = useRef(0);
+  const moveSoundPlyRef = useRef(0);
   const completingRef = useRef(false);
   const completionRequestRef = useRef(0);
   const initialOpponentMoveRef = useRef<TrainingMove | null>(null);
   const initialOpponentRequestRef = useRef(0);
+  const [initialOpponentMove, setInitialOpponentMove] = useState<TrainingMove | null>(null);
+  const [displayStartingFen, setDisplayStartingFen] = useState(mockRep.fen);
   const nextPositionPrefetchRef = useRef<Promise<NextPositionResponse | null> | null>(null);
   const engineLineCacheRef = useRef<Record<string, EngineLineResult[]>>({});
   const engineLinePrefetchRef = useRef<Map<string, Promise<void>>>(new Map());
@@ -503,8 +508,9 @@ export default function TrainPage() {
   function switchState(nextState: TrainingState) {
     completingRef.current = false;
     initialOpponentMoveRef.current = null;
+    setInitialOpponentMove(null);
     initialOpponentRequestRef.current += 1;
-    moveSoundStepRef.current = 0;
+    moveSoundPlyRef.current = 0;
     setState(nextState);
     setResultMode("results");
     setExploreIndex(0);
@@ -517,6 +523,7 @@ export default function TrainPage() {
     setIsCompletingSequence(false);
     setEloResult(null);
     setLastMove(null);
+    setDisplayStartingFen(startingFen);
     if (nextState === "active") {
       void loadNextPosition();
     }
@@ -553,8 +560,10 @@ export default function TrainPage() {
 
       if (!payload?.fen) {
         setStartingFen(mockRep.fen);
+        setDisplayStartingFen(mockRep.fen);
         setFen(mockRep.fen);
         setMoves([]);
+        setInitialOpponentMove(null);
         setSequenceLength(DEFAULT_SEQUENCE_LENGTH);
         return;
       }
@@ -576,10 +585,11 @@ export default function TrainPage() {
     if (!payload.fen) return;
     completingRef.current = false;
     initialOpponentMoveRef.current = null;
-    moveSoundStepRef.current = 0;
+    setInitialOpponentMove(null);
+    moveSoundPlyRef.current = 0;
 
     setStartingFen(payload.fen);
-    setFen(payload.fen);
+    setDisplayStartingFen(payload.previousFen ?? payload.fen);
     setMoves([]);
     setLastMove(null);
     setResultMode("results");
@@ -593,7 +603,48 @@ export default function TrainPage() {
     setPieceLinesLoadingKey(null);
     setSequenceLength(normalizeSequenceLength(payload.sequenceLength));
 
-    void playInitialOpponentMove(payload.fen);
+    if (payload.previousFen && payload.playedMove) {
+      void playInitialOpponentMoveFromPayload(payload);
+    } else {
+      void playInitialOpponentMove(payload.fen);
+    }
+  }
+
+  async function playInitialOpponentMoveFromPayload(payload: NextPositionResponse) {
+    const requestId = initialOpponentRequestRef.current + 1;
+    initialOpponentRequestRef.current = requestId;
+
+    initialOpponentMoveRef.current = null;
+    setInitialOpponentMove(null);
+
+    const previousFen = payload.previousFen!;
+    const playedMove = payload.playedMove!;
+
+    const applied = applyIndexedMove(previousFen, playedMove);
+    if (!applied) return;
+
+    initialOpponentMoveRef.current = applied.move;
+    setInitialOpponentMove(applied.move);
+
+    setIsOpponentThinking(true);
+
+    // Show the "before" position with the move highlighted.
+    setFen(previousFen);
+    await sleep(360);
+
+    if (initialOpponentRequestRef.current !== requestId) return;
+
+    setLastMove(applied.lastMove);
+    playTrainMoveSound(applied.move, true, moveSoundPlyRef);
+    await sleep(540);
+
+    if (initialOpponentRequestRef.current !== requestId) return;
+
+    setFen(payload.fen!);
+
+    if (initialOpponentRequestRef.current === requestId) {
+      setIsOpponentThinking(false);
+    }
   }
 
   async function playInitialOpponentMove(targetFen: string) {
@@ -650,7 +701,7 @@ export default function TrainPage() {
 
       // Highlight the move on the opponent's position.
       setLastMove({ from: played.from, to: played.to });
-      playTrainMoveSound(played, true, moveSoundStepRef);
+      playTrainMoveSound(played, true, moveSoundPlyRef);
       await sleep(540);
 
       if (initialOpponentRequestRef.current !== requestId) return;
@@ -785,7 +836,7 @@ export default function TrainPage() {
       };
       const movesAfterUserMove = [...moves, userTrainingMove];
 
-      playTrainMoveSound(playedMove, true, moveSoundStepRef);
+      playTrainMoveSound(playedMove, true, moveSoundPlyRef);
       setFen(fenAfterUserMove);
       setLastMove({ from: move.from, to: move.to });
       setMoves(movesAfterUserMove);
@@ -819,7 +870,7 @@ export default function TrainPage() {
       const playedMove = chess.move({ from: move.from, to: move.to, promotion: "q" });
       if (!playedMove) return;
 
-      playTrainMoveSound(playedMove, true, moveSoundStepRef);
+      playTrainMoveSound(playedMove, true, moveSoundPlyRef);
       const nextExploratoryPosition = {
         fen: chess.fen(),
         lastMove: { from: playedMove.from, to: playedMove.to },
@@ -866,7 +917,7 @@ export default function TrainPage() {
       });
       if (!playedMove) return;
 
-      playTrainMoveSound(playedMove, true, moveSoundStepRef);
+      playTrainMoveSound(playedMove, true, moveSoundPlyRef);
       setFen(chess.fen());
       setLastMove({ from: playedMove.from, to: playedMove.to });
       const finalMoves = [
@@ -1053,9 +1104,13 @@ export default function TrainPage() {
   const boardOrientation = userMoveSide;
   const userMoveCount = moves.filter((move) => move.side === userMoveSide).length;
   const moveProgress = Math.min(userMoveCount + 1, sequenceLength);
+  const displayMoves = useMemo(
+    () => initialOpponentMove ? [initialOpponentMove, ...moves] : moves,
+    [initialOpponentMove, moves],
+  );
   const sequencePositions = useMemo(
-    () => buildSequencePositions(startingFen, moves),
-    [startingFen, moves],
+    () => buildSequencePositions(displayStartingFen, displayMoves),
+    [displayStartingFen, displayMoves],
   );
   const activeExploreIndex = Math.min(exploreIndex, Math.max(0, sequencePositions.length - 1));
   const explorePosition = sequencePositions[activeExploreIndex] ?? sequencePositions[0];
@@ -1218,7 +1273,7 @@ export default function TrainPage() {
     setHoveredMoveSquares(null);
     const move = moveForExploreSound(sequencePositions, activeExploreIndex, boundedIndex);
     if (move) {
-      playTrainMoveSound(move, true, moveSoundStepRef, {
+      playTrainMoveSound(move, true, moveSoundPlyRef, {
         targetIndex: boundedIndex,
         sequenceLength: sequencePositions.length,
       });
@@ -1435,7 +1490,7 @@ export default function TrainPage() {
               ) : null}
 
               <MoveList
-                moves={moves}
+                moves={displayMoves}
                 userSide={userMoveSide}
                 isOpponentThinking={isOpponentThinking}
                 showHeaders={false}
@@ -1805,6 +1860,40 @@ function resolveProfileConnectionError(error?: string) {
 
 function waitForMinimumElapsed(startedAt: number, minimumMs: number) {
   return sleep(Math.max(0, minimumMs - (performance.now() - startedAt)));
+}
+
+function applyIndexedMove(previousFen: string, playedMove: string): {
+  move: TrainingMove;
+  fenAfter: string;
+  lastMove: { from: string; to: string };
+} | null {
+  try {
+    const chess = new Chess(previousFen);
+    let played;
+    if (/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(playedMove)) {
+      played = chess.move({
+        from: playedMove.slice(0, 2),
+        to: playedMove.slice(2, 4),
+        promotion: playedMove[4],
+      });
+    } else {
+      played = chess.move(playedMove);
+    }
+    if (!played) return null;
+    return {
+      move: {
+        san: played.san,
+        uci: `${played.from}${played.to}${played.promotion ?? ""}`,
+        side: played.color === "w" ? "white" : "black",
+        fenBefore: previousFen,
+        fenAfter: chess.fen(),
+      },
+      fenAfter: chess.fen(),
+      lastMove: { from: played.from, to: played.to },
+    };
+  } catch {
+    return null;
+  }
 }
 
 function sleep(ms: number) {
@@ -2505,51 +2594,75 @@ function MoveList({
   isOpponentThinking: boolean;
   showHeaders?: boolean;
 }) {
-  const rows = moves.reduce<Array<{ user?: TrainingMove; opponent?: TrainingMove }>>((acc, move) => {
-    if (move.side === userSide || acc.length === 0) {
-      acc.push(move.side === userSide ? { user: move } : { opponent: move });
-      return acc;
-    }
+  // Build rows by fullmove number with white on left, black on right.
+  const rows: Array<{ white?: TrainingMove; black?: TrainingMove; moveNumber: number; isFirstBlack?: boolean }> = [];
+  let moveNumber = 0;
+  let lastWasWhite = true;
 
-    acc[acc.length - 1].opponent = move;
-    return acc;
-  }, []);
+  for (const move of moves) {
+    if (move.side === "white") {
+      moveNumber += 1;
+      rows.push({ white: move, moveNumber });
+      lastWasWhite = true;
+    } else {
+      if (rows.length === 0) {
+        // Engine starts as black: first row has "..." prefix
+        rows.push({ black: move, moveNumber: 1, isFirstBlack: true });
+      } else {
+        rows[rows.length - 1].black = move;
+      }
+      lastWasWhite = false;
+    }
+  }
 
   return (
     <div className="mt-8 overflow-hidden border-y border-[var(--app-border-soft)] py-2">
       {showHeaders ? (
         <div className="grid min-h-9 grid-cols-[46px_minmax(0,1fr)_minmax(0,1fr)] items-center px-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
           <span />
-          <span className="pl-8">You</span>
-          <span>Opponent</span>
+          <span className="pl-8">White</span>
+          <span>Black</span>
         </div>
       ) : null}
       {moves.length === 0 ? (
         <p className="py-8 text-center text-sm text-[var(--app-muted)]">No moves played yet</p>
       ) : null}
-      {rows.map((row, index) => (
-        <div
-          key={`${index}-${row.user?.uci ?? ""}-${row.opponent?.uci ?? ""}`}
-          className={[
-            "grid min-h-12 grid-cols-[46px_minmax(0,1fr)_minmax(0,1fr)] items-center border-b border-[var(--app-border-soft)] px-2 text-sm last:border-b-0",
-            index === rows.length - 1 ? "bg-white/[0.03]" : "",
-          ].join(" ")}
-        >
-          <span className="text-right text-[var(--app-muted)]">{index + 1}.</span>
-          <span className="flex min-w-0 items-center gap-2 pl-8 font-bold">
-            {row.user?.classification ? <ClassificationBadge classification={row.user.classification} /> : null}
-            <span className="truncate" style={{ color: classificationColor(row.user?.classification) }}>
-              {row.user?.san ?? ""}
-            </span>
-            {typeof row.user?.cpLoss === "number" ? (
-              <span className="shrink-0 text-[11px] font-normal text-[var(--app-muted)]">
-                {row.user.cpLoss}cp
+      {rows.map((row, index) => {
+        const prefix = row.isFirstBlack ? `${row.moveNumber}... ` : `${row.moveNumber}. `;
+        return (
+          <div
+            key={`${index}-${row.white?.uci ?? ""}-${row.black?.uci ?? ""}`}
+            className={[
+              "grid min-h-12 grid-cols-[46px_minmax(0,1fr)_minmax(0,1fr)] items-center border-b border-[var(--app-border-soft)] px-2 text-sm last:border-b-0",
+              index === rows.length - 1 ? "bg-white/[0.03]" : "",
+            ].join(" ")}
+          >
+            <span className="text-right text-[var(--app-muted)]">{prefix}</span>
+            <span className="flex min-w-0 items-center gap-2 pl-8 font-bold">
+              {row.white?.classification ? <ClassificationBadge classification={row.white.classification} /> : null}
+              <span className="truncate" style={{ color: classificationColor(row.white?.classification) }}>
+                {row.white?.san ?? ""}
               </span>
-            ) : null}
-          </span>
-          <span className="font-bold text-[var(--app-muted)]">{row.opponent?.san ?? ""}</span>
-        </div>
-      ))}
+              {typeof row.white?.cpLoss === "number" ? (
+                <span className="shrink-0 text-[11px] font-normal text-[var(--app-muted)]">
+                  {row.white.cpLoss}cp
+                </span>
+              ) : null}
+            </span>
+            <span className="flex min-w-0 items-center gap-2 font-bold">
+              {row.black?.classification ? <ClassificationBadge classification={row.black.classification} /> : null}
+              <span className="truncate" style={{ color: classificationColor(row.black?.classification) }}>
+                {row.black?.san ?? ""}
+              </span>
+              {typeof row.black?.cpLoss === "number" ? (
+                <span className="shrink-0 text-[11px] font-normal text-[var(--app-muted)]">
+                  {row.black.cpLoss}cp
+                </span>
+              ) : null}
+            </span>
+          </div>
+        );
+      })}
       {isOpponentThinking ? (
         <div className="grid min-h-12 grid-cols-[46px_minmax(0,1fr)] items-center px-2 text-sm">
           <span />

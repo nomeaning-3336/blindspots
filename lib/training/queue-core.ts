@@ -14,6 +14,8 @@ export type TrainingQueueItem = {
   sessionId?: string;
   gameId?: string;
   ply?: number;
+  previousFen?: string;
+  playedMove?: string;
 };
 
 export type TrainingQueues = {
