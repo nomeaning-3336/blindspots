@@ -74,6 +74,14 @@ type SequencePosition = {
   move?: TrainingMove;
 };
 
+type VisibleSequencePosition = {
+  index: number;
+  fen: string;
+  label: string;
+  move?: TrainingMove;
+  pitchIndex?: number;
+};
+
 type EngineLineResult = {
   cp: number;
   depth: number;
@@ -317,7 +325,19 @@ function playTrainMoveSoundImpl(
       pitchIndex = ref.current;
     }
 
-    source.playbackRate.value = pitchRatioForPly(pitchIndex);
+    const playbackRate = pitchRatioForPly(pitchIndex);
+    source.playbackRate.value = playbackRate;
+
+    if (typeof window !== "undefined" && !!(window as unknown as Record<string, unknown>).__blindspotsTrainSoundEvents) {
+      const events = (window as unknown as { __blindspotsTrainSoundEvents: Array<{ san: unknown; uci: unknown; pitchIndex: number; playbackRate: number; source: string }> }).__blindspotsTrainSoundEvents;
+      events.push({
+        san: (move as { san?: unknown })?.san,
+        uci: (move as { uci?: unknown })?.uci,
+        pitchIndex,
+        playbackRate,
+        source: options.pitchIndex !== undefined ? "replay" : "live",
+      });
+    }
 
     const gainNode = context.createGain();
     gainNode.gain.value = isCapture ? 1.0 : 0.85;
@@ -710,6 +730,7 @@ export default function TrainPage() {
         fenAfter: chess.fen(),
       };
       initialOpponentMoveRef.current = move;
+      setInitialOpponentMove(move);
 
       // Show the opponent's position first so the user can see the "before" state.
       setFen(opponentFen);
@@ -1126,21 +1147,41 @@ export default function TrainPage() {
     () => initialOpponentMove ? [initialOpponentMove, ...moves] : moves,
     [initialOpponentMove, moves],
   );
-  const sequencePositions = useMemo(
-    () => buildSequencePositions(displayStartingFen, displayMoves),
-    [displayStartingFen, displayMoves],
+  const visibleSequencePositions = useMemo(
+    () => buildVisibleSequencePositions({
+      startingFen,
+      moves,
+      initialOpponentMove,
+    }),
+    [startingFen, moves, initialOpponentMove],
   );
-  const activeExploreIndex = Math.min(exploreIndex, Math.max(0, sequencePositions.length - 1));
-  const explorePosition = sequencePositions[activeExploreIndex] ?? sequencePositions[0];
+
+  // Dev-only timeline instrumentation — placed after displayMoves/visibleSequencePositions are declared
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production" && !(window as unknown as Record<string, unknown>).__BLINDSPOTS_QA__) return;
+    (window as unknown as { __blindspotsTrainTimeline?: unknown }).__blindspotsTrainTimeline = {
+      get startingFen() { return startingFen; },
+      get displayStartingFen() { return displayStartingFen; },
+      get moves() { return moves; },
+      get initialOpponentMove() { return initialOpponentMove; },
+      get displayMoves() { return displayMoves; },
+      get visibleSequencePositions() { return visibleSequencePositions; },
+    };
+  }, [startingFen, displayStartingFen, moves, initialOpponentMove, displayMoves, visibleSequencePositions]);
+
+  const activeExploreIndex = Math.min(exploreIndex, Math.max(0, visibleSequencePositions.length - 1));
+  const activeSequencePosition = visibleSequencePositions[activeExploreIndex] ?? visibleSequencePositions[0];
   const isExploringResults = state === "complete" && resultMode === "explore";
   const activeExploratoryPosition =
     exploratoryHistoryIndex >= 0 ? exploratoryHistory[exploratoryHistoryIndex] : null;
-  const boardFen = isExploringResults ? (activeExploratoryPosition?.fen ?? exploratoryFen ?? explorePosition?.fen ?? fen) : fen;
-  const boardLastMove = isExploringResults
-    ? (activeExploratoryPosition?.lastMove ?? exploratoryLastMove ?? lastMoveForPosition(explorePosition))
+  const boardFen = isExploringResults
+    ? (activeExploratoryPosition?.fen ?? exploratoryFen ?? activeSequencePosition?.fen ?? fen)
+    : fen;
+  const replayLastMove = isExploringResults
+    ? (activeExploratoryPosition?.lastMove ?? exploratoryLastMove ?? lastMoveFromTrainingMove(activeSequencePosition?.move))
     : lastMove;
   const boardLastMoveBadge = isExploringResults && !activeExploratoryPosition && !exploratoryFen
-    ? moveBadgeForPosition(explorePosition)
+    ? moveBadgeForPosition(activeSequencePosition)
     : null;
   const selectedMove =
     selectedMoveIndex != null && selectedMoveIndex > 0 && selectedMoveIndex <= moves.length
@@ -1242,23 +1283,23 @@ export default function TrainPage() {
       } else if (event.key === "ArrowUp") {
         navigateExploreTo(0, "start");
       } else {
-        navigateExploreTo(sequencePositions.length - 1, "end");
+        navigateExploreTo(visibleSequencePositions.length - 1, "end");
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeExploreIndex, exploratoryHistory.length, exploratoryHistoryIndex, isExploringResults, sequencePositions.length]);
+  }, [activeExploreIndex, exploratoryHistory.length, exploratoryHistoryIndex, isExploringResults, visibleSequencePositions.length]);
 
   useEffect(() => {
     if (state !== "complete" || resultMode === "explore") return;
     const timer = window.setTimeout(() => {
-      setExploreIndex(Math.max(0, sequencePositions.length - 1));
+      setExploreIndex(Math.max(0, visibleSequencePositions.length - 1));
       resetExploratoryLine();
       setResultMode("explore");
     }, 180);
     return () => window.clearTimeout(timer);
-  }, [resultMode, sequencePositions.length, state]);
+  }, [resultMode, visibleSequencePositions.length, state]);
 
   function navigateExploratoryLine(nextIndex: number) {
     if (nextIndex < -1) {
@@ -1281,7 +1322,7 @@ export default function TrainPage() {
     nextIndex: number,
     boundary: "start" | "end" = "end",
   ) {
-    const maxIndex = Math.max(0, sequencePositions.length - 1);
+    const maxIndex = Math.max(0, visibleSequencePositions.length - 1);
     const boundedIndex = Math.max(0, Math.min(maxIndex, nextIndex));
     if (boundedIndex === activeExploreIndex && nextIndex !== activeExploreIndex) {
       return;
@@ -1289,10 +1330,10 @@ export default function TrainPage() {
     resetExploratoryLine();
     setHoveredEngineLineIndex(null);
     setHoveredMoveSquares(null);
-    const move = moveForExploreSound(sequencePositions, activeExploreIndex, boundedIndex);
-    if (move) {
-      playTrainMoveSound(move, {
-        pitchIndex: Math.max(0, boundedIndex - 1),
+    const targetPos = visibleSequencePositions[boundedIndex];
+    if (targetPos?.move && typeof targetPos.pitchIndex === "number") {
+      playTrainMoveSound(targetPos.move, {
+        pitchIndex: targetPos.pitchIndex,
         advanceLivePitch: false,
       });
     }
@@ -1352,7 +1393,7 @@ export default function TrainPage() {
                       coordinates
                       showLegalTargets={false}
                       selectedSquare={exploreSelectedSquare}
-                      lastMove={boardLastMove}
+                      lastMove={replayLastMove}
                       lastMoveBadge={boardLastMoveBadge}
                       boardTheme={visualPreferences.boardTheme}
                       pieceTheme={visualPreferences.pieceTheme}
@@ -1411,13 +1452,14 @@ export default function TrainPage() {
                     orientation={boardOrientation}
                     coordinates
                     showLegalTargets
-                    lastMove={boardLastMove}
+                    lastMove={replayLastMove}
                     boardTheme={visualPreferences.boardTheme}
                     pieceTheme={visualPreferences.pieceTheme}
                     disabled={state !== "active" || isOpponentThinking}
                     annotationsDisabled={false}
                     highlightedSquares={getTrainingBoardHighlights(state)}
                     onMove={handleMove}
+                    dataTestId="train-board"
                   />
                 )}
               </BoardWithPlayerStrips>
@@ -1433,6 +1475,7 @@ export default function TrainPage() {
         </section>
 
         <aside
+          data-testid="train-move-panel"
           className={[
             "flex flex-col rounded-[14px] border border-[var(--app-border-soft)] bg-[var(--app-panel-strong)]",
             state === "complete" && resultMode === "results"
@@ -1448,7 +1491,7 @@ export default function TrainPage() {
               userSide={userMoveSide}
               startingFen={startingFen}
               mode={resultMode}
-              positions={sequencePositions}
+              positions={visibleSequencePositions}
               currentIndex={activeExploreIndex}
               engineLines={classifiedDisplayLines}
               isEngineLinesLoading={isDisplayLoading}
@@ -1755,7 +1798,7 @@ function PromptCard({ side }: { side: "white" | "black" }) {
       ? "White to move. Make it count."
       : "Black to move. Try not to improvise.";
   return (
-    <div className="mt-8 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-5 py-5">
+    <div data-testid="train-prompt" className="mt-8 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-5 py-5">
       <p className="text-lg font-bold text-[var(--app-text)]">{label}</p>
     </div>
   );
@@ -1987,6 +2030,66 @@ function buildSequencePositions(startingFen: string, moves: TrainingMove[]): Seq
   });
 
   return positions;
+}
+
+function buildVisibleSequencePositions(params: {
+  startingFen: string;
+  moves: TrainingMove[];
+  initialOpponentMove: TrainingMove | null;
+}): VisibleSequencePosition[] {
+  const positions: VisibleSequencePosition[] = [];
+
+  if (params.initialOpponentMove) {
+    positions.push({
+      index: 0,
+      fen: params.startingFen,
+      label: params.initialOpponentMove.san,
+      move: params.initialOpponentMove,
+      pitchIndex: 0,
+    });
+  } else {
+    positions.push({
+      index: 0,
+      fen: params.startingFen,
+      label: "Start",
+    });
+  }
+
+  let chess: Chess;
+  try {
+    chess = new Chess(params.startingFen);
+  } catch {
+    return positions;
+  }
+
+  params.moves.forEach((move) => {
+    const fenBefore = move.fenBefore ?? chess.fen();
+    const fenAfter = move.fenAfter ?? fenAfterUci(fenBefore, move.uci);
+    if (fenAfter) {
+      positions.push({
+        index: positions.length,
+        fen: fenAfter,
+        label: move.san,
+        move,
+        pitchIndex: params.initialOpponentMove ? positions.length - 1 : positions.length,
+      });
+      try {
+        chess = new Chess(fenAfter);
+      } catch {
+        // Keep positions gathered so far if a stale record cannot be replayed.
+      }
+    }
+  });
+
+  return positions;
+}
+
+function lastMoveFromTrainingMove(move?: TrainingMove | null) {
+  if (!move?.uci || move.uci.length < 4) return null;
+  return {
+    from: move.uci.slice(0, 2),
+    to: move.uci.slice(2, 4),
+  };
 }
 
 function collectKeyAnalysisFens(startingFen: string, moves: TrainingMove[]) {
@@ -2642,20 +2745,21 @@ function MoveList({
         </div>
       ) : null}
       {moves.length === 0 ? (
-        <p className="py-8 text-center text-sm text-[var(--app-muted)]">No moves yet. That is on you.</p>
+        <p data-testid="train-move-empty" className="py-8 text-center text-sm text-[var(--app-muted)]">No moves yet. That is on you.</p>
       ) : null}
       {rows.map((row, index) => {
         const prefix = row.isFirstBlack ? `${row.moveNumber}... ` : `${row.moveNumber}. `;
         return (
           <div
+            data-testid="train-move-row"
             key={`${index}-${row.white?.uci ?? ""}-${row.black?.uci ?? ""}`}
             className={[
               "grid min-h-12 grid-cols-[46px_minmax(0,1fr)_minmax(0,1fr)] items-center border-b border-[var(--app-border-soft)] px-2 text-sm last:border-b-0",
               index === rows.length - 1 ? "bg-white/[0.03]" : "",
             ].join(" ")}
           >
-            <span className="text-right text-[var(--app-muted)]">{prefix}</span>
-            <span className="flex min-w-0 items-center gap-2 pl-8 font-bold">
+            <span data-testid="train-move-row-number" className="text-right text-[var(--app-muted)]">{prefix}</span>
+            <span data-testid="train-move-white" className="flex min-w-0 items-center gap-2 pl-8 font-bold">
               {row.white?.classification ? <ClassificationBadge classification={row.white.classification} /> : null}
               <span className="truncate" style={{ color: classificationColor(row.white?.classification) }}>
                 {row.white?.san ?? ""}
@@ -2666,7 +2770,7 @@ function MoveList({
                 </span>
               ) : null}
             </span>
-            <span className="flex min-w-0 items-center gap-2 font-bold">
+            <span data-testid="train-move-black" className="flex min-w-0 items-center gap-2 font-bold">
               {row.black?.classification ? <ClassificationBadge classification={row.black.classification} /> : null}
               <span className="truncate" style={{ color: classificationColor(row.black?.classification) }}>
                 {row.black?.san ?? ""}
