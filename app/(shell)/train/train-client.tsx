@@ -1171,6 +1171,21 @@ export default function TrainPage() {
 
   const activeExploreIndex = Math.min(exploreIndex, Math.max(0, visibleSequencePositions.length - 1));
   const activeSequencePosition = visibleSequencePositions[activeExploreIndex] ?? visibleSequencePositions[0];
+
+  // Dev-only replay state instrumentation
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production" && !(window as unknown as Record<string, unknown>).__BLINDSPOTS_QA__) return;
+    const currentIndex = activeExploreIndex;
+    const currentPos = activeSequencePosition;
+    (window as unknown as { __blindspotsTrainReplayState?: unknown }).__blindspotsTrainReplayState = {
+      get activeExploreIndex() { return currentIndex; },
+      get maxExploreIndex() { return Math.max(0, visibleSequencePositions.length - 1); },
+      get activeFen() { return currentPos?.fen; },
+      get activeMove() { return currentPos?.move; },
+      get visibleSequencePositions() { return visibleSequencePositions; },
+    };
+  }, [activeExploreIndex, activeSequencePosition, visibleSequencePositions]);
+
   const isExploringResults = state === "complete" && resultMode === "explore";
   const activeExploratoryPosition =
     exploratoryHistoryIndex >= 0 ? exploratoryHistory[exploratoryHistoryIndex] : null;
@@ -1259,16 +1274,41 @@ export default function TrainPage() {
     };
   }, [boardFen, exploreSelectedSquare, isExploringResults]);
 
+  // ── Keyboard navigation (visible/replay timeline) ───────────────────────────
+
+  function shouldIgnoreTrainShortcut(event: KeyboardEvent) {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return false;
+    return Boolean(
+      target.closest(
+        "input, textarea, select, button, [contenteditable='true'], [data-ignore-train-shortcuts='true']",
+      ),
+    );
+  }
+
   useEffect(() => {
-    if (!isExploringResults) return;
+    if (state !== "complete") return;
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
-      event.preventDefault();
+      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+      if (shouldIgnoreTrainShortcut(event)) return;
 
+      // Switch from results → explore on first keypress
+      if (resultMode !== "explore") {
+        // Align with the existing auto-switch: land on the last position
+        setExploreIndex(Math.max(0, visibleSequencePositions.length - 1));
+        resetExploratoryLine();
+        setResultMode("explore");
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      // Exploratory history navigation (hover arrows)
       if (exploratoryHistory.length > 0) {
-        if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+        if (event.key === "ArrowLeft" || event.key === "ArrowUp" || event.key === "Home") {
           navigateExploratoryLine(exploratoryHistoryIndex - 1);
         } else {
           navigateExploratoryLine(exploratoryHistoryIndex + 1);
@@ -1276,11 +1316,12 @@ export default function TrainPage() {
         return;
       }
 
+      // Visible sequence position navigation
       if (event.key === "ArrowLeft") {
         navigateExploreTo(activeExploreIndex - 1, "start");
       } else if (event.key === "ArrowRight") {
         navigateExploreTo(activeExploreIndex + 1, "end");
-      } else if (event.key === "ArrowUp") {
+      } else if (event.key === "ArrowUp" || event.key === "Home") {
         navigateExploreTo(0, "start");
       } else {
         navigateExploreTo(visibleSequencePositions.length - 1, "end");
@@ -1289,7 +1330,7 @@ export default function TrainPage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeExploreIndex, exploratoryHistory.length, exploratoryHistoryIndex, isExploringResults, visibleSequencePositions.length]);
+  }, [state, resultMode, activeExploreIndex, exploratoryHistory.length, exploratoryHistoryIndex, visibleSequencePositions.length]);
 
   useEffect(() => {
     if (state !== "complete" || resultMode === "explore") return;
