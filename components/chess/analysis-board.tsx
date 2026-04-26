@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Chess } from "chess.js";
 import type { Move, Square } from "chess.js";
+import { shouldClearAnnotationsOnPointerDown } from "@/lib/board-annotations";
 import type { AnalyzeBoardTheme, AnalyzePieceTheme } from "@/lib/analyze-preferences";
+import type { LastMoveBadge } from "@/lib/training-board-ui";
 
 type BoardOrientation = "white" | "black";
 type BoardMode = "analysis" | "training";
@@ -39,6 +41,7 @@ export type AnalysisBoardProps = {
   highlightedSquares?: Record<string, string> | BoardHighlight[];
   engineArrows?: EngineArrow[];
   lastMove?: { from: string; to: string } | null;
+  lastMoveBadge?: LastMoveBadge | null;
   disabled?: boolean;
   annotationsDisabled?: boolean;
   coordinates?: boolean;
@@ -83,6 +86,7 @@ export function AnalysisBoard({
   legalTargets,
   highlightedSquares,
   lastMove,
+  lastMoveBadge,
   disabled = false,
   annotationsDisabled = disabled,
   coordinates = true,
@@ -286,6 +290,12 @@ export function AnalysisBoard({
     }
 
     if (event.button !== 0) return;
+    if (shouldClearAnnotationsOnPointerDown({ button: event.button, disabled, annotationsDisabled })) {
+      event.preventDefault();
+      event.stopPropagation();
+      clearAnnotations();
+      return;
+    }
     if (!annotationsDisabled && mode === "analysis") {
       event.preventDefault();
       event.stopPropagation();
@@ -395,7 +405,9 @@ export function AnalysisBoard({
           const isDragTarget = Boolean(dragFrom && hoveredSquare === square && activeTargets.includes(square));
           const isTurnPieceHover = Boolean(piece && chess && piece.color === chess.turn() && hoveredSquare === square);
           const isOriginEmphasized = isSelected || dragFrom === square || isTurnPieceHover;
-          const isLastMove = lastMove?.from === square || lastMove?.to === square;
+          const isLastMoveFrom = lastMove?.from === square;
+          const isLastMoveTo = lastMove?.to === square;
+          const shouldShowLastMoveBadge = Boolean(lastMoveBadge && lastMove?.to === square);
           const isCheckedKing = checkedKingSquare === square;
           const customHighlight = highlightMap.get(square);
           const squareBaseColor = isLight ? colors.light : colors.dark;
@@ -408,7 +420,16 @@ export function AnalysisBoard({
               data-square={square}
               className="relative flex min-h-0 min-w-0 touch-none items-center justify-center overflow-hidden"
               style={{
-                background: squareBackground(colors, isLight, isSelected || isDragTarget, isLastMove, isCheckedKing, customHighlight?.color),
+                background: squareBackground(
+                  colors,
+                  isLight,
+                  isSelected || isDragTarget,
+                  isLastMoveFrom,
+                  isLastMoveTo,
+                  isCheckedKing,
+                  customHighlight?.color,
+                  lastMoveBadge?.color,
+                ),
               }}
               onPointerDown={(event) => handlePointerDown(square, event)}
               onPointerEnter={() => { if (!dragFrom) setHoveredSquare(square); }}
@@ -454,6 +475,21 @@ export function AnalysisBoard({
                     dragFrom === square ? "opacity-20" : "",
                   ].join(" ")}
                 />
+              ) : null}
+
+              {shouldShowLastMoveBadge && lastMoveBadge ? (
+                <span
+                  className="pointer-events-none absolute right-1 top-1 z-[24] grid h-5 w-5 place-items-center"
+                  title={lastMoveBadge.label}
+                  aria-label={lastMoveBadge.label}
+                >
+                  <img
+                    src={lastMoveBadge.icon}
+                    alt=""
+                    className="h-5 w-5 drop-shadow-[0_2px_6px_rgba(0,0,0,0.45)]"
+                    draggable={false}
+                  />
+                </span>
               ) : null}
 
               {coordinates ? (
@@ -769,15 +805,18 @@ function squareBackground(
   colors: { light: string; dark: string },
   isLight: boolean,
   isSelected: boolean,
-  isLastMove: boolean,
+  isLastMoveFrom: boolean,
+  isLastMoveTo: boolean,
   isCheckedKing: boolean,
   customColor?: string,
+  lastMoveColor?: string,
 ) {
   const base = isLight ? colors.light : colors.dark;
   if (customColor) return customColor;
   if (isCheckedKing) return "color-mix(in srgb, var(--app-class-blunder) 72%, #2a0808 28%)";
   if (isSelected) return "color-mix(in srgb, var(--app-accent) 58%, #6aa68d 42%)";
-  if (isLastMove) return "color-mix(in srgb, var(--app-accent) 38%, #5aa37f 62%)";
+  if (isLastMoveFrom) return `color-mix(in srgb, ${lastMoveColor ?? "var(--app-accent)"} 34%, transparent)`;
+  if (isLastMoveTo) return `color-mix(in srgb, ${lastMoveColor ?? "var(--app-accent)"} 52%, transparent)`;
   return base;
 }
 

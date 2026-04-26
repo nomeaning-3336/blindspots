@@ -7,7 +7,6 @@ import {
   normalizeQueue,
   selectNextTrainingPosition,
 } from "@/lib/training/queues";
-import { getPreviousPosition } from "@/lib/training/position-index";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,14 +56,10 @@ export async function GET() {
     return NextResponse.json({ error: "No training positions available." }, { status: 404 });
   }
 
-  const previous = await getPreviousPosition(nextPosition.fen).catch(() => null);
-
   return NextResponse.json({
     fen: nextPosition.fen,
     source: nextPosition.source,
     sequenceLength: normalizeSequenceLength(preferences?.sequence_length),
-    previousFen: previous?.previousFen ?? null,
-    playedMove: previous?.playedMove ?? null,
   });
 }
 
