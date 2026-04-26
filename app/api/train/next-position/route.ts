@@ -10,6 +10,7 @@ import {
   prependRecentServedEntry,
   selectAndReserveNextTrainingPosition,
 } from "@/lib/training/queues";
+import { validateTrainingQueueItem } from "@/lib/training/position-validity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +27,7 @@ type NextPositionResponse = {
 const DEFAULT_SEQUENCE_LENGTH = 4;
 const MIN_SEQUENCE_LENGTH = 1;
 const MAX_SEQUENCE_LENGTH = 9;
+const MAX_VALID_SELECTION_ATTEMPTS = 25;
 
 export async function GET() {
   const userId = await getOptionalAppUserId();
@@ -60,20 +62,41 @@ export async function GET() {
     masteredQueue: normalizeQueue(profileError ? null : profile?.mastered_queue),
   };
   const queueCountsBefore = getQueueCounts(queuesBeforeRefill);
+  const sequenceLength = normalizeSequenceLength(preferences?.sequence_length);
 
   const queues = await ensureTrainingQueuesHavePositions({
     ...queuesBeforeRefill,
     recentServedFens,
   });
 
-  const reservation = await selectAndReserveNextTrainingPosition(queues, {
+  const selection = await selectValidTrainingPosition({
+    queues,
     completedSequenceCount,
     recentServedFens,
+    sequenceLength,
   });
-  const nextPosition = reservation.item;
+  const nextPosition = selection.item;
 
   if (!nextPosition) {
-    return NextResponse.json({ error: "No training positions available." }, { status: 404 });
+    await persistQueues(
+      userId,
+      selection.queues,
+      Boolean(profile && !profileError),
+      recentServedFens,
+    );
+
+    const response: NextPositionResponse = {
+      error: "No playable training positions available.",
+    };
+    if (process.env.NODE_ENV !== "production") {
+      response.debug = {
+        queueCountsBefore,
+        queueCountsAfter: getQueueCounts(selection.queues),
+        rejectedInvalidCount: selection.rejectedInvalidCount,
+        rejectedInvalidReasons: selection.rejectedInvalidReasons,
+      };
+    }
+    return NextResponse.json(response, { status: 404 });
   }
 
   const nextRecentServedFens = prependRecentServedEntry(recentServedFens, {
@@ -81,33 +104,121 @@ export async function GET() {
     gameId: nextPosition.gameId,
     ply: nextPosition.ply,
   });
-  const queueCountsAfter = getQueueCounts(reservation.queues);
+  const queueCountsAfter = getQueueCounts(selection.queues);
 
-  await persistQueues(userId, reservation.queues, Boolean(profile && !profileError), nextRecentServedFens);
+  await persistQueues(userId, selection.queues, Boolean(profile && !profileError), nextRecentServedFens);
 
   const response: NextPositionResponse = {
     fen: nextPosition.fen,
     previousFen: nextPosition.previousFen ?? undefined,
     playedMove: nextPosition.playedMove ?? undefined,
     source: nextPosition.source,
-    sequenceLength: normalizeSequenceLength(preferences?.sequence_length),
+    sequenceLength,
   };
 
   if (process.env.NODE_ENV !== "production") {
     response.debug = {
-      selectedQueue: reservation.selectedQueue,
+      selectedQueue: selection.selectedQueue,
       queueCountsBefore,
       queueCountsAfter,
       selectedFen: nextPosition.fen,
-      wasDueRevisit: reservation.wasDueRevisit,
+      wasDueRevisit: selection.wasDueRevisit,
       completedSequenceCount,
-      rejectedRecentExactCount: reservation.rejectedRecentExactCount,
-      rejectedNearDuplicateCount: reservation.rejectedNearDuplicateCount,
-      nearDuplicateReason: reservation.nearDuplicateReason,
+      rejectedRecentExactCount: selection.rejectedRecentExactCount,
+      rejectedNearDuplicateCount: selection.rejectedNearDuplicateCount,
+      nearDuplicateReason: selection.nearDuplicateReason,
+      rejectedInvalidCount: selection.rejectedInvalidCount,
+      rejectedInvalidReasons: selection.rejectedInvalidReasons,
+      selectedFenValidity: selection.selectedFenValidity,
     };
   }
 
   return NextResponse.json(response);
+}
+
+async function selectValidTrainingPosition({
+  queues,
+  completedSequenceCount,
+  recentServedFens,
+  sequenceLength,
+}: {
+  queues: Awaited<ReturnType<typeof ensureTrainingQueuesHavePositions>>;
+  completedSequenceCount: unknown;
+  recentServedFens: Array<{ fen: string; gameId?: string; ply?: number }>;
+  sequenceLength: number;
+}) {
+  let currentQueues = queues;
+  const invalidRecentEntries: Array<{ fen: string; gameId?: string; ply?: number }> = [];
+  const rejectedInvalidReasons: string[] = [];
+  let rejectedRecentExactCount = 0;
+  let rejectedNearDuplicateCount = 0;
+  let nearDuplicateReason: string | null = null;
+  let selectedQueue = "fallback";
+  let wasDueRevisit = false;
+  let selectedFenValidity: ReturnType<typeof validateTrainingQueueItem> | null = null;
+  let refilledAfterEmpty = false;
+
+  for (let attempt = 0; attempt < MAX_VALID_SELECTION_ATTEMPTS; attempt += 1) {
+    const reservation = await selectAndReserveNextTrainingPosition(currentQueues, {
+      completedSequenceCount,
+      recentServedFens: [...recentServedFens, ...invalidRecentEntries],
+    });
+
+    rejectedRecentExactCount += reservation.rejectedRecentExactCount;
+    rejectedNearDuplicateCount += reservation.rejectedNearDuplicateCount;
+    nearDuplicateReason ??= reservation.nearDuplicateReason;
+    selectedQueue = reservation.selectedQueue;
+    wasDueRevisit = reservation.wasDueRevisit;
+    currentQueues = reservation.queues;
+
+    if (!reservation.item) {
+      if (refilledAfterEmpty) break;
+      refilledAfterEmpty = true;
+      currentQueues = await ensureTrainingQueuesHavePositions({
+        ...currentQueues,
+        excludeFens: invalidRecentEntries.map((entry) => entry.fen),
+        recentServedFens: [...recentServedFens, ...invalidRecentEntries],
+      });
+      continue;
+    }
+
+    const validity = validateTrainingQueueItem(reservation.item, { sequenceLength });
+    if (validity.ok) {
+      selectedFenValidity = validity;
+      return {
+        item: reservation.item,
+        selectedQueue,
+        wasDueRevisit,
+        queues: currentQueues,
+        rejectedRecentExactCount,
+        rejectedNearDuplicateCount,
+        nearDuplicateReason,
+        rejectedInvalidCount: rejectedInvalidReasons.length,
+        rejectedInvalidReasons,
+        selectedFenValidity,
+      };
+    }
+
+    rejectedInvalidReasons.push(validity.reason ?? "invalid_position");
+    invalidRecentEntries.push({
+      fen: reservation.item.fen,
+      gameId: reservation.item.gameId,
+      ply: reservation.item.ply,
+    });
+  }
+
+  return {
+    item: null as Awaited<ReturnType<typeof ensureTrainingQueuesHavePositions>>["exploitQueue"][number] | null,
+    selectedQueue,
+    wasDueRevisit,
+    queues: currentQueues,
+    rejectedRecentExactCount,
+    rejectedNearDuplicateCount,
+    nearDuplicateReason,
+    rejectedInvalidCount: rejectedInvalidReasons.length,
+    rejectedInvalidReasons,
+    selectedFenValidity,
+  };
 }
 
 async function persistQueues(

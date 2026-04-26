@@ -16,6 +16,7 @@ export type TrainingQueueItem = {
   ply?: number;
   previousFen?: string;
   playedMove?: string;
+  mateDistancePlies?: number;
 };
 
 export type TrainingQueues = {
