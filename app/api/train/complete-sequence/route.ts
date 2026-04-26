@@ -4,7 +4,7 @@ import { getOptionalAppUserId } from "@/lib/app-auth";
 import { getPositionEval } from "@/lib/engines/dispatcher";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/database";
-import { normalizeQueue, updateQueuesAfterSequence } from "@/lib/training/queues";
+import { normalizeQueue, normalizeRecentServedFens, updateQueuesAfterSequence } from "@/lib/training/queues";
 import {
   calculateEloUpdate,
   calculateExpectedScore,
@@ -109,6 +109,7 @@ export async function POST(request: Request) {
     startingFen,
     evalPreservationScore,
     sessionId: session.id,
+    recentServedFens: normalizeRecentServedFens(profile.recent_served_fens),
   });
 
   const { error: profileError } = await supabase
@@ -205,10 +206,10 @@ async function calculateSequenceEvaluation(startingFen: string, moves: Array<{ s
 }
 
 function classifyCpLoss(cpLoss: number): MoveClassification {
-  if (cpLoss <= 10) return "excellent";
-  if (cpLoss <= 25) return "good";
-  if (cpLoss <= 50) return "inaccuracy";
-  if (cpLoss <= 100) return "mistake";
+  if (cpLoss <= 30) return "excellent";
+  if (cpLoss <= 90) return "good";
+  if (cpLoss <= 180) return "inaccuracy";
+  if (cpLoss <= 320) return "mistake";
   return "blunder";
 }
 
@@ -216,7 +217,7 @@ async function getOrCreateProfile(userId: string) {
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("user_blindspot_profile")
-    .select("user_id, blindspots_elo, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue")
+    .select("user_id, blindspots_elo, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -238,8 +239,9 @@ async function getOrCreateProfile(userId: string) {
       explore_queue: [],
       revisit_queue: [],
       mastered_queue: [],
+      recent_served_fens: [],
     })
-    .select("user_id, blindspots_elo, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue")
+    .select("user_id, blindspots_elo, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens")
     .single();
 
   if (insertError) {

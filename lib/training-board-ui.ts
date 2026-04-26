@@ -1,4 +1,6 @@
-export type MoveClassification = "best" | "excellent" | "good" | "inaccuracy" | "mistake" | "blunder";
+import type { MoveClassification } from "@/lib/move-classification";
+
+export type { MoveClassification } from "@/lib/move-classification";
 
 export type LastMoveBadge = {
   label: string;
