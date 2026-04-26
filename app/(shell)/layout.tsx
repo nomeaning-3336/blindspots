@@ -1,24 +1,14 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { cookies } from "next/headers";
+import { getShellAuthHint } from "@/lib/app-auth";
 import { AppShellNav } from "@/components/app-shell-nav";
-
-function hasSupabaseAuthCookieInLayout(cookieStore: Awaited<ReturnType<typeof cookies>>) {
-  for (const cookie of cookieStore.getAll()) {
-    if (cookie.name.startsWith("sb-") && cookie.name.includes("auth-token")) {
-      return true;
-    }
-  }
-  return false;
-}
 
 export default async function ProtectedAppLayout({
   children,
 }: Readonly<{
   children: ReactNode;
 }>) {
-  const cookieStore = await cookies();
-  const isSignedIn = hasSupabaseAuthCookieInLayout(cookieStore);
+  const isSignedIn = await getShellAuthHint();
 
   return (
     <div className="relative flex h-[100dvh] flex-col overflow-hidden bg-transparent">
