@@ -37,6 +37,11 @@ const MIN_SEQUENCE_LENGTH = 1;
 const MAX_SEQUENCE_LENGTH = 9;
 const MAX_VALID_SELECTION_ATTEMPTS = 25;
 
+// Columns that must exist for the route to function
+const BASE_COLUMNS = "user_id,total_sequences,exploit_queue,explore_queue,revisit_queue,mastered_queue,recent_served_fens";
+// Columns that may not exist before migration is applied
+const OPTIONAL_COLUMNS = "recent_served_modes,bucket_stats";
+
 export async function GET() {
   const userId = await getOptionalAppUserId();
   if (!userId) {
@@ -44,31 +49,46 @@ export async function GET() {
   }
 
   const supabase = getSupabaseAdminClient();
-  const [{ data: profile, error: profileError }, { data: preferences }] = await Promise.all([
-    supabase
-      .from("user_blindspot_profile")
-      .select("user_id, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens, recent_served_modes")
-      .eq("user_id", userId)
-      .maybeSingle(),
-    supabase
-      .from("user_training_preferences")
-      .select("sequence_length")
-      .eq("user_id", userId)
-      .maybeSingle(),
-  ]);
 
-  if (profileError && !isMissingQueueColumnError(profileError.message)) {
-    throw new Error(`Failed to load training queues: ${profileError.message}`);
+  // Fetch base columns (always exist post-20260425121000 migration)
+  const { data: profile, error: baseError } = await supabase
+    .from("user_blindspot_profile")
+    .select(BASE_COLUMNS)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (baseError) {
+    throw new Error(`Failed to load training profile: ${baseError.message}`);
   }
 
-  const recentServedFens = normalizeRecentRecentEntries(profileError ? null : profile?.recent_served_fens);
-  const recentServedModes = normalizeRecentServedModes(profileError ? null : profile?.recent_served_modes);
-  const completedSequenceCount = profileError ? 0 : profile?.total_sequences;
+  // Fetch optional columns only if the table has them
+  let recentServedModes: ReturnType<typeof normalizeRecentServedModes> = [];
+  let bucketStats: Record<string, unknown> | null = null;
+
+  const { data: optionalData, error: optionalError } = await supabase
+    .from("user_blindspot_profile")
+    .select(OPTIONAL_COLUMNS)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!optionalError && optionalData) {
+    recentServedModes = normalizeRecentServedModes(optionalData);
+    bucketStats = optionalData as Record<string, unknown> | null;
+  }
+
+  const { data: preferences } = await supabase
+    .from("user_training_preferences")
+    .select("sequence_length")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const recentServedFens = normalizeRecentRecentEntries(profile?.recent_served_fens ?? null);
+  const completedSequenceCount = profile?.total_sequences ?? 0;
   const queuesBeforeRefill = {
-    exploitQueue: normalizeQueue(profileError ? null : profile?.exploit_queue),
-    exploreQueue: normalizeQueue(profileError ? null : profile?.explore_queue),
-    revisitQueue: normalizeQueue(profileError ? null : profile?.revisit_queue),
-    masteredQueue: normalizeQueue(profileError ? null : profile?.mastered_queue),
+    exploitQueue: normalizeQueue(profile?.exploit_queue ?? null),
+    exploreQueue: normalizeQueue(profile?.explore_queue ?? null),
+    revisitQueue: normalizeQueue(profile?.revisit_queue ?? null),
+    masteredQueue: normalizeQueue(profile?.mastered_queue ?? null),
   };
   const queueCountsBefore = getQueueCounts(queuesBeforeRefill);
   const sequenceLength = normalizeSequenceLength(preferences?.sequence_length);
@@ -78,18 +98,15 @@ export async function GET() {
     recentServedFens,
   });
 
-  const completedSeq = typeof completedSequenceCount === "number" ? completedSequenceCount
-    : typeof completedSequenceCount === "string" ? Number(completedSequenceCount) : 0;
-
   const serveMode = chooseServeMode({
-    completedSequenceCount: completedSeq,
+    completedSequenceCount,
     dueRevisitCount: queues.revisitQueue.filter((item) => Date.parse(item.scheduledAt) <= new Date().getTime()).length,
     recentModes: recentServedModes,
   });
 
   const selection = await selectValidTrainingPosition({
     queues,
-    completedSequenceCount: completedSeq,
+    completedSequenceCount,
     recentServedFens,
     sequenceLength,
     serveMode,
@@ -100,9 +117,10 @@ export async function GET() {
     await persistQueues(
       userId,
       selection.queues,
-      Boolean(profile && !profileError),
+      Boolean(profile),
       recentServedFens,
       recentServedModes,
+      bucketStats,
     );
 
     const response: NextPositionResponse = {
@@ -127,7 +145,7 @@ export async function GET() {
   const nextRecentServedModes = prependRecentServeMode(recentServedModes, serveMode);
   const queueCountsAfter = getQueueCounts(selection.queues);
 
-  await persistQueues(userId, selection.queues, Boolean(profile && !profileError), nextRecentServedFens, nextRecentServedModes);
+  await persistQueues(userId, selection.queues, Boolean(profile), nextRecentServedFens, nextRecentServedModes, bucketStats);
 
   const enriched = enrichTrainingQueueItem(nextPosition);
 
@@ -246,7 +264,7 @@ async function selectValidTrainingPosition({
         item: candidate,
         selectedQueue: "seed" as TrainingQueueName,
         wasDueRevisit: false,
-        queues: currentQueues, // seed candidates not in queues, no removal needed
+        queues: currentQueues,
         rejectedRecentExactCount,
         rejectedNearDuplicateCount,
         nearDuplicateReason,
@@ -348,6 +366,7 @@ async function persistQueues(
   hasProfile: boolean,
   recentServedFens: RecentEntry[],
   recentServedModes?: ReturnType<typeof prependRecentServeMode>,
+  _bucketStats?: Record<string, unknown> | null,
 ) {
   const supabase = getSupabaseAdminClient();
   const baseValues = {
@@ -368,7 +387,7 @@ async function persistQueues(
       .update(values)
       .eq("user_id", userId);
 
-    if (error) {
+    if (error && !isIgnoredPersistError(error.message)) {
       throw new Error(`Failed to persist training queue: ${error.message}`);
     }
     return;
@@ -384,7 +403,7 @@ async function persistQueues(
     { onConflict: "user_id" },
   );
 
-  if (error) {
+  if (error && !isIgnoredPersistError(error.message)) {
     throw new Error(`Failed to persist training queue: ${error.message}`);
   }
 }
@@ -395,12 +414,12 @@ function normalizeSequenceLength(value: unknown) {
   return Math.max(MIN_SEQUENCE_LENGTH, Math.min(MAX_SEQUENCE_LENGTH, Math.round(parsed)));
 }
 
-function isMissingQueueColumnError(message: string) {
+function isIgnoredPersistError(message: string) {
+  // Ignore column-not-found errors for optional columns when persisting
+  // (means migration hasn't been applied yet, so just skip those fields)
   return (
-    message.includes("user_blindspot_profile.exploit_queue") ||
-    message.includes("user_blindspot_profile.explore_queue") ||
-    message.includes("user_blindspot_profile.revisit_queue") ||
-    message.includes("user_blindspot_profile.mastered_queue")
+    message.includes("recent_served_modes") ||
+    message.includes("bucket_stats")
   );
 }
 

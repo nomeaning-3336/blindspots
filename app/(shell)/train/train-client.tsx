@@ -263,6 +263,7 @@ export default function TrainPage() {
   const [profileUsername, setProfileUsername] = useState("");
   const [connectionMessage, setConnectionMessage] = useState("");
   const [isConnectingProfile, setIsConnectingProfile] = useState(false);
+  const [positionLoadError, setPositionLoadError] = useState<string | null>(null);
   const [analysisStep, setAnalysisStep] = useState(0);
   const [analysisError, setAnalysisError] = useState("");
   const [analysisElapsedMs, setAnalysisElapsedMs] = useState(0);
@@ -423,6 +424,8 @@ export default function TrainPage() {
       setCachedNextPosition(null);
 
       if (!payload?.fen) {
+        const errorMessage = payload?.error ?? "No training positions available. Please try again.";
+        setPositionLoadError(errorMessage);
         setStartingFen(mockRep.fen);
         setDisplayStartingFen(mockRep.fen);
         setFen(mockRep.fen);
@@ -452,6 +455,7 @@ export default function TrainPage() {
     setInitialOpponentMove(null);
     setActiveSetupReplayIndex(1);
     moveSoundPlyRef.current = 0;
+    setPositionLoadError(null);
 
     setStartingFen(payload.fen);
     setDisplayStartingFen(payload.previousFen ?? payload.fen);
@@ -1211,7 +1215,7 @@ export default function TrainPage() {
         if (activeSetupReplayIndex === 0) {
           setActiveSetupReplayIndex(1);
           if (initialOpponentMove) {
-            playTrainMoveSound({ move: initialOpponentMove, pitchIndex: 0, advanceLivePitch: false });
+            playTrainMoveSound({ move: initialOpponentMove, pitchIndex: 0, advanceLivePitch: false, source: "replay" });
           }
         }
       }
@@ -1257,15 +1261,21 @@ export default function TrainPage() {
     if (boundedIndex === activeExploreIndex && nextIndex !== activeExploreIndex) {
       return;
     }
+    const previousIndex = activeExploreIndex;
     resetExploratoryLine();
     setHoveredEngineLineIndex(null);
     setHoveredMoveSquares(null);
     const targetPos = visibleSequencePositions[boundedIndex];
-    if (targetPos?.move && typeof targetPos.pitchIndex === "number") {
+    if (
+      shouldPlayReplaySound(previousIndex, boundedIndex) &&
+      targetPos?.move &&
+      typeof targetPos.pitchIndex === "number"
+    ) {
       playTrainMoveSound({
         move: targetPos.move,
         pitchIndex: targetPos.pitchIndex,
         advanceLivePitch: false,
+        source: "replay",
       });
     }
     setExploreIndex(boundedIndex);
@@ -1470,7 +1480,23 @@ export default function TrainPage() {
                   <p className="text-lg font-bold text-[var(--app-text)]">Before engine move</p>
                 </div>
               ) : moves.length === 0 && !isOpponentThinking && !isPositionLoading ? (
-                <PromptCard side={userMoveSide} />
+                positionLoadError ? (
+                  <div className="mt-8 rounded-[8px] border border-red-800 bg-red-950 px-5 py-5">
+                    <p className="text-lg font-bold text-red-400">Failed to load position</p>
+                    <p className="mt-1 text-sm text-red-300">{positionLoadError}</p>
+                    <button
+                      className="mt-3 rounded bg-red-800 px-4 py-2 text-sm text-white hover:bg-red-700"
+                      onClick={() => {
+                        setPositionLoadError(null);
+                        void loadNextPosition();
+                      }}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : (
+                  <PromptCard side={userMoveSide} />
+                )
               ) : null}
 
               <MoveList
@@ -1893,6 +1919,10 @@ function sleep(ms: number) {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms);
   });
+}
+
+function shouldPlayReplaySound(oldIndex: number, newIndex: number): boolean {
+  return newIndex > oldIndex;
 }
 
 function getFenTurnSide(fen: string): TrainingMove["side"] {

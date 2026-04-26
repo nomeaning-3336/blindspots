@@ -220,6 +220,20 @@ export function playTrainMoveSound(options: PlayTrainSoundOptions): boolean {
   _instance._lastEvents.push(event);
   if (_instance._lastEvents.length > 20) _instance._lastEvents.shift();
 
+  // QA instrumentation — push to window global if present
+  if (typeof window !== "undefined") {
+    const win = window as unknown as {
+      __blindspotsTrainSoundEvents?: TrainAudioEvent[];
+      __blindspotsTrainAudioStats?: TrainAudioStats;
+    };
+    if (Array.isArray(win.__blindspotsTrainSoundEvents)) {
+      win.__blindspotsTrainSoundEvents.push(event);
+    }
+    if (win.__blindspotsTrainAudioStats) {
+      win.__blindspotsTrainAudioStats.lastEvents = _instance._lastEvents;
+    }
+  }
+
   try {
     const gainNode = ctx.createGain();
     gainNode.gain.value = isCapture ? 1.0 : 0.85;
