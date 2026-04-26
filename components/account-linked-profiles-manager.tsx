@@ -31,7 +31,7 @@ export function AccountLinkedProfilesManager({
               className="border-2 border-[var(--app-accent)] bg-[var(--app-accent-soft)] p-5 shadow-[4px_4px_0_color-mix(in_srgb,var(--app-accent)_18%,transparent)]"
             >
               <p className="text-xs uppercase tracking-[0.22em] text-[var(--app-muted)]">
-                Linked Profile
+                Account we are judging
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <span className="border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--app-text)]">
@@ -42,7 +42,7 @@ export function AccountLinkedProfilesManager({
                 </span>
               </div>
               <p className="mt-3 text-sm leading-6 text-[var(--app-muted)]">
-                Linked on {new Date(profile.linkedAt).toLocaleDateString()}.
+                Connected on {new Date(profile.linkedAt).toLocaleDateString()}.
               </p>
               <div className="mt-5 flex flex-wrap gap-3">
                 <a
@@ -51,7 +51,7 @@ export function AccountLinkedProfilesManager({
                   rel="noreferrer"
                   className="inline-flex items-center justify-center border border-[var(--app-accent)] bg-[var(--app-accent)] px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-accent-contrast)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
                 >
-                  Open Profile
+                  Open profile
                 </a>
                 <form action="/auth/profile/unlink" method="post" className="flex">
                   <input type="hidden" name="next" value="/account" />
@@ -70,8 +70,8 @@ export function AccountLinkedProfilesManager({
         </div>
       ) : (
         <p className="text-sm leading-7 text-[var(--app-muted)]">
-          Link one or more public Chess.com or Lichess profiles to import games and
-          build your performance dashboard.
+          Add a public Chess.com or Lichess account. We need actual games before we
+          can point at the recurring damage.
         </p>
       )}
 
@@ -79,11 +79,11 @@ export function AccountLinkedProfilesManager({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-[var(--app-muted)]">
-              Add Profile
+              Add another account
             </p>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--app-muted)]">
-              Add another linked account any time. Recent imports will pull from all
-              linked profiles, and Performance can compare one or combine several.
+              Add more accounts if you want the dashboard to compare where the bad
+              habits live.
             </p>
           </div>
           {hasProfiles ? (
@@ -92,7 +92,7 @@ export function AccountLinkedProfilesManager({
               onClick={() => setIsAdding((current) => !current)}
               className="inline-flex items-center justify-center border border-[var(--app-accent)] px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-text)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
             >
-              {isAdding ? "Close" : "+ Add Profile"}
+              {isAdding ? "Close" : "+ Add account"}
             </button>
           ) : null}
         </div>

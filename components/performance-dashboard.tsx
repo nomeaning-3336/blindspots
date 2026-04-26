@@ -96,8 +96,8 @@ function summarizeBestThinkZone(summary: TimeManagementSideSummary) {
   const bestBucket = summary.bestThinkZone;
   if (!bestBucket) {
     return {
-      value: "Quality unavailable",
-      detail: "Need move-by-move eval data to compare which time zone performs best.",
+      value: "Not enough data",
+      detail: "Need move-by-move eval data before this stops being a guess.",
     };
   }
 
@@ -116,16 +116,16 @@ function summarizeBestThinkZone(summary: TimeManagementSideSummary) {
   }
 
   return {
-    value: "Quality unavailable",
-    detail: "Need move-by-move eval data to compare which time zone performs best.",
+    value: "Not enough data",
+    detail: "Need move-by-move eval data before this stops being a guess.",
   };
 }
 
 function summarizeRushErrors(summary: TimeManagementSideSummary) {
   if (summary.rushErrorRatePct === null) {
     return {
-      value: "No errors logged",
-      detail: "No mistakes or blunders were recorded in the available quality data.",
+      value: "No major errors",
+      detail: "No mistakes or blunders showed up in the available move data.",
     };
   }
 
@@ -140,14 +140,14 @@ function summarizeLongThinkPayoff(summary: TimeManagementSideSummary) {
   if ((longThinkBucket?.moveCount ?? 0) === 0) {
     return {
       value: "No 30s+ moves",
-      detail: "This side did not have any moves in the 30 seconds or longer bucket.",
+      detail: "This side never spent 30 seconds or more on a move here.",
     };
   }
 
   if (summary.longThinkPayoffPct === null) {
     return {
-      value: "Quality unavailable",
-      detail: "Long-think payoff needs move-by-move eval data for the 30s+ bucket.",
+      value: "Not enough data",
+      detail: "Need eval data for the 30s+ moves before this means anything.",
     };
   }
 
@@ -207,11 +207,11 @@ function buildPerformanceTitle(
   }
 
   if (selectedProfiles.length === totalLinkedProfiles) {
-    return "All Linked Accounts";
+    return "All linked accounts";
   }
 
   if (selectedProfiles.length > 1) {
-    return `${selectedProfiles.length} Linked Accounts`;
+    return `${selectedProfiles.length} linked accounts`;
   }
 
   return "Performance";
@@ -224,7 +224,7 @@ function buildPerformanceSubtitle(
   gameType: PerformanceGameType,
 ) {
   if (selectedProfiles.length === 1) {
-    return `Pulling standard ${selectedProfiles[0]?.providerLabel ?? "linked"} games from the last ${getRangeLabel(rangeDays).toLowerCase()} and filtering for ${getGameTypeLabel(gameType).toLowerCase()} time controls.`;
+    return `Using ${selectedProfiles[0]?.providerLabel ?? "linked"} games from the last ${getRangeLabel(rangeDays).toLowerCase()}, filtered to ${getGameTypeLabel(gameType).toLowerCase()} time controls.`;
   }
 
   const accountCount =
@@ -232,7 +232,7 @@ function buildPerformanceSubtitle(
       ? "all linked accounts"
       : `${selectedProfiles.length} linked accounts`;
 
-  return `Pulling standard games from ${accountCount} over the last ${getRangeLabel(rangeDays).toLowerCase()} and filtering for ${getGameTypeLabel(gameType).toLowerCase()} time controls.`;
+  return `Using games from ${accountCount} over the last ${getRangeLabel(rangeDays).toLowerCase()}, filtered to ${getGameTypeLabel(gameType).toLowerCase()} time controls.`;
 }
 
 function matchesDashboardGameType(game: NormalizedGame, gameType: PerformanceGameType) {
@@ -436,11 +436,11 @@ function describeClientAnalysisFallback(
   }
 
   if (status.phase === "done" && status.failedGames > 0) {
-    return "Move-by-move piece error analysis is unavailable right now.";
+    return "Piece-by-piece error analysis did not finish cleanly.";
   }
 
   if (status.phase === "error") {
-    return status.errorMessage ?? "Move-by-move piece error analysis is unavailable right now.";
+    return status.errorMessage ?? "Piece-by-piece error analysis did not finish cleanly.";
   }
 
   return "No move-by-move eval and piece data matched this filter yet.";
@@ -492,7 +492,7 @@ function renderRatingTrend(summary: RatingTrendSummary) {
           </p>
         </div>
         <p className="mt-5 text-sm leading-7 text-[var(--app-muted)]">
-          No rating samples were available for this provider and filter window yet.
+          No rating samples matched this provider and filter window yet.
         </p>
       </article>
     );
@@ -765,7 +765,7 @@ function renderTimeManagementColumn(title: string, summary: TimeManagementSideSu
       <div className="app-brutal-inset p-4">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-white">{title}</p>
         <p className="mt-4 text-sm leading-7 text-[var(--app-muted)]">
-          No usable move clocks were available for this side in the current filter.
+          No usable move clocks showed up for this side in the current filter.
         </p>
       </div>
     );
@@ -1218,7 +1218,7 @@ export function PerformanceDashboard({
           current,
           {
             type: "error",
-            message: "Move-by-move piece error analysis is unavailable right now.",
+            message: "Piece-by-piece error analysis did not finish cleanly.",
             processedGames: current.processedGames,
             totalGames: current.totalGames,
             failedGames: current.failedGames,
@@ -1356,7 +1356,7 @@ export function PerformanceDashboard({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.18em] text-[var(--app-muted)]">
-                    Linked Accounts
+                    Linked accounts
                   </p>
                   <p className="mt-2 max-w-3xl text-sm leading-7 text-[var(--app-muted)]">
                     Select one or more linked profiles to focus the stats on a single

@@ -6,15 +6,15 @@ import { getOptionalAppUserId, normalizeNextPath } from "@/lib/app-auth";
 function resolveErrorMessage(error?: string | null) {
   switch (error) {
     case "missing-fields":
-      return "Enter both your email and password to continue.";
+      return "Enter both fields. This part is not abstract.";
     case "invalid-credentials":
-      return "That email and password did not match an account.";
+      return "Those credentials did not match an account. Computers are annoyingly literal.";
     case "auth-callback":
-      return "The confirmation link could not be completed. Try signing in again.";
+      return "The confirmation link fell over on the way back. Try again.";
     case "oauth-failed":
-      return "Google sign-in could not be started right now. Try again in a moment.";
+      return "Google sign-in failed to start. Extremely modern.";
     case "sign-in-failed":
-      return "Sign in could not be completed right now. Try again in a moment.";
+      return "Sign in failed. Probably our fault. Try again.";
     default:
       return null;
   }
@@ -23,9 +23,9 @@ function resolveErrorMessage(error?: string | null) {
 function resolveStatusMessage(status?: string | null) {
   switch (status) {
     case "check-email":
-      return "Check your inbox to confirm the account, then sign in here.";
+      return "Check your email, confirm the account, then come back.";
     case "signed-out":
-      return "Your session has been cleared.";
+      return "Signed out. The system is unmoved.";
     default:
       return null;
   }
@@ -72,11 +72,10 @@ export default async function SignInPage({
           <section className="grid w-full max-w-[720px] gap-8">
             <div className="space-y-5 text-center">
               <h1 className="text-5xl font-bold tracking-[-0.04em] text-white md:text-6xl">
-                Welcome Back
+                Sign in. There&apos;s a product behind this page.
               </h1>
               <p className="mx-auto max-w-xl text-base leading-8 text-[var(--app-muted)]">
-                Create your account to link your chess profile, import your recent games,
-                and track your performance over time.
+                We need your account so the app can remember your settings and your recurring disasters.
               </p>
             </div>
 
@@ -108,7 +107,7 @@ export default async function SignInPage({
 
               <div className="flex items-center gap-3 text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--app-muted)]">
                 <span className="h-px flex-1 bg-[var(--app-border)]" />
-                <span>Or continue with email</span>
+                <span>Or use email like it is 2009</span>
                 <span className="h-px flex-1 bg-[var(--app-border)]" />
               </div>
 
@@ -139,7 +138,7 @@ export default async function SignInPage({
                     type="password"
                     required
                     autoComplete="current-password"
-                    placeholder="Enter your password"
+                    placeholder="Your password"
                     className="app-brutal-input h-12 px-4 text-[15px] outline-none transition placeholder:text-[var(--app-muted-soft)] focus:border-[var(--app-accent)]"
                   />
                 </label>
@@ -148,19 +147,19 @@ export default async function SignInPage({
                   type="submit"
                   className="mt-2 h-12 border-2 border-[var(--app-accent)] bg-[var(--app-accent)] text-[13px] font-bold uppercase tracking-[0.18em] text-[var(--app-accent-contrast)] transition hover:border-[var(--app-text)] hover:bg-[var(--app-text)] hover:text-[var(--app-bg)]"
                 >
-                  Open Chessview
+                  Open Blindspots
                 </button>
               </form>
 
               <div className="flex flex-col items-center gap-3 border-t border-[var(--app-border)] pt-5 text-center">
                 <p className="text-sm leading-6 text-[var(--app-muted)]">
-                  Don&apos;t have an account?
+                  No account yet?
                 </p>
                 <Link
                   href={`/sign-up?next=${encodeURIComponent(nextPath)}`}
                   className="inline-flex items-center justify-center border border-[var(--app-border)] px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-text)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
                 >
-                  Create Account
+                  Create account
                 </Link>
               </div>
             </div>

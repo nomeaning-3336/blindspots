@@ -12,17 +12,17 @@ import { redirect } from "next/navigation";
 
 function bannerCopy(status?: string | null, error?: string | null, provider?: string | null) {
   if (error === "invalid-provider") {
-    return { tone: "error", message: "Choose either Chess.com or Lichess before linking." };
+    return { tone: "error", message: "Pick Chess.com or Lichess first. We cannot infer intent from vibes." };
   }
 
   if (error === "invalid-username") {
-    return { tone: "error", message: "That username format does not look valid yet." };
+    return { tone: "error", message: "That username does not look valid. Try the public one, not the imaginary one." };
   }
 
   if (error === "profile-not-found") {
     return {
       tone: "error",
-      message: "The public profile could not be found. Double-check the username and try again.",
+      message: "That public profile could not be found. Double-check the username and try again.",
     };
   }
 
@@ -30,7 +30,7 @@ function bannerCopy(status?: string | null, error?: string | null, provider?: st
     return {
       tone: "error",
       message:
-        "Supabase storage is not ready yet. Run the linked-profile SQL migration, then try again.",
+        "Supabase storage is not ready. Run the migration, then come back.",
     };
   }
 
@@ -38,35 +38,35 @@ function bannerCopy(status?: string | null, error?: string | null, provider?: st
     return {
       tone: "error",
       message:
-        "The linked-profile table is still on the old schema. Run the latest Supabase migration for multiple linked accounts, then try again.",
+        "The linked-profile table is still on the old schema. Run the latest migration and stop fighting the database.",
     };
   }
 
   if (error === "theme-storage-unavailable") {
     return {
       tone: "error",
-      message: "The theme could not be saved right now. Try again in a moment.",
+      message: "The theme would not save. Try again.",
     };
   }
 
   if (status === "linked") {
     return {
       tone: "success",
-      message: `Linked ${provider ?? "the profile"} successfully. Performance can use it immediately.`,
+      message: `Linked ${provider ?? "the profile"}. The dashboard can start digging through it immediately.`,
     };
   }
 
   if (status === "unlinked") {
     return {
       tone: "success",
-      message: "The linked chess profile was removed from your account.",
+      message: "Linked profile removed. The mistakes remain.",
     };
   }
 
   if (status === "theme-saved") {
     return {
       tone: "success",
-      message: "Theme updated for your account.",
+      message: "Theme updated. A cosmetic victory.",
     };
   }
 
@@ -147,9 +147,9 @@ export default async function AccountPage({
         <article className="app-brutal-card p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-bold uppercase tracking-[0.14em] text-white">
-                Engine Search Settings
-              </h2>
+                <h2 className="text-2xl font-bold uppercase tracking-[0.14em] text-white">
+                  Engine search settings
+                </h2>
             </div>
           </div>
 
@@ -164,7 +164,7 @@ export default async function AccountPage({
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-bold uppercase tracking-[0.14em] text-white">
-                  Linked Profiles
+                  Linked profiles
                 </h2>
               </div>
             </div>
@@ -178,7 +178,7 @@ export default async function AccountPage({
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-bold uppercase tracking-[0.14em] text-white">
-                  Training Settings
+                  Things you can change about how you suffer
                 </h2>
               </div>
             </div>
@@ -192,11 +192,11 @@ export default async function AccountPage({
         <article className="app-brutal-card p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-bold uppercase tracking-[0.14em] text-white">
-                Themes & Visuals
-              </h2>
+                <h2 className="text-2xl font-bold uppercase tracking-[0.14em] text-white">
+                  Themes and visuals
+                </h2>
               <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--app-muted)]">
-                Your app theme now drives the board colors automatically, while piece sets stay configurable here.
+                The app theme drives the board colors automatically. Piece sets still live here because apparently people care.
               </p>
             </div>
           </div>
@@ -209,7 +209,7 @@ export default async function AccountPage({
             <AnalyzeSettingsForm
               currentPreferences={currentAnalyzePreferences}
               sections="visual"
-              saveLabel="Save Visual Settings"
+              saveLabel="Save visual settings"
             />
           </div>
         </article>

@@ -12,7 +12,7 @@ export function AccountLinkedProfileForm({
   const [provider, setProvider] = useState<"chesscom" | "lichess">("chesscom");
   const [username, setUsername] = useState("");
   const [message, setMessage] = useState(
-    "Provider and username autosave once the profile looks valid.",
+    "Pick a site. Type the public username. We do the rest.",
   );
   const [isPending, startTransition] = useTransition();
   const lastSubmittedRef = useRef("");
@@ -20,7 +20,7 @@ export function AccountLinkedProfileForm({
   useEffect(() => {
     const normalized = username.trim();
     if (!normalized) {
-      setMessage("Enter a username to link a profile.");
+      setMessage("Start with the public username.");
       return;
     }
 
@@ -49,22 +49,22 @@ export function AccountLinkedProfileForm({
         if (!response.ok || !payload?.ok) {
           switch (payload?.error) {
             case "profile-not-found":
-              setMessage("That public profile could not be found.");
+              setMessage("That profile does not exist. Or you typed it wrong.");
               break;
             case "invalid-username":
-              setMessage("That username format does not look valid yet.");
+              setMessage("That username format looks wrong.");
               break;
             case "storage-needs-migration":
-              setMessage("The linked-profile table needs the latest migration first.");
+              setMessage("The linked-profile table is behind. Run the migration.");
               break;
             default:
-              setMessage("Profile could not be linked right now.");
+              setMessage("Could not link that profile right now.");
           }
           return;
         }
 
         lastSubmittedRef.current = submissionKey;
-        setMessage("Profile linked.");
+        setMessage("Profile linked. The digging can start.");
         if (window.location.pathname !== "/train") {
           void fetch("/api/train/initialize", {
             method: "POST",
@@ -116,7 +116,7 @@ export function AccountLinkedProfileForm({
       </label>
 
       <p className="text-sm leading-6 text-[var(--app-muted)]">
-        {isPending ? "Linking profile..." : message}
+        {isPending ? "Checking that account..." : message}
       </p>
     </div>
   );
