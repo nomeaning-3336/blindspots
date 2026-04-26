@@ -5,23 +5,23 @@ import { getOptionalAppUserId } from "@/lib/app-auth";
 const loopSteps = [
   {
     number: "01",
-    title: "Position served",
-    copy: "A real position from your games, an import, or a pool matching positions you have struggled with.",
+    title: "You get a position",
+    copy: "Usually from your own games. Sometimes from the fallback pool. Either way it is there because your chess invited it.",
   },
   {
     number: "02",
     title: "You play it out",
-    copy: "Three, five, or seven moves against a configured opponent. No hints while you play.",
+    copy: "A few moves against the engine. No eval bar. No hints. This is not tracing paper.",
   },
   {
     number: "03",
-    title: "Sequence scored",
-    copy: "The system measures how much evaluation you preserved across the whole sequence.",
+    title: "We measure the damage",
+    copy: "The system tracks how much evaluation you managed not to throw away. A low bar, but still useful.",
   },
   {
     number: "04",
-    title: "Next position, adjusted",
-    copy: "Future positions reflect what you have mishandled, while your profile updates in the background.",
+    title: "The next one gets meaner",
+    copy: "Future positions lean toward the stuff you keep mishandling. The database remembers. How touching.",
   },
 ];
 
@@ -29,17 +29,17 @@ const faqItems = [
   {
     question: "How is this different from Lichess puzzles?",
     answer:
-      "Puzzle trainers mostly serve one-move or short tactical problems. Blindspots gives you positions to play out for several moves, then learns which types of positions you mishandle.",
+      "Lichess shows you random puzzles. Chess.com shows you random puzzles with more banners. Blindspots shows the positions you actually keep mishandling and makes you play them out.",
   },
   {
     question: "Do I need a lot of games first?",
     answer:
-      "Linked games help, but cold-start pools and opening-constrained pools can start training before the profile is fully personalized.",
+      "No. Linked games help, but the fallback pools can get started before the profile knows all your habits. The profile just gets more specific once it has receipts.",
   },
   {
     question: "Can I train openings I actually play?",
     answer:
-      "Yes. Opening preferences live in profile or account settings, so every session can factor in the openings you expect to face.",
+      "Yes. Opening preferences live in account settings, so the positions can stay closer to the lines you actually inflict on yourself.",
   },
   {
     question: "Is this cheating detection?",
@@ -348,15 +348,13 @@ export default async function HomePage() {
         <section className="mx-auto grid w-full max-w-7xl gap-12 px-6 py-14 md:grid-cols-[1.02fr_0.98fr] md:items-center md:px-10 md:py-20">
           <div>
             <h1 className="max-w-3xl text-5xl font-bold leading-tight text-[var(--app-text)] md:text-6xl lg:text-7xl">
-              Train the positions{" "}
+              We show you the positions{" "}
               <span className="text-[var(--app-muted)]">you actually</span>{" "}
-              <span className="italic text-[var(--app-accent)]">mishandle</span>.
+              <span className="italic text-[var(--app-accent)]">keep getting wrong</span>.
             </h1>
 
             <p className="mt-6 max-w-xl text-base leading-8 text-[var(--app-muted)]">
-              Random puzzles can waste your time. Blindspots gives you positions
-              from real games, lets you play them out, and learns which positions
-              you mishandle.
+              Lichess shows you random puzzles. Chess.com shows you random puzzles with ads. We show you the positions you actually keep mishandling, because you do, and we have receipts.
             </p>
 
             <div className="mt-9 flex flex-wrap gap-3">
@@ -370,20 +368,20 @@ export default async function HomePage() {
 
         <section className="mx-auto grid w-full max-w-7xl gap-4 px-6 py-10 md:grid-cols-2 md:px-10">
           <DifferenceCard
-            title="Random tactics"
+            title="Random puzzles"
             items={[
-              "Lichess and Chess.com serve random puzzles matched to your rating",
-              "One best move per puzzle, usually a tactic",
-              "No memory of what you personally struggle with",
+              "One best move, usually a tactic, occasionally a cheap shot",
+              "Roughly your rating, give or take whatever the puzzle system had for breakfast",
+              "No memory of what you personally keep doing wrong",
             ]}
           />
           <DifferenceCard
             title="Blindspots.gg"
             accent
             items={[
-              "Positions from any phase of the game, not just tactics",
-              "Play the position out for several moves against a human-like opponent",
-              "The system learns what you mishandle and serves more of those",
+              "Positions from your own games or a pool built to make you uncomfortable",
+              "Play the position out for several moves instead of spotting one move and feeling heroic",
+              "The system tracks what you mishandle and keeps bringing it back. Very considerate",
             ]}
           />
         </section>
@@ -391,7 +389,7 @@ export default async function HomePage() {
         <section className="mx-auto w-full max-w-7xl px-6 py-14 md:px-10">
           <div className="mb-10 text-center">
             <h2 className="text-4xl font-bold text-[var(--app-text)] md:text-5xl">
-              Four steps, repeated across sessions.
+              Same loop. Better target.
             </h2>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -417,7 +415,7 @@ export default async function HomePage() {
         <section className="mx-auto w-full max-w-4xl px-6 py-14 md:px-10">
           <div className="mb-8 text-center">
             <h2 className="text-4xl font-bold text-[var(--app-text)]">
-              Questions we get
+              Questions people keep asking
             </h2>
           </div>
           <div className="border-t border-[var(--app-border)]">
@@ -453,11 +451,10 @@ export default async function HomePage() {
             }}
           >
             <h2 className="mx-auto max-w-5xl text-4xl font-bold text-[var(--app-text)] md:text-5xl">
-              Start with positions from games you actually play.
+              Connect your games. We will find the bad parts.
             </h2>
             <p className="mx-auto mt-5 max-w-xl text-sm leading-7 text-[var(--app-muted)]">
-              Link a Lichess or Chess.com account, import PGNs, or use curated
-              pools while the system learns what you mishandle.
+              Link a Lichess or Chess.com account. We pull recent games, run the moves through Stockfish, and write down where you panic.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <PrimaryLink href={startHref}>Start training</PrimaryLink>
@@ -468,7 +465,7 @@ export default async function HomePage() {
         <footer className="mx-auto flex w-full max-w-7xl flex-col gap-4 border-t border-[var(--app-border)] px-6 py-6 md:flex-row md:items-center md:justify-between md:px-10">
           <BrandMark size={20} />
           <p className="text-[10px] uppercase text-[var(--app-muted)]">
-            (c) 2026 / Built for chess training
+            (c) 2026 / No streak counters were harmed
           </p>
         </footer>
       </main>

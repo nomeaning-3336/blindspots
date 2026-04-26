@@ -29,12 +29,12 @@ export function AccountTrainingPreferencesForm({
         });
 
         if (!response.ok) {
-          setMessage("Training settings could not be saved right now.");
+          setMessage("Those settings did not save. Try again.");
           return;
         }
 
         lastSavedRef.current = sequenceLength;
-        setMessage("Training settings saved.");
+        setMessage("Saved. You will probably change it again.");
       });
     }, 250);
 
@@ -47,7 +47,7 @@ export function AccountTrainingPreferencesForm({
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h3 className="text-base font-bold uppercase tracking-[0.14em] text-[var(--app-text)]">
-              Training
+              Sequence settings
             </h3>
           </div>
           <label className="grid gap-2">
@@ -74,7 +74,7 @@ export function AccountTrainingPreferencesForm({
       </section>
       {(message || isPending) ? (
         <p className="text-sm leading-6 text-[var(--app-muted)]">
-          {isPending ? "Saving training settings..." : message}
+          {isPending ? "Saving. Briefly." : message}
         </p>
       ) : null}
     </div>

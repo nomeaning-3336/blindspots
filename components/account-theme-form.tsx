@@ -52,16 +52,16 @@ export function AccountThemeForm({
           localStorage.setItem(THEME_LOCAL_STORAGE_KEY, newTheme);
           setThemeCookie(newTheme);
           initialThemeRef.current = newTheme;
-          setMessage("Theme saved locally.");
+          setMessage("Saved on this browser at least.");
           return;
         } catch {
-          setMessage("Theme could not be saved.");
+          setMessage("That did not save.");
           return;
         }
       }
 
       if (!response.ok) {
-        setMessage("Theme could not be saved right now.");
+        setMessage("Theme did not save right now.");
         return;
       }
 

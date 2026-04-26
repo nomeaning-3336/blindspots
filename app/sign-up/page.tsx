@@ -6,17 +6,17 @@ import { getOptionalAppUserId, normalizeNextPath } from "@/lib/app-auth";
 function resolveErrorMessage(error?: string | null) {
   switch (error) {
     case "missing-fields":
-      return "Enter your email and password to create the account.";
+      return "Fill in all the fields. We are not guessing.";
     case "password-mismatch":
-      return "The password confirmation did not match yet.";
+      return "The password confirmation did not match. A classic.";
     case "weak-password":
-      return "Use a password with at least 8 characters.";
+      return "Use at least 8 characters. Do not make this embarrassing.";
     case "email-in-use":
-      return "That email already belongs to an account. Try signing in instead.";
+      return "That email already has an account attached to it. Try signing in instead.";
     case "oauth-failed":
-      return "Google sign-in could not be started right now. Try again in a moment.";
+      return "Google sign-in failed to start. Try again.";
     case "sign-up-failed":
-      return "Account creation could not be completed right now. Try again in a moment.";
+      return "Account creation failed. Very professional of us.";
     default:
       return null;
   }
@@ -58,10 +58,10 @@ export default async function SignUpPage({
           <section className="grid w-full max-w-[720px] gap-8">
             <div className="space-y-5 text-center">
               <h1 className="text-5xl font-bold tracking-[-0.04em] text-white md:text-6xl">
-                Create Account
+                Make an account
               </h1>
               <p className="mx-auto max-w-xl text-sm leading-8 text-[var(--app-muted)]">
-                Join Blindspots to save your preferences and analysis across sessions.
+                You need one if you want the app to remember anything. Which, surprisingly, matters.
               </p>
             </div>
 
@@ -87,7 +87,7 @@ export default async function SignUpPage({
 
               <div className="flex items-center gap-3 text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--app-muted)]">
                 <span className="h-px flex-1 bg-[var(--app-border)]" />
-                <span>Or create an account with email</span>
+                <span>Or do it with email</span>
                 <span className="h-px flex-1 bg-[var(--app-border)]" />
               </div>
 
@@ -119,7 +119,7 @@ export default async function SignUpPage({
                     required
                     autoComplete="new-password"
                     minLength={8}
-                    placeholder="Use at least 8 characters"
+                    placeholder="At least 8 characters"
                     className="app-brutal-input h-12 px-4 text-[15px] outline-none transition placeholder:text-[var(--app-muted-soft)] focus:border-[var(--app-accent)]"
                   />
                 </label>
@@ -134,7 +134,7 @@ export default async function SignUpPage({
                     required
                     autoComplete="new-password"
                     minLength={8}
-                    placeholder="Repeat the password"
+                    placeholder="Repeat it"
                     className="app-brutal-input h-12 px-4 text-[15px] outline-none transition placeholder:text-[var(--app-muted-soft)] focus:border-[var(--app-accent)]"
                   />
                 </label>
@@ -143,13 +143,13 @@ export default async function SignUpPage({
                   type="submit"
                   className="mt-2 h-12 border-2 border-[var(--app-accent)] bg-[var(--app-accent)] text-[13px] font-bold uppercase tracking-[0.18em] text-[var(--app-accent-contrast)] transition hover:border-[var(--app-text)] hover:bg-[var(--app-text)] hover:text-[var(--app-bg)]"
                 >
-                  Create Account
+                  Create account
                 </button>
               </form>
 
               <div className="flex flex-col items-center gap-3 border-t border-[var(--app-border)] pt-5 text-center">
                 <p className="text-sm leading-6 text-[var(--app-muted)]">
-                  Already have an account?
+                  Already made one?
                 </p>
                 <Link
                   href={`/sign-in?next=${encodeURIComponent(nextPath)}`}

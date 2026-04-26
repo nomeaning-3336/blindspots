@@ -88,7 +88,7 @@ export function PublicHeaderClient({ isSignedIn }: { isSignedIn: boolean }) {
             <AppShellNav isSignedIn />
           ) : (
             <HeaderLink href={signUpHref} primary>
-              Start training
+              Start suffering
             </HeaderLink>
           )}
         </div>

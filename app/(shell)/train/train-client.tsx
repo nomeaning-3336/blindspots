@@ -129,7 +129,8 @@ const ANALYZE_PREFERENCES_STORAGE_KEY = "chessview-analyze-preferences";
 const ANALYZE_RUNTIME_SETTINGS_STORAGE_KEY = "chess-something:settings";
 const MIN_ONBOARDING_EVALUATION_MS = 1200;
 const ONBOARDING_BUILD_PROFILE_MS = 900;
-const ANALYSIS_FAILURE_MESSAGE = "Analysis didn't complete — continuing anyway";
+const ANALYSIS_FAILURE_MESSAGE =
+  "Analysis did not finish. We are sending you into training anyway.";
 const DEFAULT_SEQUENCE_LENGTH = 4;
 const MIN_SEQUENCE_LENGTH = 1;
 const MAX_SEQUENCE_LENGTH = 9;
@@ -140,6 +141,7 @@ const TRAIN_SOUND_SOURCES = {
 const primaryActionClassName =
   "min-h-11 rounded-[8px] border border-[var(--app-accent)] bg-[var(--app-accent)] px-4 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]";
 const trainSoundBank = new Map<keyof typeof TRAIN_SOUND_SOURCES, AudioBuffer>();
+const defaultTrainSoundPlyRef = { current: 0 };
 let trainAudioContext: AudioContext | null = null;
 let trainSoundPrimePromise: Promise<void> | null = null;
 
@@ -262,55 +264,71 @@ function trainMoveIsCapture(move?: TrainSoundMove | null) {
   return typeof move.san === "string" && move.san.includes("x");
 }
 
+function pitchRatioForPly(plyIndex: number) {
+  return MOVE_SCALE_RATIOS[((plyIndex % MOVE_SCALE_RATIOS.length) + MOVE_SCALE_RATIOS.length) % MOVE_SCALE_RATIOS.length];
+}
+
+type TrainSoundOptions = {
+  pitchIndex?: number;
+  advanceLivePitch?: boolean;
+  plyRef?: { current: number };
+};
+
 function playTrainMoveSound(
   move: TrainSoundMove | null | undefined,
-  retryAfterPrime = true,
-  pitchStepRef?: { current: number },
-  pitchForExplore?: { targetIndex: number; sequenceLength: number },
+  options: TrainSoundOptions = {},
 ) {
   if (!move) return;
   primeTrainSounds();
   resumeTrainAudioContext();
   const context = ensureTrainAudioContext();
-  const buffer = trainSoundBank.get("move");
-  if (context && !buffer && retryAfterPrime && trainSoundPrimePromise) {
-    void trainSoundPrimePromise.then(() =>
-      playTrainMoveSound(move, false, pitchStepRef, pitchForExplore),
-    );
+  const isCapture = trainMoveIsCapture(move);
+  const soundName = isCapture ? "capture" : "move";
+  let buffer = trainSoundBank.get(soundName);
+  if (context && !buffer && trainSoundPrimePromise) {
+    void trainSoundPrimePromise.then(() => {
+      buffer = trainSoundBank.get(soundName);
+      if (buffer) {
+        playTrainMoveSoundImpl(context, move, buffer, options, isCapture);
+      }
+    });
     return;
   }
   if (!context || !buffer) return;
+  playTrainMoveSoundImpl(context, move, buffer, options, isCapture);
+}
 
+function playTrainMoveSoundImpl(
+  context: AudioContext,
+  move: TrainSoundMove,
+  buffer: AudioBuffer,
+  options: TrainSoundOptions,
+  isCapture: boolean,
+) {
   try {
     const source = context.createBufferSource();
     source.buffer = buffer;
-    if (pitchStepRef && pitchForExplore) {
-      // Explore traversal: derive pitch from the move's display position.
-      // position 1 -> displayMoves[0] -> pitch 0, position 2 -> pitch 1, etc.
-      const pitchIndex = Math.max(0, pitchForExplore.targetIndex - 1);
-      if (pitchForExplore.targetIndex === 0) {
-        pitchStepRef.current = 0;
-      }
-      source.playbackRate.value = normalizedMovePitch(
-        pitchIndex,
-        pitchForExplore.sequenceLength,
-      );
-      if (pitchForExplore.targetIndex === pitchForExplore.sequenceLength - 1) {
-        pitchStepRef.current += 1;
-      }
-    } else if (pitchStepRef) {
-      // Real-time training: sequential stepping through scale
-      source.playbackRate.value = normalizedMovePitch(
-        pitchStepRef.current % (MOVE_SCALE_RATIOS.length - 1),
-        MOVE_SCALE_RATIOS.length - 1,
-      );
-      pitchStepRef.current += 1;
+
+    let pitchIndex: number;
+    if (options.pitchIndex !== undefined) {
+      pitchIndex = options.pitchIndex;
+    } else {
+      const ref = options.plyRef ?? defaultTrainSoundPlyRef;
+      pitchIndex = ref.current;
     }
+
+    source.playbackRate.value = pitchRatioForPly(pitchIndex);
+
     const gainNode = context.createGain();
-    gainNode.gain.value = 0.85;
+    gainNode.gain.value = isCapture ? 1.0 : 0.85;
     source.connect(gainNode);
     gainNode.connect(context.destination);
     source.start();
+
+    if (options.advanceLivePitch !== false) {
+      const ref = options.plyRef ?? defaultTrainSoundPlyRef;
+      ref.current += 1;
+    }
   } catch {}
 }
 
@@ -635,7 +653,7 @@ export default function TrainPage() {
     if (initialOpponentRequestRef.current !== requestId) return;
 
     setLastMove(applied.lastMove);
-    playTrainMoveSound(applied.move, true, moveSoundPlyRef);
+    playTrainMoveSound(applied.move, { plyRef: moveSoundPlyRef });
     await sleep(540);
 
     if (initialOpponentRequestRef.current !== requestId) return;
@@ -701,7 +719,7 @@ export default function TrainPage() {
 
       // Highlight the move on the opponent's position.
       setLastMove({ from: played.from, to: played.to });
-      playTrainMoveSound(played, true, moveSoundPlyRef);
+      playTrainMoveSound(played, { plyRef: moveSoundPlyRef });
       await sleep(540);
 
       if (initialOpponentRequestRef.current !== requestId) return;
@@ -836,7 +854,7 @@ export default function TrainPage() {
       };
       const movesAfterUserMove = [...moves, userTrainingMove];
 
-      playTrainMoveSound(playedMove, true, moveSoundPlyRef);
+      playTrainMoveSound(playedMove, { plyRef: moveSoundPlyRef });
       setFen(fenAfterUserMove);
       setLastMove({ from: move.from, to: move.to });
       setMoves(movesAfterUserMove);
@@ -870,7 +888,7 @@ export default function TrainPage() {
       const playedMove = chess.move({ from: move.from, to: move.to, promotion: "q" });
       if (!playedMove) return;
 
-      playTrainMoveSound(playedMove, true, moveSoundPlyRef);
+      playTrainMoveSound(playedMove, { plyRef: moveSoundPlyRef });
       const nextExploratoryPosition = {
         fen: chess.fen(),
         lastMove: { from: playedMove.from, to: playedMove.to },
@@ -917,7 +935,7 @@ export default function TrainPage() {
       });
       if (!playedMove) return;
 
-      playTrainMoveSound(playedMove, true, moveSoundPlyRef);
+      playTrainMoveSound(playedMove, { plyRef: moveSoundPlyRef });
       setFen(chess.fen());
       setLastMove({ from: playedMove.from, to: playedMove.to });
       const finalMoves = [
@@ -979,7 +997,7 @@ export default function TrainPage() {
     const username = profileUsername.trim();
     if (!username) {
       setSelectedProvider(provider);
-      setConnectionMessage("Enter your public username to connect.");
+      setConnectionMessage("We need the public username, not the nickname you use in your head.");
       return;
     }
 
@@ -1273,9 +1291,9 @@ export default function TrainPage() {
     setHoveredMoveSquares(null);
     const move = moveForExploreSound(sequencePositions, activeExploreIndex, boundedIndex);
     if (move) {
-      playTrainMoveSound(move, true, moveSoundPlyRef, {
-        targetIndex: boundedIndex,
-        sequenceLength: sequencePositions.length,
+      playTrainMoveSound(move, {
+        pitchIndex: Math.max(0, boundedIndex - 1),
+        advanceLivePitch: false,
       });
     }
     setExploreIndex(boundedIndex);
@@ -1408,7 +1426,7 @@ export default function TrainPage() {
                 className="grid aspect-square w-full place-items-center rounded-[10px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] text-sm font-bold text-[var(--app-muted)]"
                 aria-live="polite"
               >
-                Loading position...
+                Finding something you mishandle...
               </div>
             )}
           </div>
@@ -1467,8 +1485,8 @@ export default function TrainPage() {
               {state === "drift" ? (
                 <StatusBanner
                   title="Eval dropped"
-                  detail="Rep saved for review"
-                  action="Retry"
+                  detail="Saved for later. You will see it again."
+                  action="Again"
                   tone="warning"
                   onAction={() => switchState("active")}
                 />
@@ -1477,17 +1495,6 @@ export default function TrainPage() {
                   <PromptCard side={userMoveSide} />
                 ) : null
               )}
-
-              {initialOpponentMoveRef.current && moves.length === 0 ? (
-                <div className="mt-6 rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] px-4 py-3">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">
-                    Opponent move
-                  </p>
-                  <p className="mt-1 text-lg font-bold text-[var(--app-text)]">
-                    {initialOpponentMoveRef.current.san}
-                  </p>
-                </div>
-              ) : null}
 
               <MoveList
                 moves={displayMoves}
@@ -1550,8 +1557,12 @@ function TrainOnboarding({
           <div className="grid gap-8">
             <div className="grid gap-4">
               <h1 className="text-2xl font-bold text-[var(--app-text)]">
-                To find your blindspots, we need to see your games.
+                We need your games first.
               </h1>
+              <p className="text-sm leading-7 text-[var(--app-muted)]">
+                We need your Lichess or Chess.com username. We are going to read your
+                games. Yes, the bad ones too. Especially the bad ones.
+              </p>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1563,7 +1574,7 @@ function TrainOnboarding({
                   onSelectProvider("lichess");
                 }}
               >
-                Connect Lichess
+                Use Lichess
               </button>
               <button
                 type="button"
@@ -1573,7 +1584,7 @@ function TrainOnboarding({
                   onSelectProvider("chesscom");
                 }}
               >
-                Connect Chess.com
+                Use Chess.com
               </button>
             </div>
 
@@ -1596,7 +1607,9 @@ function TrainOnboarding({
                     onChange={(event) => onUsernameChange(event.target.value)}
                     className="app-brutal-input min-h-12 px-4 text-base text-[var(--app-text)] outline-none transition focus:border-[var(--app-accent)]"
                     placeholder={
-                      selectedProvider === "lichess" ? "Lichess username" : "Chess.com username"
+                      selectedProvider === "lichess"
+                        ? "Your Lichess username"
+                        : "Your Chess.com username"
                     }
                     autoComplete="off"
                   />
@@ -1609,7 +1622,7 @@ function TrainOnboarding({
                   disabled={isConnectingProfile || username.trim().length === 0}
                   className="min-h-12 rounded-[8px] border border-[var(--app-accent)] bg-[var(--app-accent)] px-5 text-sm font-bold uppercase tracking-[0.12em] text-black transition hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)] disabled:cursor-not-allowed disabled:border-[var(--app-border)] disabled:bg-[var(--app-surface-subtle)] disabled:text-[var(--app-muted)]"
                 >
-                  {isConnectingProfile ? "Connecting..." : "Continue"}
+                  {isConnectingProfile ? "Checking..." : "Continue"}
                 </button>
               </form>
             ) : null}
@@ -1619,7 +1632,7 @@ function TrainOnboarding({
               className="mx-auto min-h-11 cursor-pointer text-sm font-bold text-[var(--app-muted)] underline-offset-4 transition hover:text-[var(--app-text)] hover:underline"
               onClick={() => void onSkip()}
             >
-              Skip — start with random positions
+              Skip this. Start with random positions.
             </button>
           </div>
         ) : null}
@@ -1635,17 +1648,17 @@ function TrainOnboarding({
                   <AnalysisLine
                     active={analysisStep === 0}
                     done={analysisStep >= 1}
-                    label="Fetching your recent games"
+                    label="Pulling your recent games"
                   />
                   <AnalysisLine
                     active={analysisStep === 1}
                     done={analysisStep >= 2}
-                    label="Analyzing games"
+                    label="Running your moves through Stockfish"
                   />
                   <AnalysisLine
                     active={analysisStep === 2}
                     done={analysisStep >= 3}
-                    label="Building your blindspots.gg profile"
+                    label="Building the list of things you keep repeating"
                   />
                 </>
               )}
@@ -1657,19 +1670,19 @@ function TrainOnboarding({
         {screen === "summary" && summary ? (
           <div className="grid gap-8">
             <h1 className="text-3xl font-bold text-[var(--app-text)]">
-              Your blindspot profile is ready.
+              We found enough.
             </h1>
             <div className="grid gap-3 border-y border-[var(--app-border-soft)] py-6 text-left sm:grid-cols-3">
               <SummaryStat value={`${summary.mistakesFound}`} label="mistakes found" />
-              <SummaryStat value={`${summary.gamesAnalyzed}`} label="across games" />
-              <SummaryStat value={`${summary.averageCpLossPerMove}cp`} label="avg loss per move" />
+              <SummaryStat value={`${summary.gamesAnalyzed}`} label="games checked" />
+              <SummaryStat value={`${summary.averageCpLossPerMove}cp`} label="average loss" />
             </div>
             <button
               type="button"
               className="mx-auto min-h-12 rounded-[8px] border border-[var(--app-accent)] bg-[var(--app-accent)] px-6 text-sm font-bold uppercase tracking-[0.12em] text-black transition hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
               onClick={onStartTraining}
             >
-              Start training →
+              Start training
             </button>
           </div>
         ) : null}
@@ -1737,7 +1750,10 @@ function PlayerTurnStrip({ label, isActive }: { label: string; isActive: boolean
 }
 
 function PromptCard({ side }: { side: "white" | "black" }) {
-  const label = side === "white" ? "White to play" : "Black to play";
+  const label =
+    side === "white"
+      ? "White to move. Make it count."
+      : "Black to move. Try not to improvise.";
   return (
     <div className="mt-8 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-5 py-5">
       <p className="text-lg font-bold text-[var(--app-text)]">{label}</p>
@@ -1769,11 +1785,11 @@ function LinearProgress({ completedSteps }: { completedSteps: number }) {
 function AnalysisElapsedMessage({ elapsedMs }: { elapsedMs: number }) {
   const message =
     elapsedMs >= 45_000
-      ? "Almost done..."
+      ? "Still working. Stockfish was not built for your convenience."
       : elapsedMs >= 15_000
-        ? "Still working..."
+        ? "This takes about a minute. Real analysis is slow."
         : elapsedMs >= 5_000
-          ? "This takes about 30 seconds"
+          ? "Running through the bad moves now."
           : "";
 
   return <p className="min-h-5 text-sm text-[var(--app-muted)]">{message}</p>;
@@ -1846,15 +1862,15 @@ function onboardingPrimaryButtonClass(isActive: boolean) {
 function resolveProfileConnectionError(error?: string) {
   switch (error) {
     case "profile-not-found":
-      return "That public profile could not be found.";
+      return "That profile does not exist. Or you typed it wrong.";
     case "invalid-username":
-      return "That username format does not look valid.";
+      return "That username format looks wrong.";
     case "storage-needs-migration":
-      return "The linked-profile table needs the latest migration first.";
+      return "The linked-profile table is behind. Run the migration.";
     case "unauthorized":
-      return "Sign in again before connecting a profile.";
+      return "Sign in again before trying that.";
     default:
-      return "Profile could not be linked right now.";
+      return "Could not link that profile right now.";
   }
 }
 
@@ -2186,7 +2202,7 @@ function EngineLinesSection({
   const emptyMessage = isLoading
     ? "Receiving engine lines..."
     : hasError
-      ? "Analysis unavailable"
+      ? "No engine lines yet."
       : "Engine lines unavailable";
   return (
     <section className="grid gap-2" aria-live="polite">
@@ -2506,7 +2522,7 @@ function EvalGraph({
           </svg>
         ) : (
           <div className="grid h-full place-items-center text-xs text-[var(--app-muted)]">
-            Eval data unavailable
+            No eval data here yet
           </div>
         )}
       </div>
@@ -2540,7 +2556,7 @@ function AnalysisMoveTable({
         <span className="text-right">Loss</span>
       </div>
       {moves.length === 0 ? (
-        <div className="px-3 py-4 text-sm text-[var(--app-muted)]">Analysis unavailable</div>
+        <div className="px-3 py-4 text-sm text-[var(--app-muted)]">No move grades yet.</div>
       ) : null}
       {moves.map((move, index) => {
         const positionIndex = (move.absoluteIndex ?? index) + 1;
@@ -2594,26 +2610,27 @@ function MoveList({
   isOpponentThinking: boolean;
   showHeaders?: boolean;
 }) {
-  // Build rows by fullmove number with white on left, black on right.
-  const rows: Array<{ white?: TrainingMove; black?: TrainingMove; moveNumber: number; isFirstBlack?: boolean }> = [];
-  let moveNumber = 0;
-  let lastWasWhite = true;
-
+  // Build rows keyed by fullmove number from fenBefore.
+  // White column gets moves where fenBefore turn was "w".
+  // Black column gets moves where fenBefore turn was "b".
+  const rowsMap = new Map<number, { white?: TrainingMove; black?: TrainingMove; isFirstBlack?: boolean }>();
   for (const move of moves) {
-    if (move.side === "white") {
-      moveNumber += 1;
-      rows.push({ white: move, moveNumber });
-      lastWasWhite = true;
+    let moveNumber = 1;
+    let wasBlack = false;
+    if (move.fenBefore) {
+      const parts = move.fenBefore.split(" ");
+      moveNumber = parseInt(parts[5] ?? "1", 10);
+      wasBlack = parts[1] === "b";
+    }
+    const side = wasBlack ? "black" : "white";
+    if (!rowsMap.has(moveNumber)) {
+      rowsMap.set(moveNumber, { [side]: move, ...(side === "black" ? { isFirstBlack: true } : {}) });
     } else {
-      if (rows.length === 0) {
-        // Engine starts as black: first row has "..." prefix
-        rows.push({ black: move, moveNumber: 1, isFirstBlack: true });
-      } else {
-        rows[rows.length - 1].black = move;
-      }
-      lastWasWhite = false;
+      const row = rowsMap.get(moveNumber)!;
+      row[side] = move;
     }
   }
+  const rows = [...rowsMap.entries()].map(([moveNumber, row]) => ({ ...row, moveNumber }));
 
   return (
     <div className="mt-8 overflow-hidden border-y border-[var(--app-border-soft)] py-2">
@@ -2625,7 +2642,7 @@ function MoveList({
         </div>
       ) : null}
       {moves.length === 0 ? (
-        <p className="py-8 text-center text-sm text-[var(--app-muted)]">No moves played yet</p>
+        <p className="py-8 text-center text-sm text-[var(--app-muted)]">No moves yet. That is on you.</p>
       ) : null}
       {rows.map((row, index) => {
         const prefix = row.isFirstBlack ? `${row.moveNumber}... ` : `${row.moveNumber}. `;

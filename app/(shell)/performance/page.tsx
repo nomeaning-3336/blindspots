@@ -80,18 +80,18 @@ export default async function PerformancePage({
         <div className="mx-auto grid w-full max-w-[1180px] gap-6">
           <div className="app-brutal-card-strong p-8">
             <h1 className="text-3xl font-bold uppercase tracking-[0.16em] text-white">
-              Link A Chess Profile First
+              No games. No dashboard.
             </h1>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--app-muted)]">
-              The dashboard needs at least one public Chess.com or Lichess username
-              tied to your account before it can fetch games and compute your metrics.
+              Add a public Chess.com or Lichess account first. Otherwise this page is
+              just an expensive way to render empty space.
             </p>
             <div className="mt-6">
               <a
                 href="/account"
                 className="inline-flex items-center justify-center border border-[var(--app-accent)] bg-[var(--app-accent)] px-5 py-3 text-xs font-bold uppercase tracking-[0.18em] !text-black transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
               >
-                Open Account Linking
+                Open account
               </a>
             </div>
           </div>
@@ -122,11 +122,11 @@ export default async function PerformancePage({
         <div className="mx-auto grid w-full max-w-[1180px] gap-6">
           <div className="app-brutal-card-strong p-8">
             <h1 className="text-3xl font-bold uppercase tracking-[0.16em] text-white">
-              Data Fetch Failed
+              The fetch broke
             </h1>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--app-muted)]">
-              The linked provider could not be reached cleanly right now. Try the
-              same filter again, or relink the account if the username changed.
+              The provider did not cooperate. Try the same filter again, or reconnect
+              the account if the username changed.
             </p>
             <div className="mt-6 border-2 border-rose-400/35 bg-rose-400/10 px-5 py-4 text-sm leading-6 text-rose-100 shadow-[4px_4px_0_color-mix(in_srgb,rgba(251,113,133,1)_18%,transparent)]">
               {errorMessage}
@@ -142,7 +142,7 @@ export default async function PerformancePage({
                 href="/account"
                 className="inline-flex items-center justify-center border border-[var(--app-border)] px-5 py-3 text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-text)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
               >
-                Manage Linked Profiles
+                Manage accounts
               </a>
             </div>
           </div>
