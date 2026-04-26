@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
 import { Chess } from "chess.js";
 import { getOptionalAppUserId } from "@/lib/app-auth";
-import { getPositionLines, classifyEngineError, type EngineErrorCode } from "@/lib/engines/dispatcher";
-import { getAnalyzePreferencesForUser } from "@/lib/analyze-preferences-store";
-import { normalizeAnalyzePreferences } from "@/lib/analyze-preferences";
+import { getPieceLinesFromSquare, classifyEngineError, type EngineErrorCode } from "@/lib/engines/dispatcher";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type EngineLinesPayload = {
+type PieceLinesPayload = {
   fen?: unknown;
+  square?: unknown;
 };
 
 export async function POST(request: Request) {
@@ -18,23 +17,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const payload = (await request.json().catch(() => null)) as EngineLinesPayload | null;
+  const payload = (await request.json().catch(() => null)) as PieceLinesPayload | null;
   const fen = typeof payload?.fen === "string" ? payload.fen : "";
-  if (!isValidFen(fen)) {
-    return NextResponse.json({ error: "Invalid position." }, { status: 400 });
+  const square = typeof payload?.square === "string" ? payload.square : "";
+
+  if (!isValidFen(fen) || !square) {
+    return NextResponse.json({ error: "Invalid position or square." }, { status: 400 });
   }
 
-  const rawPrefs = await getAnalyzePreferencesForUser(userId);
-  const { linesShown } = normalizeAnalyzePreferences(rawPrefs);
-
-  let lines: Awaited<ReturnType<typeof getPositionLines>> = [];
+  let lines: Awaited<ReturnType<typeof getPieceLinesFromSquare>> = [];
   let engineError: EngineErrorCode | null = null;
 
   try {
-    lines = await getPositionLines(fen, { depthLimit: 18, multiPv: linesShown });
+    lines = await getPieceLinesFromSquare(fen, square, { depthLimit: 18 });
   } catch (error: unknown) {
     engineError = classifyEngineError(error);
-    console.error(`[engine-lines] Engine error for fen=${fen}:`, error);
+    console.error(`[piece-lines] Engine error for fen=${fen} square=${square}:`, error);
   }
 
   return NextResponse.json({

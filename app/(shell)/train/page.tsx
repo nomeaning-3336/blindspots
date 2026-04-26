@@ -128,7 +128,9 @@ const TRAIN_SOUND_SOURCES = {
 } as const;
 const primaryActionClassName =
   "min-h-11 rounded-[8px] border border-[var(--app-accent)] bg-[var(--app-accent)] px-4 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]";
-const trainSoundBank = new Map<keyof typeof TRAIN_SOUND_SOURCES, HTMLAudioElement>();
+const trainSoundBank = new Map<keyof typeof TRAIN_SOUND_SOURCES, AudioBuffer>();
+let trainAudioContext: AudioContext | null = null;
+let trainSoundPrimePromise: Promise<void> | null = null;
 
 function readVisualPreferences() {
   let storedPreferences: Partial<AnalyzePreferences> | null = null;
@@ -165,17 +167,59 @@ type TrainSoundMove = {
 };
 
 function primeTrainSounds() {
-  if (typeof Audio === "undefined") return;
+  const context = ensureTrainAudioContext();
+  if (!context || typeof fetch === "undefined") return;
+  if (trainSoundPrimePromise) return;
 
-  (Object.entries(TRAIN_SOUND_SOURCES) as Array<[keyof typeof TRAIN_SOUND_SOURCES, string]>)
-    .forEach(([name, src]) => {
+  trainSoundPrimePromise = Promise.all(
+    (Object.entries(TRAIN_SOUND_SOURCES) as Array<[keyof typeof TRAIN_SOUND_SOURCES, string]>)
+      .map(async ([name, src]) => {
       if (trainSoundBank.has(name)) return;
-      const audio = new Audio(src);
-      audio.preload = "auto";
-      audio.volume = 1;
-      trainSoundBank.set(name, audio);
-      audio.load();
+      const response = await fetch(src, { cache: "force-cache" });
+      if (!response.ok) throw new Error(`Could not load train sound: ${src}`);
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = await decodeTrainSound(context, arrayBuffer);
+      trainSoundBank.set(name, buffer);
+    }),
+  ).then(
+    () => {},
+    () => {
+      trainSoundPrimePromise = null;
     });
+}
+
+function ensureTrainAudioContext() {
+  if (typeof window === "undefined") return null;
+  if (trainAudioContext) return trainAudioContext;
+  const AudioContextCtor =
+    window.AudioContext ??
+    (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextCtor) return null;
+
+  try {
+    trainAudioContext = new AudioContextCtor();
+  } catch {
+    trainAudioContext = null;
+  }
+
+  return trainAudioContext;
+}
+
+function resumeTrainAudioContext() {
+  const context = ensureTrainAudioContext();
+  if (context?.state === "suspended") {
+    void context.resume().catch(() => {});
+  }
+}
+
+function decodeTrainSound(context: AudioContext, arrayBuffer: ArrayBuffer) {
+  const data = arrayBuffer.slice(0);
+  return new Promise<AudioBuffer>((resolve, reject) => {
+    const maybePromise = context.decodeAudioData(data, resolve, reject);
+    if (maybePromise instanceof Promise) {
+      maybePromise.then(resolve, reject);
+    }
+  });
 }
 
 function trainMoveIsCapture(move?: TrainSoundMove | null) {
@@ -188,14 +232,17 @@ function trainMoveIsCapture(move?: TrainSoundMove | null) {
 function playTrainMoveSound(move?: TrainSoundMove | null) {
   if (!move) return;
   primeTrainSounds();
+  resumeTrainAudioContext();
   const name = trainMoveIsCapture(move) ? "capture" : "move";
-  const audio = trainSoundBank.get(name);
-  if (!audio) return;
+  const context = ensureTrainAudioContext();
+  const buffer = trainSoundBank.get(name);
+  if (!context || !buffer) return;
 
   try {
-    const instance = audio.cloneNode(true) as HTMLAudioElement;
-    instance.volume = audio.volume;
-    void instance.play().catch(() => {});
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(context.destination);
+    source.start();
   } catch {}
 }
 
@@ -260,8 +307,8 @@ export default function TrainPage() {
   const [exploratoryHistoryIndex, setExploratoryHistoryIndex] = useState(-1);
   const [exploreSelectedSquare, setExploreSelectedSquare] = useState<string | null>(null);
   const [selectedMoveIndex, setSelectedMoveIndex] = useState<number | null>(null);
-  const [boundaryFlash, setBoundaryFlash] = useState<"start" | "end" | null>(null);
   const [engineLineCache, setEngineLineCache] = useState<Record<string, EngineLineResult[]>>({});
+  const [engineLineErrorFens, setEngineLineErrorFens] = useState<Set<string>>(new Set());
   const [engineLineLoadingFen, setEngineLineLoadingFen] = useState<string | null>(null);
   const [cachedNextPosition, setCachedNextPosition] = useState<NextPositionResponse | null>(null);
   const [isOpponentThinking, setIsOpponentThinking] = useState(false);
@@ -285,10 +332,14 @@ export default function TrainPage() {
     boardTheme: AnalyzeBoardTheme;
     pieceTheme: AnalyzePieceTheme;
   } | null>(null);
+  const [pieceLineCache, setPieceLineCache] = useState<Record<string, EngineLineResult[]>>({});
+  const [pieceLinesLoadingKey, setPieceLinesLoadingKey] = useState<string | null>(null);
+  const completingRef = useRef(false);
   const completionRequestRef = useRef(0);
   const nextPositionPrefetchRef = useRef<Promise<NextPositionResponse | null> | null>(null);
   const engineLineCacheRef = useRef<Record<string, EngineLineResult[]>>({});
   const engineLinePrefetchRef = useRef<Map<string, Promise<void>>>(new Map());
+  const pieceLineCacheRef = useRef<Record<string, EngineLineResult[]>>({});
 
   useEffect(() => {
     engineLineCacheRef.current = engineLineCache;
@@ -355,8 +406,11 @@ export default function TrainPage() {
   }, []);
 
   useEffect(() => {
+    primeTrainSounds();
+
     function primeSounds() {
       primeTrainSounds();
+      resumeTrainAudioContext();
     }
 
     window.addEventListener("pointerdown", primeSounds, { once: true });
@@ -379,13 +433,14 @@ export default function TrainPage() {
   }, [onboardingScreen]);
 
   function switchState(nextState: TrainingState) {
+    completingRef.current = false;
     setState(nextState);
     setResultMode("results");
     setExploreIndex(0);
     resetExploratoryLine();
     setSelectedMoveIndex(null);
-    setBoundaryFlash(null);
     setEngineLineCache({});
+    setEngineLineErrorFens(new Set());
     setEngineLineLoadingFen(null);
     setIsOpponentThinking(false);
     setIsCompletingSequence(false);
@@ -448,6 +503,7 @@ export default function TrainPage() {
 
   function applyNextPosition(payload: NextPositionResponse) {
     if (!payload.fen) return;
+    completingRef.current = false;
     setStartingFen(payload.fen);
     setFen(payload.fen);
     setMoves([]);
@@ -455,8 +511,8 @@ export default function TrainPage() {
     setResultMode("results");
     setExploreIndex(0);
     resetExploratoryLine();
-    setBoundaryFlash(null);
     setEngineLineCache({});
+    setEngineLineErrorFens(new Set());
     setEngineLineLoadingFen(null);
     setSequenceLength(normalizeSequenceLength(payload.sequenceLength));
   }
@@ -484,19 +540,32 @@ export default function TrainPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fen: fenToAnalyze }),
       });
-      const payload = (await response.json().catch(() => null)) as { lines?: EngineLineResult[] } | null;
+      const payload = (await response.json().catch(() => null)) as { lines?: EngineLineResult[]; error?: string } | null;
       const lines = response.ok && Array.isArray(payload?.lines) ? payload.lines : [];
+      const hadError = typeof payload?.error === "string" || !response.ok;
       setEngineLineCache((current) => {
         if (current[fenToAnalyze]) return current;
         const next = { ...current, [fenToAnalyze]: lines };
         engineLineCacheRef.current = next;
         return next;
       });
+      if (hadError) {
+        setEngineLineErrorFens((current) => {
+          const next = new Set(current);
+          next.add(fenToAnalyze);
+          return next;
+        });
+      }
     })().catch(() => {
       setEngineLineCache((current) => {
         if (current[fenToAnalyze]) return current;
         const next = { ...current, [fenToAnalyze]: [] };
         engineLineCacheRef.current = next;
+        return next;
+      });
+      setEngineLineErrorFens((current) => {
+        const next = new Set(current);
+        next.add(fenToAnalyze);
         return next;
       });
     }).finally(() => {
@@ -507,8 +576,30 @@ export default function TrainPage() {
     return promise;
   }
 
+  async function fetchPieceLinesForSquare(fen: string, square: string) {
+    const key = `${fen}::${square}`;
+    if (pieceLineCacheRef.current[key]) return;
+
+    const response = await fetch("/api/train/piece-lines", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fen, square }),
+    });
+    const payload = (await response.json().catch(() => null)) as { lines?: EngineLineResult[]; error?: string } | null;
+    const lines = response.ok && Array.isArray(payload?.lines) ? payload.lines : [];
+    if (typeof payload?.error === "string" || !response.ok) {
+      console.warn(`[piece-lines] fetch failed for ${fen}@${square}:`, payload?.error ?? "unknown error");
+    }
+    setPieceLineCache((current) => {
+      if (current[key]) return current;
+      const next = { ...current, [key]: lines };
+      pieceLineCacheRef.current = next;
+      return next;
+    });
+  }
+
   function warmEngineLinesForSequence(nextMoves: TrainingMove[]) {
-    const fens = collectOnePlyAnalysisFens(startingFen, nextMoves)
+    const fens = collectKeyAnalysisFens(startingFen, nextMoves)
       .filter((fenToAnalyze) => !engineLineCacheRef.current[fenToAnalyze]);
     if (fens.length === 0) return;
 
@@ -528,7 +619,7 @@ export default function TrainPage() {
   }
 
   function handleMove(move: BoardMove) {
-    if (state !== "active" || isOpponentThinking) return;
+    if (state !== "active" || isOpponentThinking || completingRef.current) return;
 
     try {
       const chess = new Chess(fen);
@@ -553,16 +644,20 @@ export default function TrainPage() {
       warmEngineLinesForSequence(movesAfterUserMove);
 
       if (chess.isGameOver()) {
+        completingRef.current = true;
         setState("complete");
         void completeSequence(movesAfterUserMove);
         return;
       }
 
-      void requestOpponentMove(
-        fenAfterUserMove,
-        movesAfterUserMove,
-        userMoveCountAfterMove >= sequenceLength,
-      );
+      if (userMoveCountAfterMove >= sequenceLength) {
+        completingRef.current = true;
+        setState("complete");
+        void completeSequence(movesAfterUserMove);
+        return;
+      }
+
+      void requestOpponentMove(fenAfterUserMove, movesAfterUserMove);
     } catch {
       // The board only emits legal moves, but keep the page resilient to stale FEN.
     }
@@ -599,7 +694,6 @@ export default function TrainPage() {
   async function requestOpponentMove(
     fenAfterUserMove: string,
     movesAfterUserMove: TrainingMove[],
-    completeAfterOpponentMove = false,
   ) {
     setIsOpponentThinking(true);
 
@@ -640,7 +734,7 @@ export default function TrainPage() {
       setMoves(finalMoves);
       warmEngineLinesForSequence(finalMoves);
 
-      if (completeAfterOpponentMove || chess.isGameOver()) {
+      if (chess.isGameOver()) {
         setState("complete");
         void completeSequence(finalMoves);
       }
@@ -832,10 +926,20 @@ export default function TrainPage() {
   const currentEngineLines = isExploringResults
     ? engineLineCache[boardFen] ?? []
     : [];
+  const pieceLinesKey = exploreSelectedSquare ? `${boardFen}::${exploreSelectedSquare}` : null;
+  const currentPieceLines = pieceLinesKey ? (pieceLineCache[pieceLinesKey] ?? null) : null;
+  const displayLines = exploreSelectedSquare
+    ? (currentPieceLines ?? [])
+    : currentEngineLines;
   const currentEngineEval = currentEngineLines[0]?.cp;
   const isEngineLinesLoading = Boolean(
     isExploringResults && engineLineLoadingFen === boardFen,
   );
+  const isPieceLinesLoading = Boolean(
+    exploreSelectedSquare && pieceLinesKey && pieceLinesLoadingKey === pieceLinesKey,
+  );
+  const isDisplayLoading = exploreSelectedSquare ? isPieceLinesLoading : isEngineLinesLoading;
+  const hasEngineLineError = isExploringResults && engineLineErrorFens.has(boardFen);
 
   useEffect(() => {
     const exploreFen = isExploringResults ? boardFen : null;
@@ -854,6 +958,28 @@ export default function TrainPage() {
       cancelled = true;
     };
   }, [boardFen, isExploringResults]);
+
+  useEffect(() => {
+    if (!isExploringResults || !exploreSelectedSquare) {
+      setPieceLinesLoadingKey(null);
+      return;
+    }
+    const key = `${boardFen}::${exploreSelectedSquare}`;
+    if (pieceLineCacheRef.current[key]) {
+      setPieceLinesLoadingKey(null);
+      return;
+    }
+
+    let cancelled = false;
+    setPieceLinesLoadingKey(key);
+    void fetchPieceLinesForSquare(boardFen, exploreSelectedSquare).finally(() => {
+      if (!cancelled) setPieceLinesLoadingKey(null);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [boardFen, exploreSelectedSquare, isExploringResults]);
 
   useEffect(() => {
     if (!isExploringResults) return;
@@ -899,17 +1025,12 @@ export default function TrainPage() {
 
   function navigateExploratoryLine(nextIndex: number) {
     if (nextIndex < -1) {
-      setBoundaryFlash("start");
-      window.setTimeout(() => setBoundaryFlash(null), 180);
       return;
     }
     if (nextIndex >= exploratoryHistory.length) {
-      setBoundaryFlash("end");
-      window.setTimeout(() => setBoundaryFlash(null), 180);
       return;
     }
 
-    setBoundaryFlash(null);
     setHoveredEngineLineIndex(null);
     setHoveredMoveSquares(null);
     setExploratoryHistoryIndex(nextIndex);
@@ -923,11 +1044,8 @@ export default function TrainPage() {
     const maxIndex = Math.max(0, sequencePositions.length - 1);
     const boundedIndex = Math.max(0, Math.min(maxIndex, nextIndex));
     if (boundedIndex === activeExploreIndex && nextIndex !== activeExploreIndex) {
-      setBoundaryFlash(boundary);
-      window.setTimeout(() => setBoundaryFlash(null), 180);
       return;
     }
-    setBoundaryFlash(null);
     resetExploratoryLine();
     setHoveredEngineLineIndex(null);
     setHoveredMoveSquares(null);
@@ -965,12 +1083,7 @@ export default function TrainPage() {
         ].join(" ")}
       >
         <section
-          className={[
-            "flex items-center justify-center rounded-[14px] border bg-[var(--app-panel-strong)] p-3 transition-colors sm:p-5 lg:min-h-0 lg:p-8",
-            boundaryFlash
-              ? "border-[var(--app-muted)]"
-              : "border-[var(--app-border-soft)]",
-          ].join(" ")}
+          className="flex items-center justify-center rounded-[14px] border border-[var(--app-border-soft)] bg-[var(--app-panel-strong)] p-3 transition-colors sm:p-5 lg:min-h-0 lg:p-8"
         >
           <div className="w-full max-w-[min(92vw,74vh,920px)]">
             {visualPreferences && !isPositionLoading ? (
@@ -991,7 +1104,8 @@ export default function TrainPage() {
                       mode="training"
                       orientation={boardOrientation}
                       coordinates
-                      showLegalTargets={!exploreSelectedSquare}
+                      showLegalTargets={false}
+                      selectedSquare={exploreSelectedSquare}
                       lastMove={boardLastMove}
                       boardTheme={visualPreferences.boardTheme}
                       pieceTheme={visualPreferences.pieceTheme}
@@ -1020,7 +1134,7 @@ export default function TrainPage() {
                               ]
                             : undefined
                       }
-                      engineArrows={buildEngineArrows(currentEngineLines, hoveredEngineLineIndex, exploreSelectedSquare)}
+                      engineArrows={buildEngineArrows(displayLines, hoveredEngineLineIndex)}
                       onMove={(move) => {
                         setExploreSelectedSquare(null);
                         setSelectedMoveIndex(null);
@@ -1095,8 +1209,9 @@ export default function TrainPage() {
               mode={resultMode}
               positions={sequencePositions}
               currentIndex={activeExploreIndex}
-              engineLines={currentEngineLines}
-              isEngineLinesLoading={isEngineLinesLoading}
+              engineLines={displayLines}
+              isEngineLinesLoading={isDisplayLoading}
+              hasEngineLineError={hasEngineLineError}
               hoveredAnnotationSquare={hoveredAnnotationSquare}
               hoveredEngineLineIndex={hoveredEngineLineIndex}
               onEngineLineHover={setHoveredEngineLineIndex}
@@ -1589,27 +1704,13 @@ function buildSequencePositions(startingFen: string, moves: TrainingMove[]): Seq
   return positions;
 }
 
-function collectOnePlyAnalysisFens(startingFen: string, moves: TrainingMove[]) {
+function collectKeyAnalysisFens(startingFen: string, moves: TrainingMove[]) {
   const fens = new Set<string>();
-  const positions = buildSequencePositions(startingFen, moves);
+  fens.add(startingFen);
 
-  for (const position of positions) {
-    fens.add(position.fen);
-    try {
-      const chess = new Chess(position.fen);
-      const legalMoves = chess.moves({ verbose: true }) as Move[];
-      for (const move of legalMoves) {
-        const branch = new Chess(position.fen);
-        const playedMove = branch.move({
-          from: move.from,
-          to: move.to,
-          promotion: move.promotion ?? "q",
-        });
-        if (playedMove) fens.add(branch.fen());
-      }
-    } catch {
-      // Skip stale or terminal positions; the visible sequence positions are still cached.
-    }
+  for (const move of moves) {
+    if (move.fenBefore) fens.add(move.fenBefore);
+    if (move.fenAfter) fens.add(move.fenAfter);
   }
 
   return [...fens];
@@ -1801,6 +1902,7 @@ function engineLineColor(cls: MoveClassification | undefined): string {
 function EngineLinesSection({
   lines,
   isLoading,
+  hasError = false,
   hoveredDestinationSquare,
   hoveredIndex,
   onHoverLine,
@@ -1808,11 +1910,17 @@ function EngineLinesSection({
 }: {
   lines: EngineLineResult[];
   isLoading: boolean;
+  hasError?: boolean;
   hoveredDestinationSquare?: string | null;
   hoveredIndex?: number | null;
   onHoverLine?: (index: number | null) => void;
   selectedMoveUci?: string | null;
 }) {
+  const emptyMessage = isLoading
+    ? "Receiving engine lines..."
+    : hasError
+      ? "Analysis unavailable"
+      : "Engine lines unavailable";
   return (
     <section className="grid gap-2" aria-live="polite">
       <div className="flex items-center justify-between gap-3">
@@ -1826,7 +1934,7 @@ function EngineLinesSection({
       <div className={["grid gap-2", isLoading ? "opacity-60" : ""].join(" ")}>
         {lines.length === 0 ? (
           <div className="rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] px-3 py-4 text-xs font-bold text-[var(--app-muted)]">
-            {isLoading ? "Receiving engine lines..." : "Engine lines unavailable"}
+            {emptyMessage}
           </div>
         ) : null}
         {lines.map((line, index) => {
@@ -1930,6 +2038,7 @@ function ResultsPanel({
   currentIndex,
   engineLines,
   isEngineLinesLoading,
+  hasEngineLineError,
   hoveredAnnotationSquare,
   hoveredEngineLineIndex,
   onEngineLineHover,
@@ -1950,6 +2059,7 @@ function ResultsPanel({
   currentIndex: number;
   engineLines: EngineLineResult[];
   isEngineLinesLoading: boolean;
+  hasEngineLineError?: boolean;
   hoveredAnnotationSquare: string | null;
   hoveredEngineLineIndex: number | null;
   onEngineLineHover: (index: number | null) => void;
@@ -1968,10 +2078,11 @@ function ResultsPanel({
   if (mode === "explore") {
     return (
       <div className="flex flex-1 flex-col gap-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
-        <CompactEloLine result={eloResult} isLoading={isSaving} />
+        <EloResultCard result={eloResult} isLoading={isSaving} />
         <EngineLinesSection
           lines={engineLines}
           isLoading={isEngineLinesLoading}
+          hasError={hasEngineLineError}
           hoveredDestinationSquare={hoveredAnnotationSquare}
           hoveredIndex={hoveredEngineLineIndex}
           onHoverLine={onEngineLineHover}
@@ -1987,7 +2098,7 @@ function ResultsPanel({
           moves={userMoves}
           currentIndex={currentIndex}
           selectedMoveIndex={selectedMoveIndex}
-          engineLines={engineLines}
+          isAnalyzing={isSaving}
           compact
           onSelectPosition={
             onSelectMove
@@ -2013,7 +2124,7 @@ function ResultsPanel({
     <div className="flex flex-1 flex-col gap-4 opacity-80 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
       <EloResultCard result={eloResult} isLoading={isSaving} />
       <EvalGraph points={graphPoints} currentIndex={positions.length - 1} compact />
-      <AnalysisMoveTable moves={userMoves} compact onHoverMove={onMoveHover} />
+      <AnalysisMoveTable moves={userMoves} isAnalyzing={isSaving} compact onHoverMove={onMoveHover} />
       <div className="pt-1">
         <button
           type="button"
@@ -2135,7 +2246,7 @@ function AnalysisMoveTable({
   moves,
   currentIndex,
   selectedMoveIndex,
-  engineLines,
+  isAnalyzing,
   compact = false,
   onSelectPosition,
   onHoverMove,
@@ -2143,12 +2254,11 @@ function AnalysisMoveTable({
   moves: Array<TrainingMove & { absoluteIndex?: number }>;
   currentIndex?: number;
   selectedMoveIndex?: number | null;
-  engineLines?: EngineLineResult[];
+  isAnalyzing?: boolean;
   compact?: boolean;
   onSelectPosition?: (index: number) => void;
   onHoverMove?: (move: { from: string; to: string } | null) => void;
 }) {
-  const bestEngineUci = engineLines?.[0]?.bestMove ?? null;
   return (
     <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)]">
       <div className="grid min-h-8 grid-cols-[minmax(0,1.1fr)_68px_68px_76px] items-center border-b border-[var(--app-border-soft)] px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
@@ -2163,7 +2273,7 @@ function AnalysisMoveTable({
       {moves.map((move, index) => {
         const positionIndex = (move.absoluteIndex ?? index) + 1;
         const isSelected = selectedMoveIndex != null && selectedMoveIndex === positionIndex;
-        const isEngineMove = bestEngineUci ? move.uci === bestEngineUci : false;
+        const pendingValue = isAnalyzing ? "..." : "--";
         return (
         <button
           type="button"
@@ -2171,7 +2281,7 @@ function AnalysisMoveTable({
           className={[
             "grid w-full grid-cols-[minmax(0,1.1fr)_68px_68px_76px] items-center border-b border-[var(--app-border-soft)] px-3 text-left last:border-b-0",
             compact ? "min-h-9 text-xs" : "min-h-10 text-sm",
-            onSelectPosition ? "cursor-pointer transition hover:bg-[var(--app-highlight-soft)]" : "cursor-default",
+            onSelectPosition ? "cursor-pointer transition" : "cursor-default",
             currentIndex === positionIndex || isSelected ? "bg-[var(--app-highlight-soft)]" : "",
           ].join(" ")}
           disabled={!onSelectPosition}
@@ -2184,20 +2294,15 @@ function AnalysisMoveTable({
             <span className="truncate" style={{ color: classificationColor(move.classification) }}>
               {move.san}
             </span>
-            {isEngineMove ? (
-              <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--app-class-best)]">
-                Engine move
-              </span>
-            ) : null}
           </span>
-          <span className="text-right text-[var(--app-muted)]">
-            {typeof move.evalBefore === "number" ? formatEval(move.evalBefore) : "--"}
+          <span className="overflow-hidden whitespace-nowrap text-right tabular-nums text-[var(--app-muted)]">
+            {typeof move.evalBefore === "number" ? formatEval(move.evalBefore) : pendingValue}
           </span>
-          <span className="text-right text-[var(--app-muted)]">
-            {typeof move.evalAfter === "number" ? formatEval(move.evalAfter) : "--"}
+          <span className="overflow-hidden whitespace-nowrap text-right tabular-nums text-[var(--app-muted)]">
+            {typeof move.evalAfter === "number" ? formatEval(move.evalAfter) : pendingValue}
           </span>
-          <span className="text-right text-[var(--app-muted)]">
-            {typeof move.cpLoss === "number" ? `${move.cpLoss}cp` : "--"}
+          <span className="overflow-hidden whitespace-nowrap text-right tabular-nums text-[var(--app-muted)]">
+            {typeof move.cpLoss === "number" ? `${move.cpLoss}cp` : pendingValue}
           </span>
         </button>
         );
@@ -2348,19 +2453,14 @@ function formatEval(cp: number) {
 function buildEngineArrows(
   lines: EngineLineResult[],
   emphasizedIndex: number | null = null,
-  selectedSquare?: string | null,
 ): EngineArrow[] {
-  const relevant = selectedSquare
-    ? lines.filter((line) => line.bestMove.slice(0, 2) === selectedSquare)
-    : lines.slice(0, 3);
-
-  return relevant.map((line, index) => ({
+  return lines.map((line, index) => ({
     from: line.bestMove.slice(0, 2),
     to: line.bestMove.slice(2, 4),
     label: formatEval(line.cp),
     rank: index + 1,
-    emphasis: emphasizedIndex === lines.indexOf(line),
-    color: selectedSquare ? classificationColor(engineLineClassification(lines.indexOf(line), lines)) : undefined,
+    emphasis: emphasizedIndex === index,
+    color: classificationColor(engineLineClassification(index, lines)),
   }));
 }
 

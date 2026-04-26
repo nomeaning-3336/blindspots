@@ -19,6 +19,15 @@ const DEFAULT_EVAL_DEPTH = 16;
 const ENGINE_INIT_TIMEOUT_MS = 6000;
 const ENGINE_SEARCH_TIMEOUT_MS = 10000;
 
+export class EngineError extends Error {
+  code: "engine_timeout" | "engine_unavailable" | "engine_error";
+  constructor(message: string, code: "engine_timeout" | "engine_unavailable" | "engine_error") {
+    super(message);
+    this.code = code;
+    this.name = "EngineError";
+  }
+}
+
 interface CandidateMove {
   uci: string;
   cp: number | null;
@@ -36,6 +45,7 @@ interface SearchResult {
 interface SearchOptions {
   depthLimit?: number;
   timeLimitMs?: number;
+  searchMoves?: string[];
 }
 
 export const stockfishHarness: EngineHarness = {
@@ -122,6 +132,7 @@ export const stockfishHarness: EngineHarness = {
       return engine.search(fen, {
         depthLimit: options.depthLimit ?? DEFAULT_EVAL_DEPTH,
         timeLimitMs: options.timeLimitMs,
+        searchMoves: options.searchMoves,
       });
     });
 
@@ -152,6 +163,7 @@ function createStockfishProcess() {
   let buffer = "";
   let uciResolve: (() => void) | null = null;
   let readyResolve: (() => void) | null = null;
+  let dead = false;
   let pendingSearch:
     | {
         resolve: (result: SearchResult) => void;
@@ -162,8 +174,23 @@ function createStockfishProcess() {
       }
     | null = null;
 
+  function kill() {
+    dead = true;
+    if (processRef) {
+      try { processRef.stdin.destroy(); } catch { /* pipe already gone */ }
+      try { processRef.stdout.destroy(); } catch { /* pipe already gone */ }
+      processRef.kill();
+      processRef = null;
+    }
+  }
+
   function write(command: string) {
-    processRef?.stdin.write(`${command}\n`);
+    if (dead || !processRef) return;
+    try {
+      processRef.stdin.write(`${command}\n`);
+    } catch {
+      kill();
+    }
   }
 
   function handleLine(line: string) {
@@ -212,7 +239,7 @@ function createStockfishProcess() {
   return {
     async init() {
       if (!existsSync(STOCKFISH_SCRIPT)) {
-        throw new Error("Stockfish script is not available.");
+        throw new EngineError("Stockfish script is not available.", "engine_unavailable");
       }
 
       processRef = spawn(process.execPath, [STOCKFISH_SCRIPT], {
@@ -226,8 +253,14 @@ function createStockfishProcess() {
         lines.map((line) => line.trim()).filter(Boolean).forEach(handleLine);
       });
       processRef.stderr.on("data", () => {});
-      processRef.on("error", rejectPending);
-      processRef.on("exit", () => rejectPending(new Error("Stockfish exited.")));
+      processRef.on("error", () => {
+        kill();
+        rejectPending(new EngineError("Stockfish process error.", "engine_error"));
+      });
+      processRef.on("exit", () => {
+        dead = true;
+        rejectPending(new EngineError("Stockfish exited.", "engine_error"));
+      });
 
       write("uci");
       await withTimeout(new Promise<void>((resolveReady) => {
@@ -240,7 +273,7 @@ function createStockfishProcess() {
     },
 
     async setMultiPv(multiPv: number) {
-      write(`setoption name MultiPV value ${clamp(Math.round(multiPv), 1, 8)}`);
+      write(`setoption name MultiPV value ${clamp(Math.round(multiPv), 1, 32)}`);
       await this.ready();
     },
 
@@ -253,13 +286,17 @@ function createStockfishProcess() {
 
     async search(fen: string, options: SearchOptions) {
       if (!processRef || pendingSearch) {
-        throw new Error("Stockfish is not ready for search.");
+        throw new EngineError("Stockfish is not ready for search.", "engine_error");
       }
 
       const depthLimit = options.depthLimit ?? DEFAULT_MOVE_DEPTH;
-      const goCommand = options.timeLimitMs
+      const baseGoCommand = options.timeLimitMs
         ? `go movetime ${Math.max(20, Math.round(options.timeLimitMs))}`
         : `go depth ${Math.max(1, Math.round(depthLimit))}`;
+      const searchMovesClause = options.searchMoves?.length
+        ? ` searchmoves ${options.searchMoves.join(" ")}`
+        : "";
+      const goCommand = `${baseGoCommand}${searchMovesClause}`;
 
       return withTimeout(new Promise<SearchResult>((resolveSearch, rejectSearch) => {
         pendingSearch = {
@@ -273,19 +310,15 @@ function createStockfishProcess() {
         write(`position fen ${fen}`);
         write(goCommand);
       }), ENGINE_SEARCH_TIMEOUT_MS).catch((error) => {
-        write("stop");
+        kill();
         pendingSearch = null;
         throw error;
       });
     },
 
     dispose() {
-      rejectPending(new Error("Stockfish disposed."));
-      if (processRef) {
-        write("quit");
-        processRef.kill();
-        processRef = null;
-      }
+      rejectPending(new EngineError("Stockfish disposed.", "engine_error"));
+      kill();
     },
   };
 }
@@ -415,7 +448,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
     return await Promise.race([
       promise,
       new Promise<T>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error("Stockfish command timed out.")), timeoutMs);
+        timeoutId = setTimeout(() => reject(new EngineError("Stockfish command timed out.", "engine_timeout")), timeoutMs);
       }),
     ]);
   } finally {
