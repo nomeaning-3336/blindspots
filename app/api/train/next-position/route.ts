@@ -14,6 +14,15 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type NextPositionResponse = {
+  fen?: string;
+  previousFen?: string;
+  playedMove?: string;
+  sequenceLength?: number;
+  source?: string;
+  error?: string;
+  debug?: Record<string, unknown>;
+};
 const DEFAULT_SEQUENCE_LENGTH = 4;
 const MIN_SEQUENCE_LENGTH = 1;
 const MAX_SEQUENCE_LENGTH = 9;
@@ -76,8 +85,10 @@ export async function GET() {
 
   await persistQueues(userId, reservation.queues, Boolean(profile && !profileError), nextRecentServedFens);
 
-  const response: Record<string, unknown> = {
+  const response: NextPositionResponse = {
     fen: nextPosition.fen,
+    previousFen: nextPosition.previousFen ?? undefined,
+    playedMove: nextPosition.playedMove ?? undefined,
     source: nextPosition.source,
     sequenceLength: normalizeSequenceLength(preferences?.sequence_length),
   };
