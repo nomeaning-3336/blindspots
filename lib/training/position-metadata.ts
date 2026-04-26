@@ -15,24 +15,23 @@ export function classifyTrainingPhase(fen: string): TrainingPhase {
     const parts = fen.trim().split(/\s+/);
     if (parts.length < 6) return "unknown";
 
-    // Endgame heuristics — check first so early but queenless positions are caught
     const board = parts[0];
-    const hasQueens = /Q/.test(board);
-    const nonPawnPieces = board.replace(/[^a-zA-Z]/g, "").replace(/[pP]/g, "").length;
+    const fullmove = parseInt(parts[5], 10);
     const totalPieces = board.replace(/[^a-zA-Z]/g, "").length;
+    const hasQueens = /[qQ]/.test(board);
+    const nonPawnPieces = board.replace(/[^a-zA-Z]/g, "").replace(/[pP]/g, "").length;
 
+    // Endgame: low piece count OR queenless with low material
+    if (totalPieces <= 10) return "endgame";
     if (!hasQueens && nonPawnPieces <= 4) return "endgame";
     if (!hasQueens && totalPieces <= 10) return "endgame";
-    if (totalPieces <= 8 && nonPawnPieces <= 4) return "endgame";
 
-    // Opening: early game
-    const fullmove = parseInt(parts[5], 10);
-    const ply = (fullmove - 1) * 2 + (parts[1] === "b" ? 1 : 0);
-    if (fullmove <= 12 || ply <= 24) {
+    // Opening: early game with substantial material
+    if (fullmove <= 10 && totalPieces >= 24) {
       return "opening";
     }
 
-    // Middlegame: anything that passes terminal checks but isn't opening/endgame
+    // Middlegame: everything else
     return "middlegame";
   } catch {
     return "unknown";
