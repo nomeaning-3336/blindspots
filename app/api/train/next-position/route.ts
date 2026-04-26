@@ -10,6 +10,12 @@ import {
   prependRecentServedEntry,
   selectAndReserveNextTrainingPosition,
 } from "@/lib/training/queues";
+import {
+  chooseServeMode,
+  normalizeRecentServedModes,
+  prependRecentServeMode,
+  type ServeMode,
+} from "@/lib/training/serving-policy";
 import { validateTrainingQueueItem } from "@/lib/training/position-validity";
 
 export const runtime = "nodejs";
@@ -39,7 +45,7 @@ export async function GET() {
   const [{ data: profile, error: profileError }, { data: preferences }] = await Promise.all([
     supabase
       .from("user_blindspot_profile")
-      .select("user_id, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens")
+      .select("user_id, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens, recent_served_modes")
       .eq("user_id", userId)
       .maybeSingle(),
     supabase
@@ -54,6 +60,7 @@ export async function GET() {
   }
 
   const recentServedFens = normalizeRecentServedEntries(profileError ? null : profile?.recent_served_fens);
+  const recentServedModes = normalizeRecentServedModes(profileError ? null : profile?.recent_served_modes);
   const completedSequenceCount = profileError ? 0 : profile?.total_sequences;
   const queuesBeforeRefill = {
     exploitQueue: normalizeQueue(profileError ? null : profile?.exploit_queue),
@@ -69,11 +76,21 @@ export async function GET() {
     recentServedFens,
   });
 
+  const completedSeq = typeof completedSequenceCount === "number" ? completedSequenceCount
+    : typeof completedSequenceCount === "string" ? Number(completedSequenceCount) : 0;
+
+  const serveMode = chooseServeMode({
+    completedSequenceCount: completedSeq,
+    dueRevisitCount: queues.revisitQueue.filter((item) => Date.parse(item.scheduledAt) <= new Date().getTime()).length,
+    recentModes: recentServedModes,
+  });
+
   const selection = await selectValidTrainingPosition({
     queues,
-    completedSequenceCount,
+    completedSequenceCount: completedSeq,
     recentServedFens,
     sequenceLength,
+    serveMode,
   });
   const nextPosition = selection.item;
 
@@ -83,6 +100,7 @@ export async function GET() {
       selection.queues,
       Boolean(profile && !profileError),
       recentServedFens,
+      recentServedModes,
     );
 
     const response: NextPositionResponse = {
@@ -104,9 +122,10 @@ export async function GET() {
     gameId: nextPosition.gameId,
     ply: nextPosition.ply,
   });
+  const nextRecentServedModes = prependRecentServeMode(recentServedModes, serveMode);
   const queueCountsAfter = getQueueCounts(selection.queues);
 
-  await persistQueues(userId, selection.queues, Boolean(profile && !profileError), nextRecentServedFens);
+  await persistQueues(userId, selection.queues, Boolean(profile && !profileError), nextRecentServedFens, nextRecentServedModes);
 
   const response: NextPositionResponse = {
     fen: nextPosition.fen,
@@ -130,6 +149,11 @@ export async function GET() {
       rejectedInvalidCount: selection.rejectedInvalidCount,
       rejectedInvalidReasons: selection.rejectedInvalidReasons,
       selectedFenValidity: selection.selectedFenValidity,
+      requestedServeMode: serveMode,
+      selectedServeMode: serveMode,
+      selectedPhase: nextPosition.phase ?? selection.selectedPhase,
+      selectedBucket: nextPosition.bucket ?? selection.selectedBucket,
+      phaseFallbackUsed: selection.phaseFallbackUsed,
     };
   }
 
@@ -141,11 +165,13 @@ async function selectValidTrainingPosition({
   completedSequenceCount,
   recentServedFens,
   sequenceLength,
+  serveMode,
 }: {
   queues: Awaited<ReturnType<typeof ensureTrainingQueuesHavePositions>>;
   completedSequenceCount: unknown;
   recentServedFens: Array<{ fen: string; gameId?: string; ply?: number }>;
   sequenceLength: number;
+  serveMode: ServeMode;
 }) {
   let currentQueues = queues;
   const invalidRecentEntries: Array<{ fen: string; gameId?: string; ply?: number }> = [];
@@ -157,11 +183,15 @@ async function selectValidTrainingPosition({
   let wasDueRevisit = false;
   let selectedFenValidity: ReturnType<typeof validateTrainingQueueItem> | null = null;
   let refilledAfterEmpty = false;
+  let selectedPhase: string | undefined = undefined;
+  let selectedBucket: string | undefined = undefined;
+  let phaseFallbackUsed = false;
 
   for (let attempt = 0; attempt < MAX_VALID_SELECTION_ATTEMPTS; attempt += 1) {
     const reservation = await selectAndReserveNextTrainingPosition(currentQueues, {
       completedSequenceCount,
       recentServedFens: [...recentServedFens, ...invalidRecentEntries],
+      serveMode,
     });
 
     rejectedRecentExactCount += reservation.rejectedRecentExactCount;
@@ -196,6 +226,9 @@ async function selectValidTrainingPosition({
         rejectedInvalidCount: rejectedInvalidReasons.length,
         rejectedInvalidReasons,
         selectedFenValidity,
+        selectedPhase,
+        selectedBucket,
+        phaseFallbackUsed,
       };
     }
 
@@ -218,6 +251,9 @@ async function selectValidTrainingPosition({
     rejectedInvalidCount: rejectedInvalidReasons.length,
     rejectedInvalidReasons,
     selectedFenValidity,
+    selectedPhase,
+    selectedBucket,
+    phaseFallbackUsed,
   };
 }
 
@@ -226,15 +262,20 @@ async function persistQueues(
   queues: Awaited<ReturnType<typeof ensureTrainingQueuesHavePositions>>,
   hasProfile: boolean,
   recentServedFens: Array<{ fen: string; gameId?: string; ply?: number }>,
+  recentServedModes?: ReturnType<typeof prependRecentServeMode>,
 ) {
   const supabase = getSupabaseAdminClient();
-  const values = {
+  const baseValues = {
     exploit_queue: queues.exploitQueue as unknown as Json,
     explore_queue: queues.exploreQueue as unknown as Json,
     revisit_queue: queues.revisitQueue as unknown as Json,
     mastered_queue: queues.masteredQueue as unknown as Json,
     recent_served_fens: recentServedFens as unknown as Json,
   };
+
+  const values = recentServedModes
+    ? { ...baseValues, recent_served_modes: recentServedModes as unknown as Json }
+    : baseValues;
 
   if (hasProfile) {
     const { error } = await supabase

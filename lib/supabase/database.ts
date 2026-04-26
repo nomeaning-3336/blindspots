@@ -285,6 +285,8 @@ export type Database = {
           revisit_queue: Json;
           mastered_queue: Json;
           recent_served_fens: Json;
+          recent_served_modes: Json;
+          bucket_stats: Json;
           total_sequences: number;
           last_session_at: string | null;
           profile_initialized: boolean;
@@ -303,6 +305,8 @@ export type Database = {
           revisit_queue?: Json;
           mastered_queue?: Json;
           recent_served_fens?: Json;
+          recent_served_modes?: Json;
+          bucket_stats?: Json;
           total_sequences?: number;
           last_session_at?: string | null;
           profile_initialized?: boolean;
@@ -321,6 +325,8 @@ export type Database = {
           revisit_queue?: Json;
           mastered_queue?: Json;
           recent_served_fens?: Json;
+          recent_served_modes?: Json;
+          bucket_stats?: Json;
           total_sequences?: number;
           last_session_at?: string | null;
           profile_initialized?: boolean;

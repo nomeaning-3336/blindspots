@@ -11,6 +11,8 @@ import {
   getKFactor,
   getOpponentElo,
 } from "@/lib/training/elo";
+import { normalizeBucketStats, recordBucketResult } from "@/lib/training/bandit-stats";
+import type { TrainingBucket } from "@/lib/training/queue-core";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +32,8 @@ type CompleteSequencePayload = {
   moves?: unknown;
   sequenceLength?: unknown;
   reflectionNote?: unknown;
+  selectedBucket?: unknown;
+  selectedServeMode?: unknown;
 };
 
 type MoveClassification = "excellent" | "good" | "inaccuracy" | "mistake" | "blunder";
@@ -43,6 +47,8 @@ export async function POST(request: Request) {
   const payload = (await request.json().catch(() => null)) as CompleteSequencePayload | null;
   const startingFen = typeof payload?.startingFen === "string" ? payload.startingFen : "";
   const moves = normalizeMoves(payload?.moves);
+  const selectedBucket = typeof payload?.selectedBucket === "string" ? payload.selectedBucket : "middlegame";
+  const selectedServeMode = typeof payload?.selectedServeMode === "string" ? payload.selectedServeMode : null;
 
   if (!isValidFen(startingFen) || moves.length === 0) {
     return NextResponse.json({ error: "Invalid sequence." }, { status: 400 });
@@ -112,6 +118,13 @@ export async function POST(request: Request) {
     recentServedFens: normalizeRecentServedFens(profile.recent_served_fens),
   });
 
+  const useBayesianBandit = process.env.TRAIN_USE_BAYESIAN_BANDIT === "true";
+  const currentStats = normalizeBucketStats(profile.bucket_stats);
+  const success = evalPreservationScore !== null && evalPreservationScore >= 0.6;
+  const updatedStats = useBayesianBandit
+    ? recordBucketResult(currentStats, selectedBucket, success)
+    : currentStats;
+
   const { error: profileError } = await supabase
     .from("user_blindspot_profile")
     .update({
@@ -122,6 +135,7 @@ export async function POST(request: Request) {
       explore_queue: queues.exploreQueue as unknown as Json,
       revisit_queue: queues.revisitQueue as unknown as Json,
       mastered_queue: queues.masteredQueue as unknown as Json,
+      bucket_stats: updatedStats as unknown as Json,
     })
     .eq("user_id", userId);
 
@@ -217,7 +231,7 @@ async function getOrCreateProfile(userId: string) {
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("user_blindspot_profile")
-    .select("user_id, blindspots_elo, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens")
+    .select("user_id, blindspots_elo, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens, bucket_stats, recent_served_modes")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -240,8 +254,10 @@ async function getOrCreateProfile(userId: string) {
       revisit_queue: [],
       mastered_queue: [],
       recent_served_fens: [],
+      recent_served_modes: [],
+      bucket_stats: { opening: { alpha: 1, beta: 1, attempts: 0 }, middlegame: { alpha: 1, beta: 1, attempts: 0 }, endgame: { alpha: 1, beta: 1, attempts: 0 }, tactic: { alpha: 1, beta: 1, attempts: 0 }, opening_gambit: { alpha: 1, beta: 1, attempts: 0 }, opening_development: { alpha: 1, beta: 1, attempts: 0 }, middlegame_attack: { alpha: 1, beta: 1, attempts: 0 }, middlegame_positional: { alpha: 1, beta: 1, attempts: 0 }, endgame_rook: { alpha: 1, beta: 1, attempts: 0 }, endgame_pawn: { alpha: 1, beta: 1, attempts: 0 }, wildcard: { alpha: 1, beta: 1, attempts: 0 } },
     })
-    .select("user_id, blindspots_elo, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens")
+    .select("user_id, blindspots_elo, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens, bucket_stats, recent_served_modes")
     .single();
 
   if (insertError) {
