@@ -142,16 +142,20 @@ const ANALYSIS_FAILURE_MESSAGE =
 const DEFAULT_SEQUENCE_LENGTH = 4;
 const MIN_SEQUENCE_LENGTH = 1;
 const MAX_SEQUENCE_LENGTH = 9;
-const TRAIN_SOUND_SOURCES = {
-  move: "/analyze/sounds/move-self.mp3",
-  capture: "/analyze/sounds/capture.mp3",
-} as const;
+// Train audio - managed by lib/train-audio.ts
+import {
+  primeTrainAudio,
+  unlockTrainAudio,
+  playTrainMoveSound,
+  setupTrainAudioUnlockOnGesture,
+  getTrainAudioStats,
+  pitchRatioForPly,
+  type TrainSoundMove,
+  type PlayTrainSoundOptions,
+} from "@/lib/train-audio";
+
 const primaryActionClassName =
   "min-h-11 rounded-[8px] border border-[var(--app-accent)] bg-[var(--app-accent)] px-4 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]";
-const trainSoundBank = new Map<keyof typeof TRAIN_SOUND_SOURCES, AudioBuffer>();
-const defaultTrainSoundPlyRef = { current: 0 };
-let trainAudioContext: AudioContext | null = null;
-let trainSoundPrimePromise: Promise<void> | null = null;
 
 function readVisualPreferences() {
   let storedPreferences: Partial<AnalyzePreferences> | null = null;
@@ -181,176 +185,7 @@ function hasAnalyzeRuntimeSettings() {
   }
 }
 
-type TrainSoundMove = {
-  san?: unknown;
-  captured?: unknown;
-  flags?: unknown;
-};
-
-function primeTrainSounds() {
-  const context = ensureTrainAudioContext();
-  if (!context || typeof fetch === "undefined") return;
-  if (trainSoundPrimePromise) return;
-
-  trainSoundPrimePromise = Promise.all(
-    (Object.entries(TRAIN_SOUND_SOURCES) as Array<[keyof typeof TRAIN_SOUND_SOURCES, string]>)
-      .map(async ([name, src]) => {
-      if (trainSoundBank.has(name)) return;
-      const response = await fetch(src, { cache: "force-cache" });
-      if (!response.ok) throw new Error(`Could not load train sound: ${src}`);
-      const arrayBuffer = await response.arrayBuffer();
-      const buffer = await decodeTrainSound(context, arrayBuffer);
-      trainSoundBank.set(name, buffer);
-    }),
-  ).then(
-    () => {},
-    () => {
-      trainSoundPrimePromise = null;
-    });
-}
-
-function ensureTrainAudioContext() {
-  if (typeof window === "undefined") return null;
-  if (trainAudioContext) return trainAudioContext;
-  const AudioContextCtor =
-    window.AudioContext ??
-    (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioContextCtor) return null;
-
-  try {
-    trainAudioContext = new AudioContextCtor();
-  } catch {
-    trainAudioContext = null;
-  }
-
-  return trainAudioContext;
-}
-
-function resumeTrainAudioContext() {
-  const context = ensureTrainAudioContext();
-  if (context?.state === "suspended") {
-    void context.resume().catch(() => {});
-  }
-}
-
-function decodeTrainSound(context: AudioContext, arrayBuffer: ArrayBuffer) {
-  const data = arrayBuffer.slice(0);
-  return new Promise<AudioBuffer>((resolve, reject) => {
-    const maybePromise = context.decodeAudioData(data, resolve, reject);
-    if (maybePromise instanceof Promise) {
-      maybePromise.then(resolve, reject);
-    }
-  });
-}
-
-const MOVE_SCALE_RATIOS = [
-  1.0, 1.12246, 1.25992, 1.33484, 1.49831, 1.68179, 1.88775, 2.0,
-] as const;
-const MOVE_SCALE_LABELS = ["do", "re", "mi", "fa", "sol", "la", "si", "do"] as const;
-
-/** Normalized pitch for a given move index across a sequence.
- * The entire scale (do→do octave) is spread evenly across the sequence length,
- * so the first move always lands on do and the last move on do octave.
- * @param moveIndex 0-based index of the target move
- * @param sequenceLength total number of moves in the sequence
- * @param reverse true for backward traversal (unused in normalized mode, kept for API compat)
- */
-function normalizedMovePitch(moveIndex: number, sequenceLength: number): number {
-  if (sequenceLength <= 1) return MOVE_SCALE_RATIOS[0];
-  const scaleSpan = MOVE_SCALE_RATIOS.length - 1; // 7 steps from do to do octave
-  const step = (scaleSpan * moveIndex) / (sequenceLength - 1);
-  const lowerIdx = Math.floor(step);
-  const t = step - lowerIdx;
-  // Linear interpolation between adjacent scale ratios
-  return MOVE_SCALE_RATIOS[lowerIdx] * (1 - t) + MOVE_SCALE_RATIOS[lowerIdx + 1] * t;
-}
-
-function trainMoveIsCapture(move?: TrainSoundMove | null) {
-  if (!move) return false;
-  if (move.captured) return true;
-  if (typeof move.flags === "string" && /[ce]/.test(move.flags)) return true;
-  return typeof move.san === "string" && move.san.includes("x");
-}
-
-function pitchRatioForPly(plyIndex: number) {
-  return MOVE_SCALE_RATIOS[((plyIndex % MOVE_SCALE_RATIOS.length) + MOVE_SCALE_RATIOS.length) % MOVE_SCALE_RATIOS.length];
-}
-
-type TrainSoundOptions = {
-  pitchIndex?: number;
-  advanceLivePitch?: boolean;
-  plyRef?: { current: number };
-};
-
-function playTrainMoveSound(
-  move: TrainSoundMove | null | undefined,
-  options: TrainSoundOptions = {},
-) {
-  if (!move) return;
-  primeTrainSounds();
-  resumeTrainAudioContext();
-  const context = ensureTrainAudioContext();
-  const isCapture = trainMoveIsCapture(move);
-  const soundName = isCapture ? "capture" : "move";
-  let buffer = trainSoundBank.get(soundName);
-  if (context && !buffer && trainSoundPrimePromise) {
-    void trainSoundPrimePromise.then(() => {
-      buffer = trainSoundBank.get(soundName);
-      if (buffer) {
-        playTrainMoveSoundImpl(context, move, buffer, options, isCapture);
-      }
-    });
-    return;
-  }
-  if (!context || !buffer) return;
-  playTrainMoveSoundImpl(context, move, buffer, options, isCapture);
-}
-
-function playTrainMoveSoundImpl(
-  context: AudioContext,
-  move: TrainSoundMove,
-  buffer: AudioBuffer,
-  options: TrainSoundOptions,
-  isCapture: boolean,
-) {
-  try {
-    const source = context.createBufferSource();
-    source.buffer = buffer;
-
-    let pitchIndex: number;
-    if (options.pitchIndex !== undefined) {
-      pitchIndex = options.pitchIndex;
-    } else {
-      const ref = options.plyRef ?? defaultTrainSoundPlyRef;
-      pitchIndex = ref.current;
-    }
-
-    const playbackRate = pitchRatioForPly(pitchIndex);
-    source.playbackRate.value = playbackRate;
-
-    if (typeof window !== "undefined" && !!(window as unknown as Record<string, unknown>).__blindspotsTrainSoundEvents) {
-      const events = (window as unknown as { __blindspotsTrainSoundEvents: Array<{ san: unknown; uci: unknown; pitchIndex: number; playbackRate: number; source: string }> }).__blindspotsTrainSoundEvents;
-      events.push({
-        san: (move as { san?: unknown })?.san,
-        uci: (move as { uci?: unknown })?.uci,
-        pitchIndex,
-        playbackRate,
-        source: options.pitchIndex !== undefined ? "replay" : "live",
-      });
-    }
-
-    const gainNode = context.createGain();
-    gainNode.gain.value = isCapture ? 1.0 : 0.85;
-    source.connect(gainNode);
-    gainNode.connect(context.destination);
-    source.start();
-
-    if (options.advanceLivePitch !== false) {
-      const ref = options.plyRef ?? defaultTrainSoundPlyRef;
-      ref.current += 1;
-    }
-  } catch {}
-}
+// Train audio now managed by lib/train-audio.ts
 
 function moveForExploreSound(
   positions: SequencePosition[],
@@ -447,6 +282,7 @@ export default function TrainPage() {
   const initialOpponentRequestRef = useRef(0);
   const [initialOpponentMove, setInitialOpponentMove] = useState<TrainingMove | null>(null);
   const [displayStartingFen, setDisplayStartingFen] = useState(mockRep.fen);
+  const [activeSetupReplayIndex, setActiveSetupReplayIndex] = useState<0 | 1>(1);
   const nextPositionPrefetchRef = useRef<Promise<NextPositionResponse | null> | null>(null);
   const engineLineCacheRef = useRef<Record<string, EngineLineResult[]>>({});
   const engineLinePrefetchRef = useRef<Map<string, Promise<void>>>(new Map());
@@ -517,19 +353,8 @@ export default function TrainPage() {
   }, []);
 
   useEffect(() => {
-    primeTrainSounds();
-
-    function primeSounds() {
-      primeTrainSounds();
-      resumeTrainAudioContext();
-    }
-
-    window.addEventListener("pointerdown", primeSounds, { once: true });
-    window.addEventListener("keydown", primeSounds, { once: true });
-    return () => {
-      window.removeEventListener("pointerdown", primeSounds);
-      window.removeEventListener("keydown", primeSounds);
-    };
+    void primeTrainAudio();
+    setupTrainAudioUnlockOnGesture();
   }, []);
 
   useEffect(() => {
@@ -547,6 +372,7 @@ export default function TrainPage() {
     completingRef.current = false;
     initialOpponentMoveRef.current = null;
     setInitialOpponentMove(null);
+    setActiveSetupReplayIndex(1);
     initialOpponentRequestRef.current += 1;
     moveSoundPlyRef.current = 0;
     setState(nextState);
@@ -624,6 +450,7 @@ export default function TrainPage() {
     completingRef.current = false;
     initialOpponentMoveRef.current = null;
     setInitialOpponentMove(null);
+    setActiveSetupReplayIndex(1);
     moveSoundPlyRef.current = 0;
 
     setStartingFen(payload.fen);
@@ -673,11 +500,12 @@ export default function TrainPage() {
     if (initialOpponentRequestRef.current !== requestId) return;
 
     setLastMove(applied.lastMove);
-    playTrainMoveSound(applied.move, { plyRef: moveSoundPlyRef });
+    playTrainMoveSound({ move: applied.move, plyRef: moveSoundPlyRef });
     await sleep(540);
 
     if (initialOpponentRequestRef.current !== requestId) return;
 
+    setActiveSetupReplayIndex(1);
     setFen(payload.fen!);
 
     if (initialOpponentRequestRef.current === requestId) {
@@ -740,12 +568,13 @@ export default function TrainPage() {
 
       // Highlight the move on the opponent's position.
       setLastMove({ from: played.from, to: played.to });
-      playTrainMoveSound(played, { plyRef: moveSoundPlyRef });
+      playTrainMoveSound({ move: played, plyRef: moveSoundPlyRef });
       await sleep(540);
 
       if (initialOpponentRequestRef.current !== requestId) return;
 
       // Show the resulting position.
+      setActiveSetupReplayIndex(1);
       setFen(chess.fen());
       setStartingFen(chess.fen());
     } finally {
@@ -858,9 +687,10 @@ export default function TrainPage() {
 
   function handleMove(move: BoardMove) {
     if (state !== "active" || isOpponentThinking || completingRef.current) return;
+    if (isActiveSetupReplay && activeSetupReplayIndex === 0) return;
 
     try {
-      const chess = new Chess(fen);
+      const chess = new Chess(boardFen);
       const playedMove = chess.move({ from: move.from, to: move.to, promotion: "q" });
       if (!playedMove) return;
 
@@ -870,12 +700,12 @@ export default function TrainPage() {
         san: playedMove.san,
         uci: `${playedMove.from}${playedMove.to}${playedMove.promotion ?? ""}`,
         side: playedMove.color === "w" ? "white" : "black",
-        fenBefore: fen,
+        fenBefore: boardFen,
         fenAfter: fenAfterUserMove,
       };
       const movesAfterUserMove = [...moves, userTrainingMove];
 
-      playTrainMoveSound(playedMove, { plyRef: moveSoundPlyRef });
+      playTrainMoveSound({ move: playedMove, plyRef: moveSoundPlyRef });
       setFen(fenAfterUserMove);
       setLastMove({ from: move.from, to: move.to });
       setMoves(movesAfterUserMove);
@@ -909,7 +739,7 @@ export default function TrainPage() {
       const playedMove = chess.move({ from: move.from, to: move.to, promotion: "q" });
       if (!playedMove) return;
 
-      playTrainMoveSound(playedMove, { plyRef: moveSoundPlyRef });
+      playTrainMoveSound({ move: playedMove, plyRef: moveSoundPlyRef });
       const nextExploratoryPosition = {
         fen: chess.fen(),
         lastMove: { from: playedMove.from, to: playedMove.to },
@@ -956,7 +786,7 @@ export default function TrainPage() {
       });
       if (!playedMove) return;
 
-      playTrainMoveSound(playedMove, { plyRef: moveSoundPlyRef });
+      playTrainMoveSound({ move: playedMove, plyRef: moveSoundPlyRef });
       setFen(chess.fen());
       setLastMove({ from: playedMove.from, to: playedMove.to });
       const finalMoves = [
@@ -1166,6 +996,11 @@ export default function TrainPage() {
       get initialOpponentMove() { return initialOpponentMove; },
       get displayMoves() { return displayMoves; },
       get visibleSequencePositions() { return visibleSequencePositions; },
+      get isActiveSetupReplay() { return isActiveSetupReplay; },
+      get activeSetupReplayIndex() { return activeSetupReplayIndex; },
+      get setupBeforeFen() { return activeSetupBeforeFen; },
+      get setupAfterFen() { return activeSetupAfterFen; },
+      get activeSetupCurrentFen() { return activeSetupCurrentFen; },
     };
   }, [startingFen, displayStartingFen, moves, initialOpponentMove, displayMoves, visibleSequencePositions]);
 
@@ -1186,15 +1021,39 @@ export default function TrainPage() {
     };
   }, [activeExploreIndex, activeSequencePosition, visibleSequencePositions]);
 
+  // Dev-only audio stats instrumentation
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production" && !(window as unknown as Record<string, unknown>).__BLINDSPOTS_QA__) return;
+    (window as unknown as { __blindspotsTrainAudioStats?: unknown }).__blindspotsTrainAudioStats = getTrainAudioStats();
+  });
+
   const isExploringResults = state === "complete" && resultMode === "explore";
+  const isActiveSetupReplay =
+    state === "active" &&
+    !!initialOpponentMove &&
+    moves.length === 0;
+
+  const activeSetupBeforeFen = displayStartingFen;
+  const activeSetupAfterFen = startingFen;
+  const activeSetupCurrentFen =
+    activeSetupReplayIndex === 0 ? activeSetupBeforeFen : activeSetupAfterFen;
+  const activeSetupCurrentLastMove =
+    activeSetupReplayIndex === 1 && initialOpponentMove
+      ? lastMoveFromTrainingMove(initialOpponentMove)
+      : null;
+
   const activeExploratoryPosition =
     exploratoryHistoryIndex >= 0 ? exploratoryHistory[exploratoryHistoryIndex] : null;
   const boardFen = isExploringResults
     ? (activeExploratoryPosition?.fen ?? exploratoryFen ?? activeSequencePosition?.fen ?? fen)
-    : fen;
+    : isActiveSetupReplay
+      ? activeSetupCurrentFen
+      : fen;
   const replayLastMove = isExploringResults
     ? (activeExploratoryPosition?.lastMove ?? exploratoryLastMove ?? lastMoveFromTrainingMove(activeSequencePosition?.move))
-    : lastMove;
+    : isActiveSetupReplay
+      ? activeSetupCurrentLastMove
+      : lastMove;
   const boardLastMoveBadge = isExploringResults && !activeExploratoryPosition && !exploratoryFen
     ? moveBadgeForPosition(activeSequencePosition)
     : null;
@@ -1332,6 +1191,36 @@ export default function TrainPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [state, resultMode, activeExploreIndex, exploratoryHistory.length, exploratoryHistoryIndex, visibleSequencePositions.length]);
 
+  // ── Keyboard navigation (active setup replay: ArrowLeft/Right between a and b) ──
+
+  useEffect(() => {
+    if (!isActiveSetupReplay) return;
+
+    function handleSetupReplayKey(event: KeyboardEvent) {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      if (shouldIgnoreTrainShortcut(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (event.key === "ArrowLeft" || event.key === "Home") {
+        if (activeSetupReplayIndex === 1) {
+          setActiveSetupReplayIndex(0);
+        }
+      } else if (event.key === "ArrowRight" || event.key === "End") {
+        if (activeSetupReplayIndex === 0) {
+          setActiveSetupReplayIndex(1);
+          if (initialOpponentMove) {
+            playTrainMoveSound({ move: initialOpponentMove, pitchIndex: 0, advanceLivePitch: false });
+          }
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleSetupReplayKey);
+    return () => window.removeEventListener("keydown", handleSetupReplayKey);
+  }, [isActiveSetupReplay, activeSetupReplayIndex, initialOpponentMove]);
+
   useEffect(() => {
     if (state !== "complete" || resultMode === "explore") return;
     const timer = window.setTimeout(() => {
@@ -1373,7 +1262,8 @@ export default function TrainPage() {
     setHoveredMoveSquares(null);
     const targetPos = visibleSequencePositions[boundedIndex];
     if (targetPos?.move && typeof targetPos.pitchIndex === "number") {
-      playTrainMoveSound(targetPos.move, {
+      playTrainMoveSound({
+        move: targetPos.move,
         pitchIndex: targetPos.pitchIndex,
         advanceLivePitch: false,
       });
@@ -1464,6 +1354,7 @@ export default function TrainPage() {
                             : undefined
                       }
                       engineArrows={buildEngineArrows(boardEngineLines, hoveredEngineLineMove)}
+                      data-testid="train-board"
                       onMove={(move) => {
                         setExploreSelectedSquare(null);
                         setSelectedMoveIndex(null);
@@ -1496,11 +1387,11 @@ export default function TrainPage() {
                     lastMove={replayLastMove}
                     boardTheme={visualPreferences.boardTheme}
                     pieceTheme={visualPreferences.pieceTheme}
-                    disabled={state !== "active" || isOpponentThinking}
+                    disabled={state !== "active" || isOpponentThinking || (isActiveSetupReplay && activeSetupReplayIndex === 0)}
                     annotationsDisabled={false}
                     highlightedSquares={getTrainingBoardHighlights(state)}
                     onMove={handleMove}
-                    dataTestId="train-board"
+                    data-testid="train-board"
                   />
                 )}
               </BoardWithPlayerStrips>
@@ -1574,11 +1465,13 @@ export default function TrainPage() {
                   tone="warning"
                   onAction={() => switchState("active")}
                 />
-              ) : (
-                moves.length === 0 && !isOpponentThinking && !isPositionLoading ? (
-                  <PromptCard side={userMoveSide} />
-                ) : null
-              )}
+              ) : isActiveSetupReplay && activeSetupReplayIndex === 0 ? (
+                <div className="mt-8 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-5 py-5">
+                  <p className="text-lg font-bold text-[var(--app-text)]">Before engine move</p>
+                </div>
+              ) : moves.length === 0 && !isOpponentThinking && !isPositionLoading ? (
+                <PromptCard side={userMoveSide} />
+              ) : null}
 
               <MoveList
                 moves={displayMoves}
