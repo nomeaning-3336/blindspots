@@ -12,12 +12,31 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: "https://blindspots.gg",
   title: {
-    default: "Blindspots.gg",
+    default: "Blindspots.gg - Chess Training for the Positions You Keep Getting Wrong",
     template: "%s | Blindspots.gg",
   },
   description:
-    "Position-based chess training for finding and drilling blindspots.",
+    "Blindspots.gg is position-based chess training that finds recurring chess mistakes and recommends similar positions you are likely to struggle with.",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "Blindspots.gg - Chess Training for the Positions You Keep Getting Wrong",
+    description:
+      "Position-based chess training that finds recurring mistakes and recommends similar positions you are likely to struggle with.",
+    url: "https://blindspots.gg",
+    siteName: "Blindspots.gg",
+    type: "website",
+    images: ["/og.png"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Blindspots.gg - Chess Training for the Positions You Keep Getting Wrong",
+    description:
+      "Position-based chess training that finds recurring mistakes and recommends similar positions you are likely to struggle with.",
+  },
 };
 
 export default async function RootLayout({

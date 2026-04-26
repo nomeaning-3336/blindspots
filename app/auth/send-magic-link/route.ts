@@ -27,32 +27,35 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const nextPath = normalizeNextPath(getFormValue(formData, "next"));
   const email = getFormValue(formData, "email").toLowerCase();
-  const password = getFormValue(formData, "password");
 
-  if (!email || !password) {
-    return redirectWithQuery(request, "/sign-in", nextPath, {
-      error: "missing-fields",
-      email,
+  if (!email) {
+    return redirectWithQuery(request, "/auth/email", nextPath, {
+      error: "missing-email",
     });
   }
 
+  const origin = new URL(request.url).origin;
   const { supabase, applyCookies } = await createSupabaseRouteHandlerClient();
-  const { error } = await supabase.auth.signInWithPassword({
+
+  const { error } = await supabase.auth.signInWithOtp({
     email,
-    password,
+    options: {
+      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
+      shouldCreateUser: true,
+    },
   });
 
   if (error) {
-    return redirectWithQuery(request, "/sign-in", nextPath, {
-      error:
-        error.message.toLowerCase().includes("invalid login credentials")
-          ? "invalid-credentials"
-          : "sign-in-failed",
+    return redirectWithQuery(request, "/auth/email", nextPath, {
+      error: "otp-failed",
       email,
     });
   }
 
   return applyCookies(
-    NextResponse.redirect(new URL(nextPath, request.url), 303),
+    NextResponse.redirect(
+      new URL(`/auth/email?next=${encodeURIComponent(nextPath)}&sent=true`, request.url),
+      303,
+    ),
   );
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PublicHeaderClient } from "@/components/public-header";
 import { PublicFaq } from "@/components/public-faq";
 import { getOptionalAppUserId } from "@/lib/app-auth";
+import { AnalysisBoard } from "@/components/chess/analysis-board";
 
 const loopSteps = [
   {
@@ -48,36 +49,6 @@ const faqItems = [
       "No. Linked games are used to build a private training profile, not to accuse or classify players.",
   },
 ];
-
-const pieces: Record<string, string> = {
-  r: "/analyze/pieces/cburnett/bR.svg",
-  n: "/analyze/pieces/cburnett/bN.svg",
-  b: "/analyze/pieces/cburnett/bB.svg",
-  q: "/analyze/pieces/cburnett/bQ.svg",
-  k: "/analyze/pieces/cburnett/bK.svg",
-  p: "/analyze/pieces/cburnett/bP.svg",
-  R: "/analyze/pieces/cburnett/wR.svg",
-  N: "/analyze/pieces/cburnett/wN.svg",
-  B: "/analyze/pieces/cburnett/wB.svg",
-  Q: "/analyze/pieces/cburnett/wQ.svg",
-  K: "/analyze/pieces/cburnett/wK.svg",
-  P: "/analyze/pieces/cburnett/wP.svg",
-};
-
-function parseFen(fen: string) {
-  return fen.split("/").flatMap((rank) => {
-    const squares: Array<string | null> = [];
-    for (const char of rank) {
-      const emptyCount = Number(char);
-      if (Number.isInteger(emptyCount) && emptyCount > 0) {
-        squares.push(...Array.from({ length: emptyCount }, () => null));
-      } else {
-        squares.push(char);
-      }
-    }
-    return squares;
-  });
-}
 
 function BrandMark({ size = 22 }: { size?: number }) {
   return (
@@ -136,91 +107,17 @@ function SecondaryLink({ href, children }: { href: string; children: React.React
   );
 }
 
-function Dot({ pulse = false }: { pulse?: boolean }) {
-  return (
-    <span
-      className={["h-2 w-2 rounded-full bg-[var(--app-accent)]", pulse ? "animate-pulse" : ""]
-        .filter(Boolean)
-        .join(" ")}
-      style={{ boxShadow: "0 0 14px var(--app-accent)" }}
-    />
-  );
-}
-
-function Chip({ children, accent = false }: { children: React.ReactNode; accent?: boolean }) {
-  return (
-    <span
-      className={[
-        "inline-flex items-center rounded px-3 py-1 text-[10px] font-bold uppercase",
-        accent
-          ? "bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
-          : "border border-[var(--app-border)] text-[var(--app-muted)]",
-      ].join(" ")}
-    >
-      {children}
-    </span>
-  );
-}
-
 function TrainingBoard() {
-  const board = parseFen("r1bq1rk1/pp3ppp/2n1pn2/2bp4/3P4/P1N1PN2/1P2BPPP/R1BQ1RK1");
-  const markedSquares = new Set(["d5", "c3", "e2", "a3"]);
-
   return (
-    <div
-      className="relative aspect-square w-full overflow-hidden rounded border border-[var(--app-border)]"
-      style={{
-        background: "var(--app-panel-deep)",
-        boxShadow:
-          "0 28px 70px color-mix(in srgb, var(--app-bg) 78%, transparent)",
-      }}
-    >
-      <div className="grid h-full w-full grid-cols-8">
-        {board.map((piece, index) => {
-          const row = Math.floor(index / 8);
-          const col = index % 8;
-          const square = `${"abcdefgh"[col]}${8 - row}`;
-          const isLight = (row + col) % 2 === 0;
-          const isMarked = markedSquares.has(square);
-
-          return (
-            <div
-              key={square}
-              className="relative flex items-center justify-center"
-              style={{
-                background: isLight
-                  ? "color-mix(in srgb, var(--app-panel-solid) 74%, var(--app-text) 12%)"
-                  : "color-mix(in srgb, var(--app-panel-deep) 88%, var(--app-bg) 12%)",
-                boxShadow: isMarked
-                  ? "inset 0 0 0 2px var(--app-accent)"
-                  : "none",
-              }}
-            >
-              {col === 0 ? (
-                <span className="absolute left-1 top-0.5 text-[9px] font-bold text-[var(--app-muted)]">
-                  {8 - row}
-                </span>
-              ) : null}
-              {row === 7 ? (
-                <span className="absolute bottom-0.5 right-1 text-[9px] font-bold text-[var(--app-muted)]">
-                  {"abcdefgh"[col]}
-                </span>
-              ) : null}
-              {piece ? (
-                <img
-                  src={pieces[piece]}
-                  alt=""
-                  className="h-[86%] w-[86%] object-contain"
-                  draggable={false}
-                />
-              ) : isMarked ? (
-                <span className="h-3 w-3 rounded-full bg-[var(--app-accent-soft)]" />
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-    </div>
+    <AnalysisBoard
+      fen="r1bq1rk1/pp3ppp/2n1pn2/2bp4/3P4/P1N1PN2/1P2BPPP/R1BQ1RK1 b - - 0 1"
+      mode="training"
+      coordinates={true}
+      lastMove={{ from: "d5", to: "c3" }}
+      highlightedSquares={{ d5: "var(--app-accent)", c3: "var(--app-accent)", e2: "var(--app-accent)", a3: "var(--app-accent)" }}
+      disabled={true}
+      className="!rounded-[10px]"
+    />
   );
 }
 
@@ -237,51 +134,11 @@ function HeroVisual() {
           maskImage: "radial-gradient(ellipse at center, black 20%, transparent 76%)",
         }}
       />
-      <div className="relative rounded-lg border border-[var(--app-border)] bg-[var(--app-panel-strong)] p-4 shadow-[var(--app-shadow)]">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-2">
-            <Chip>Move 3 / 5</Chip>
-          </div>
-          <div className="inline-flex items-center gap-2 rounded border border-[var(--app-border)] px-3 py-1">
-            <Dot />
-            <span className="text-xs font-bold text-[var(--app-text)]">02:14</span>
-          </div>
-        </div>
-
+      <div className="relative">
         <TrainingBoard />
-
-        <div className="mt-2 h-2 overflow-hidden rounded border border-[var(--app-border)] bg-[var(--app-panel-deep)]">
-          <div
-            className="h-full w-full"
-            style={{
-              background:
-                "repeating-linear-gradient(45deg, color-mix(in srgb, var(--app-text) 8%, transparent) 0 6px, transparent 6px 12px)",
-            }}
-          />
-        </div>
-        <div className="mt-2 flex justify-between text-[9px] uppercase text-[var(--app-muted)]">
-          <span>-4</span>
-          <span>eval hidden</span>
-          <span>+4</span>
-        </div>
-
-        <div className="mt-4 flex justify-between gap-4">
-          <div>
-            <p className="text-[10px] font-bold uppercase text-[var(--app-muted)]">
-              Opponent
-            </p>
-            <p className="mt-1 text-sm font-bold text-[var(--app-text)]">
-              Stockfish
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-[10px] font-bold uppercase text-[var(--app-muted)]">
-              Preservation
-            </p>
-            <p className="mt-1 text-sm font-bold text-[var(--app-accent)]">
-              &gt;= 95%
-            </p>
-          </div>
+        <div className="mt-2 flex items-center gap-2 px-0.5">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: "var(--app-class-best)" }} />
+          <span className="text-sm font-bold" style={{ color: "var(--app-text)" }}>Black</span>
         </div>
       </div>
     </div>
@@ -299,7 +156,7 @@ function DifferenceCard({
 }) {
   return (
     <article
-      className="rounded-lg border p-6"
+      className="rounded-lg border p-6 transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-105 hover:shadow-lg"
       style={{
         borderColor: accent ? "var(--app-accent)" : "var(--app-border)",
         background: accent
@@ -346,16 +203,15 @@ export default async function HomePage() {
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-transparent">
       <PublicHeaderClient isSignedIn={isSignedIn} />
       <main className="min-h-0 flex-1 overflow-auto">
-        <section className="mx-auto grid w-full max-w-7xl gap-12 px-6 py-14 md:grid-cols-[1.02fr_0.98fr] md:items-center md:px-10 md:py-20">
+        <section className="mx-auto grid w-full gap-12 px-6 py-14 md:grid-cols-[1.02fr_0.98fr] md:items-center md:px-10 md:py-20" style={{ maxWidth: '80vw' }}>
           <div>
             <h1 className="max-w-3xl text-5xl font-bold leading-tight text-[var(--app-text)] md:text-6xl lg:text-7xl">
-              We show you the positions{" "}
-              <span className="text-[var(--app-muted)]">you actually</span>{" "}
+              Chess training for the positions you{" "}
               <span className="italic text-[var(--app-accent)]">keep getting wrong</span>.
             </h1>
 
             <p className="mt-6 max-w-xl text-base leading-8 text-[var(--app-muted)]">
-              Lichess shows you random puzzles. Chess.com shows you random puzzles with ads. We show you the positions you actually keep mishandling, because you do, and we have receipts.
+              <span className="font-bold uppercase leading-none text-[var(--app-text)]">Blindspots</span><span className="font-bold uppercase leading-none text-[var(--app-accent)]">.gg</span> finds the chess positions you mishandle, then uses suspicious math to recommend other positions likely to hurt the same way.
             </p>
 
             <div className="mt-9 flex flex-wrap gap-3">
