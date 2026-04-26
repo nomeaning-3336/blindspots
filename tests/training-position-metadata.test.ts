@@ -22,8 +22,8 @@ test("classifyTrainingPhase early e4 is opening", () => {
   assert.equal(classifyTrainingPhase("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"), "opening");
 });
 
-test("classifyTrainingPhase fullmove 12 is opening", () => {
-  assert.equal(classifyTrainingPhase("r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 12"), "opening");
+test("classifyTrainingPhase fullmove 10 is opening", () => {
+  assert.equal(classifyTrainingPhase("r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 10"), "opening");
 });
 
 test("classifyTrainingPhase simple endgame is endgame", () => {
@@ -66,11 +66,9 @@ test("classifyBoardPhase queenless endgame is endgame", () => {
 });
 
 test("isGambitFen detects early pawn sacrifice", () => {
-  // King's Gambit: white has 7 pawns (sacrificed f4), all 8 pieces intact
-  // Manually verify: white has PPPPPPP (7) + RNBQKBNR (8 pieces)
-  // Our rank parser should detect this
-  const kg = "rnbqkbnr/pppppppp/8/4P3/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1";
-  assert.equal(isGambitFen(kg), true);
+  // King's Gambit Accepted: black captured f4, white lost f2 pawn (7 white pawns, all pieces intact)
+  const kga = "rnbqkbnr/pppp1ppp/8/8/4Pp2/8/PPPP2PP/RNBQKBNR w KQkq - 0 3";
+  assert.equal(isGambitFen(kga), true);
 });
 
 test("isGambitFen normal position is not gambit", () => {

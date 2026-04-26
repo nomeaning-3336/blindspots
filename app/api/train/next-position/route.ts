@@ -17,6 +17,8 @@ import {
   type ServeMode,
 } from "@/lib/training/serving-policy";
 import { validateTrainingQueueItem } from "@/lib/training/position-validity";
+import { getModeSeedCandidates } from "@/lib/training/serve-mode-sampler";
+import { classifyTrainingPhase, enrichTrainingQueueItem } from "@/lib/training/position-metadata";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,7 +61,7 @@ export async function GET() {
     throw new Error(`Failed to load training queues: ${profileError.message}`);
   }
 
-  const recentServedFens = normalizeRecentServedEntries(profileError ? null : profile?.recent_served_fens);
+  const recentServedFens = normalizeRecentRecentEntries(profileError ? null : profile?.recent_served_fens);
   const recentServedModes = normalizeRecentServedModes(profileError ? null : profile?.recent_served_modes);
   const completedSequenceCount = profileError ? 0 : profile?.total_sequences;
   const queuesBeforeRefill = {
@@ -127,6 +129,8 @@ export async function GET() {
 
   await persistQueues(userId, selection.queues, Boolean(profile && !profileError), nextRecentServedFens, nextRecentServedModes);
 
+  const enriched = enrichTrainingQueueItem(nextPosition);
+
   const response: NextPositionResponse = {
     fen: nextPosition.fen,
     previousFen: nextPosition.previousFen ?? undefined,
@@ -150,14 +154,20 @@ export async function GET() {
       rejectedInvalidReasons: selection.rejectedInvalidReasons,
       selectedFenValidity: selection.selectedFenValidity,
       requestedServeMode: serveMode,
-      selectedServeMode: serveMode,
-      selectedPhase: nextPosition.phase ?? selection.selectedPhase,
-      selectedBucket: nextPosition.bucket ?? selection.selectedBucket,
+      selectedServeMode: selection.selectedServeMode ?? serveMode,
+      selectedPhase: enriched.phase ?? selection.selectedPhase,
+      selectedBucket: enriched.bucket ?? selection.selectedBucket,
       phaseFallbackUsed: selection.phaseFallbackUsed,
     };
   }
 
   return NextResponse.json(response);
+}
+
+type RecentEntry = { fen: string; gameId?: string; ply?: number };
+
+function normalizeRecentRecentEntries(value: unknown): RecentEntry[] {
+  return normalizeRecentServedEntries(value);
 }
 
 async function selectValidTrainingPosition({
@@ -168,13 +178,13 @@ async function selectValidTrainingPosition({
   serveMode,
 }: {
   queues: Awaited<ReturnType<typeof ensureTrainingQueuesHavePositions>>;
-  completedSequenceCount: unknown;
-  recentServedFens: Array<{ fen: string; gameId?: string; ply?: number }>;
+  completedSequenceCount: number;
+  recentServedFens: RecentEntry[];
   sequenceLength: number;
   serveMode: ServeMode;
 }) {
   let currentQueues = queues;
-  const invalidRecentEntries: Array<{ fen: string; gameId?: string; ply?: number }> = [];
+  const invalidRecentEntries: RecentEntry[] = [];
   const rejectedInvalidReasons: string[] = [];
   let rejectedRecentExactCount = 0;
   let rejectedNearDuplicateCount = 0;
@@ -182,16 +192,83 @@ async function selectValidTrainingPosition({
   let selectedQueue = "fallback";
   let wasDueRevisit = false;
   let selectedFenValidity: ReturnType<typeof validateTrainingQueueItem> | null = null;
-  let refilledAfterEmpty = false;
   let selectedPhase: string | undefined = undefined;
   let selectedBucket: string | undefined = undefined;
   let phaseFallbackUsed = false;
+  let selectedServeMode: ServeMode | undefined = undefined;
+  const now = new Date();
+  const recentFenSet = new Set([...recentServedFens, ...invalidRecentEntries].map((e) => e.fen));
 
+  // Step 1: If revisit is due, always prefer it
+  const dueRevisit = currentQueues.revisitQueue.find((item) => Date.parse(item.scheduledAt) <= now.getTime());
+  if (dueRevisit) {
+    const enriched = enrichTrainingQueueItem(dueRevisit);
+    return {
+      item: dueRevisit,
+      selectedQueue: "revisit" as const,
+      wasDueRevisit: true,
+      queues: removeFenFromAllQueues(currentQueues, dueRevisit.fen),
+      rejectedRecentExactCount: 0,
+      rejectedNearDuplicateCount: 0,
+      nearDuplicateReason: null,
+      rejectedInvalidCount: 0,
+      rejectedInvalidReasons: [] as string[],
+      selectedFenValidity: null,
+      selectedServeMode: "revisit" as ServeMode,
+      selectedPhase: enriched.phase,
+      selectedBucket: enriched.bucket,
+      phaseFallbackUsed: false,
+    };
+  }
+
+  // Step 2: For opening/tactic/endgame/middlegame/wildcard modes, try seed candidates first
+  if (serveMode === "opening" || serveMode === "tactic" || serveMode === "endgame" || serveMode === "middlegame" || serveMode === "wildcard") {
+    const seedCandidates = await getModeSeedCandidates(serveMode, recentFenSet, now, 30);
+    for (const candidate of seedCandidates) {
+      const enriched = enrichTrainingQueueItem(candidate);
+
+      // Check validity
+      const validity = validateTrainingQueueItem(candidate, { sequenceLength });
+      if (!validity.ok) continue;
+
+      // Check recent exact
+      if (recentFenSet.has(candidate.fen)) {
+        rejectedRecentExactCount += 1;
+        continue;
+      }
+
+      // Return this seed candidate
+      selectedPhase = enriched.phase ?? classifyPhaseFromFen(candidate.fen);
+      selectedBucket = enriched.bucket;
+      selectedServeMode = serveMode;
+      selectedFenValidity = validity;
+      return {
+        item: candidate,
+        selectedQueue: "seed" as TrainingQueueName,
+        wasDueRevisit: false,
+        queues: currentQueues, // seed candidates not in queues, no removal needed
+        rejectedRecentExactCount,
+        rejectedNearDuplicateCount,
+        nearDuplicateReason,
+        rejectedInvalidCount: rejectedInvalidReasons.length,
+        rejectedInvalidReasons,
+        selectedFenValidity,
+        selectedServeMode: serveMode,
+        selectedPhase,
+        selectedBucket,
+        phaseFallbackUsed: false,
+      };
+    }
+
+    // No valid seed candidate found — fall back to queue selection
+    phaseFallbackUsed = true;
+  }
+
+  // Step 3: Fallback to queue-based selection
   for (let attempt = 0; attempt < MAX_VALID_SELECTION_ATTEMPTS; attempt += 1) {
     const reservation = await selectAndReserveNextTrainingPosition(currentQueues, {
       completedSequenceCount,
       recentServedFens: [...recentServedFens, ...invalidRecentEntries],
-      serveMode,
     });
 
     rejectedRecentExactCount += reservation.rejectedRecentExactCount;
@@ -202,8 +279,7 @@ async function selectValidTrainingPosition({
     currentQueues = reservation.queues;
 
     if (!reservation.item) {
-      if (refilledAfterEmpty) break;
-      refilledAfterEmpty = true;
+      // Refill and retry once
       currentQueues = await ensureTrainingQueuesHavePositions({
         ...currentQueues,
         excludeFens: invalidRecentEntries.map((entry) => entry.fen),
@@ -214,7 +290,11 @@ async function selectValidTrainingPosition({
 
     const validity = validateTrainingQueueItem(reservation.item, { sequenceLength });
     if (validity.ok) {
+      const enriched = enrichTrainingQueueItem(reservation.item);
       selectedFenValidity = validity;
+      selectedPhase = enriched.phase;
+      selectedBucket = enriched.bucket;
+      selectedServeMode ??= serveMode;
       return {
         item: reservation.item,
         selectedQueue,
@@ -226,6 +306,7 @@ async function selectValidTrainingPosition({
         rejectedInvalidCount: rejectedInvalidReasons.length,
         rejectedInvalidReasons,
         selectedFenValidity,
+        selectedServeMode,
         selectedPhase,
         selectedBucket,
         phaseFallbackUsed,
@@ -238,6 +319,7 @@ async function selectValidTrainingPosition({
       gameId: reservation.item.gameId,
       ply: reservation.item.ply,
     });
+    recentFenSet.add(reservation.item.fen);
   }
 
   return {
@@ -251,17 +333,20 @@ async function selectValidTrainingPosition({
     rejectedInvalidCount: rejectedInvalidReasons.length,
     rejectedInvalidReasons,
     selectedFenValidity,
+    selectedServeMode: serveMode,
     selectedPhase,
     selectedBucket,
     phaseFallbackUsed,
   };
 }
 
+type TrainingQueueName = "revisit" | "exploit" | "explore" | "mastered" | "fallback" | "seed";
+
 async function persistQueues(
   userId: string,
   queues: Awaited<ReturnType<typeof ensureTrainingQueuesHavePositions>>,
   hasProfile: boolean,
-  recentServedFens: Array<{ fen: string; gameId?: string; ply?: number }>,
+  recentServedFens: RecentEntry[],
   recentServedModes?: ReturnType<typeof prependRecentServeMode>,
 ) {
   const supabase = getSupabaseAdminClient();
@@ -317,4 +402,29 @@ function isMissingQueueColumnError(message: string) {
     message.includes("user_blindspot_profile.revisit_queue") ||
     message.includes("user_blindspot_profile.mastered_queue")
   );
+}
+
+function removeFenFromAllQueues(
+  queues: Awaited<ReturnType<typeof ensureTrainingQueuesHavePositions>>,
+  fen: string,
+) {
+  const MAX = 20;
+  return {
+    exploitQueue: queues.exploitQueue.filter((item) => item.fen !== fen).slice(0, MAX),
+    exploreQueue: queues.exploreQueue.filter((item) => item.fen !== fen).slice(0, MAX),
+    revisitQueue: queues.revisitQueue.filter((item) => item.fen !== fen).slice(0, MAX),
+    masteredQueue: queues.masteredQueue.filter((item) => item.fen !== fen).slice(0, MAX),
+  };
+}
+
+function classifyPhaseFromFen(fen: string): string {
+  try {
+    const parts = fen.trim().split(/\s+/);
+    if (parts.length < 6) return "unknown";
+    const fullmove = parseInt(parts[5], 10);
+    if (fullmove <= 10) return "opening";
+    return "middlegame";
+  } catch {
+    return "unknown";
+  }
 }
