@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Chess, type Move, type Square } from "chess.js";
+import { Chess, type Square } from "chess.js";
 import { AnalysisBoard, type BoardMove, type EngineArrow } from "@/components/chess/analysis-board";
 import {
   analyzeBoardThemeForAppTheme,
@@ -10,12 +10,19 @@ import {
   type AnalyzeBoardTheme,
   type AnalyzePieceTheme,
 } from "@/lib/analyze-preferences";
+import {
+  DEFAULT_BLINDSPOTS_ELO,
+  classificationColor,
+  classificationIcon,
+  classificationLabel,
+  getTrainingBoardHighlights,
+  moveBadgeForPosition,
+  type MoveClassification,
+} from "@/lib/training-board-ui";
 
 type TrainingState = "active" | "complete" | "drift";
 type OnboardingScreen = "loading" | "connect" | "analysis" | "summary" | "done";
 type ProfileProvider = "chesscom" | "lichess";
-type MoveClassification = "best" | "excellent" | "good" | "inaccuracy" | "mistake" | "blunder";
-
 type TrainingMove = {
   san: string;
   uci: string;
@@ -229,13 +236,17 @@ function trainMoveIsCapture(move?: TrainSoundMove | null) {
   return typeof move.san === "string" && move.san.includes("x");
 }
 
-function playTrainMoveSound(move?: TrainSoundMove | null) {
+function playTrainMoveSound(move?: TrainSoundMove | null, retryAfterPrime = true) {
   if (!move) return;
   primeTrainSounds();
   resumeTrainAudioContext();
   const name = trainMoveIsCapture(move) ? "capture" : "move";
   const context = ensureTrainAudioContext();
   const buffer = trainSoundBank.get(name);
+  if (context && !buffer && retryAfterPrime && trainSoundPrimePromise) {
+    void trainSoundPrimePromise.then(() => playTrainMoveSound(move, false));
+    return;
+  }
   if (!context || !buffer) return;
 
   try {
@@ -277,7 +288,7 @@ const mockRep = {
   sideToMove: "White",
   prompt: "Play it out",
   sequenceLength: DEFAULT_SEQUENCE_LENGTH,
-  rating: 1647,
+  rating: DEFAULT_BLINDSPOTS_ELO,
   completedRating: 1656,
   moveHistory: [
   ] satisfies TrainingMove[],
@@ -336,6 +347,8 @@ export default function TrainPage() {
   const [pieceLinesLoadingKey, setPieceLinesLoadingKey] = useState<string | null>(null);
   const completingRef = useRef(false);
   const completionRequestRef = useRef(0);
+  const initialOpponentMoveRef = useRef<TrainingMove | null>(null);
+  const initialOpponentRequestRef = useRef(0);
   const nextPositionPrefetchRef = useRef<Promise<NextPositionResponse | null> | null>(null);
   const engineLineCacheRef = useRef<Record<string, EngineLineResult[]>>({});
   const engineLinePrefetchRef = useRef<Map<string, Promise<void>>>(new Map());
@@ -434,6 +447,8 @@ export default function TrainPage() {
 
   function switchState(nextState: TrainingState) {
     completingRef.current = false;
+    initialOpponentMoveRef.current = null;
+    initialOpponentRequestRef.current += 1;
     setState(nextState);
     setResultMode("results");
     setExploreIndex(0);
@@ -504,6 +519,8 @@ export default function TrainPage() {
   function applyNextPosition(payload: NextPositionResponse) {
     if (!payload.fen) return;
     completingRef.current = false;
+    initialOpponentMoveRef.current = null;
+
     setStartingFen(payload.fen);
     setFen(payload.fen);
     setMoves([]);
@@ -511,10 +528,84 @@ export default function TrainPage() {
     setResultMode("results");
     setExploreIndex(0);
     resetExploratoryLine();
+    setSelectedMoveIndex(null);
     setEngineLineCache({});
     setEngineLineErrorFens(new Set());
     setEngineLineLoadingFen(null);
+    setPieceLineCache({});
+    setPieceLinesLoadingKey(null);
     setSequenceLength(normalizeSequenceLength(payload.sequenceLength));
+
+    void playInitialOpponentMove(payload.fen);
+  }
+
+  async function playInitialOpponentMove(targetFen: string) {
+    const requestId = initialOpponentRequestRef.current + 1;
+    initialOpponentRequestRef.current = requestId;
+
+    initialOpponentMoveRef.current = null;
+
+    const parts = targetFen.split(" ");
+    if (parts.length < 2) return;
+    const userTurn = parts[1];
+    const opponentTurn = userTurn === "w" ? "b" : "w";
+    parts[1] = opponentTurn;
+    const opponentFen = parts.join(" ");
+
+    setIsOpponentThinking(true);
+
+    try {
+      const response = await fetch("/api/train/opponent-move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fen: opponentFen, userBlindspotElo: blindspotsElo }),
+      });
+      const data = (await response.json().catch(() => null)) as OpponentMoveResponse | null;
+      const oppMove = data?.move;
+      if (!response.ok || !oppMove) return;
+
+      if (initialOpponentRequestRef.current !== requestId) return;
+
+      const chess = new Chess(opponentFen);
+      const played = chess.move({
+        from: oppMove.uci.slice(0, 2),
+        to: oppMove.uci.slice(2, 4),
+        promotion: oppMove.uci[4],
+      });
+      if (!played) return;
+
+      if (initialOpponentRequestRef.current !== requestId) return;
+
+      const move: TrainingMove = {
+        san: oppMove.san || played.san,
+        uci: `${played.from}${played.to}${played.promotion ?? ""}`,
+        side: played.color === "w" ? "white" : "black",
+        fenBefore: opponentFen,
+        fenAfter: chess.fen(),
+      };
+      initialOpponentMoveRef.current = move;
+
+      // Show the opponent's position first so the user can see the "before" state.
+      setFen(opponentFen);
+      await sleep(360);
+
+      if (initialOpponentRequestRef.current !== requestId) return;
+
+      // Highlight the move on the opponent's position.
+      setLastMove({ from: played.from, to: played.to });
+      playTrainMoveSound(played);
+      await sleep(540);
+
+      if (initialOpponentRequestRef.current !== requestId) return;
+
+      // Show the resulting position.
+      setFen(chess.fen());
+      setStartingFen(chess.fen());
+    } finally {
+      if (initialOpponentRequestRef.current === requestId) {
+        setIsOpponentThinking(false);
+      }
+    }
   }
 
   function prefetchNextPosition() {
@@ -821,6 +912,7 @@ export default function TrainPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "skip" }),
     });
+    setBlindspotsElo(DEFAULT_BLINDSPOTS_ELO);
     await startFirstSession();
   }
 
@@ -917,6 +1009,9 @@ export default function TrainPage() {
   const boardLastMove = isExploringResults
     ? (activeExploratoryPosition?.lastMove ?? exploratoryLastMove ?? lastMoveForPosition(explorePosition))
     : lastMove;
+  const boardLastMoveBadge = isExploringResults && !activeExploratoryPosition && !exploratoryFen
+    ? moveBadgeForPosition(explorePosition)
+    : null;
   const selectedMove =
     selectedMoveIndex != null && selectedMoveIndex > 0 && selectedMoveIndex <= moves.length
       ? moves[selectedMoveIndex - 1]
@@ -1107,6 +1202,7 @@ export default function TrainPage() {
                       showLegalTargets={false}
                       selectedSquare={exploreSelectedSquare}
                       lastMove={boardLastMove}
+                      lastMoveBadge={boardLastMoveBadge}
                       boardTheme={visualPreferences.boardTheme}
                       pieceTheme={visualPreferences.pieceTheme}
                       highlightedSquares={
@@ -1169,13 +1265,7 @@ export default function TrainPage() {
                     pieceTheme={visualPreferences.pieceTheme}
                     disabled={state !== "active" || isOpponentThinking}
                     annotationsDisabled={false}
-                    highlightedSquares={
-                      state === "complete"
-                        ? undefined
-                        : state === "drift"
-                          ? { b8: "color-mix(in srgb, var(--app-class-mistake) 42%, #7f8190 58%)" }
-                          : { c7: "color-mix(in srgb, var(--app-accent) 30%, var(--app-selection) 70%)" }
-                    }
+                    highlightedSquares={getTrainingBoardHighlights(state)}
                     onMove={handleMove}
                   />
                 )}
@@ -1249,10 +1339,21 @@ export default function TrainPage() {
                   onAction={() => switchState("active")}
                 />
               ) : (
-                moves.length === 0 ? (
+                moves.length === 0 && !isOpponentThinking && !isPositionLoading ? (
                   <PromptCard side={userMoveSide} />
                 ) : null
               )}
+
+              {initialOpponentMoveRef.current && moves.length === 0 ? (
+                <div className="mt-6 rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">
+                    Opponent move
+                  </p>
+                  <p className="mt-1 text-lg font-bold text-[var(--app-text)]">
+                    {initialOpponentMoveRef.current.san}
+                  </p>
+                </div>
+              ) : null}
 
               <MoveList
                 moves={moves}
@@ -2105,7 +2206,6 @@ function ResultsPanel({
               ? (index) => onSelectMove(index)
               : undefined
           }
-          onHoverMove={onMoveHover}
         />
         <div className="mt-auto pt-1">
           <button
@@ -2124,7 +2224,7 @@ function ResultsPanel({
     <div className="flex flex-1 flex-col gap-4 opacity-80 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
       <EloResultCard result={eloResult} isLoading={isSaving} />
       <EvalGraph points={graphPoints} currentIndex={positions.length - 1} compact />
-      <AnalysisMoveTable moves={userMoves} isAnalyzing={isSaving} compact onHoverMove={onMoveHover} />
+      <AnalysisMoveTable moves={userMoves} isAnalyzing={isSaving} compact />
       <div className="pt-1">
         <button
           type="button"
@@ -2378,69 +2478,21 @@ function MoveList({
 }
 
 function ClassificationBadge({ classification }: { classification: MoveClassification }) {
+  const label = classificationLabel(classification);
   return (
     <span
-      className="grid h-4 w-4 shrink-0 place-items-center rounded-full text-[10px] font-bold text-black"
-      style={{ background: classificationColor(classification) }}
-      title={classificationLabel(classification)}
-      aria-label={classificationLabel(classification)}
+      className="grid h-4 w-4 shrink-0 place-items-center"
+      title={label}
+      aria-label={label}
     >
-      {classificationGlyph(classification)}
+      <img
+        src={classificationIcon(classification)}
+        alt=""
+        className="h-4 w-4"
+        draggable={false}
+      />
     </span>
   );
-}
-
-function classificationColor(classification?: MoveClassification) {
-  switch (classification) {
-    case "best":
-      return "var(--app-class-best)";
-    case "excellent":
-      return "var(--app-class-excellent)";
-    case "good":
-      return "var(--app-class-good)";
-    case "inaccuracy":
-      return "var(--app-class-inaccuracy)";
-    case "mistake":
-      return "var(--app-class-mistake)";
-    case "blunder":
-      return "var(--app-class-blunder)";
-    default:
-      return "var(--app-text)";
-  }
-}
-
-function classificationGlyph(classification: MoveClassification) {
-  switch (classification) {
-    case "best":
-      return "B";
-    case "excellent":
-      return "✓";
-    case "good":
-      return "•";
-    case "inaccuracy":
-      return "?";
-    case "mistake":
-      return "!";
-    case "blunder":
-      return "??";
-  }
-}
-
-function classificationLabel(classification: MoveClassification) {
-  switch (classification) {
-    case "best":
-      return "Best";
-    case "excellent":
-      return "Excellent";
-    case "good":
-      return "Good";
-    case "inaccuracy":
-      return "Inaccuracy";
-    case "mistake":
-      return "Mistake";
-    case "blunder":
-      return "Blunder";
-  }
 }
 
 function formatEval(cp: number) {
