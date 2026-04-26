@@ -8,7 +8,9 @@ import {
   selectAndReserveNextTrainingPositionCore,
   updateQueuesAfterSequenceCore,
   type TrainingQueueItem,
+  type TrainingBucket,
 } from "./queue-core";
+import type { ServeMode } from "./serving-policy";
 
 const MAX_QUEUE_ITEMS = 20;
 
@@ -120,7 +122,7 @@ export async function selectAndReserveNextTrainingPosition(
     revisitQueue: TrainingQueueItem[];
     masteredQueue: TrainingQueueItem[];
   },
-  options: { completedSequenceCount?: unknown; now?: Date; recentServedFens?: unknown } = {},
+  options: { completedSequenceCount?: unknown; now?: Date; recentServedFens?: unknown; serveMode?: string } = {},
 ) {
   return selectAndReserveNextTrainingPositionCore(queues, {
     ...options,
@@ -278,3 +280,248 @@ function shuffle<T>(items: T[]) {
   }
   return copy;
 }
+
+// ─── Opening Positions ────────────────────────────────────────────────────────
+
+type OpeningPosition = {
+  fen?: unknown;
+  phase?: unknown;
+  bucket?: unknown;
+  openingName?: unknown;
+  eco?: unknown;
+  tags?: unknown;
+  isTactic?: unknown;
+  tacticRating?: unknown;
+  gameId?: unknown;
+  game_id?: unknown;
+  ply?: unknown;
+  previousFen?: unknown;
+  previous_fen?: unknown;
+  playedMove?: unknown;
+  played_move?: unknown;
+  source?: unknown;
+};
+
+async function readOpeningPositions(): Promise<OpeningPosition[]> {
+  try {
+    const raw = await readFile(resolve(process.cwd(), "public", "training_opening_positions.json"), "utf8");
+    return JSON.parse(raw) as OpeningPosition[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Sample opening positions, enriched with phase/bucket metadata.
+ * Excludes FENs already recently served.
+ */
+export async function sampleOpeningPositions(
+  count: number,
+  excludeFens: Set<string>,
+  now: Date,
+): Promise<TrainingQueueItem[]> {
+  if (count <= 0) return [];
+
+  const positions = await readOpeningPositions();
+  return shuffle(positions)
+    .flatMap((position) => {
+      const fen = typeof position.fen === "string" ? position.fen : "";
+      if (!fen || excludeFens.has(fen)) return [];
+
+      excludeFens.add(fen);
+      const item = queueItemFromFen(fen, "elite", now.toISOString(), {
+        previousFen: enrichPreviousFen(position),
+        playedMove: enrichPlayedMove(position),
+        gameId: enrichGameId(position),
+        ply: enrichPly(position),
+        phase: enrichPhase(position),
+        bucket: enrichBucket(position),
+        tags: enrichTags(position),
+        isTactic: enrichIsTactic(position),
+        tacticRating: enrichTacticRating(position),
+        openingName: enrichOpeningName(position),
+        eco: enrichEco(position),
+      });
+      return item ? [item] : [];
+    })
+    .slice(0, count);
+}
+
+// ─── Tactical Positions ───────────────────────────────────────────────────────
+
+type TacticPosition = OpeningPosition;
+
+async function readTacticPositions(): Promise<TacticPosition[]> {
+  try {
+    const raw = await readFile(resolve(process.cwd(), "public", "training_tactic_positions.json"), "utf8");
+    return JSON.parse(raw) as TacticPosition[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Sample tactical positions, enriched with phase/bucket metadata.
+ * Excludes FENs already recently served.
+ */
+export async function sampleTacticalPositions(
+  count: number,
+  excludeFens: Set<string>,
+  now: Date,
+): Promise<TrainingQueueItem[]> {
+  if (count <= 0) return [];
+
+  const positions = await readTacticPositions();
+  return shuffle(positions)
+    .flatMap((position) => {
+      const fen = typeof position.fen === "string" ? position.fen : "";
+      if (!fen || excludeFens.has(fen)) return [];
+
+      excludeFens.add(fen);
+      const item = queueItemFromFen(fen, "elite", now.toISOString(), {
+        previousFen: enrichPreviousFen(position),
+        playedMove: enrichPlayedMove(position),
+        gameId: enrichGameId(position),
+        ply: enrichPly(position),
+        phase: "tactic",
+        bucket: "tactic",
+        tags: enrichTags(position),
+        isTactic: true,
+        tacticRating: enrichTacticRating(position),
+        openingName: enrichOpeningName(position),
+        eco: enrichEco(position),
+      });
+      return item ? [item] : [];
+    })
+    .slice(0, count);
+}
+
+// ─── Phase/Bucket Samplers ────────────────────────────────────────────────────
+
+/**
+ * Sample positions matching a specific phase or bucket from the opening pool.
+ */
+export async function samplePhasePositions(
+  phaseOrBucket: string,
+  count: number,
+  excludeFens: Set<string>,
+  now: Date,
+): Promise<TrainingQueueItem[]> {
+  if (count <= 0) return [];
+  if (phaseOrBucket === "tactic") return sampleTacticalPositions(count, excludeFens, now);
+  if (phaseOrBucket === "opening" || phaseOrBucket === "opening_gambit" || phaseOrBucket === "opening_development") {
+    return sampleOpeningPositions(count, excludeFens, now);
+  }
+
+  // For middlegame/endgame buckets, filter from opening pool
+  const positions = await readOpeningPositions();
+  return shuffle(positions)
+    .flatMap((position) => {
+      const fen = typeof position.fen === "string" ? position.fen : "";
+      if (!fen || excludeFens.has(fen)) return [];
+
+      const bucket = enrichBucket(position);
+      const phase = enrichPhase(position);
+      if (bucket !== phaseOrBucket && phase !== phaseOrBucket) return [];
+
+      excludeFens.add(fen);
+      const item = queueItemFromFen(fen, "elite", now.toISOString(), {
+        previousFen: enrichPreviousFen(position),
+        playedMove: enrichPlayedMove(position),
+        gameId: enrichGameId(position),
+        ply: enrichPly(position),
+        phase: enrichPhase(position),
+        bucket: enrichBucket(position),
+        tags: enrichTags(position),
+        isTactic: enrichIsTactic(position),
+        tacticRating: enrichTacticRating(position),
+        openingName: enrichOpeningName(position),
+        eco: enrichEco(position),
+      });
+      return item ? [item] : [];
+    })
+    .slice(0, count);
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────────
+
+function enrichPreviousFen(pos: OpeningPosition): string | undefined {
+  return typeof pos.previousFen === "string"
+    ? pos.previousFen
+    : typeof pos.previous_fen === "string"
+      ? pos.previous_fen
+      : undefined;
+}
+
+function enrichPlayedMove(pos: OpeningPosition): string | undefined {
+  return typeof pos.playedMove === "string"
+    ? pos.playedMove
+    : typeof pos.played_move === "string"
+      ? pos.played_move
+      : undefined;
+}
+
+function enrichGameId(pos: OpeningPosition): string | undefined {
+  return typeof pos.gameId === "string"
+    ? pos.gameId
+    : typeof pos.game_id === "string"
+      ? pos.game_id
+      : undefined;
+}
+
+function enrichPly(pos: OpeningPosition): number | undefined {
+  const v = pos.ply;
+  const parsed = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(parsed) ? Math.floor(parsed) : undefined;
+}
+
+function enrichPhase(pos: OpeningPosition): "opening" | "middlegame" | "endgame" | "tactic" | "unknown" | undefined {
+  const v = pos.phase;
+  if (v === "opening" || v === "middlegame" || v === "endgame" || v === "tactic" || v === "unknown") return v;
+  return undefined;
+}
+
+function enrichBucket(pos: OpeningPosition): TrainingBucket | undefined {
+  const v = pos.bucket;
+  if (
+    v === "opening" ||
+    v === "opening_gambit" ||
+    v === "opening_development" ||
+    v === "middlegame" ||
+    v === "middlegame_attack" ||
+    v === "middlegame_positional" ||
+    v === "endgame" ||
+    v === "endgame_rook" ||
+    v === "endgame_pawn" ||
+    v === "tactic" ||
+    v === "wildcard"
+  ) {
+    return v;
+  }
+  return undefined;
+}
+
+function enrichTags(pos: OpeningPosition): string[] | undefined {
+  if (Array.isArray(pos.tags)) {
+    return pos.tags.filter((t): t is string => typeof t === "string");
+  }
+  return undefined;
+}
+
+function enrichIsTactic(pos: OpeningPosition): boolean | undefined {
+  return typeof pos.isTactic === "boolean" ? pos.isTactic : undefined;
+}
+
+function enrichTacticRating(pos: OpeningPosition): number | undefined {
+  const v = pos.tacticRating;
+  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+}
+
+function enrichOpeningName(pos: OpeningPosition): string | undefined {
+  return typeof pos.openingName === "string" ? pos.openingName : undefined;
+}
+
+function enrichEco(pos: OpeningPosition): string | undefined {
+  return typeof pos.eco === "string" ? pos.eco : undefined;
+}
+

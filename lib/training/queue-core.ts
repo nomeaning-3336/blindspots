@@ -5,6 +5,21 @@ const MAX_RECENT_SERVED_FENS = 100;
 const SAME_GAME_PLY_WINDOW = 8;
 const FEN_NEAR_DUPLICATE_THRESHOLD = 0.92;
 
+export type TrainingPhase = "opening" | "middlegame" | "endgame" | "tactic" | "unknown";
+
+export type TrainingBucket =
+  | "opening"
+  | "opening_gambit"
+  | "opening_development"
+  | "middlegame"
+  | "middlegame_attack"
+  | "middlegame_positional"
+  | "endgame"
+  | "endgame_rook"
+  | "endgame_pawn"
+  | "tactic"
+  | "wildcard";
+
 export type TrainingQueueItem = {
   fen: string;
   fingerprint: unknown;
@@ -17,6 +32,13 @@ export type TrainingQueueItem = {
   previousFen?: string;
   playedMove?: string;
   mateDistancePlies?: number;
+  phase?: TrainingPhase;
+  bucket?: TrainingBucket;
+  tags?: string[];
+  isTactic?: boolean;
+  tacticRating?: number;
+  openingName?: string;
+  eco?: string;
 };
 
 export type TrainingQueues = {
@@ -170,6 +192,7 @@ export async function selectAndReserveNextTrainingPositionCore(
     now?: Date;
     recentServedFens?: unknown;
     fallbackSampler?: ExploreSampler;
+    serveMode?: string;
   } = {},
 ) {
   const now = options.now ?? new Date();

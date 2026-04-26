@@ -1,0 +1,227 @@
+[
+  {
+    "fen": "r1b1kb1r/pppp1ppp/2n2n2/4N1q1/2B1P3/8/PPPP1PPP/RNBQK2R w KQkq - 4 7",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "fork", "nxe4"],
+    "tacticRating": 800,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "r2qk2r/ppp2ppp/2n1bn2/2bpN3/3P4/2NB4/PPP2PPP/R1BQK2R w KQkq - 0 8",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "pin", "sacrifice"],
+    "tacticRating": 1000,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "r1bqkb1r/pppp1ppp/2n5/8/2BnN3/8/PPPP1PPP/R1BQK2R w KQkq - 0 6",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "discovered", "attack"],
+    "tacticRating": 900,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "checkmate", "endgame_tactic"],
+    "tacticRating": 600,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "r1bq1rk1/ppp2ppp/2n2n2/3pp3/2B1P1b1/2NP1N2/PPP2PPP/R1BQK2R w KQkq - 0 7",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "pin", "bishop_pair"],
+    "tacticRating": 1100,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "4r1k1/5ppp/8/8/3Q4/8/5PPP/6K1 w - - 0 1",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "back_rank", "queen"],
+    "tacticRating": 700,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "r1bq1rk1/ppp2ppp/2n2N2/3n4/3P4/2N5/PPP2PPP/R1BQK2R w KQkq - 0 9",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "fork", "discovered"],
+    "tacticRating": 950,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "3r2k1/pp3ppp/8/2p5/8/2Q3P1/P4PKP/4r3 w - - 0 1",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "queen_sacrifice", "attack"],
+    "tacticRating": 1200,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkb1r/pp3ppp/3p1n2/2pN4/4P3/8/PPPP1PPP/R1BQKBNR w KQkq - 0 5",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "pin", "sacrifice"],
+    "tacticRating": 850,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "r3kb1r/ppp1qppp/2n1bn2/3pp3/2B1P1B1/2NP1N2/PPP2PPP/R2QK2R w KQkq - 2 7",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "castling", "attack"],
+    "tacticRating": 1000,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "2kr3r/ppp2ppp/2nqbn2/3pp3/2B1P1B1/2N1P3/PPP2PPP/R2QK2R w KQ - 0 9",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "pawn_storm", "kingside"],
+    "tacticRating": 1050,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "r1bqkb1r/pppp1ppp/2n2n2/4p2Q/4P3/8/PPPP1PPP/RNB1KBNR b KQkq - 1 3",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "fried_liver", "attack"],
+    "tacticRating": 1300,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "r1bqk2r/ppp2ppp/2npbn2/2b1p3/2B1P3/2NP1N2/PPP2PPP/R1BQK2R w KQkq - 0 6",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", " IQP", "crush"],
+    "tacticRating": 1100,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "2rq1rk1/ppp2ppp/2n1bn2/3pp3/1BP1P1B1/2NP1N2/PP3PPP/R1BQK2R w KQ - 0 9",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "center_control", "bishop_pair"],
+    "tacticRating": 950,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "r1bq1rk1/ppp1n1pp/3p1p2/2pNp3/2P1P3/2N3P1/PP2BPP1/R1BQK2R w KQ - 0 9",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "outpost", "knight"],
+    "tacticRating": 880,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "r1bqkb1r/pppp1ppp/2n2n2/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 2 4",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "italian", "bishop_gambit"],
+    "tacticRating": 920,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "r2qk2r/ppp1bppp/2n1bn2/3p4/3P4/2NBPN2/PP3PPP/R1BQK2R w KQkq - 0 8",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "isolani", "d5"],
+    "tacticRating": 1050,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "r1b1kb1r/ppppqppp/2n2n2/4p3/2B1P3/2N2N2/PPPP1PPP/R1BQK2R w KQkq - 4 5",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "bishop_pair", "center"],
+    "tacticRating": 800,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "r1bqk2r/pppp1ppp/2n2n2/1B2p3/1b2P3/2NP1N2/PPP2PPP/R1BQK2R b KQkq - 1 5",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "nimzo", "bishop"],
+    "tacticRating": 1100,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "r1bqk2r/ppppbppp/2n2n2/4p3/2B1P3/2N2N2/PPPP1PPP/R1BQK2R w KQkq - 2 5",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "ruy_lopez", "morgan"],
+    "tacticRating": 970,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "2rqkb1r/pp1nbppp/3p1n2/2pN4/4P3/2N5/PPP1BPPP/R1BQK2R w KQkq - 0 9",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "sacrifice", "exchange"],
+    "tacticRating": 1150,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "3r2k1/pp3ppp/2p5/4P3/1P6/P4N2/5PPP/4R1K1 w - - 0 1",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "rook_endgame", "opposition"],
+    "tacticRating": 750,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "r1bq1rk1/ppp1n1pp/3p1p2/2pNp3/2P1P3/2N3P1/PP2BPP1/R1BQK2R b KQ - 0 9",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "minority_attack", "d5"],
+    "tacticRating": 1020,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqk2r/ppp1bppp/4pn2/8/2PN4/2N5/PP2PPPP/R1BQKB1R w KQkq - 0 6",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "tarrasch", "pawn_structure"],
+    "tacticRating": 890,
+    "openingName": null,
+    "source": "seed"
+  },
+  {
+    "fen": "r1bq1rk1/ppp1n1pp/3p1p2/2pNp3/2P1P3/2N2N2/PP1BBPPP/R1BQK2R w KQ - 4 8",
+    "phase": "tactic",
+    "bucket": "tactic",
+    "tags": ["tactic", "bishop_pair", "space"],
+    "tacticRating": 1050,
+    "openingName": null,
+    "source": "seed"
+  }
+]

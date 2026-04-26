@@ -1,0 +1,272 @@
+[
+  {
+    "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    "phase": "opening",
+    "bucket": "opening_development",
+    "openingName": "Starting Position",
+    "eco": "START",
+    "tags": ["opening", "development", "starting"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+    "phase": "opening",
+    "bucket": "opening",
+    "openingName": "King's Pawn Opening",
+    "eco": "C20",
+    "tags": ["opening", "e4"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkbnr/pppppppp/8/8/3PP3/8/PPP2PPP/RNBQKBNR b KQkq - 0 2",
+    "phase": "opening",
+    "bucket": "opening",
+    "openingName": "Central Game",
+    "eco": "C20",
+    "tags": ["opening", "e4", "d4"],
+    "source": "seed"
+  },
+  {
+    "fen": "r1bqkbnr/pppppppp/2n5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2",
+    "phase": "opening",
+    "bucket": "opening_development",
+    "openingName": "Petrov's Defense",
+    "eco": "C42",
+    "tags": ["opening", "petrov", "nf5"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+    "phase": "opening",
+    "bucket": "opening",
+    "openingName": "Open Game",
+    "eco": "C20",
+    "tags": ["opening", "e5"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkbnr/ppp2ppp/8/3pp3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 3",
+    "phase": "opening",
+    "bucket": "opening_development",
+    "openingName": "Scandinavian Defense",
+    "eco": "B01",
+    "tags": ["opening", "scandinavian", "e5"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkbnr/pppp1ppp/8/4p3/4PP2/8/PPPP2PP/RNBQKBNR b KQkq - 0 2",
+    "phase": "opening",
+    "bucket": "opening_gambit",
+    "openingName": "King's Gambit",
+    "eco": "C30",
+    "tags": ["opening", "gambit", "kings_gambit"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkbnr/pppp1ppp/8/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR b KQkq - 1 2",
+    "phase": "opening",
+    "bucket": "opening_development",
+    "openingName": "Italian Game / Two Knights",
+    "eco": "C50",
+    "tags": ["opening", "italian", "two_knights", "development"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkb1r/pppp1ppp/5n2/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3",
+    "phase": "opening",
+    "bucket": "opening_development",
+    "openingName": "Italian Game",
+    "eco": "C50",
+    "tags": ["opening", "italian", "development"],
+    "source": "seed"
+  },
+  {
+    "fen": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3",
+    "phase": "opening",
+    "bucket": "opening_development",
+    "openingName": "Italian Game",
+    "eco": "C54",
+    "tags": ["opening", "italian", "development"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkb1r/pp2pppp/2p2n2/3p4/2PP4/2N2N2/PP2PPPP/R1BQKB1R w KQkq - 0 5",
+    "phase": "opening",
+    "bucket": "opening",
+    "openingName": "Queen's Gambit",
+    "eco": "D07",
+    "tags": ["opening", "queens_gambit", "d5"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkb1r/ppp2ppp/4pn2/3p4/2PP4/2N2N2/PP2PPPP/R1BQKB1R w KQkq - 0 5",
+    "phase": "opening",
+    "bucket": "opening_development",
+    "openingName": "Chigorin Defense",
+    "eco": "D07",
+    "tags": ["opening", "chigorin", "development"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkbnr/pppp1ppp/8/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR b KQkq - 1 2",
+    "phase": "opening",
+    "bucket": "opening_development",
+    "openingName": "Italian Game",
+    "eco": "C50",
+    "tags": ["opening", "italian", "development", "bishop"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkbnr/ppp2ppp/8/3pp3/2P1P3/8/PP1P1PPP/RNBQKBNR w KQkq - 0 3",
+    "phase": "opening",
+    "bucket": "opening",
+    "openingName": "Sicilian Defense",
+    "eco": "B50",
+    "tags": ["opening", "sicilian", "c5"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkbnr/pp2pppp/2p5/3p4/3PP3/8/PPP2PPP/RNBQKBNR w KQkq - 0 3",
+    "phase": "opening",
+    "bucket": "opening",
+    "openingName": "French Defense",
+    "eco": "C00",
+    "tags": ["opening", "french", "e6"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkbnr/pp2pppp/2p5/3p4/3PP3/8/PPP2PPP/RNBQKBNR b KQkq - 0 3",
+    "phase": "opening",
+    "bucket": "opening",
+    "openingName": "French Defense",
+    "eco": "C00",
+    "tags": ["opening", "french", "e6", "d5"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkbnr/pp2pppp/2p5/3p4/2PP4/8/PP2PPPP/RNBQKBNR w KQkq - 0 3",
+    "phase": "opening",
+    "bucket": "opening",
+    "openingName": "Caro-Kann Defense",
+    "eco": "B10",
+    "tags": ["opening", "caro_kann", "c6"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkb1r/pppppppp/5n2/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2",
+    "phase": "opening",
+    "bucket": "opening_development",
+    "openingName": "Alekhine's Defense",
+    "eco": "B02",
+    "tags": ["opening", "alekhine", "Nf6"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+    "phase": "opening",
+    "bucket": "opening_development",
+    "openingName": "Dunstable Pawn Game",
+    "eco": "C20",
+    "tags": ["opening", "e4"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkbnr/pppp1ppp/8/4p3/4PP2/8/PPPP2PP/RNBQKBNR b KQkq - 0 2",
+    "phase": "opening",
+    "bucket": "opening_gambit",
+    "openingName": "King's Gambit Accepted",
+    "eco": "C33",
+    "tags": ["opening", "gambit", "kings_gambit", "f4"],
+    "source": "seed"
+  },
+  {
+    "fen": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3",
+    "phase": "opening",
+    "bucket": "opening_development",
+    "openingName": "Italian Game",
+    "eco": "C57",
+    "tags": ["opening", "italian", "two_knights", "attack"],
+    "source": "seed"
+  },
+  {
+    "fen": "r1bqkbnr/pppp1ppp/1bn5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 4",
+    "phase": "opening",
+    "bucket": "opening_development",
+    "openingName": "Italian Game / Two Knights",
+    "eco": "C58",
+    "tags": ["opening", "italian", "two_knights", "Nf5"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkb1r/pppp1ppp/4pn2/8/3PP3/8/PPP2PPP/RNBQKBNR w KQkq - 0 4",
+    "phase": "opening",
+    "bucket": "opening",
+    "openingName": "English Opening",
+    "eco": "A10",
+    "tags": ["opening", "english", "d4"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkb1r/pppppppp/5n2/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 1 2",
+    "phase": "opening",
+    "bucket": "opening",
+    "openingName": "Nimzowitsch Defense",
+    "eco": "B00",
+    "tags": ["opening", "nimzowitsch", "Nc6"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqk2r/pppp1ppp/4pn2/8/1bPP4/2N2N2/PP2PPPP/R1BQKB1R w KQkq - 2 5",
+    "phase": "opening",
+    "bucket": "opening_development",
+    "openingName": "Nimzo-Indian Defense",
+    "eco": "E32",
+    "tags": ["opening", "nimzo_indian", "b4"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkb1r/pppppppp/5n2/8/3PP3/8/PPP2PPP/RNBQKBNR b KQkq - 0 3",
+    "phase": "opening",
+    "bucket": "opening",
+    "openingName": "Blackmar-Diemer Gambit",
+    "eco": "C00",
+    "tags": ["opening", "gambit", "d4", "e4"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkb1r/pppp1ppp/5n2/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3",
+    "phase": "opening",
+    "bucket": "opening_development",
+    "openingName": "Petrovsky Defense",
+    "eco": "C42",
+    "tags": ["opening", "petrov", "n5"],
+    "source": "seed"
+  },
+  {
+    "fen": "r1bqkb1r/ppppnppp/2n5/4p3/4P3/2N2N2/PPPP1PPP/R1BQKB1R w KQkq - 2 4",
+    "phase": "opening",
+    "bucket": "opening_development",
+    "openingName": "Four Knights Game",
+    "eco": "C47",
+    "tags": ["opening", "four_knights", "development"],
+    "source": "seed"
+  },
+  {
+    "fen": "r1bqkbnr/pppp1ppp/2n5/8/3Pp3/8/PPP2PPP/RNBQKBNR w KQkq - 0 3",
+    "phase": "opening",
+    "bucket": "opening",
+    "openingName": "Scandinavian: Portuguese Variation",
+    "eco": "B01",
+    "tags": ["opening", "scandinavian", "portuguese", "d4"],
+    "source": "seed"
+  },
+  {
+    "fen": "rnbqkb1r/ppp2ppp/3p1n2/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 4",
+    "phase": "opening",
+    "bucket": "opening_development",
+    "openingName": "French Tarrasch",
+    "eco": "C07",
+    "tags": ["opening", "french", "tarrasch"],
+    "source": "seed"
+  }
+]
