@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { Chess } from "chess.js";
 import { getOptionalAppUserId } from "@/lib/app-auth";
-import { getPieceLinesFromSquare, classifyEngineError, type EngineErrorCode } from "@/lib/engines/dispatcher";
+import { getLegalMoveLines, classifyEngineError, type EngineErrorCode } from "@/lib/engines/dispatcher";
+import { classifyMoveAgainstBest } from "@/lib/move-classification";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,20 +26,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid position or square." }, { status: 400 });
   }
 
-  let lines: Awaited<ReturnType<typeof getPieceLinesFromSquare>> = [];
+  let lines: Awaited<ReturnType<typeof getLegalMoveLines>> = [];
   let engineError: EngineErrorCode | null = null;
 
   try {
-    lines = await getPieceLinesFromSquare(fen, square, { depthLimit: 18 });
+    lines = await getLegalMoveLines(fen, { depthLimit: 18 });
   } catch (error: unknown) {
     engineError = classifyEngineError(error);
     console.error(`[piece-lines] Engine error for fen=${fen} square=${square}:`, error);
   }
 
+  const bestLine = lines[0] ?? null;
+  const selectedSquareLines = lines.filter((line) => line.bestMove.slice(0, 2) === square);
+
   return NextResponse.json({
     ok: engineError === null,
     error: engineError,
-    lines: lines.map((line) => ({
+    lines: selectedSquareLines.map((line) => ({
       cp: line.cp,
       depth: line.depth,
       rank: line.rank,
@@ -46,6 +50,7 @@ export async function POST(request: Request) {
       bestSan: uciToSan(fen, line.bestMove),
       pv: line.pv,
       pvSan: pvToSan(fen, line.pv),
+      classification: classifyMoveAgainstBest(bestLine, line, fen),
     })),
   });
 }

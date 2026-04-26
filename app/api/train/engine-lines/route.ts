@@ -4,6 +4,7 @@ import { getOptionalAppUserId } from "@/lib/app-auth";
 import { getPositionLines, classifyEngineError, type EngineErrorCode } from "@/lib/engines/dispatcher";
 import { getAnalyzePreferencesForUser } from "@/lib/analyze-preferences-store";
 import { normalizeAnalyzePreferences } from "@/lib/analyze-preferences";
+import { classifyRankedMove } from "@/lib/move-classification";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: engineError === null,
     error: engineError,
-    lines: lines.map((line) => ({
+    lines: lines.map((line, index) => ({
       cp: line.cp,
       depth: line.depth,
       rank: line.rank,
@@ -48,6 +49,7 @@ export async function POST(request: Request) {
       bestSan: uciToSan(fen, line.bestMove),
       pv: line.pv,
       pvSan: pvToSan(fen, line.pv),
+      classification: classifyRankedMove(index, lines, fen),
     })),
   });
 }

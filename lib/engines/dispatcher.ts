@@ -39,6 +39,24 @@ export async function getPositionLines(fen: string, options: { depthLimit?: numb
   }) ?? [];
 }
 
+export async function getLegalMoveLines(fen: string, options: { depthLimit?: number } = {}) {
+  let legalMoves: { from: string; to: string; promotion?: string }[] = [];
+  try {
+    const chess = new Chess(fen);
+    legalMoves = chess.moves({ verbose: true });
+  } catch {
+    return [];
+  }
+  if (legalMoves.length === 0) return [];
+
+  const uciMoves = legalMoves.map((move) => `${move.from}${move.to}${move.promotion ?? ""}`);
+  return stockfishHarness.getLines?.(fen, {
+    depthLimit: options.depthLimit ?? 18,
+    multiPv: uciMoves.length,
+    searchMoves: uciMoves,
+  }) ?? [];
+}
+
 export async function getPieceLinesFromSquare(
   fen: string,
   square: string,

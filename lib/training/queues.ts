@@ -1,26 +1,28 @@
-import "server-only";
-
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { extractFenConsequenceFingerprint } from "@/lib/fen-consequence-similarity";
-import type { Json } from "@/lib/supabase/database";
+import { extractFenConsequenceFingerprint } from "../fen-consequence-similarity";
+import type { Json } from "../supabase/database";
+import {
+  ensureTrainingQueuesHavePositionsCore,
+  selectAndReserveNextTrainingPositionCore,
+  updateQueuesAfterSequenceCore,
+  type TrainingQueueItem,
+} from "./queue-core";
 
 const MAX_QUEUE_ITEMS = 20;
-const EXPLORE_REFRESH_TARGET = 12;
-const EXPLORE_REFRESH_THRESHOLD = 6;
-
-export type TrainingQueueItem = {
-  fen: string;
-  fingerprint: Json;
-  scheduledAt: string;
-  source: "initialization" | "elite" | "revisit";
-  cpLoss?: number;
-  sessionId?: string;
-};
 
 type ElitePosition = {
   fen?: unknown;
 };
+
+export type { TrainingQueueItem } from "./queue-core";
+export {
+  getQueueCounts,
+  normalizeRecentServedFens,
+  normalizeRecentServedEntries,
+  prependRecentServedEntry,
+  prependRecentServedFen,
+} from "./queue-core";
 
 export function buildInitializationExploitQueue(
   positions: Array<{ fen: string; cpLoss: number }>,
@@ -41,6 +43,9 @@ export async function updateQueuesAfterSequence({
   startingFen,
   evalPreservationScore,
   sessionId,
+  now = new Date(),
+  recentServedFens = [],
+  exploreSampler = sampleEliteExplorePositions,
 }: {
   currentQueues: {
     exploitQueue: TrainingQueueItem[];
@@ -51,38 +56,19 @@ export async function updateQueuesAfterSequence({
   startingFen: string;
   evalPreservationScore: number | null;
   sessionId: string;
+  now?: Date;
+  recentServedFens?: unknown;
+  exploreSampler?: typeof sampleEliteExplorePositions;
 }) {
-  const now = new Date();
-  const servedFenSet = new Set([startingFen]);
-  const exploitQueue = trimQueue(
-    currentQueues.exploitQueue.filter((item) => !servedFenSet.has(item.fen)),
-  );
-  let exploreQueue = trimQueue(
-    currentQueues.exploreQueue.filter((item) => !servedFenSet.has(item.fen)),
-  );
-  let revisitQueue = trimQueue(
-    currentQueues.revisitQueue.filter((item) => !servedFenSet.has(item.fen)),
-  );
-  const masteredQueue = trimQueue(
-    currentQueues.masteredQueue.filter((item) => !servedFenSet.has(item.fen)),
-  );
-
-  if (evalPreservationScore !== null && evalPreservationScore < 0.6) {
-    const revisitItem = queueItemFromFen(startingFen, "revisit", addDays(now, 1).toISOString(), {
-      sessionId,
-    });
-    if (revisitItem) {
-      revisitQueue = trimQueue([revisitItem, ...revisitQueue.filter((item) => item.fen !== startingFen)]);
-    }
-  }
-
-  return ensureTrainingQueuesHavePositions({
-    exploitQueue,
-    exploreQueue,
-    revisitQueue,
-    masteredQueue,
-    excludeFens: [startingFen],
+  return updateQueuesAfterSequenceCore({
+    currentQueues,
+    startingFen,
+    evalPreservationScore,
+    sessionId,
     now,
+    recentServedFens,
+    itemFactory: queueItemFromFen,
+    exploreSampler,
   });
 }
 
@@ -92,47 +78,44 @@ export async function ensureTrainingQueuesHavePositions({
   revisitQueue,
   masteredQueue,
   excludeFens = [],
+  recentServedFens = [],
   now = new Date(),
+  exploreSampler = sampleEliteExplorePositions,
 }: {
   exploitQueue: TrainingQueueItem[];
   exploreQueue: TrainingQueueItem[];
   revisitQueue: TrainingQueueItem[];
   masteredQueue: TrainingQueueItem[];
   excludeFens?: string[];
+  recentServedFens?: unknown;
   now?: Date;
+  exploreSampler?: typeof sampleEliteExplorePositions;
 }) {
-  const normalizedExploitQueue = trimQueue(exploitQueue);
-  let normalizedExploreQueue = trimQueue(exploreQueue);
-  const normalizedRevisitQueue = trimQueue(revisitQueue);
-  const normalizedMasteredQueue = trimQueue(masteredQueue);
-  const readyCount =
-    normalizedExploitQueue.length +
-    normalizedExploreQueue.length +
-    normalizedRevisitQueue.filter((item) => Date.parse(item.scheduledAt) <= now.getTime()).length +
-    normalizedMasteredQueue.length;
+  return ensureTrainingQueuesHavePositionsCore({
+    exploitQueue,
+    exploreQueue,
+    revisitQueue,
+    masteredQueue,
+    excludeFens,
+    recentServedFens,
+    now,
+    exploreSampler,
+  });
+}
 
-  if (readyCount < EXPLORE_REFRESH_THRESHOLD || normalizedExploreQueue.length < EXPLORE_REFRESH_THRESHOLD) {
-    const excluded = new Set([
-      ...normalizedExploitQueue.map((item) => item.fen),
-      ...normalizedExploreQueue.map((item) => item.fen),
-      ...normalizedRevisitQueue.map((item) => item.fen),
-      ...normalizedMasteredQueue.map((item) => item.fen),
-      ...excludeFens,
-    ]);
-    const additions = await sampleEliteExplorePositions(
-      Math.max(0, EXPLORE_REFRESH_TARGET - normalizedExploreQueue.length),
-      excluded,
-      now,
-    );
-    normalizedExploreQueue = trimQueue([...normalizedExploreQueue, ...additions]);
-  }
-
-  return {
-    exploitQueue: normalizedExploitQueue,
-    exploreQueue: normalizedExploreQueue,
-    revisitQueue: normalizedRevisitQueue,
-    masteredQueue: normalizedMasteredQueue,
-  };
+export async function selectAndReserveNextTrainingPosition(
+  queues: {
+    exploitQueue: TrainingQueueItem[];
+    exploreQueue: TrainingQueueItem[];
+    revisitQueue: TrainingQueueItem[];
+    masteredQueue: TrainingQueueItem[];
+  },
+  options: { completedSequenceCount?: unknown; now?: Date; recentServedFens?: unknown } = {},
+) {
+  return selectAndReserveNextTrainingPositionCore(queues, {
+    ...options,
+    fallbackSampler: sampleEliteExplorePositions,
+  });
 }
 
 export async function selectNextTrainingPosition({
@@ -146,25 +129,13 @@ export async function selectNextTrainingPosition({
   revisitQueue: TrainingQueueItem[];
   masteredQueue: TrainingQueueItem[];
 }, options: { completedSequenceCount?: unknown } = {}) {
-  const now = Date.now();
-  const revisitItem = revisitQueue.find((item) => Date.parse(item.scheduledAt) <= now);
-  if (revisitItem) return revisitItem;
-
-  const completedSequenceCount = normalizeSequenceCount(options.completedSequenceCount);
-  const shouldExplore = exploreQueue.length > 0 && completedSequenceCount % 3 === 2;
-  const queuedItem = shouldExplore
-    ? exploreQueue[0] ?? exploitQueue[0] ?? masteredQueue[0]
-    : exploitQueue[0] ?? exploreQueue[0] ?? masteredQueue[0];
-  if (queuedItem) return queuedItem;
-
-  const [fallback] = await sampleEliteExplorePositions(1, new Set(), new Date());
-  return fallback ?? null;
-}
-
-function normalizeSequenceCount(value: unknown) {
-  const parsed = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(parsed)) return 0;
-  return Math.max(0, Math.floor(parsed));
+  const result = await selectAndReserveNextTrainingPosition({
+    exploitQueue,
+    exploreQueue,
+    revisitQueue,
+    masteredQueue,
+  }, options);
+  return result.item;
 }
 
 export function normalizeQueue(value: Json | null | undefined): TrainingQueueItem[] {
@@ -175,6 +146,13 @@ export function normalizeQueue(value: Json | null | undefined): TrainingQueueIte
     const fen = typeof candidate.fen === "string" ? candidate.fen : "";
     const source = candidate.source;
     const scheduledAt = typeof candidate.scheduledAt === "string" ? candidate.scheduledAt : new Date().toISOString();
+    const gameId = typeof candidate.gameId === "string"
+      ? candidate.gameId
+      : typeof candidate.game_id === "string"
+        ? candidate.game_id
+        : undefined;
+    const parsedPly = typeof candidate.ply === "number" ? candidate.ply : Number(candidate.ply);
+    const ply = Number.isFinite(parsedPly) ? Math.floor(parsedPly) : undefined;
     if (!fen || (source !== "initialization" && source !== "elite" && source !== "revisit")) return [];
     return [{
       fen,
@@ -183,6 +161,8 @@ export function normalizeQueue(value: Json | null | undefined): TrainingQueueIte
       source,
       cpLoss: typeof candidate.cpLoss === "number" ? candidate.cpLoss : undefined,
       sessionId: typeof candidate.sessionId === "string" ? candidate.sessionId : undefined,
+      gameId,
+      ply,
     }];
   });
 }
@@ -224,10 +204,6 @@ async function sampleEliteExplorePositions(count: number, excludeFens: Set<strin
 
 function trimQueue(queue: TrainingQueueItem[]) {
   return queue.slice(0, MAX_QUEUE_ITEMS);
-}
-
-function addDays(date: Date, days: number) {
-  return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
 function shuffle<T>(items: T[]) {

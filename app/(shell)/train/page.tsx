@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Chess, type Square } from "chess.js";
 import { AnalysisBoard, type BoardMove, type EngineArrow } from "@/components/chess/analysis-board";
+import { classifyRankedMove, isRecommendableClassification } from "@/lib/move-classification";
 import {
   analyzeBoardThemeForAppTheme,
   normalizeAnalyzePreferences,
@@ -81,6 +82,7 @@ type EngineLineResult = {
   bestSan: string;
   pv: string[];
   pvSan: string[];
+  classification?: MoveClassification;
 };
 
 type EvalGraphPoint = {
@@ -1026,6 +1028,18 @@ export default function TrainPage() {
   const displayLines = exploreSelectedSquare
     ? (currentPieceLines ?? [])
     : currentEngineLines;
+  const classifiedDisplayLines = useMemo(
+    () => displayLines.map((line, index) => ({
+      ...line,
+      classification: line.classification ?? engineLineClassification(index, displayLines, boardFen),
+    })),
+    [boardFen, displayLines],
+  );
+  const boardEngineLines = exploreSelectedSquare
+    ? classifiedDisplayLines
+    : classifiedDisplayLines.filter((line) => isRecommendableClassification(line.classification));
+  const hoveredEngineLineMove =
+    hoveredEngineLineIndex == null ? null : classifiedDisplayLines[hoveredEngineLineIndex]?.bestMove ?? null;
   const currentEngineEval = currentEngineLines[0]?.cp;
   const isEngineLinesLoading = Boolean(
     isExploringResults && engineLineLoadingFen === boardFen,
@@ -1230,7 +1244,7 @@ export default function TrainPage() {
                               ]
                             : undefined
                       }
-                      engineArrows={buildEngineArrows(displayLines, hoveredEngineLineIndex)}
+                      engineArrows={buildEngineArrows(boardEngineLines, hoveredEngineLineMove)}
                       onMove={(move) => {
                         setExploreSelectedSquare(null);
                         setSelectedMoveIndex(null);
@@ -1299,9 +1313,10 @@ export default function TrainPage() {
               mode={resultMode}
               positions={sequencePositions}
               currentIndex={activeExploreIndex}
-              engineLines={displayLines}
+              engineLines={classifiedDisplayLines}
               isEngineLinesLoading={isDisplayLoading}
               hasEngineLineError={hasEngineLineError}
+              isPieceSelected={Boolean(exploreSelectedSquare)}
               hoveredAnnotationSquare={hoveredAnnotationSquare}
               hoveredEngineLineIndex={hoveredEngineLineIndex}
               onEngineLineHover={setHoveredEngineLineIndex}
@@ -1984,16 +1999,12 @@ function CompactEloLine({ result, isLoading }: { result: EloResult | null; isLoa
   );
 }
 
-function engineLineClassification(index: number, lines: EngineLineResult[]): MoveClassification | undefined {
-  if (lines.length === 0) return undefined;
-  const bestCp = lines[0]!.cp;
-  const loss = Math.abs(lines[index]!.cp - bestCp);
-  if (loss === 0) return "best";
-  if (loss <= 30) return "excellent";
-  if (loss <= 80) return "good";
-  if (loss <= 200) return "inaccuracy";
-  if (loss <= 500) return "mistake";
-  return "blunder";
+function engineLineClassification(
+  index: number,
+  lines: EngineLineResult[],
+  fen: string,
+): MoveClassification | undefined {
+  return classifyRankedMove(index, lines, fen);
 }
 
 function engineLineColor(cls: MoveClassification | undefined): string {
@@ -2004,6 +2015,7 @@ function EngineLinesSection({
   lines,
   isLoading,
   hasError = false,
+  revealBadLines = false,
   hoveredDestinationSquare,
   hoveredIndex,
   onHoverLine,
@@ -2012,6 +2024,7 @@ function EngineLinesSection({
   lines: EngineLineResult[];
   isLoading: boolean;
   hasError?: boolean;
+  revealBadLines?: boolean;
   hoveredDestinationSquare?: string | null;
   hoveredIndex?: number | null;
   onHoverLine?: (index: number | null) => void;
@@ -2041,8 +2054,9 @@ function EngineLinesSection({
         {lines.map((line, index) => {
           const lead = line.bestSan || line.bestMove;
           const pv = line.pvSan.slice(1).join(" ");
-          const cls = engineLineClassification(index, lines);
+          const cls = line.classification;
           const lineColor = engineLineColor(cls);
+          const isBlurred = !revealBadLines && !isRecommendableClassification(cls);
           const isHovered =
             hoveredIndex === index ||
             (hoveredDestinationSquare ? line.bestMove.slice(2, 4) === hoveredDestinationSquare : false);
@@ -2055,6 +2069,8 @@ function EngineLinesSection({
                 borderLeftColor: lineColor,
                 borderLeftWidth: 3,
                 background: isHovered ? "color-mix(in srgb, var(--app-accent) 6%, var(--app-surface-subtle))" : undefined,
+                filter: isBlurred ? "blur(2px)" : undefined,
+                opacity: isBlurred ? 0.48 : undefined,
               }}
               onPointerEnter={() => onHoverLine?.(index)}
               onPointerLeave={() => onHoverLine?.(null)}
@@ -2140,6 +2156,7 @@ function ResultsPanel({
   engineLines,
   isEngineLinesLoading,
   hasEngineLineError,
+  isPieceSelected,
   hoveredAnnotationSquare,
   hoveredEngineLineIndex,
   onEngineLineHover,
@@ -2161,6 +2178,7 @@ function ResultsPanel({
   engineLines: EngineLineResult[];
   isEngineLinesLoading: boolean;
   hasEngineLineError?: boolean;
+  isPieceSelected: boolean;
   hoveredAnnotationSquare: string | null;
   hoveredEngineLineIndex: number | null;
   onEngineLineHover: (index: number | null) => void;
@@ -2184,6 +2202,7 @@ function ResultsPanel({
           lines={engineLines}
           isLoading={isEngineLinesLoading}
           hasError={hasEngineLineError}
+          revealBadLines={isPieceSelected}
           hoveredDestinationSquare={hoveredAnnotationSquare}
           hoveredIndex={hoveredEngineLineIndex}
           onHoverLine={onEngineLineHover}
@@ -2504,15 +2523,15 @@ function formatEval(cp: number) {
 
 function buildEngineArrows(
   lines: EngineLineResult[],
-  emphasizedIndex: number | null = null,
+  emphasizedMoveUci: string | null = null,
 ): EngineArrow[] {
   return lines.map((line, index) => ({
     from: line.bestMove.slice(0, 2),
     to: line.bestMove.slice(2, 4),
     label: formatEval(line.cp),
     rank: index + 1,
-    emphasis: emphasizedIndex === index,
-    color: classificationColor(engineLineClassification(index, lines)),
+    emphasis: emphasizedMoveUci === line.bestMove,
+    color: classificationColor(line.classification),
   }));
 }
 

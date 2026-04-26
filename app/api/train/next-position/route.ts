@@ -4,8 +4,11 @@ import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/database";
 import {
   ensureTrainingQueuesHavePositions,
+  getQueueCounts,
   normalizeQueue,
-  selectNextTrainingPosition,
+  normalizeRecentServedEntries,
+  prependRecentServedEntry,
+  selectAndReserveNextTrainingPosition,
 } from "@/lib/training/queues";
 
 export const runtime = "nodejs";
@@ -25,7 +28,7 @@ export async function GET() {
   const [{ data: profile, error: profileError }, { data: preferences }] = await Promise.all([
     supabase
       .from("user_blindspot_profile")
-      .select("user_id, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue")
+      .select("user_id, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens")
       .eq("user_id", userId)
       .maybeSingle(),
     supabase
@@ -39,34 +42,68 @@ export async function GET() {
     throw new Error(`Failed to load training queues: ${profileError.message}`);
   }
 
-  const queues = await ensureTrainingQueuesHavePositions({
+  const recentServedFens = normalizeRecentServedEntries(profileError ? null : profile?.recent_served_fens);
+  const completedSequenceCount = profileError ? 0 : profile?.total_sequences;
+  const queuesBeforeRefill = {
     exploitQueue: normalizeQueue(profileError ? null : profile?.exploit_queue),
     exploreQueue: normalizeQueue(profileError ? null : profile?.explore_queue),
     revisitQueue: normalizeQueue(profileError ? null : profile?.revisit_queue),
     masteredQueue: normalizeQueue(profileError ? null : profile?.mastered_queue),
+  };
+  const queueCountsBefore = getQueueCounts(queuesBeforeRefill);
+
+  const queues = await ensureTrainingQueuesHavePositions({
+    ...queuesBeforeRefill,
+    recentServedFens,
   });
 
-  await persistQueues(userId, queues, Boolean(profile && !profileError));
-
-  const nextPosition = await selectNextTrainingPosition(queues, {
-    completedSequenceCount: profileError ? 0 : profile?.total_sequences,
+  const reservation = await selectAndReserveNextTrainingPosition(queues, {
+    completedSequenceCount,
+    recentServedFens,
   });
+  const nextPosition = reservation.item;
 
   if (!nextPosition) {
     return NextResponse.json({ error: "No training positions available." }, { status: 404 });
   }
 
-  return NextResponse.json({
+  const nextRecentServedFens = prependRecentServedEntry(recentServedFens, {
+    fen: nextPosition.fen,
+    gameId: nextPosition.gameId,
+    ply: nextPosition.ply,
+  });
+  const queueCountsAfter = getQueueCounts(reservation.queues);
+
+  await persistQueues(userId, reservation.queues, Boolean(profile && !profileError), nextRecentServedFens);
+
+  const response: Record<string, unknown> = {
     fen: nextPosition.fen,
     source: nextPosition.source,
     sequenceLength: normalizeSequenceLength(preferences?.sequence_length),
-  });
+  };
+
+  if (process.env.NODE_ENV !== "production") {
+    response.debug = {
+      selectedQueue: reservation.selectedQueue,
+      queueCountsBefore,
+      queueCountsAfter,
+      selectedFen: nextPosition.fen,
+      wasDueRevisit: reservation.wasDueRevisit,
+      completedSequenceCount,
+      rejectedRecentExactCount: reservation.rejectedRecentExactCount,
+      rejectedNearDuplicateCount: reservation.rejectedNearDuplicateCount,
+      nearDuplicateReason: reservation.nearDuplicateReason,
+    };
+  }
+
+  return NextResponse.json(response);
 }
 
 async function persistQueues(
   userId: string,
   queues: Awaited<ReturnType<typeof ensureTrainingQueuesHavePositions>>,
   hasProfile: boolean,
+  recentServedFens: Array<{ fen: string; gameId?: string; ply?: number }>,
 ) {
   const supabase = getSupabaseAdminClient();
   const values = {
@@ -74,6 +111,7 @@ async function persistQueues(
     explore_queue: queues.exploreQueue as unknown as Json,
     revisit_queue: queues.revisitQueue as unknown as Json,
     mastered_queue: queues.masteredQueue as unknown as Json,
+    recent_served_fens: recentServedFens as unknown as Json,
   };
 
   if (hasProfile) {
