@@ -149,6 +149,7 @@ export function AppShellNav({
 
   return (
     <div
+      data-testid="app-shell-nav"
       className={[
         "app-shell-nav flex flex-wrap items-center justify-end gap-2 md:gap-3",
         className,
@@ -171,8 +172,16 @@ export function AppShellNav({
           );
         })}
       </nav>
-      {isSignedIn && <AppShellSignOutButton />}
-      {!isSignedIn && <AppShellSignInLink nextPath={nextPath} />}
+      {isSignedIn && (
+        <div data-testid="nav-authenticated">
+          <AppShellSignOutButton />
+        </div>
+      )}
+      {!isSignedIn && (
+        <div data-testid="nav-unauthenticated">
+          <AppShellSignInLink nextPath={nextPath} />
+        </div>
+      )}
     </div>
   );
 }
