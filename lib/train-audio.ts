@@ -34,6 +34,8 @@ export type TrainAudioEvent = {
   uci: unknown;
   soundName: TrainSoundName;
   pitchIndex: number;
+  scaleIndex: number;
+  scaleLabel: string;
   playbackRate: number;
   source: "live" | "replay";
   requestedAt: number;
@@ -50,6 +52,8 @@ const TRAIN_SOUND_SOURCES: Record<TrainSoundName, string> = {
 const MOVE_SCALE_RATIOS = [
   1.0, 1.12246, 1.25992, 1.33484, 1.49831, 1.68179, 1.88775, 2.0,
 ] as const;
+
+const MOVE_SCALE_LABELS = ["do", "re", "mi", "fa", "sol", "la", "si", "do"] as const;
 
 type TrainAudioManager = {
   _context: AudioContext | null;
@@ -87,8 +91,20 @@ let _unlockListenersRegistered = false;
 
 export const TRAIN_AUDIO_MANAGER = _instance;
 
+export function pingPongScaleIndex(plyIndex: number): number {
+  const maxIndex = MOVE_SCALE_RATIOS.length - 1;
+  if (maxIndex <= 0) return 0;
+  const period = maxIndex * 2;
+  const normalized = ((plyIndex % period) + period) % period;
+  return normalized <= maxIndex ? normalized : period - normalized;
+}
+
 export function pitchRatioForPly(plyIndex: number) {
-  return MOVE_SCALE_RATIOS[((plyIndex % MOVE_SCALE_RATIOS.length) + MOVE_SCALE_RATIOS.length) % MOVE_SCALE_RATIOS.length];
+  return MOVE_SCALE_RATIOS[pingPongScaleIndex(plyIndex)];
+}
+
+export function scaleLabelForPly(plyIndex: number): string {
+  return MOVE_SCALE_LABELS[pingPongScaleIndex(plyIndex)];
 }
 
 export function primeTrainAudio(): Promise<void> {
@@ -178,6 +194,7 @@ export function playTrainMoveSound(options: PlayTrainSoundOptions): boolean {
   }
 
   const effectivePitchIndex = pitchIndex ?? plyRef?.current ?? 0;
+  const scaleIdx = pingPongScaleIndex(effectivePitchIndex);
   const playbackRate = pitchRatioForPly(effectivePitchIndex);
   const startedAt = performance.now();
   const setupMs = startedAt - requestedAt;
@@ -191,6 +208,8 @@ export function playTrainMoveSound(options: PlayTrainSoundOptions): boolean {
     uci: typeof move.uci === "string" ? move.uci : undefined,
     soundName,
     pitchIndex: effectivePitchIndex,
+    scaleIndex: scaleIdx,
+    scaleLabel: MOVE_SCALE_LABELS[scaleIdx],
     playbackRate,
     source: source ?? "live",
     requestedAt,
