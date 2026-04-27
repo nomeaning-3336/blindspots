@@ -7,13 +7,6 @@
     "source": "seed"
   },
   {
-    "fen": "8/8/8/4k3/8/4K3/8/8 w - - 0 1",
-    "phase": "endgame",
-    "bucket": "endgame_pawn",
-    "tags": ["endgame", "pawn_endgame"],
-    "source": "seed"
-  },
-  {
     "fen": "4k3/8/8/8/8/4K3/4P3/8 w - - 0 1",
     "phase": "endgame",
     "bucket": "endgame_pawn",
@@ -28,16 +21,16 @@
     "source": "seed"
   },
   {
-    "fen": "8/3k4/8/8/8/4K3/8/4Q3 w - - 0 1",
+    "fen": "8/8/8/4k3/8/8/4P3/4K3 w - - 0 1",
     "phase": "endgame",
     "bucket": "endgame_pawn",
-    "tags": ["endgame", "queen_vs_king"],
+    "tags": ["endgame", "pawn_endgame", "central_pawn"],
     "source": "seed"
   },
   {
     "fen": "8/8/8/8/8/8/6k1/4QK2 w - - 0 1",
     "phase": "endgame",
-    "bucket": "endgame_pawn",
+    "bucket": "endgame",
     "tags": ["endgame", "queen_endgame"],
     "source": "seed"
   },
@@ -98,48 +91,6 @@
     "source": "seed"
   },
   {
-    "fen": "8/8/8/8/8/8/8/3QK2k w - - 0 1",
-    "phase": "endgame",
-    "bucket": "endgame",
-    "tags": ["endgame", "queen_endgame"],
-    "source": "seed"
-  },
-  {
-    "fen": "8/8/8/4k3/8/8/8/4K1B1 w - - 0 1",
-    "phase": "endgame",
-    "bucket": "endgame",
-    "tags": ["endgame", "bishop_endgame"],
-    "source": "seed"
-  },
-  {
-    "fen": "8/8/8/8/8/8/6k1/5K1B w - - 0 1",
-    "phase": "endgame",
-    "bucket": "endgame",
-    "tags": ["endgame", "bishop_endgame"],
-    "source": "seed"
-  },
-  {
-    "fen": "8/8/8/8/8/8/5k2/4K1N1 w - - 0 1",
-    "phase": "endgame",
-    "bucket": "endgame",
-    "tags": ["endgame", "knight_endgame"],
-    "source": "seed"
-  },
-  {
-    "fen": "8/8/8/8/8/4k3/8/4K1N1 w - - 0 1",
-    "phase": "endgame",
-    "bucket": "endgame",
-    "tags": ["endgame", "knight_endgame"],
-    "source": "seed"
-  },
-  {
-    "fen": "8/8/8/8/8/4k3/8/4K1B1 w - - 0 1",
-    "phase": "endgame",
-    "bucket": "endgame",
-    "tags": ["endgame", "bishop_knight_mixed"],
-    "source": "seed"
-  },
-  {
     "fen": "8/8/8/8/3k4/8/8/4KQR1 w - - 0 1",
     "phase": "endgame",
     "bucket": "endgame_rook",
@@ -157,14 +108,42 @@
     "fen": "8/8/8/4k3/8/8/5B2/4K3 w - - 0 1",
     "phase": "endgame",
     "bucket": "endgame",
-    "tags": ["endgame", "bishop_vs_pawn"],
+    "tags": ["endgame", "bishop_endgame"],
     "source": "seed"
   },
   {
-    "fen": "8/8/8/8/8/4k3/8/4K1N1 w - - 0 1",
+    "fen": "8/8/8/4k3/8/8/8/4KBN1 w - - 0 1",
     "phase": "endgame",
     "bucket": "endgame",
-    "tags": ["endgame", "knight_vs_pawn"],
+    "tags": ["endgame", "bishop_knight_endgame"],
+    "source": "seed"
+  },
+  {
+    "fen": "8/8/8/4k3/8/8/8/4KRN1 w - - 0 1",
+    "phase": "endgame",
+    "bucket": "endgame_rook",
+    "tags": ["endgame", "rook_knight_endgame"],
+    "source": "seed"
+  },
+  {
+    "fen": "8/8/4k3/8/8/8/8/3QRK2 w - - 0 1",
+    "phase": "endgame",
+    "bucket": "endgame_rook",
+    "tags": ["endgame", "queen_rook_endgame"],
+    "source": "seed"
+  },
+  {
+    "fen": "8/8/8/8/8/4k3/8/3QK3 w - - 0 1",
+    "phase": "endgame",
+    "bucket": "endgame",
+    "tags": ["endgame", "queen_endgame"],
+    "source": "seed"
+  },
+  {
+    "fen": "8/8/8/8/4k3/8/8/3QK3 w - - 0 1",
+    "phase": "endgame",
+    "bucket": "endgame",
+    "tags": ["endgame", "queen_endgame"],
     "source": "seed"
   }
 ]

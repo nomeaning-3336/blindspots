@@ -1,6 +1,6 @@
 # Train FEN Sampling Findings
 
-Generated: 2026-04-27T18:01:52.406Z
+Generated: 2026-04-27T18:40:30.217Z
 
 Total samples: 30
 
@@ -32,26 +32,21 @@ Run only with a dedicated QA account, not a production profile.
 
 ### Serve Mode
 
-- endgame: 2
-- middlegame: 20
-- opening: 5
-- tactic: 3
+- middlegame: 17
+- opening: 11
+- tactic: 2
 
 ### Phase
 
-- endgame: 2
-- middlegame: 20
-- opening: 5
-- tactic: 3
+- middlegame: 17
+- opening: 11
+- tactic: 2
 
 ### Bucket
 
-- endgame_rook: 1
-- endgame_pawn: 1
-- middlegame: 20
-- opening: 4
-- tactic: 3
-- opening_development: 1
+- middlegame: 17
+- opening: 11
+- tactic: 2
 
 ### Source
 
@@ -61,13 +56,13 @@ Run only with a dedicated QA account, not a production profile.
 
 - api-sampling-plus-mocked-ui-replay: 30
 
-### Tactic: yes=3 no=27
+### Tactic: yes=2 no=28
 
 ### API invalid FEN: 0
 
-### UI board FEN unreadable: 24
+### UI board FEN unreadable: 28
 
-### UI board mismatch (verified but wrong): 6
+### UI board mismatch (verified but wrong): 2
 
 ### Terminal/checkmate: 0
 
@@ -78,36 +73,36 @@ Run only with a dedicated QA account, not a production profile.
 sample | testMode | serveMode | phase | bucket | source | apiValid | uiVerified | clientMatch | terminal | screenshot
 
 ---|---|---|---|---|---|---|---|---|---|---|---
-1 | mock | endgame | endgame | endgame_rook | elite | true | true | false | false | yes
-2 | mock | endgame | endgame | endgame_pawn | elite | true | true | false | false | yes
-3 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-4 | mock | opening | opening | opening | elite | true | false | false | false | yes
-5 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
+1 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
+2 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
+3 | mock | opening | opening | opening | elite | true | false | false | false | yes
+4 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
+5 | mock | opening | opening | opening | elite | true | false | false | false | yes
 6 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-7 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
+7 | mock | opening | opening | opening | elite | true | false | false | false | yes
 8 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-9 | mock | tactic | tactic | tactic | elite | true | true | false | false | yes
-10 | mock | tactic | tactic | tactic | elite | true | true | false | false | yes
-11 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-12 | mock | tactic | tactic | tactic | elite | true | true | false | false | yes
-13 | mock | opening | opening | opening | elite | true | false | false | false | yes
-14 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-15 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-16 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
+9 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
+10 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
+11 | mock | opening | opening | opening | elite | true | false | false | false | yes
+12 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
+13 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
+14 | mock | opening | opening | opening | elite | true | false | false | false | yes
+15 | mock | opening | opening | opening | elite | true | false | false | false | yes
+16 | mock | tactic | tactic | tactic | elite | true | true | false | false | yes
 17 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-18 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-19 | mock | opening | opening | opening_development | elite | true | true | false | false | yes
-20 | mock | opening | opening | opening | elite | true | false | false | false | yes
+18 | mock | tactic | tactic | tactic | elite | true | true | false | false | yes
+19 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
+20 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
 21 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-22 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
+22 | mock | opening | opening | opening | elite | true | false | false | false | yes
 23 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-24 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
+24 | mock | opening | opening | opening | elite | true | false | false | false | yes
 25 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-26 | mock | opening | opening | opening | elite | true | false | false | false | yes
-27 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
+26 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
+27 | mock | opening | opening | opening | elite | true | false | false | false | yes
 28 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-29 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-30 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
+29 | mock | opening | opening | opening | elite | true | false | false | false | yes
+30 | mock | opening | opening | opening | elite | true | false | false | false | yes
 
 ## All Findings
 
