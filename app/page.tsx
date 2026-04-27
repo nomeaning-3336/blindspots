@@ -134,11 +134,22 @@ function HeroVisual() {
           maskImage: "radial-gradient(ellipse at center, black 20%, transparent 76%)",
         }}
       />
-      <div className="relative">
-        <TrainingBoard />
-        <div className="mt-2 flex items-center gap-2 px-0.5">
-          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: "var(--app-class-best)" }} />
-          <span className="text-sm font-bold" style={{ color: "var(--app-text)" }}>Black</span>
+      <div className="relative overflow-hidden rounded-lg border border-[var(--app-border)]" style={{ background: "var(--app-panel-strong)" }}>
+        <div className="relative" style={{ background: "color-mix(in srgb, var(--app-bg) 60%, transparent)" }}>
+          <img
+            src="/hero-image.png"
+            alt="Chess positions visualization"
+            className="h-auto w-full object-cover opacity-80"
+          />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <TrainingBoard />
+          </div>
+          <div className="absolute bottom-2 left-0 right-0 flex items-center justify-center">
+            <div className="flex items-center gap-2 px-0.5">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: "var(--app-class-best)" }} />
+              <span className="text-sm font-bold" style={{ color: "var(--app-text)" }}>Black</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

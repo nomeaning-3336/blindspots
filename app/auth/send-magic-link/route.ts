@@ -37,13 +37,22 @@ export async function POST(request: Request) {
   const origin = new URL(request.url).origin;
   const { supabase, applyCookies } = await createSupabaseRouteHandlerClient();
 
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
-      shouldCreateUser: true,
-    },
-  });
+  let error;
+  try {
+    const result = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
+        shouldCreateUser: true,
+      },
+    });
+    error = result.error;
+  } catch {
+    return redirectWithQuery(request, "/auth/email", nextPath, {
+      error: "otp-failed",
+      email,
+    });
+  }
 
   if (error) {
     return redirectWithQuery(request, "/auth/email", nextPath, {
@@ -54,7 +63,7 @@ export async function POST(request: Request) {
 
   return applyCookies(
     NextResponse.redirect(
-      new URL(`/auth/email?next=${encodeURIComponent(nextPath)}&sent=true`, request.url),
+      new URL(`/auth/email?next=${encodeURIComponent(nextPath)}&sent=true&email=${encodeURIComponent(email)}`, request.url),
       303,
     ),
   );

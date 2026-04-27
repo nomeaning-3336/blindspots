@@ -9,6 +9,7 @@ import {
   updateQueuesAfterSequenceCore,
   type TrainingQueueItem,
   type TrainingBucket,
+  type TrainingPhase,
 } from "./queue-core";
 import type { ServeMode } from "./serving-policy";
 
@@ -58,6 +59,7 @@ export async function updateQueuesAfterSequence({
   now = new Date(),
   recentServedFens = [],
   exploreSampler = sampleEliteExplorePositions,
+  selectedMetadata,
 }: {
   currentQueues: {
     exploitQueue: TrainingQueueItem[];
@@ -71,6 +73,15 @@ export async function updateQueuesAfterSequence({
   now?: Date;
   recentServedFens?: unknown;
   exploreSampler?: typeof sampleEliteExplorePositions;
+  selectedMetadata?: {
+    phase?: TrainingPhase;
+    bucket?: TrainingBucket;
+    tags?: string[];
+    isTactic?: boolean;
+    tacticRating?: number;
+    openingName?: string;
+    eco?: string;
+  };
 }) {
   return updateQueuesAfterSequenceCore({
     currentQueues,
@@ -81,6 +92,7 @@ export async function updateQueuesAfterSequence({
     recentServedFens,
     itemFactory: queueItemFromFen,
     exploreSampler,
+    selectedMetadata,
   });
 }
 
@@ -192,6 +204,13 @@ export function normalizeQueue(value: Json | null | undefined): TrainingQueueIte
       previousFen,
       playedMove,
       mateDistancePlies,
+      phase: normalizePhase(candidate.phase),
+      bucket: normalizeBucket(candidate.bucket),
+      tags: normalizeStringArray(candidate.tags),
+      isTactic: candidate.isTactic === true,
+      tacticRating: typeof candidate.tacticRating === "number" ? candidate.tacticRating : undefined,
+      openingName: typeof candidate.openingName === "string" ? candidate.openingName : undefined,
+      eco: typeof candidate.eco === "string" ? candidate.eco : undefined,
     }];
   });
 }
@@ -270,6 +289,38 @@ function normalizeMateDistancePlies(value: unknown) {
   if (!Number.isFinite(parsed)) return undefined;
   const normalized = Math.floor(parsed);
   return normalized >= 0 ? normalized : undefined;
+}
+
+function normalizeStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const strings = value.filter((item): item is string => typeof item === "string");
+  return strings.length > 0 ? strings : undefined;
+}
+
+function normalizePhase(value: unknown): "opening" | "middlegame" | "endgame" | "tactic" | "unknown" | undefined {
+  const v = value;
+  if (v === "opening" || v === "middlegame" || v === "endgame" || v === "tactic" || v === "unknown") return v;
+  return undefined;
+}
+
+function normalizeBucket(value: unknown): TrainingBucket | undefined {
+  const v = value;
+  if (
+    v === "opening" ||
+    v === "opening_gambit" ||
+    v === "opening_development" ||
+    v === "middlegame" ||
+    v === "middlegame_attack" ||
+    v === "middlegame_positional" ||
+    v === "endgame" ||
+    v === "endgame_rook" ||
+    v === "endgame_pawn" ||
+    v === "tactic" ||
+    v === "wildcard"
+  ) {
+    return v as TrainingBucket;
+  }
+  return undefined;
 }
 
 function shuffle<T>(items: T[]) {
@@ -396,10 +447,61 @@ export async function sampleTacticalPositions(
     .slice(0, count);
 }
 
+// ─── Endgame Positions ───────────────────────────────────────────────────────
+
+type EndgamePosition = OpeningPosition;
+
+async function readEndgamePositions(): Promise<EndgamePosition[]> {
+  try {
+    const raw = await readFile(resolve(process.cwd(), "public", "training_endgame_positions.json"), "utf8");
+    return JSON.parse(raw) as EndgamePosition[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Sample endgame positions, enriched with phase/bucket metadata.
+ * Excludes FENs already recently served.
+ */
+export async function sampleEndgamePositions(
+  count: number,
+  excludeFens: Set<string>,
+  now: Date,
+): Promise<TrainingQueueItem[]> {
+  if (count <= 0) return [];
+
+  const positions = await readEndgamePositions();
+  return shuffle(positions)
+    .flatMap((position) => {
+      const fen = typeof position.fen === "string" ? position.fen : "";
+      if (!fen || excludeFens.has(fen)) return [];
+
+      excludeFens.add(fen);
+      const item = queueItemFromFen(fen, "elite", now.toISOString(), {
+        previousFen: enrichPreviousFen(position),
+        playedMove: enrichPlayedMove(position),
+        gameId: enrichGameId(position),
+        ply: enrichPly(position),
+        phase: "endgame",
+        bucket: (enrichBucket(position) ?? "endgame") as TrainingBucket,
+        tags: enrichTags(position) ?? ["endgame"],
+        isTactic: false,
+        tacticRating: enrichTacticRating(position),
+        openingName: undefined,
+        eco: undefined,
+      });
+      return item ? [item] : [];
+    })
+    .slice(0, count);
+}
+
 // ─── Phase/Bucket Samplers ────────────────────────────────────────────────────
 
 /**
  * Sample positions matching a specific phase or bucket from the opening pool.
+ * Dedicated samplers (sampleOpeningPositions, sampleTacticalPositions,
+ * sampleEndgamePositions) should be preferred for each seed pool.
  */
 export async function samplePhasePositions(
   phaseOrBucket: string,
@@ -411,6 +513,9 @@ export async function samplePhasePositions(
   if (phaseOrBucket === "tactic") return sampleTacticalPositions(count, excludeFens, now);
   if (phaseOrBucket === "opening" || phaseOrBucket === "opening_gambit" || phaseOrBucket === "opening_development") {
     return sampleOpeningPositions(count, excludeFens, now);
+  }
+  if (phaseOrBucket === "endgame" || phaseOrBucket === "endgame_pawn" || phaseOrBucket === "endgame_rook") {
+    return sampleEndgamePositions(count, excludeFens, now);
   }
 
   // For middlegame/endgame buckets, filter from opening pool

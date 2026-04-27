@@ -352,7 +352,7 @@ async function selectValidTrainingPosition({
           selectedServeMode,
           selectedPhase,
           selectedBucket,
-          phaseFallbackUsed: false,
+          phaseFallbackUsed: selectedServeMode !== requestedServeMode,
         };
       }
     }

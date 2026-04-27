@@ -74,10 +74,11 @@ export function normalizeRecentServedModes(value: unknown): RecentModeEntry[] {
 }
 
 /**
- * Count modes in the recent window (last TARGET_WINDOW entries).
+ * Count modes in the recent window (newest TARGET_WINDOW entries).
+ * recentModes is newest-first from prependRecentServeMode.
  */
 function countModesInWindow(recentModes: RecentModeEntry[]): ServeModeCount {
-  const window = recentModes.slice(-TARGET_WINDOW);
+  const window = recentModes.slice(0, TARGET_WINDOW);
   const counts: ServeModeCount = { opening: 0, middlegame: 0, endgame: 0, tactic: 0, wildcard: 0 };
   for (const entry of window) {
     if (entry.mode === "opening") counts.opening += 1;
@@ -155,13 +156,13 @@ export function chooseServeMode(input: {
     return "wildcard";
   }
 
-  // No history — deterministic modulo pattern
+  // No history — deterministic fallback for new profile
   const n = completedSequenceCount;
-  if (n > 0 && n % 7 === 0) return "tactic";       // every 7th: tactic
-  if (n > 0 && n % 5 === 0) return "opening";       // every 5th: opening
-  if (n > 0 && n % 6 === 0) return "endgame";       // every 6th: endgame
-  if (n % 4 === 0) return "wildcard";              // every 4th: wildcard
-  // Default: middlegame / exploit
+  if (n === 0) return "opening";                         // first serve: opening
+  if (n > 0 && n % 7 === 0) return "tactic";             // every 7th: tactic
+  if (n > 0 && n % 5 === 0) return "opening";            // every 5th: opening
+  if (n > 0 && n % 6 === 0) return "endgame";           // every 6th: endgame
+  if (n > 0 && n % 4 === 0) return "wildcard";          // every 4th: wildcard
   if (n % 3 === 2) return "explore";
   return "middlegame";
 }

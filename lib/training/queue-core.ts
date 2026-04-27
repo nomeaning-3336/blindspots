@@ -244,6 +244,7 @@ export async function updateQueuesAfterSequenceCore({
   recentServedFens = [],
   itemFactory,
   exploreSampler,
+  selectedMetadata,
 }: {
   currentQueues: TrainingQueues;
   startingFen: string;
@@ -253,11 +254,29 @@ export async function updateQueuesAfterSequenceCore({
   recentServedFens?: unknown;
   itemFactory: QueueItemFactory;
   exploreSampler: ExploreSampler;
+  selectedMetadata?: {
+    phase?: TrainingPhase;
+    bucket?: TrainingBucket;
+    tags?: string[];
+    isTactic?: boolean;
+    tacticRating?: number;
+    openingName?: string;
+    eco?: string;
+  };
 }) {
   let queues = removeFenFromAllQueues(currentQueues, startingFen);
 
   if (evalPreservationScore !== null && evalPreservationScore < 0.6) {
-    const revisitItem = itemFactory(startingFen, "revisit", addDays(now, 1).toISOString(), { sessionId });
+    const revisitItem = itemFactory(startingFen, "revisit", addDays(now, 1).toISOString(), {
+      sessionId,
+      phase: selectedMetadata?.phase,
+      bucket: selectedMetadata?.bucket,
+      tags: selectedMetadata?.tags && selectedMetadata.tags.length > 0 ? selectedMetadata.tags : undefined,
+      isTactic: selectedMetadata?.isTactic === true ? true : undefined,
+      tacticRating: selectedMetadata?.tacticRating,
+      openingName: selectedMetadata?.openingName,
+      eco: selectedMetadata?.eco,
+    });
     if (revisitItem) {
       queues = {
         ...queues,

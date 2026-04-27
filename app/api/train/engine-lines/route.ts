@@ -26,13 +26,17 @@ export async function POST(request: Request) {
   }
 
   const rawPrefs = await getAnalyzePreferencesForUser(userId);
-  const { linesShown } = normalizeAnalyzePreferences(rawPrefs);
+  const { linesShown, limitKind, timeLimitValue, depthLimitValue } = normalizeAnalyzePreferences(rawPrefs);
 
   let lines: Awaited<ReturnType<typeof getPositionLines>> = [];
   let engineError: EngineErrorCode | null = null;
 
   try {
-    lines = await getPositionLines(fen, { depthLimit: 18, multiPv: linesShown });
+    lines = await getPositionLines(fen, {
+      depthLimit: limitKind === "depth" ? depthLimitValue : undefined,
+      timeLimitMs: limitKind === "time" ? timeLimitValue : undefined,
+      multiPv: linesShown,
+    });
   } catch (error: unknown) {
     engineError = classifyEngineError(error);
     console.error(`[engine-lines] Engine error for fen=${fen}:`, error);

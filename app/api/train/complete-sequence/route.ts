@@ -12,7 +12,8 @@ import {
   getOpponentElo,
 } from "@/lib/training/elo";
 import { normalizeBucketStats, recordBucketResult } from "@/lib/training/bandit-stats";
-import type { TrainingBucket } from "@/lib/training/queue-core";
+import { classifyTrainingBucket } from "@/lib/training/position-metadata";
+import type { TrainingBucket, TrainingPhase } from "@/lib/training/queue-core";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +35,12 @@ type CompleteSequencePayload = {
   reflectionNote?: unknown;
   selectedBucket?: unknown;
   selectedServeMode?: unknown;
+  selectedPhase?: unknown;
+  selectedTags?: unknown;
+  selectedIsTactic?: unknown;
+  selectedTacticRating?: unknown;
+  selectedOpeningName?: unknown;
+  selectedEco?: unknown;
 };
 
 type MoveClassification = "excellent" | "good" | "inaccuracy" | "mistake" | "blunder";
@@ -47,8 +54,21 @@ export async function POST(request: Request) {
   const payload = (await request.json().catch(() => null)) as CompleteSequencePayload | null;
   const startingFen = typeof payload?.startingFen === "string" ? payload.startingFen : "";
   const moves = normalizeMoves(payload?.moves);
-  const selectedBucket = typeof payload?.selectedBucket === "string" ? payload.selectedBucket : "middlegame";
+  const selectedPhase = typeof payload?.selectedPhase === "string" ? payload.selectedPhase : null;
+  const selectedBucket =
+    typeof payload?.selectedBucket === "string" && payload.selectedBucket.length > 0
+      ? payload.selectedBucket
+      : classifyTrainingBucket({
+          fen: startingFen,
+          phase: selectedPhase as "opening" | "middlegame" | "endgame" | "tactic" | "unknown" | undefined,
+        });
   const selectedServeMode = typeof payload?.selectedServeMode === "string" ? payload.selectedServeMode : null;
+
+  const selectedTags = normalizeTags(payload?.selectedTags);
+  const selectedIsTactic = typeof payload?.selectedIsTactic === "boolean" ? payload.selectedIsTactic : null;
+  const selectedTacticRating = typeof payload?.selectedTacticRating === "number" ? payload.selectedTacticRating : null;
+  const selectedOpeningName = typeof payload?.selectedOpeningName === "string" ? payload.selectedOpeningName : null;
+  const selectedEco = typeof payload?.selectedEco === "string" ? payload.selectedEco : null;
 
   if (!isValidFen(startingFen) || moves.length === 0) {
     return NextResponse.json({ error: "Invalid sequence." }, { status: 400 });
@@ -116,14 +136,23 @@ export async function POST(request: Request) {
     evalPreservationScore,
     sessionId: session.id,
     recentServedFens: normalizeRecentServedFens(profile.recent_served_fens),
+    selectedMetadata: {
+      phase: (selectedPhase as TrainingPhase) ?? undefined,
+      bucket: selectedBucket as TrainingBucket | undefined,
+      tags: selectedTags ?? undefined,
+      isTactic: selectedIsTactic ?? undefined,
+      tacticRating: selectedTacticRating ?? undefined,
+      openingName: selectedOpeningName ?? undefined,
+      eco: selectedEco ?? undefined,
+    },
   });
 
-  const useBayesianBandit = process.env.TRAIN_USE_BAYESIAN_BANDIT === "true";
   const currentStats = normalizeBucketStats(profile.bucket_stats);
-  const success = evalPreservationScore !== null && evalPreservationScore >= 0.6;
-  const updatedStats = useBayesianBandit
-    ? recordBucketResult(currentStats, selectedBucket, success)
-    : currentStats;
+  const bad =
+    evalPreservationScore !== null &&
+    evalPreservationScore !== undefined &&
+    evalPreservationScore < 0.6;
+  const updatedStats = recordBucketResult(currentStats, selectedBucket, !bad);
 
   const { error: profileError } = await supabase
     .from("user_blindspot_profile")
@@ -283,6 +312,12 @@ function normalizeSequenceLength(value: unknown) {
   const parsed = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(parsed)) return DEFAULT_SEQUENCE_LENGTH;
   return Math.max(MIN_SEQUENCE_LENGTH, Math.min(MAX_SEQUENCE_LENGTH, Math.round(parsed)));
+}
+
+function normalizeTags(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const strings = value.filter((item): item is string => typeof item === "string");
+  return strings.length > 0 ? strings : null;
 }
 
 function isValidFen(fen: string) {

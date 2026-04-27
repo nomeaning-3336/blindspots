@@ -32,14 +32,21 @@ export async function getPositionEval(fen: string) {
   return stockfishHarness.getEval(fen, { depthLimit: 16 });
 }
 
-export async function getPositionLines(fen: string, options: { depthLimit?: number; multiPv?: number } = {}) {
+export async function getPositionLines(
+  fen: string,
+  options: { depthLimit?: number; multiPv?: number; timeLimitMs?: number } = {},
+) {
   return stockfishHarness.getLines?.(fen, {
     depthLimit: options.depthLimit ?? 18,
     multiPv: options.multiPv ?? 5,
+    timeLimitMs: options.timeLimitMs,
   }) ?? [];
 }
 
-export async function getLegalMoveLines(fen: string, options: { depthLimit?: number } = {}) {
+export async function getLegalMoveLines(
+  fen: string,
+  options: { depthLimit?: number; timeLimitMs?: number } = {},
+) {
   let legalMoves: { from: string; to: string; promotion?: string }[] = [];
   try {
     const chess = new Chess(fen);
@@ -54,6 +61,7 @@ export async function getLegalMoveLines(fen: string, options: { depthLimit?: num
     depthLimit: options.depthLimit ?? 18,
     multiPv: uciMoves.length,
     searchMoves: uciMoves,
+    timeLimitMs: options.timeLimitMs,
   }) ?? [];
 }
 
