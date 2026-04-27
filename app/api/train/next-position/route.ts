@@ -19,6 +19,7 @@ import {
 import { validateTrainingQueueItem } from "@/lib/training/position-validity";
 import { getModeSeedCandidates } from "@/lib/training/serve-mode-sampler";
 import { classifyTrainingPhase, enrichTrainingQueueItem } from "@/lib/training/position-metadata";
+import { selectAndReserveNextTrainingPositionCore } from "@/lib/training/queue-core";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +30,14 @@ type NextPositionResponse = {
   playedMove?: string;
   sequenceLength?: number;
   source?: string;
+  selectedServeMode?: string;
+  selectedPhase?: string;
+  selectedBucket?: string;
+  tags?: string[];
+  isTactic?: boolean;
+  tacticRating?: number;
+  openingName?: string;
+  eco?: string;
   error?: string;
   debug?: Record<string, unknown>;
 };
@@ -71,10 +80,14 @@ export async function GET() {
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (!optionalError && optionalData) {
-    recentServedModes = normalizeRecentServedModes(optionalData);
+if (!optionalError && optionalData) {
+    recentServedModes = normalizeRecentServedModes(optionalData?.recent_served_modes);
     bucketStats = optionalData as Record<string, unknown> | null;
   }
+
+  const optionalRecentServedModesRawCount = Array.isArray((optionalData as Record<string, unknown>)?.recent_served_modes)
+    ? ((optionalData as Record<string, unknown>).recent_served_modes as unknown[]).length
+    : null;
 
   const { data: preferences } = await supabase
     .from("user_training_preferences")
@@ -82,7 +95,7 @@ export async function GET() {
     .eq("user_id", userId)
     .maybeSingle();
 
-  const recentServedFens = normalizeRecentRecentEntries(profile?.recent_served_fens ?? null);
+  const recentServedFens = normalizeRecentServedEntries(profile?.recent_served_fens ?? null);
   const completedSequenceCount = profile?.total_sequences ?? 0;
   const queuesBeforeRefill = {
     exploitQueue: normalizeQueue(profile?.exploit_queue ?? null),
@@ -98,7 +111,7 @@ export async function GET() {
     recentServedFens,
   });
 
-  const serveMode = chooseServeMode({
+  const requestedServeMode = chooseServeMode({
     completedSequenceCount,
     dueRevisitCount: queues.revisitQueue.filter((item) => Date.parse(item.scheduledAt) <= new Date().getTime()).length,
     recentModes: recentServedModes,
@@ -109,7 +122,7 @@ export async function GET() {
     completedSequenceCount,
     recentServedFens,
     sequenceLength,
-    serveMode,
+    requestedServeMode,
   });
   const nextPosition = selection.item;
 
@@ -119,8 +132,7 @@ export async function GET() {
       selection.queues,
       Boolean(profile),
       recentServedFens,
-      recentServedModes,
-      bucketStats,
+      /* no position served — skip prepending to recentServedModes */
     );
 
     const response: NextPositionResponse = {
@@ -142,7 +154,7 @@ export async function GET() {
     gameId: nextPosition.gameId,
     ply: nextPosition.ply,
   });
-  const nextRecentServedModes = prependRecentServeMode(recentServedModes, serveMode);
+  const nextRecentServedModes = prependRecentServeMode(recentServedModes, selection.selectedServeMode);
   const queueCountsAfter = getQueueCounts(selection.queues);
 
   await persistQueues(userId, selection.queues, Boolean(profile), nextRecentServedFens, nextRecentServedModes, bucketStats);
@@ -155,6 +167,14 @@ export async function GET() {
     playedMove: nextPosition.playedMove ?? undefined,
     source: nextPosition.source,
     sequenceLength,
+    selectedServeMode: selection.selectedServeMode,
+    selectedPhase: enriched.phase ?? selection.selectedPhase,
+    selectedBucket: enriched.bucket ?? selection.selectedBucket,
+    tags: nextPosition.tags,
+    isTactic: nextPosition.isTactic,
+    tacticRating: nextPosition.tacticRating,
+    openingName: nextPosition.openingName,
+    eco: nextPosition.eco,
   };
 
   if (process.env.NODE_ENV !== "production") {
@@ -171,11 +191,25 @@ export async function GET() {
       rejectedInvalidCount: selection.rejectedInvalidCount,
       rejectedInvalidReasons: selection.rejectedInvalidReasons,
       selectedFenValidity: selection.selectedFenValidity,
-      requestedServeMode: serveMode,
-      selectedServeMode: selection.selectedServeMode ?? serveMode,
+      requestedServeMode,
+      selectedServeMode: selection.selectedServeMode,
       selectedPhase: enriched.phase ?? selection.selectedPhase,
       selectedBucket: enriched.bucket ?? selection.selectedBucket,
       phaseFallbackUsed: selection.phaseFallbackUsed,
+      // Safe recommender diagnostics for QA
+      recentServedModesCount: recentServedModes.length,
+      recentServedModesPreview: recentServedModes.slice(0, 10).map((e) => e.mode),
+      dueRevisitCount: queues.revisitQueue.filter(
+        (item) => Date.parse(item.scheduledAt) <= new Date().getTime(),
+      ).length,
+      // QA debug: prove recentServedModes grew per call
+      profileUserId: userId,
+      recentServedModesSource: optionalError ? "optional-query-error" : "optional-query",
+      optionalRecentServedModesRawCount: optionalRecentServedModesRawCount,
+      recentServedModesBeforeCount: recentServedModes.length,
+      recentServedModesBeforePreview: recentServedModes.slice(0, 5).map((e) => e.mode),
+      nextRecentServedModesCount: nextRecentServedModes.length,
+      nextRecentServedModesPreview: nextRecentServedModes.slice(0, 5).map((e) => e.mode),
     };
   }
 
@@ -184,8 +218,27 @@ export async function GET() {
 
 type RecentEntry = { fen: string; gameId?: string; ply?: number };
 
-function normalizeRecentRecentEntries(value: unknown): RecentEntry[] {
-  return normalizeRecentServedEntries(value);
+function deriveServeModeFromCandidate(input: {
+  requestedServeMode: ServeMode;
+  phase?: string;
+  bucket?: string;
+  isTactic?: boolean;
+  selectedQueue?: string | null;
+}): ServeMode {
+  if (input.selectedQueue === "revisit") return "revisit";
+  if (input.isTactic === true) return "tactic";
+  if (input.bucket === "tactic") return "tactic";
+  if (input.phase === "tactic") return "tactic";
+  if (input.bucket?.startsWith("opening")) return "opening";
+  if (input.phase === "opening") return "opening";
+  if (input.bucket?.startsWith("endgame")) return "endgame";
+  if (input.phase === "endgame") return "endgame";
+  if (input.bucket?.startsWith("middlegame")) return "middlegame";
+  if (input.phase === "middlegame") return "middlegame";
+  if (input.requestedServeMode === "wildcard") return "wildcard";
+  if (input.requestedServeMode === "exploit") return "exploit";
+  if (input.requestedServeMode === "explore") return "explore";
+  return input.requestedServeMode;
 }
 
 async function selectValidTrainingPosition({
@@ -193,13 +246,13 @@ async function selectValidTrainingPosition({
   completedSequenceCount,
   recentServedFens,
   sequenceLength,
-  serveMode,
+  requestedServeMode,
 }: {
   queues: Awaited<ReturnType<typeof ensureTrainingQueuesHavePositions>>;
   completedSequenceCount: number;
   recentServedFens: RecentEntry[];
   sequenceLength: number;
-  serveMode: ServeMode;
+  requestedServeMode: ServeMode;
 }) {
   let currentQueues = queues;
   const invalidRecentEntries: RecentEntry[] = [];
@@ -221,6 +274,15 @@ async function selectValidTrainingPosition({
   const dueRevisit = currentQueues.revisitQueue.find((item) => Date.parse(item.scheduledAt) <= now.getTime());
   if (dueRevisit) {
     const enriched = enrichTrainingQueueItem(dueRevisit);
+    selectedPhase = enriched.phase;
+    selectedBucket = enriched.bucket;
+    selectedServeMode = deriveServeModeFromCandidate({
+      requestedServeMode,
+      phase: selectedPhase,
+      bucket: selectedBucket,
+      isTactic: dueRevisit.isTactic,
+      selectedQueue: "revisit",
+    });
     return {
       item: dueRevisit,
       selectedQueue: "revisit" as const,
@@ -232,50 +294,67 @@ async function selectValidTrainingPosition({
       rejectedInvalidCount: 0,
       rejectedInvalidReasons: [] as string[],
       selectedFenValidity: null,
-      selectedServeMode: "revisit" as ServeMode,
-      selectedPhase: enriched.phase,
-      selectedBucket: enriched.bucket,
-      phaseFallbackUsed: false,
+      selectedServeMode,
+      selectedPhase,
+      selectedBucket,
+      phaseFallbackUsed: requestedServeMode !== "revisit",
     };
   }
 
   // Step 2: For opening/tactic/endgame/middlegame/wildcard modes, try seed candidates first
-  if (serveMode === "opening" || serveMode === "tactic" || serveMode === "endgame" || serveMode === "middlegame" || serveMode === "wildcard") {
-    const seedCandidates = await getModeSeedCandidates(serveMode, recentFenSet, now, 30);
-    for (const candidate of seedCandidates) {
-      const enriched = enrichTrainingQueueItem(candidate);
+  if (requestedServeMode === "opening" || requestedServeMode === "tactic" || requestedServeMode === "endgame" || requestedServeMode === "middlegame" || requestedServeMode === "wildcard") {
+    const seedCandidates = await getModeSeedCandidates(requestedServeMode, recentFenSet, now, 30);
 
-      // Check validity
-      const validity = validateTrainingQueueItem(candidate, { sequenceLength });
-      if (!validity.ok) continue;
+    const seedSelection = await selectAndReserveNextTrainingPositionCore(
+      {
+        exploitQueue: seedCandidates,
+        exploreQueue: [],
+        revisitQueue: [],
+        masteredQueue: [],
+      },
+      {
+        completedSequenceCount,
+        recentServedFens: [...recentServedFens, ...invalidRecentEntries],
+      },
+    );
 
-      // Check recent exact
-      if (recentFenSet.has(candidate.fen)) {
-        rejectedRecentExactCount += 1;
-        continue;
+    // Merge diagnostics before checking success so failures still count
+    rejectedRecentExactCount += seedSelection.rejectedRecentExactCount;
+    rejectedNearDuplicateCount += seedSelection.rejectedNearDuplicateCount;
+    if (seedSelection.nearDuplicateReason) {
+      nearDuplicateReason = seedSelection.nearDuplicateReason;
+    }
+
+    if (seedSelection.item) {
+      const enriched = enrichTrainingQueueItem(seedSelection.item);
+      selectedFenValidity = validateTrainingQueueItem(seedSelection.item, { sequenceLength });
+      if (selectedFenValidity.ok) {
+        selectedPhase = enriched.phase ?? classifyPhaseFromFen(seedSelection.item.fen);
+        selectedBucket = enriched.bucket;
+        selectedServeMode = deriveServeModeFromCandidate({
+          requestedServeMode,
+          phase: selectedPhase,
+          bucket: selectedBucket,
+          isTactic: seedSelection.item.isTactic,
+          selectedQueue: "seed",
+        });
+        return {
+          item: seedSelection.item,
+          selectedQueue: "seed" as TrainingQueueName,
+          wasDueRevisit: false,
+          queues: currentQueues,
+          rejectedRecentExactCount,
+          rejectedNearDuplicateCount,
+          nearDuplicateReason,
+          rejectedInvalidCount: rejectedInvalidReasons.length,
+          rejectedInvalidReasons,
+          selectedFenValidity,
+          selectedServeMode,
+          selectedPhase,
+          selectedBucket,
+          phaseFallbackUsed: false,
+        };
       }
-
-      // Return this seed candidate
-      selectedPhase = enriched.phase ?? classifyPhaseFromFen(candidate.fen);
-      selectedBucket = enriched.bucket;
-      selectedServeMode = serveMode;
-      selectedFenValidity = validity;
-      return {
-        item: candidate,
-        selectedQueue: "seed" as TrainingQueueName,
-        wasDueRevisit: false,
-        queues: currentQueues,
-        rejectedRecentExactCount,
-        rejectedNearDuplicateCount,
-        nearDuplicateReason,
-        rejectedInvalidCount: rejectedInvalidReasons.length,
-        rejectedInvalidReasons,
-        selectedFenValidity,
-        selectedServeMode: serveMode,
-        selectedPhase,
-        selectedBucket,
-        phaseFallbackUsed: false,
-      };
     }
 
     // No valid seed candidate found — fall back to queue selection
@@ -291,7 +370,9 @@ async function selectValidTrainingPosition({
 
     rejectedRecentExactCount += reservation.rejectedRecentExactCount;
     rejectedNearDuplicateCount += reservation.rejectedNearDuplicateCount;
-    nearDuplicateReason ??= reservation.nearDuplicateReason;
+    if (reservation.nearDuplicateReason) {
+      nearDuplicateReason = reservation.nearDuplicateReason;
+    }
     selectedQueue = reservation.selectedQueue;
     wasDueRevisit = reservation.wasDueRevisit;
     currentQueues = reservation.queues;
@@ -312,7 +393,13 @@ async function selectValidTrainingPosition({
       selectedFenValidity = validity;
       selectedPhase = enriched.phase;
       selectedBucket = enriched.bucket;
-      selectedServeMode ??= serveMode;
+      selectedServeMode = deriveServeModeFromCandidate({
+        requestedServeMode,
+        phase: selectedPhase,
+        bucket: selectedBucket,
+        isTactic: reservation.item.isTactic,
+        selectedQueue,
+      });
       return {
         item: reservation.item,
         selectedQueue,
@@ -351,7 +438,7 @@ async function selectValidTrainingPosition({
     rejectedInvalidCount: rejectedInvalidReasons.length,
     rejectedInvalidReasons,
     selectedFenValidity,
-    selectedServeMode: serveMode,
+    selectedServeMode: requestedServeMode,
     selectedPhase,
     selectedBucket,
     phaseFallbackUsed,
@@ -365,7 +452,7 @@ async function persistQueues(
   queues: Awaited<ReturnType<typeof ensureTrainingQueuesHavePositions>>,
   hasProfile: boolean,
   recentServedFens: RecentEntry[],
-  recentServedModes?: ReturnType<typeof prependRecentServeMode>,
+  recentServedModes: ReturnType<typeof prependRecentServeMode> | undefined,
   _bucketStats?: Record<string, unknown> | null,
 ) {
   const supabase = getSupabaseAdminClient();
