@@ -110,6 +110,14 @@ type NextPositionResponse = {
   playedMove?: string;
   sequenceLength?: number;
   source?: string;
+  selectedServeMode?: string;
+  selectedPhase?: string;
+  selectedBucket?: string;
+  tags?: string[];
+  isTactic?: boolean;
+  tacticRating?: number;
+  openingName?: string;
+  eco?: string;
   error?: string;
 };
 
@@ -264,6 +272,8 @@ export default function TrainPage() {
   const [connectionMessage, setConnectionMessage] = useState("");
   const [isConnectingProfile, setIsConnectingProfile] = useState(false);
   const [positionLoadError, setPositionLoadError] = useState<string | null>(null);
+  const [isAwaitingStartGesture, setIsAwaitingStartGesture] = useState(false);
+  const [pendingInitialEngineMove, setPendingInitialEngineMove] = useState<NextPositionResponse | null>(null);
   const [analysisStep, setAnalysisStep] = useState(0);
   const [analysisError, setAnalysisError] = useState("");
   const [analysisElapsedMs, setAnalysisElapsedMs] = useState(0);
@@ -281,6 +291,14 @@ export default function TrainPage() {
   const completionRequestRef = useRef(0);
   const initialOpponentMoveRef = useRef<TrainingMove | null>(null);
   const initialOpponentRequestRef = useRef(0);
+  const selectedServeModeRef = useRef<string | null>(null);
+  const selectedBucketRef = useRef<string | null>(null);
+  const selectedPhaseRef = useRef<string | null>(null);
+  const selectedTagsRef = useRef<string[] | null>(null);
+  const selectedIsTacticRef = useRef<boolean | null>(null);
+  const selectedTacticRatingRef = useRef<number | null>(null);
+  const selectedOpeningNameRef = useRef<string | null>(null);
+  const selectedEcoRef = useRef<string | null>(null);
   const [initialOpponentMove, setInitialOpponentMove] = useState<TrainingMove | null>(null);
   const [displayStartingFen, setDisplayStartingFen] = useState(mockRep.fen);
   const [activeSetupReplayIndex, setActiveSetupReplayIndex] = useState<0 | 1>(1);
@@ -357,6 +375,63 @@ export default function TrainPage() {
     void primeTrainAudio();
     setupTrainAudioUnlockOnGesture();
   }, []);
+
+  // Test hook: exposes board FEN and setup state to QA tests.
+  // Exposes state.fen (the core state that drives AnalysisBoard rendering),
+  // plus setup overlay state. Does not include PII, auth tokens, queue data.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__blindspotsTrainState = {
+      fen,
+      boardFen: fen,
+      currentFen: fen,
+      isAwaitingStartGesture,
+      pendingInitialEngineMove: pendingInitialEngineMove
+        ? {
+            previousFen: pendingInitialEngineMove.previousFen,
+            playedMove: pendingInitialEngineMove.playedMove,
+            fen: pendingInitialEngineMove.fen,
+          }
+        : null,
+    };
+  }, [fen, isAwaitingStartGesture, pendingInitialEngineMove]);
+
+  // Start gesture handler — intercepts the first user interaction to unlock audio
+  // and play the pending initial engine move.
+  useEffect(() => {
+    if (!isAwaitingStartGesture) return;
+
+    function handleGesture(e: MouseEvent | KeyboardEvent) {
+      // Ignore keyboard events from editable elements
+      const target = e.target as Element;
+      const tag = target.tagName.toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select" || target.getAttribute("contenteditable") === "true") return;
+
+      // For keyboard events, only respond to meaningful keys (not modifiers alone)
+      if (e instanceof KeyboardEvent) {
+        if (e.key === "Shift" || e.key === "Control" || e.key === "Alt" || e.key === "Meta") return;
+      }
+
+      const pending = pendingInitialEngineMove;
+      if (!pending) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      setIsAwaitingStartGesture(false);
+      setPendingInitialEngineMove(null);
+      void unlockTrainAudio();
+      void playInitialOpponentMoveFromPayload(pending);
+    }
+
+    window.addEventListener("pointerdown", handleGesture);
+    window.addEventListener("keydown", handleGesture);
+    return () => {
+      window.removeEventListener("pointerdown", handleGesture);
+      window.removeEventListener("keydown", handleGesture);
+    };
+  }, [isAwaitingStartGesture, pendingInitialEngineMove]);
 
   useEffect(() => {
     if (onboardingScreen !== "analysis") return;
@@ -450,6 +525,59 @@ export default function TrainPage() {
 
   function applyNextPosition(payload: NextPositionResponse) {
     if (!payload.fen) return;
+
+    const debug = (payload as Record<string, unknown>).debug as Record<string, unknown> | undefined;
+    selectedServeModeRef.current =
+      (payload.selectedServeMode as string | null | undefined) ??
+      (debug?.selectedServeMode as string | null | undefined) ??
+      (debug?.requestedServeMode as string | null | undefined) ??
+      null;
+
+    selectedBucketRef.current =
+      (payload.selectedBucket as string | null | undefined) ??
+      (debug?.selectedBucket as string | null | undefined) ??
+      null;
+
+    selectedPhaseRef.current =
+      (payload.selectedPhase as string | null | undefined) ??
+      (debug?.selectedPhase as string | null | undefined) ??
+      null;
+
+    selectedTagsRef.current =
+      Array.isArray(payload.tags)
+        ? payload.tags.filter((tag): tag is string => typeof tag === "string")
+        : Array.isArray(debug?.tags)
+          ? (debug.tags as string[]).filter((tag): tag is string => typeof tag === "string")
+          : null;
+
+    selectedIsTacticRef.current =
+      typeof payload.isTactic === "boolean"
+        ? payload.isTactic
+        : typeof debug?.isTactic === "boolean"
+          ? (debug.isTactic as boolean)
+          : null;
+
+    selectedTacticRatingRef.current =
+      typeof payload.tacticRating === "number"
+        ? payload.tacticRating
+        : typeof debug?.tacticRating === "number"
+          ? (debug.tacticRating as number)
+          : null;
+
+    selectedOpeningNameRef.current =
+      typeof payload.openingName === "string"
+        ? payload.openingName
+        : typeof debug?.openingName === "string"
+          ? (debug.openingName as string)
+          : null;
+
+    selectedEcoRef.current =
+      typeof payload.eco === "string"
+        ? payload.eco
+        : typeof debug?.eco === "string"
+          ? (debug.eco as string)
+          : null;
+
     completingRef.current = false;
     initialOpponentMoveRef.current = null;
     setInitialOpponentMove(null);
@@ -473,7 +601,8 @@ export default function TrainPage() {
     setSequenceLength(normalizeSequenceLength(payload.sequenceLength));
 
     if (payload.previousFen && payload.playedMove) {
-      void playInitialOpponentMoveFromPayload(payload);
+      setPendingInitialEngineMove(payload);
+      setIsAwaitingStartGesture(true);
     } else {
       void playInitialOpponentMove(payload.fen);
     }
@@ -504,7 +633,7 @@ export default function TrainPage() {
     if (initialOpponentRequestRef.current !== requestId) return;
 
     setLastMove(applied.lastMove);
-    playTrainMoveSound({ move: applied.move, plyRef: moveSoundPlyRef });
+    playTrainMoveSound({ move: applied.move, plyRef: moveSoundPlyRef, source: "initial-engine" });
     await sleep(540);
 
     if (initialOpponentRequestRef.current !== requestId) return;
@@ -828,6 +957,14 @@ export default function TrainPage() {
           startingFen,
           moves: finalMoves,
           sequenceLength,
+          selectedServeMode: selectedServeModeRef.current,
+          selectedBucket: selectedBucketRef.current,
+          selectedPhase: selectedPhaseRef.current,
+          selectedTags: selectedTagsRef.current,
+          selectedIsTactic: selectedIsTacticRef.current,
+          selectedTacticRating: selectedTacticRatingRef.current,
+          selectedOpeningName: selectedOpeningNameRef.current,
+          selectedEco: selectedEcoRef.current,
         }),
       });
       const payload = (await response.json().catch(() => null)) as
@@ -1313,8 +1450,9 @@ export default function TrainPage() {
         <section
           className="flex items-center justify-center rounded-[14px] border border-[var(--app-border-soft)] bg-[var(--app-panel-strong)] p-3 transition-colors sm:p-5 lg:min-h-0 lg:p-8"
         >
-          <div className="w-full max-w-[min(92vw,74vh,920px)]">
+          <div className="relative w-full max-w-[min(92vw,74vh,920px)]">
             {visualPreferences && !isPositionLoading ? (
+              <>
               <BoardWithPlayerStrips
                 userSide={userMoveSide}
                 boardFen={boardFen}
@@ -1397,7 +1535,7 @@ export default function TrainPage() {
                     lastMove={replayLastMove}
                     boardTheme={visualPreferences.boardTheme}
                     pieceTheme={visualPreferences.pieceTheme}
-                    disabled={state !== "active" || isOpponentThinking || (isActiveSetupReplay && activeSetupReplayIndex === 0)}
+                    disabled={state !== "active" || isOpponentThinking || isAwaitingStartGesture || (isActiveSetupReplay && activeSetupReplayIndex === 0)}
                     annotationsDisabled={false}
                     highlightedSquares={getTrainingBoardHighlights(state)}
                     onMove={handleMove}
@@ -1405,6 +1543,17 @@ export default function TrainPage() {
                   />
                 )}
               </BoardWithPlayerStrips>
+              {isAwaitingStartGesture ? (
+                <div
+                  className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-[10px] bg-black/70 backdrop-blur-sm"
+                  data-testid="audio-unlock-overlay"
+                >
+                  <p className="text-sm font-bold uppercase tracking-[0.18em] text-white">
+                    Press any key or click the board to start
+                  </p>
+                </div>
+              ) : null}
+            </>
             ) : (
               <div
                 className="grid aspect-square w-full place-items-center rounded-[10px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] text-sm font-bold text-[var(--app-muted)]"

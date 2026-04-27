@@ -4,7 +4,7 @@
  */
 
 import type { TrainingQueueItem } from "./queue-core";
-import { sampleOpeningPositions, sampleTacticalPositions, samplePhasePositions } from "./queues";
+import { sampleOpeningPositions, sampleTacticalPositions, sampleEndgamePositions } from "./queues";
 import type { ServeMode } from "./serving-policy";
 
 export async function getModeSeedCandidates(
@@ -21,7 +21,7 @@ export async function getModeSeedCandidates(
     case "tactic":
       return sampleTacticalPositions(count, excludeFens, now);
     case "endgame":
-      return samplePhasePositions("endgame", count, excludeFens, now);
+      return sampleEndgamePositions(count, excludeFens, now);
     case "middlegame":
     case "middlegame_attack":
     case "middlegame_positional":

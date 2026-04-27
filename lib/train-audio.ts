@@ -7,7 +7,7 @@ export type PlayTrainSoundOptions = {
   pitchIndex?: number;
   advanceLivePitch?: boolean;
   plyRef?: { current: number };
-  source?: "live" | "replay";
+  source?: "live" | "replay" | "initial-engine";
 };
 
 export type TrainSoundMove = {
@@ -37,7 +37,7 @@ export type TrainAudioEvent = {
   scaleIndex: number;
   scaleLabel: string;
   playbackRate: number;
-  source: "live" | "replay";
+  source: "live" | "replay" | "initial-engine";
   requestedAt: number;
   startedAt: number;
   setupMs: number;

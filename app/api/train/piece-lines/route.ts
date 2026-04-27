@@ -3,6 +3,8 @@ import { Chess } from "chess.js";
 import { getOptionalAppUserId } from "@/lib/app-auth";
 import { getLegalMoveLines, classifyEngineError, type EngineErrorCode } from "@/lib/engines/dispatcher";
 import { classifyMoveAgainstBest } from "@/lib/move-classification";
+import { getAnalyzePreferencesForUser } from "@/lib/analyze-preferences-store";
+import { normalizeAnalyzePreferences } from "@/lib/analyze-preferences";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,11 +28,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid position or square." }, { status: 400 });
   }
 
+  const rawPrefs = await getAnalyzePreferencesForUser(userId);
+  const { limitKind, timeLimitValue, depthLimitValue } = normalizeAnalyzePreferences(rawPrefs);
+
   let lines: Awaited<ReturnType<typeof getLegalMoveLines>> = [];
   let engineError: EngineErrorCode | null = null;
 
   try {
-    lines = await getLegalMoveLines(fen, { depthLimit: 18 });
+    lines = await getLegalMoveLines(fen, {
+      depthLimit: limitKind === "depth" ? depthLimitValue : undefined,
+      timeLimitMs: limitKind === "time" ? timeLimitValue : undefined,
+    });
   } catch (error: unknown) {
     engineError = classifyEngineError(error);
     console.error(`[piece-lines] Engine error for fen=${fen} square=${square}:`, error);

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PublicHeaderClient } from "@/components/public-header";
 import { getOptionalAppUserId, normalizeNextPath } from "@/lib/app-auth";
+import { EmailAuthHashHandler } from "./hash-handler";
 
 function resolveErrorMessage(error?: string | null) {
   switch (error) {
@@ -9,6 +10,8 @@ function resolveErrorMessage(error?: string | null) {
       return "Enter an email address. We will take it from there.";
     case "otp-failed":
       return "Failed to send a link. Try again in a moment.";
+    case "link-expired":
+      return "That link expired. No worries — request a fresh one.";
     case "auth-callback":
       return "The link fell over on the way back. Try again.";
     case "oauth-failed":
@@ -53,6 +56,7 @@ export default async function EmailAuthPage({
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-transparent">
+      <EmailAuthHashHandler />
       <PublicHeaderClient isSignedIn={false} />
       <main className="flex min-h-0 w-full flex-1 overflow-auto px-4 pb-4 pt-3 md:px-6">
         <div className="mx-auto flex w-full max-w-5xl items-center justify-center">
@@ -82,18 +86,15 @@ export default async function EmailAuthPage({
                   <p className="text-center text-xs text-[var(--app-muted)]">
                     The link expires in about an hour. If you do not see it, check your spam folder.
                   </p>
-                  <button
-                    onClick={() => {
-                      const form = document.getElementById("retry-form") as HTMLFormElement;
-                      if (form) form.submit();
-                    }}
-                    className="mt-2 h-12 w-full border-2 border-[var(--app-border)] bg-[var(--app-surface-input)] text-[13px] font-bold uppercase tracking-[0.18em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:bg-[var(--app-accent-soft)]"
-                  >
-                    Send another link
-                  </button>
-                  <form id="retry-form" action="/auth/send-magic-link" method="post" className="hidden">
+                  <form action="/auth/send-magic-link" method="post" className="grid gap-4">
                     <input type="hidden" name="next" value={nextPath} />
                     <input type="hidden" name="email" value={email ?? ""} />
+                    <button
+                      type="submit"
+                      className="mt-2 h-12 w-full border-2 border-[var(--app-border)] bg-[var(--app-surface-input)] text-[13px] font-bold uppercase tracking-[0.18em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:bg-[var(--app-accent-soft)]"
+                    >
+                      Send another link
+                    </button>
                   </form>
                 </div>
               ) : (
