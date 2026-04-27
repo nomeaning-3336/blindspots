@@ -12,6 +12,7 @@
     "watch:analyze-css": "tailwindcss -i ./standalone.tailwind.css -o ./standalone.css --watch",
     "test:theme-backgrounds": "node scripts/check-theme-backgrounds.mjs",
     "test:analysis-multipv": "node scripts/check-analysis-multipv-snapshots.mjs",
+    "db:query": "node --env-file=.env.agent.local scripts/db-query.mjs",
     "test:performance-time-management": "node --test --experimental-strip-types tests/performance-time-management.test.ts",
     "test:performance-client-analysis": "node --test --experimental-strip-types tests/performance-client-analysis.test.ts",
     "index:build:10k": "python scripts/build-position-index-sample.py --limit 10000 && node --experimental-strip-types scripts/fingerprint-position-index.ts && node --experimental-strip-types scripts/build-compact-position-index.ts",
@@ -21,6 +22,7 @@
     "index:benchmark:10k": "node --experimental-strip-types scripts/benchmark-position-index-search.ts"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@tailwindcss/cli": "^4.2.2",
     "@tailwindcss/postcss": "^4.2.2",
     "@types/node": "^25.5.0",
@@ -36,6 +38,7 @@
     "@supabase/supabase-js": "^2.100.1",
     "chess.js": "^1.4.0",
     "next": "^16.2.1",
+    "pg": "^8.20.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   }

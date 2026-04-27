@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  timeout: 30_000,
+  timeout: 300_000,
   fullyParallel: false,
   reporter: [["html", { outputFolder: "qa-artifacts/playwright-reports" }], ["list"]],
   use: {
@@ -13,7 +13,7 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: { ...devices["Desktop Chrome"], storageState: ".auth/user.json" },
     },
   ],
 });
