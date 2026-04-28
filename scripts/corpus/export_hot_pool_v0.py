@@ -115,7 +115,6 @@ def main():
     total_input_clusters = cluster_summary.get("totalClusters", 0)
 
     # --- Pass 1: group rows by clusterId ---
-    rng = random.Random(args.seed)
     cluster_rows: dict = defaultdict(list)
     read_rows = 0
     skipped_invalid_fen = 0
@@ -149,20 +148,21 @@ def main():
             cluster_rows[cid].append(row)
 
     # --- Pass 2: deduplicate within cluster by normalizedFen ---
+    skipped_duplicate_normalized_fen = 0
     for cid in cluster_rows:
         seen = set()
         deduped = []
         for row in cluster_rows[cid]:
             nf = row.get("normalizedFen", "")
-            if nf and nf not in seen:
-                seen.add(nf)
+            if nf:
+                if nf in seen:
+                    skipped_duplicate_normalized_fen += 1
+                else:
+                    seen.add(nf)
+                    deduped.append(row)
+            else:
                 deduped.append(row)
         cluster_rows[cid] = deduped
-
-    skipped_duplicate_normalized_fen = sum(
-        len(rows) - len({row.get("normalizedFen") for row in rows})
-        for rows in cluster_rows.values()
-    )
 
     # --- Pass 3: score and select per cluster ---
     selected: list[dict] = []
