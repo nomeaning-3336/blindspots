@@ -4,7 +4,7 @@
  */
 
 import type { TrainingQueueItem } from "./queue-core";
-import { sampleOpeningPositions, sampleTacticalPositions, sampleEndgamePositions } from "./queues";
+import { sampleOpeningPositions, sampleTacticalPositions, sampleEndgamePositions, samplePhasePositions } from "./queues";
 import type { ServeMode } from "./serving-policy";
 
 export async function getModeSeedCandidates(

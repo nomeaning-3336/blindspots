@@ -241,8 +241,8 @@ const mockRep = {
 
 export default function TrainPage() {
   const [state, setState] = useState<TrainingState>("active");
-  const [startingFen, setStartingFen] = useState(mockRep.fen);
-  const [fen, setFen] = useState(mockRep.fen);
+  const [startingFen, setStartingFen] = useState<string>("");
+  const [fen, setFen] = useState<string>("");
   const [moves, setMoves] = useState<TrainingMove[]>(mockRep.moveHistory);
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(null);
   const [sequenceLength, setSequenceLength] = useState(mockRep.sequenceLength);
@@ -300,7 +300,8 @@ export default function TrainPage() {
   const selectedOpeningNameRef = useRef<string | null>(null);
   const selectedEcoRef = useRef<string | null>(null);
   const [initialOpponentMove, setInitialOpponentMove] = useState<TrainingMove | null>(null);
-  const [displayStartingFen, setDisplayStartingFen] = useState(mockRep.fen);
+  const [displayStartingFen, setDisplayStartingFen] = useState<string>("");
+  const [hasLoadedPosition, setHasLoadedPosition] = useState(false);
   const [activeSetupReplayIndex, setActiveSetupReplayIndex] = useState<0 | 1>(1);
   const nextPositionPrefetchRef = useRef<Promise<NextPositionResponse | null> | null>(null);
   const engineLineCacheRef = useRef<Record<string, EngineLineResult[]>>({});
@@ -421,8 +422,7 @@ export default function TrainPage() {
 
       setIsAwaitingStartGesture(false);
       setPendingInitialEngineMove(null);
-      void unlockTrainAudio();
-      void playInitialOpponentMoveFromPayload(pending);
+      void startPendingInitialEngineMove(pending);
     }
 
     window.addEventListener("pointerdown", handleGesture);
@@ -488,6 +488,7 @@ export default function TrainPage() {
 
     const pendingPrefetch = nextPositionPrefetchRef.current;
     if (!pendingPrefetch) {
+      setHasLoadedPosition(false);
       setIsPositionLoading(true);
     }
 
@@ -501,9 +502,10 @@ export default function TrainPage() {
       if (!payload?.fen) {
         const errorMessage = payload?.error ?? "No training positions available. Please try again.";
         setPositionLoadError(errorMessage);
-        setStartingFen(mockRep.fen);
-        setDisplayStartingFen(mockRep.fen);
-        setFen(mockRep.fen);
+        setStartingFen("");
+        setDisplayStartingFen("");
+        setFen("");
+        setHasLoadedPosition(false);
         setMoves([]);
         setInitialOpponentMove(null);
         setSequenceLength(DEFAULT_SEQUENCE_LENGTH);
@@ -585,8 +587,11 @@ export default function TrainPage() {
     moveSoundPlyRef.current = 0;
     setPositionLoadError(null);
 
+    const visibleInitialFen = payload.previousFen ?? payload.fen;
     setStartingFen(payload.fen);
-    setDisplayStartingFen(payload.previousFen ?? payload.fen);
+    setDisplayStartingFen(visibleInitialFen);
+    setFen(visibleInitialFen);
+    setHasLoadedPosition(true);
     setMoves([]);
     setLastMove(null);
     setResultMode("results");
@@ -608,6 +613,11 @@ export default function TrainPage() {
     }
   }
 
+  async function startPendingInitialEngineMove(pending: NextPositionResponse) {
+    await unlockTrainAudio();
+    await playInitialOpponentMoveFromPayload(pending);
+  }
+
   async function playInitialOpponentMoveFromPayload(payload: NextPositionResponse) {
     const requestId = initialOpponentRequestRef.current + 1;
     initialOpponentRequestRef.current = requestId;
@@ -626,20 +636,17 @@ export default function TrainPage() {
 
     setIsOpponentThinking(true);
 
-    // Show the "before" position with the move highlighted.
+    // Show the "before" position briefly.
     setFen(previousFen);
-    await sleep(360);
+    await new Promise<void>((resolve) => { requestAnimationFrame(() => resolve()); });
 
     if (initialOpponentRequestRef.current !== requestId) return;
 
+    // Apply the move, sound, and visual transition together — synchronized.
     setLastMove(applied.lastMove);
-    playTrainMoveSound({ move: applied.move, plyRef: moveSoundPlyRef, source: "initial-engine" });
-    await sleep(540);
-
-    if (initialOpponentRequestRef.current !== requestId) return;
-
     setActiveSetupReplayIndex(1);
     setFen(payload.fen!);
+    playTrainMoveSound({ move: applied.move, plyRef: moveSoundPlyRef, source: "initial-engine" });
 
     if (initialOpponentRequestRef.current === requestId) {
       setIsOpponentThinking(false);
@@ -693,23 +700,19 @@ export default function TrainPage() {
       initialOpponentMoveRef.current = move;
       setInitialOpponentMove(move);
 
-      // Show the opponent's position first so the user can see the "before" state.
+      // Show the opponent's position so user sees the "before" state.
       setFen(opponentFen);
-      await sleep(360);
+      await new Promise<void>((resolve) => { requestAnimationFrame(() => resolve()); });
 
       if (initialOpponentRequestRef.current !== requestId) return;
 
-      // Highlight the move on the opponent's position.
-      setLastMove({ from: played.from, to: played.to });
-      playTrainMoveSound({ move: played, plyRef: moveSoundPlyRef });
-      await sleep(540);
-
-      if (initialOpponentRequestRef.current !== requestId) return;
-
-      // Show the resulting position.
+      // Apply the move, sound, and visual transition together — synchronized.
       setActiveSetupReplayIndex(1);
+      setInitialOpponentMove(move);
+      setLastMove({ from: played.from, to: played.to });
       setFen(chess.fen());
       setStartingFen(chess.fen());
+      playTrainMoveSound({ move: played, plyRef: moveSoundPlyRef, source: "initial-engine" });
     } finally {
       if (initialOpponentRequestRef.current === requestId) {
         setIsOpponentThinking(false);
@@ -799,6 +802,7 @@ export default function TrainPage() {
   }
 
   function warmEngineLinesForSequence(nextMoves: TrainingMove[]) {
+    if (!startingFen) return;
     const fens = collectKeyAnalysisFens(startingFen, nextMoves)
       .filter((fenToAnalyze) => !engineLineCacheRef.current[fenToAnalyze]);
     if (fens.length === 0) return;
@@ -833,7 +837,7 @@ export default function TrainPage() {
         san: playedMove.san,
         uci: `${playedMove.from}${playedMove.to}${playedMove.promotion ?? ""}`,
         side: playedMove.color === "w" ? "white" : "black",
-        fenBefore: boardFen,
+        fenBefore: boardFen!,
         fenAfter: fenAfterUserMove,
       };
       const movesAfterUserMove = [...moves, userTrainingMove];
@@ -1119,11 +1123,13 @@ export default function TrainPage() {
     [initialOpponentMove, moves],
   );
   const visibleSequencePositions = useMemo(
-    () => buildVisibleSequencePositions({
-      startingFen,
-      moves,
-      initialOpponentMove,
-    }),
+    () => startingFen
+      ? buildVisibleSequencePositions({
+          startingFen,
+          moves,
+          initialOpponentMove,
+        })
+      : [],
     [startingFen, moves, initialOpponentMove],
   );
 
@@ -1186,10 +1192,10 @@ export default function TrainPage() {
   const activeExploratoryPosition =
     exploratoryHistoryIndex >= 0 ? exploratoryHistory[exploratoryHistoryIndex] : null;
   const boardFen = isExploringResults
-    ? (activeExploratoryPosition?.fen ?? exploratoryFen ?? activeSequencePosition?.fen ?? fen)
+    ? (activeExploratoryPosition?.fen ?? exploratoryFen ?? activeSequencePosition?.fen ?? fen ?? "")
     : isActiveSetupReplay
       ? activeSetupCurrentFen
-      : fen;
+      : (fen ?? "");
   const replayLastMove = isExploringResults
     ? (activeExploratoryPosition?.lastMove ?? exploratoryLastMove ?? lastMoveFromTrainingMove(activeSequencePosition?.move))
     : isActiveSetupReplay
@@ -1451,11 +1457,11 @@ export default function TrainPage() {
           className="flex items-center justify-center rounded-[14px] border border-[var(--app-border-soft)] bg-[var(--app-panel-strong)] p-3 transition-colors sm:p-5 lg:min-h-0 lg:p-8"
         >
           <div className="relative w-full max-w-[min(92vw,74vh,920px)]">
-            {visualPreferences && !isPositionLoading ? (
+            {visualPreferences && !isPositionLoading && hasLoadedPosition ? (
               <>
               <BoardWithPlayerStrips
                 userSide={userMoveSide}
-                boardFen={boardFen}
+                boardFen={boardFen ?? ""}
                 isOpponentThinking={isOpponentThinking}
                 isTrainingActive={state === "active"}
                 isExploring={isExploringResults}
@@ -2074,7 +2080,8 @@ function shouldPlayReplaySound(oldIndex: number, newIndex: number): boolean {
   return newIndex > oldIndex;
 }
 
-function getFenTurnSide(fen: string): TrainingMove["side"] {
+function getFenTurnSide(fen: string | null): TrainingMove["side"] {
+  if (!fen) return "white";
   try {
     return new Chess(fen).turn() === "w" ? "white" : "black";
   } catch {

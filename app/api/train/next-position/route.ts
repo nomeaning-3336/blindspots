@@ -132,7 +132,7 @@ if (!optionalError && optionalData) {
       selection.queues,
       Boolean(profile),
       recentServedFens,
-      /* no position served — skip prepending to recentServedModes */
+      undefined, // no position served — skip prepending to recentServedModes
     );
 
     const response: NextPositionResponse = {
