@@ -33,7 +33,14 @@ __pycache__/
 tmp/
 logs/
 cache/
+cache/corpus/
 artifacts/
+
+# corpus / eval cache
+*.jsonl
+*.jsonl.zst
+*.zst.part
+*.parquet
 .tmp_served_standalone.js
 .__*
 .analyze-dev-check.*
