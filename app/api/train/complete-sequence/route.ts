@@ -42,6 +42,7 @@ type CompleteSequencePayload = {
   selectedTacticRating?: unknown;
   selectedOpeningName?: unknown;
   selectedEco?: unknown;
+  challengeElo?: unknown;
 };
 
 type MoveClassification = "excellent" | "good" | "inaccuracy" | "mistake" | "blunder";
@@ -96,6 +97,7 @@ export async function POST(request: Request) {
 
   const sequenceLength = normalizeSequenceLength(payload?.sequenceLength);
   const reflectionNote = typeof payload?.reflectionNote === "string" ? payload.reflectionNote : null;
+  const challengeElo = normalizeOptionalNumber(payload?.challengeElo);
   const profile = await getOrCreateProfile(userId);
   const sequenceEvaluation = await calculateSequenceEvaluation(startingFen, moves);
   const evalPreservationScore = sequenceEvaluation.evalPreservationScore;
@@ -107,9 +109,10 @@ export async function POST(request: Request) {
     totalSequences: profile.total_sequences,
     evalPreservationScore,
     totalCpLoss: sequenceEvaluation.totalCpLoss,
+    opponentElo: challengeElo ?? undefined,
   });
 
-  const fallbackOpponentElo = getOpponentElo(profile.blindspots_elo, profile.total_sequences);
+  const fallbackOpponentElo = challengeElo ?? eloUpdate?.opponentElo ?? getOpponentElo(profile.blindspots_elo);
   const fallbackExpectedScore = calculateExpectedScore(profile.blindspots_elo, fallbackOpponentElo);
   const kFactor = eloUpdate?.kFactor ?? getKFactor(profile.total_sequences, profileRatingDeviation);
   const completedAt = new Date().toISOString();
@@ -361,6 +364,11 @@ function normalizeTags(value: unknown): string[] | null {
   if (!Array.isArray(value)) return null;
   const strings = value.filter((item): item is string => typeof item === "string");
   return strings.length > 0 ? strings : null;
+}
+
+function normalizeOptionalNumber(value: unknown) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function isValidFen(fen: string) {

@@ -31,16 +31,19 @@ export interface EngineMove {
   engine: "stockfish";
   targetElo: number;
   effectiveElo: number;
+  mate?: number | null;
 }
 
 export interface EngineEval {
   cp: number;
+  mate?: number | null;
   depth: number;
   bestMove: string;
 }
 
 export interface EngineLine {
   cp: number;
+  mate?: number | null;
   depth: number;
   rank: number;
   bestMove: string;

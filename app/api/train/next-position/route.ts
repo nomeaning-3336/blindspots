@@ -21,6 +21,8 @@ import { getModeSeedCandidates } from "@/lib/training/serve-mode-sampler";
 import { classifyTrainingPhase, enrichTrainingQueueItem } from "@/lib/training/position-metadata";
 import { selectAndReserveNextTrainingPositionCore, type TrainingBucket } from "@/lib/training/queue-core";
 import { normalizeBucketStats, thompsonSample, type BucketStats } from "@/lib/training/bandit-stats";
+import { getPositionMateStatus } from "@/lib/engines/dispatcher";
+import { getOpponentElo } from "@/lib/training/elo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +41,7 @@ type NextPositionResponse = {
   tacticRating?: number;
   openingName?: string;
   eco?: string;
+  challengeElo?: number;
   error?: string;
   debug?: Record<string, unknown>;
 };
@@ -48,7 +51,7 @@ const MAX_SEQUENCE_LENGTH = 9;
 const MAX_VALID_SELECTION_ATTEMPTS = 25;
 
 // Columns that must exist for the route to function
-const BASE_COLUMNS = "user_id,total_sequences,exploit_queue,explore_queue,revisit_queue,mastered_queue,recent_served_fens";
+const BASE_COLUMNS = "user_id,total_sequences,blindspots_elo,exploit_queue,explore_queue,revisit_queue,mastered_queue,recent_served_fens";
 // Columns that may not exist before migration is applied
 const OPTIONAL_COLUMNS = "recent_served_modes,bucket_stats";
 
@@ -106,6 +109,10 @@ if (!optionalError && optionalData) {
   };
   const queueCountsBefore = getQueueCounts(queuesBeforeRefill);
   const sequenceLength = normalizeSequenceLength(preferences?.sequence_length);
+  const userElo = typeof profile?.blindspots_elo === "number"
+    ? profile.blindspots_elo
+    : Number(profile?.blindspots_elo ?? 500);
+  const challengeElo = getOpponentElo(userElo);
 
   const queues = await ensureTrainingQueuesHavePositions({
     ...queuesBeforeRefill,
@@ -177,6 +184,7 @@ if (!optionalError && optionalData) {
     tacticRating: nextPosition.tacticRating,
     openingName: nextPosition.openingName,
     eco: nextPosition.eco,
+    challengeElo,
   };
 
   if (process.env.NODE_ENV !== "production") {
@@ -202,6 +210,7 @@ if (!optionalError && optionalData) {
       banditCandidateBuckets: selection.banditCandidateBuckets,
       banditUsed: selection.banditUsed,
       banditFallbackUsed: selection.banditFallbackUsed,
+      challengeElo,
       // Safe recommender diagnostics for QA
       recentServedModesCount: recentServedModes.length,
       recentServedModesPreview: recentServedModes.slice(0, 10).map((e) => e.mode),
@@ -223,6 +232,35 @@ if (!optionalError && optionalData) {
 }
 
 type RecentEntry = { fen: string; gameId?: string; ply?: number };
+
+async function validateEngineServeability(
+  fen: string,
+): Promise<
+  | { ok: true; mate?: number | null }
+  | { ok: false; reason: string; mate?: number | null }
+> {
+  try {
+    const status = await getPositionMateStatus(fen, {
+      depthLimit: 14,
+      timeLimitMs: 700,
+    });
+
+    if (typeof status.mate === "number" && status.mate < 0) {
+      return {
+        ok: false,
+        reason: "forced_losing_mate",
+        mate: status.mate,
+      };
+    }
+
+    return {
+      ok: true,
+      mate: status.mate,
+    };
+  } catch {
+    return { ok: true };
+  }
+}
 
 function deriveServeModeFromCandidate(input: {
   requestedServeMode: ServeMode;
@@ -288,35 +326,55 @@ async function selectValidTrainingPosition({
   const dueRevisit = currentQueues.revisitQueue.find((item) => Date.parse(item.scheduledAt) <= now.getTime());
   if (dueRevisit) {
     const enriched = enrichTrainingQueueItem(dueRevisit);
-    selectedPhase = enriched.phase;
-    selectedBucket = enriched.bucket;
-    selectedServeMode = deriveServeModeFromCandidate({
-      requestedServeMode,
-      phase: selectedPhase,
-      bucket: selectedBucket,
-      isTactic: dueRevisit.isTactic,
-      selectedQueue: "revisit",
+    selectedFenValidity = validateTrainingQueueItem(dueRevisit, { sequenceLength });
+
+    if (selectedFenValidity.ok) {
+      const engineValidity = await validateEngineServeability(dueRevisit.fen);
+
+      if (engineValidity.ok) {
+        selectedPhase = enriched.phase;
+        selectedBucket = enriched.bucket;
+        selectedServeMode = deriveServeModeFromCandidate({
+          requestedServeMode,
+          phase: selectedPhase,
+          bucket: selectedBucket,
+          isTactic: dueRevisit.isTactic,
+          selectedQueue: "revisit",
+        });
+        return {
+          item: dueRevisit,
+          selectedQueue: "revisit" as const,
+          wasDueRevisit: true,
+          queues: removeFenFromAllQueues(currentQueues, dueRevisit.fen),
+          rejectedRecentExactCount: 0,
+          rejectedNearDuplicateCount: 0,
+          nearDuplicateReason: null,
+          rejectedInvalidCount: rejectedInvalidReasons.length,
+          rejectedInvalidReasons,
+          selectedFenValidity,
+          selectedServeMode,
+          selectedPhase,
+          selectedBucket,
+          banditPreferredBucket,
+          banditCandidateBuckets,
+          banditUsed: false,
+          banditFallbackUsed: false,
+          phaseFallbackUsed: requestedServeMode !== "revisit",
+        };
+      }
+
+      rejectedInvalidReasons.push(engineValidity.reason);
+    } else {
+      rejectedInvalidReasons.push(selectedFenValidity.reason ?? "invalid_position");
+    }
+
+    invalidRecentEntries.push({
+      fen: dueRevisit.fen,
+      gameId: dueRevisit.gameId,
+      ply: dueRevisit.ply,
     });
-    return {
-      item: dueRevisit,
-      selectedQueue: "revisit" as const,
-      wasDueRevisit: true,
-      queues: removeFenFromAllQueues(currentQueues, dueRevisit.fen),
-      rejectedRecentExactCount: 0,
-      rejectedNearDuplicateCount: 0,
-      nearDuplicateReason: null,
-      rejectedInvalidCount: 0,
-      rejectedInvalidReasons: [] as string[],
-      selectedFenValidity: null,
-      selectedServeMode,
-      selectedPhase,
-      selectedBucket,
-      banditPreferredBucket,
-      banditCandidateBuckets,
-      banditUsed: false,
-      banditFallbackUsed: false,
-      phaseFallbackUsed: requestedServeMode !== "revisit",
-    };
+    recentFenSet.add(dueRevisit.fen);
+    currentQueues = removeFenFromAllQueues(currentQueues, dueRevisit.fen);
   }
 
   // Step 2: For opening/tactic/endgame/middlegame/wildcard modes, try seed candidates first
@@ -349,6 +407,19 @@ async function selectValidTrainingPosition({
         const enriched = enrichTrainingQueueItem(seedSelection.item);
         selectedFenValidity = validateTrainingQueueItem(seedSelection.item, { sequenceLength });
         if (selectedFenValidity.ok) {
+          const engineValidity = await validateEngineServeability(seedSelection.item.fen);
+
+          if (!engineValidity.ok) {
+            rejectedInvalidReasons.push(engineValidity.reason);
+            invalidRecentEntries.push({
+              fen: seedSelection.item.fen,
+              gameId: seedSelection.item.gameId,
+              ply: seedSelection.item.ply,
+            });
+            recentFenSet.add(seedSelection.item.fen);
+            continue;
+          }
+
           selectedPhase = enriched.phase ?? classifyPhaseFromFen(seedSelection.item.fen);
           selectedBucket = enriched.bucket;
           selectedServeMode = deriveServeModeFromCandidate({
@@ -414,6 +485,19 @@ async function selectValidTrainingPosition({
 
     const validity = validateTrainingQueueItem(reservation.item, { sequenceLength });
     if (validity.ok) {
+      const engineValidity = await validateEngineServeability(reservation.item.fen);
+
+      if (!engineValidity.ok) {
+        rejectedInvalidReasons.push(engineValidity.reason);
+        invalidRecentEntries.push({
+          fen: reservation.item.fen,
+          gameId: reservation.item.gameId,
+          ply: reservation.item.ply,
+        });
+        recentFenSet.add(reservation.item.fen);
+        continue;
+      }
+
       const enriched = enrichTrainingQueueItem(reservation.item);
       selectedFenValidity = validity;
       selectedPhase = enriched.phase;

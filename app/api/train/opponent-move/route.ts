@@ -11,6 +11,7 @@ type OpponentMovePayload = {
   fen?: unknown;
   userBlindspotElo?: unknown;
   previousEvalCp?: unknown;
+  challengeElo?: unknown;
 };
 
 export async function POST(request: Request) {
@@ -25,7 +26,10 @@ export async function POST(request: Request) {
     fen,
     normalizeElo(payload?.userBlindspotElo),
     normalizeOptionalNumber(payload?.previousEvalCp),
-    { responseDelayMs: FIXED_OPPONENT_THINK_MS },
+    {
+      responseDelayMs: FIXED_OPPONENT_THINK_MS,
+      targetElo: normalizeOptionalNumber(payload?.challengeElo),
+    },
   );
 
   return NextResponse.json({ move });

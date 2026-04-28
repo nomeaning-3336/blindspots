@@ -128,6 +128,7 @@ type NextPositionResponse = {
   tacticRating?: number;
   openingName?: string;
   eco?: string;
+  challengeElo?: number;
   error?: string;
 };
 
@@ -272,6 +273,7 @@ export default function TrainPage() {
   const [engineLineErrorFens, setEngineLineErrorFens] = useState<Set<string>>(new Set());
   const [engineLineLoadingFen, setEngineLineLoadingFen] = useState<string | null>(null);
   const [cachedNextPosition, setCachedNextPosition] = useState<NextPositionResponse | null>(null);
+  const [currentChallengeElo, setCurrentChallengeElo] = useState<number | null>(null);
   const [isOpponentThinking, setIsOpponentThinking] = useState(false);
   const [isCompletingSequence, setIsCompletingSequence] = useState(false);
   const [isPositionLoading, setIsPositionLoading] = useState(true);
@@ -486,6 +488,7 @@ export default function TrainPage() {
     setLastMove(null);
     setDisplayStartingFen(startingFen);
     if (nextState === "active") {
+      setCurrentChallengeElo(null);
       void loadNextPosition();
     }
     if (nextState === "complete") {
@@ -509,6 +512,7 @@ export default function TrainPage() {
 
     const pendingPrefetch = nextPositionPrefetchRef.current;
     if (!pendingPrefetch) {
+      setCurrentChallengeElo(null);
       setHasLoadedPosition(false);
       setIsPositionLoading(true);
     }
@@ -529,6 +533,7 @@ export default function TrainPage() {
         setHasLoadedPosition(false);
         setMoves([]);
         setInitialOpponentMove(null);
+        setCurrentChallengeElo(null);
         setSequenceLength(DEFAULT_SEQUENCE_LENGTH);
         return;
       }
@@ -625,6 +630,7 @@ export default function TrainPage() {
     setEngineLineLoadingFen(null);
     setPieceLineCache({});
     setPieceLinesLoadingKey(null);
+    setCurrentChallengeElo(typeof payload.challengeElo === "number" ? payload.challengeElo : null);
     setSequenceLength(normalizeSequenceLength(payload.sequenceLength));
 
     if (payload.previousFen && payload.playedMove) {
@@ -872,6 +878,7 @@ export default function TrainPage() {
         body: JSON.stringify({
           fen: fenAfterUserMove,
           userBlindspotElo: blindspotsElo,
+          challengeElo: currentChallengeElo,
         }),
       });
       const payload = (await response.json().catch(() => null)) as OpponentMoveResponse | null;
@@ -932,6 +939,7 @@ export default function TrainPage() {
           selectedTacticRating: selectedTacticRatingRef.current,
           selectedOpeningName: selectedOpeningNameRef.current,
           selectedEco: selectedEcoRef.current,
+          challengeElo: currentChallengeElo,
         }),
       });
       const payload = (await response.json().catch(() => null)) as

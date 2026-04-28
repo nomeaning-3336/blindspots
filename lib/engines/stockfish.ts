@@ -31,6 +31,7 @@ export class EngineError extends Error {
 interface CandidateMove {
   uci: string;
   cp: number | null;
+  mate: number | null;
   depth: number;
   rank: number;
   pv: string[];
@@ -66,7 +67,7 @@ export const stockfishHarness: EngineHarness = {
       });
       const candidates = fullResult.candidates.length > 0
         ? fullResult.candidates
-        : [{ uci: fullResult.bestMove, cp: null, depth: fullResult.depth, rank: 0, pv: [fullResult.bestMove] }];
+        : [{ uci: fullResult.bestMove, cp: null, mate: null, depth: fullResult.depth, rank: 0, pv: [fullResult.bestMove] }];
       let selected = sampleCandidate(candidates, targetElo);
 
       if (targetElo < 2000) {
@@ -83,6 +84,7 @@ export const stockfishHarness: EngineHarness = {
             selected = shallowBest.candidates[0] ?? {
               uci: shallowBest.bestMove,
               cp: null,
+              mate: null,
               depth: shallowBest.depth,
               rank: 0,
               pv: [shallowBest.bestMove],
@@ -105,6 +107,7 @@ export const stockfishHarness: EngineHarness = {
       engine: "stockfish",
       targetElo,
       effectiveElo: targetElo,
+      mate: result.mate ?? null,
     };
   },
 
@@ -120,6 +123,7 @@ export const stockfishHarness: EngineHarness = {
 
     return {
       cp: whitePositiveCp(fen, best?.cp ?? 0),
+      mate: best?.mate ?? null,
       depth: best?.depth ?? result.depth,
       bestMove: result.bestMove,
     };
@@ -138,6 +142,7 @@ export const stockfishHarness: EngineHarness = {
 
     return result.candidates.slice(0, multiPv).map((candidate) => ({
       cp: whitePositiveCp(fen, candidate.cp ?? 0),
+      mate: candidate.mate ?? null,
       depth: candidate.depth || result.depth,
       rank: candidate.rank,
       bestMove: candidate.uci,
@@ -334,16 +339,18 @@ function parseCandidateLine(line: string): CandidateMove | null {
   if (!pvMove) return null;
 
   let cp: number | null = null;
+  let mate: number | null = null;
   if (cpMatch) {
     cp = Number.parseInt(cpMatch[1] ?? "0", 10);
   } else if (mateMatch) {
-    const mate = Number.parseInt(mateMatch[1] ?? "0", 10);
+    mate = Number.parseInt(mateMatch[1] ?? "0", 10);
     cp = Math.sign(mate) * (100000 - Math.min(99, Math.abs(mate)) * 1000);
   }
 
   return {
     uci: pvMove,
     cp,
+    mate,
     depth: Number.parseInt(depthMatch?.[1] ?? "0", 10) || 0,
     rank: Math.max(0, (Number.parseInt(multipvMatch?.[1] ?? "1", 10) || 1) - 1),
     pv,
