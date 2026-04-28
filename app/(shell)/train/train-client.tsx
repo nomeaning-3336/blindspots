@@ -2523,20 +2523,23 @@ function BoardWithEvalBar({
   const blackPct = 100 - whitePct;
 
   return (
-    <div className="grid grid-cols-[18px_minmax(0,1fr)] gap-3">
-      <div className="relative overflow-hidden rounded-[4px] border border-[var(--app-border-soft)] bg-black">
-        <div
-          className="absolute left-0 right-0 top-0 bg-white transition-[height] duration-200"
-          style={{ height: `${whitePct}%` }}
-        />
-        <div
-          className="absolute left-0 right-0 bottom-0 bg-black transition-[height] duration-200"
-          style={{ height: `${blackPct}%` }}
-        />
-        <span className="absolute inset-x-0 top-1 text-center text-[9px] font-bold text-black">
-          {typeof displayEvalCp === "number" ? formatEval(displayEvalCp) : isLoading ? "..." : "--"}
-        </span>
+    <div className="relative w-full overflow-visible">
+      <div className="pointer-events-none absolute right-full top-0 mr-3 h-full w-6 shrink-0">
+        <div className="relative h-full overflow-hidden rounded-[4px] border border-[var(--app-border-soft)] bg-black">
+          <div
+            className="absolute left-0 right-0 top-0 bg-white transition-[height] duration-200"
+            style={{ height: `${whitePct}%` }}
+          />
+          <div
+            className="absolute left-0 right-0 bottom-0 bg-black transition-[height] duration-200"
+            style={{ height: `${blackPct}%` }}
+          />
+          <span className="absolute inset-x-0 top-1 text-center text-[9px] font-bold text-black">
+            {typeof displayEvalCp === "number" ? formatEval(displayEvalCp) : isLoading ? "..." : "--"}
+          </span>
+        </div>
       </div>
+
       {children}
     </div>
   );
