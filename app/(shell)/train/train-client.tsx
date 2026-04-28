@@ -303,6 +303,7 @@ export default function TrainPage() {
   const [displayStartingFen, setDisplayStartingFen] = useState<string>("");
   const [hasLoadedPosition, setHasLoadedPosition] = useState(false);
   const [activeSetupReplayIndex, setActiveSetupReplayIndex] = useState<0 | 1>(1);
+  const [activeReplayIndex, setActiveReplayIndex] = useState<number | null>(null);
   const nextPositionPrefetchRef = useRef<Promise<NextPositionResponse | null> | null>(null);
   const engineLineCacheRef = useRef<Record<string, EngineLineResult[]>>({});
   const engineLinePrefetchRef = useRef<Map<string, Promise<void>>>(new Map());
@@ -454,6 +455,7 @@ export default function TrainPage() {
     setExploreIndex(0);
     resetExploratoryLine();
     setSelectedMoveIndex(null);
+    setActiveReplayIndex(null);
     setEngineLineCache({});
     setEngineLineErrorFens(new Set());
     setEngineLineLoadingFen(null);
@@ -596,6 +598,7 @@ export default function TrainPage() {
     setExploreIndex(0);
     resetExploratoryLine();
     setSelectedMoveIndex(null);
+    setActiveReplayIndex(null);
     setEngineLineCache({});
     setEngineLineErrorFens(new Set());
     setEngineLineLoadingFen(null);
@@ -761,6 +764,9 @@ export default function TrainPage() {
   function handleMove(move: BoardMove) {
     if (state !== "active" || isOpponentThinking || completingRef.current) return;
     if (isActiveSetupReplay && activeSetupReplayIndex === 0) return;
+    if (isViewingActiveReplay) return;
+
+    setActiveReplayIndex(null);
 
     try {
       const chess = new Chess(boardFen);
@@ -1069,6 +1075,21 @@ export default function TrainPage() {
     [startingFen, moves, initialOpponentMove],
   );
 
+  const activeReplayLastIndex = Math.max(0, visibleSequencePositions.length - 1);
+  const effectiveActiveReplayIndex =
+    state === "active" && activeReplayIndex !== null
+      ? Math.min(activeReplayIndex, activeReplayLastIndex)
+      : null;
+  const activeReplayPosition =
+    effectiveActiveReplayIndex !== null
+      ? visibleSequencePositions[effectiveActiveReplayIndex] ?? null
+      : null;
+  const isViewingActiveReplay =
+    state === "active" &&
+    activeReplayPosition !== null &&
+    effectiveActiveReplayIndex !== null &&
+    effectiveActiveReplayIndex < activeReplayLastIndex;
+
   // Dev-only timeline instrumentation — placed after displayMoves/visibleSequencePositions are declared
   useEffect(() => {
     if (process.env.NODE_ENV === "production" && !(window as unknown as Record<string, unknown>).__BLINDSPOTS_QA__) return;
@@ -1131,12 +1152,14 @@ export default function TrainPage() {
     ? (activeExploratoryPosition?.fen ?? exploratoryFen ?? activeSequencePosition?.fen ?? fen ?? "")
     : isActiveSetupReplay
       ? activeSetupCurrentFen
-      : (fen ?? "");
+      : activeReplayPosition?.fen ?? (fen ?? "");
   const replayLastMove = isExploringResults
     ? (activeExploratoryPosition?.lastMove ?? exploratoryLastMove ?? lastMoveFromTrainingMove(activeSequencePosition?.move))
     : isActiveSetupReplay
       ? activeSetupCurrentLastMove
-      : lastMove;
+      : activeReplayPosition?.move
+        ? lastMoveFromTrainingMove(activeReplayPosition.move)
+        : lastMove;
   const boardLastMoveBadge = isExploringResults && !activeExploratoryPosition && !exploratoryFen
     ? moveBadgeForPosition(activeSequencePosition)
     : null;
@@ -1303,6 +1326,70 @@ export default function TrainPage() {
     window.addEventListener("keydown", handleSetupReplayKey);
     return () => window.removeEventListener("keydown", handleSetupReplayKey);
   }, [isActiveSetupReplay, activeSetupReplayIndex, initialOpponentMove]);
+
+  // ── Keyboard navigation (active sequence replay: ArrowLeft/Right through history) ──
+
+  useEffect(() => {
+    function isEditableTarget(target: EventTarget | null) {
+      if (!(target instanceof Element)) return false;
+      const tag = target.tagName.toLowerCase();
+      return (
+        tag === "input" ||
+        tag === "textarea" ||
+        tag === "select" ||
+        target.getAttribute("contenteditable") === "true"
+      );
+    }
+
+    function handleActiveReplayKeydown(e: KeyboardEvent) {
+      if (isAwaitingStartGesture) return;
+      if (state !== "active") return;
+      if (isOpponentThinking || isCompletingSequence) return;
+      if (isEditableTarget(e.target)) return;
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+
+      const positions = visibleSequencePositions;
+      if (positions.length <= 1) return;
+
+      const liveLastIndex = positions.length - 1;
+      const currentIndex = activeReplayIndex ?? liveLastIndex;
+
+      const nextIndex =
+        e.key === "ArrowLeft"
+          ? Math.max(0, currentIndex - 1)
+          : Math.min(liveLastIndex, currentIndex + 1);
+
+      if (nextIndex === currentIndex) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const nextPosition = positions[nextIndex];
+      setActiveReplayIndex(nextIndex === liveLastIndex ? null : nextIndex);
+
+      if (e.key === "ArrowRight" && nextPosition?.move) {
+        playTrainMoveSound({
+          move: nextPosition.move,
+          plyRef: moveSoundPlyRef,
+          pitchIndex: nextPosition.pitchIndex,
+          source: "replay",
+          advanceLivePitch: false,
+        });
+      }
+    }
+
+    window.addEventListener("keydown", handleActiveReplayKeydown);
+    return () => {
+      window.removeEventListener("keydown", handleActiveReplayKeydown);
+    };
+  }, [
+    activeReplayIndex,
+    isAwaitingStartGesture,
+    isCompletingSequence,
+    isOpponentThinking,
+    state,
+    visibleSequencePositions,
+  ]);
 
   useEffect(() => {
     if (state !== "complete" || resultMode === "explore") return;
