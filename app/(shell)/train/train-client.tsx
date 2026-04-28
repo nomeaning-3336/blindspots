@@ -1490,10 +1490,7 @@ export default function TrainPage() {
                 isExploring={isExploringResults}
               >
                 {isExploringResults ? (
-                  <BoardWithEvalBar
-                    evalCp={currentEngineEval}
-                    isLoading={isEngineLinesLoading}
-                  >
+                  <BoardWithEvalBar evalCp={currentEngineEval} isLoading={isEngineLinesLoading}>
                     <AnalysisBoard
                       fen={boardFen}
                       mode="training"
@@ -1508,47 +1505,25 @@ export default function TrainPage() {
                       highlightedSquares={
                         hoveredMoveSquares
                           ? [
-                              {
-                                square: hoveredMoveSquares.from,
-                                color: "color-mix(in srgb, var(--app-accent) 24%, transparent)",
-                              },
-                              {
-                                square: hoveredMoveSquares.to,
-                                color: "color-mix(in srgb, var(--app-accent) 36%, transparent)",
-                              },
+                              { square: hoveredMoveSquares.from, color: "color-mix(in srgb, var(--app-accent) 24%, transparent)" },
+                              { square: hoveredMoveSquares.to, color: "color-mix(in srgb, var(--app-accent) 36%, transparent)" },
                             ]
                           : selectedMoveSquares
                             ? [
-                                {
-                                  square: selectedMoveSquares.from,
-                                  color: "color-mix(in srgb, var(--app-accent) 24%, transparent)",
-                                },
-                                {
-                                  square: selectedMoveSquares.to,
-                                  color: "color-mix(in srgb, var(--app-accent) 36%, transparent)",
-                                },
+                                { square: selectedMoveSquares.from, color: "color-mix(in srgb, var(--app-accent) 24%, transparent)" },
+                                { square: selectedMoveSquares.to, color: "color-mix(in srgb, var(--app-accent) 36%, transparent)" },
                               ]
                             : undefined
                       }
                       engineArrows={buildEngineArrows(boardEngineLines, hoveredEngineLineMove)}
                       data-testid="train-board"
-                      onMove={(move) => {
-                        setExploreSelectedSquare(null);
-                        setSelectedMoveIndex(null);
-                        handleExploreMove(move);
-                      }}
+                      onMove={(move) => { setExploreSelectedSquare(null); setSelectedMoveIndex(null); handleExploreMove(move); }}
                       onSquareClick={(square) => {
                         try {
                           const chess = new Chess(boardFen);
                           const piece = chess.get(square as Square);
-                          if (piece && piece.color === chess.turn() && square !== exploreSelectedSquare) {
-                            setExploreSelectedSquare(square);
-                          } else {
-                            setExploreSelectedSquare(null);
-                          }
-                        } catch {
-                          setExploreSelectedSquare(null);
-                        }
+                          if (piece && piece.color === chess.turn() && square !== exploreSelectedSquare) { setExploreSelectedSquare(square); } else { setExploreSelectedSquare(null); }
+                        } catch { setExploreSelectedSquare(null); }
                       }}
                       onCircleHover={setHoveredAnnotationSquare}
                       onEngineArrowClick={handleExploreMove}
@@ -2359,8 +2334,8 @@ function StatusBanner({
 function EloResultCard({ result, isLoading }: { result: EloResult | null; isLoading: boolean }) {
   if (isLoading && !result) {
     return (
-      <div className="rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-5">
-        <p className="mt-3 text-lg font-bold text-[var(--app-muted)]">Saving result...</p>
+      <div className="flex items-center rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-5">
+        <p className="text-lg font-bold text-[var(--app-muted)]">Saving result...</p>
       </div>
     );
   }
