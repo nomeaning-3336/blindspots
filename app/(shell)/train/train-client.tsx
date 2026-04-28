@@ -25,6 +25,14 @@ type TrainingState = "active" | "complete" | "drift";
 type OnboardingScreen = "loading" | "connect" | "analysis" | "summary" | "done";
 type ProfileProvider = "chesscom" | "lichess";
 type SkillLevel = "new_to_chess" | "beginner" | "intermediate" | "advanced";
+
+const SKILL_LEVEL_STARTING_ELO: Record<SkillLevel, number> = {
+  new_to_chess: 0,
+  beginner: 250,
+  intermediate: 500,
+  advanced: 1000,
+};
+
 type TrainingMove = {
   san: string;
   uci: string;
@@ -339,7 +347,7 @@ export default function TrainPage() {
             setSkillLevel(payload.preferences.skill_level);
           }
         }
-        if (payload.profile?.blindspots_elo) {
+        if (typeof payload.profile?.blindspots_elo === "number") {
           setBlindspotsElo(payload.profile.blindspots_elo);
         }
 
@@ -987,7 +995,7 @@ export default function TrainPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "skip", skillLevel }),
     });
-    setBlindspotsElo(DEFAULT_BLINDSPOTS_ELO);
+    setBlindspotsElo(SKILL_LEVEL_STARTING_ELO[skillLevel]);
     await startFirstSession();
   }
 
