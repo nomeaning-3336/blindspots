@@ -14,13 +14,19 @@ export async function getModeSeedCandidates(
 ): Promise<TrainingQueueItem[]> {
   switch (mode) {
     case "opening":
-    case "opening_gambit":
-    case "opening_development":
       return sampleOpeningPositions(count, excludeFens, now);
+    case "opening_gambit":
+      return sampleOpeningPositions(count, excludeFens, now, "opening_gambit");
+    case "opening_development":
+      return sampleOpeningPositions(count, excludeFens, now, "opening_development");
     case "tactic":
       return sampleTacticalPositions(count, excludeFens, now);
     case "endgame":
       return sampleEndgamePositions(count, excludeFens, now);
+    case "endgame_rook":
+      return sampleEndgamePositions(count, excludeFens, now, "endgame_rook");
+    case "endgame_pawn":
+      return sampleEndgamePositions(count, excludeFens, now, "endgame_pawn");
     case "middlegame":
       return sampleMiddlegamePositions(count, excludeFens, now);
     case "middlegame_attack":

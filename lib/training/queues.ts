@@ -445,6 +445,7 @@ export async function sampleOpeningPositions(
   count: number,
   excludeFens: Set<string>,
   now: Date,
+  bucketFilter?: TrainingBucket,
 ): Promise<TrainingQueueItem[]> {
   if (count <= 0) return [];
 
@@ -454,6 +455,9 @@ export async function sampleOpeningPositions(
       const fen = typeof position.fen === "string" ? position.fen : "";
       if (!fen || excludeFens.has(fen)) return [];
 
+      const bucket = enrichBucket(position);
+      if (bucketFilter && bucketFilter !== "opening" && bucket !== bucketFilter) return [];
+
       excludeFens.add(fen);
       const item = queueItemFromFen(fen, "elite", now.toISOString(), {
         previousFen: enrichPreviousFen(position),
@@ -461,7 +465,7 @@ export async function sampleOpeningPositions(
         gameId: enrichGameId(position),
         ply: enrichPly(position),
         phase: enrichPhase(position),
-        bucket: enrichBucket(position),
+        bucket,
         tags: enrichTags(position),
         isTactic: enrichIsTactic(position),
         tacticRating: enrichTacticRating(position),
@@ -543,6 +547,7 @@ export async function sampleEndgamePositions(
   count: number,
   excludeFens: Set<string>,
   now: Date,
+  bucketFilter?: TrainingBucket,
 ): Promise<TrainingQueueItem[]> {
   if (count <= 0) return [];
 
@@ -552,6 +557,9 @@ export async function sampleEndgamePositions(
       const fen = typeof position.fen === "string" ? position.fen : "";
       if (!fen || excludeFens.has(fen)) return [];
 
+      const bucket = (enrichBucket(position) ?? "endgame") as TrainingBucket;
+      if (bucketFilter && bucketFilter !== "endgame" && bucket !== bucketFilter) return [];
+
       excludeFens.add(fen);
       const item = queueItemFromFen(fen, "elite", now.toISOString(), {
         previousFen: enrichPreviousFen(position),
@@ -559,7 +567,7 @@ export async function sampleEndgamePositions(
         gameId: enrichGameId(position),
         ply: enrichPly(position),
         phase: "endgame",
-        bucket: (enrichBucket(position) ?? "endgame") as TrainingBucket,
+        bucket,
         tags: enrichTags(position) ?? ["endgame"],
         isTactic: false,
         tacticRating: enrichTacticRating(position),
