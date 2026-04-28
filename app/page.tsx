@@ -134,23 +134,34 @@ function HeroVisual() {
           maskImage: "radial-gradient(ellipse at center, black 20%, transparent 76%)",
         }}
       />
-      <div className="relative overflow-hidden rounded-lg border border-[var(--app-border)]" style={{ background: "var(--app-panel-strong)" }}>
-        <div className="relative" style={{ background: "color-mix(in srgb, var(--app-bg) 60%, transparent)" }}>
-          <img
-            src="/hero-image.png"
-            alt="Chess positions visualization"
-            className="h-auto w-full object-cover opacity-80"
-          />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="aspect-square w-[min(82%,72vh)] max-w-[760px]">
-              <TrainingBoard />
-            </div>
-          </div>
-          <div className="absolute bottom-2 left-0 right-0 flex items-center justify-center">
-            <div className="flex items-center gap-2 px-0.5">
+
+      <div className="relative flex min-h-[460px] items-center justify-center overflow-visible">
+        <img
+          src="/hero-image.png"
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-1/2 h-[130%] w-[130%] -translate-x-1/2 -translate-y-1/2 object-cover opacity-45 blur-sm"
+          style={{
+            maskImage: "radial-gradient(ellipse at center, black 18%, transparent 72%)",
+          }}
+        />
+
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-1/2 h-[95%] w-[95%] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-70 blur-3xl"
+          style={{
+            background:
+              "radial-gradient(circle at 50% 50%, var(--app-accent-soft), transparent 68%)",
+          }}
+        />
+
+        <div className="relative z-10 aspect-square w-[min(88vw,42rem,72vh)]">
+          <TrainingBoard />
+          <div className="pointer-events-none absolute bottom-3 left-0 right-0 flex items-center justify-center">
+            <span className="flex items-center gap-2 rounded-full bg-black/35 px-2 py-1 backdrop-blur-sm">
               <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: "var(--app-class-best)" }} />
-              <span className="text-sm font-bold" style={{ color: "var(--app-text)" }}>Black</span>
-            </div>
+              <span className="text-sm font-bold text-[var(--app-text)]">Black</span>
+            </span>
           </div>
         </div>
       </div>
