@@ -24,6 +24,7 @@ import {
 type TrainingState = "active" | "complete" | "drift";
 type OnboardingScreen = "loading" | "connect" | "analysis" | "summary" | "done";
 type ProfileProvider = "chesscom" | "lichess";
+type SkillLevel = "new_to_chess" | "beginner" | "intermediate" | "advanced";
 type TrainingMove = {
   san: string;
   uci: string;
@@ -134,6 +135,7 @@ interface OnboardingStatePayload {
     opponent_mode: string;
     time_pressure_mode: string;
     opening_filter?: unknown;
+    skill_level?: SkillLevel | null;
   } | null;
   profile: {
     blindspots_elo: number;
@@ -246,6 +248,7 @@ export default function TrainPage() {
   const [moves, setMoves] = useState<TrainingMove[]>(mockRep.moveHistory);
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(null);
   const [sequenceLength, setSequenceLength] = useState(mockRep.sequenceLength);
+  const [skillLevel, setSkillLevel] = useState<SkillLevel>("beginner");
   const [blindspotsElo, setBlindspotsElo] = useState(mockRep.rating);
   const [eloResult, setEloResult] = useState<EloResult | null>(null);
   const [resultMode, setResultMode] = useState<ResultMode>("results");
@@ -327,6 +330,14 @@ export default function TrainPage() {
 
         if (payload.preferences) {
           setSequenceLength(normalizeSequenceLength(payload.preferences.sequence_length));
+          if (
+            payload.preferences.skill_level === "new_to_chess" ||
+            payload.preferences.skill_level === "beginner" ||
+            payload.preferences.skill_level === "intermediate" ||
+            payload.preferences.skill_level === "advanced"
+          ) {
+            setSkillLevel(payload.preferences.skill_level);
+          }
         }
         if (payload.profile?.blindspots_elo) {
           setBlindspotsElo(payload.profile.blindspots_elo);
@@ -974,7 +985,7 @@ export default function TrainPage() {
     await fetch("/api/train/initialize", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "skip" }),
+      body: JSON.stringify({ action: "skip", skillLevel }),
     });
     setBlindspotsElo(DEFAULT_BLINDSPOTS_ELO);
     await startFirstSession();
@@ -996,7 +1007,7 @@ export default function TrainPage() {
     const response = await fetch("/api/train/initialize", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "analyze" }),
+      body: JSON.stringify({ action: "analyze", skillLevel }),
     });
     const payload = (await response.json().catch(() => null)) as
       | {
@@ -1046,6 +1057,7 @@ export default function TrainPage() {
           sequenceLength: normalizeSequenceLength(sequenceLength),
           timePressureMode: "none",
           openingFilter: [],
+          skillLevel,
         }),
       });
       setOnboardingScreen("done");
@@ -1459,6 +1471,8 @@ export default function TrainPage() {
         analysisError={analysisError}
         analysisElapsedMs={analysisElapsedMs}
         summary={initializationSummary}
+        skillLevel={skillLevel}
+        onSkillLevelChange={setSkillLevel}
         onSelectProvider={setSelectedProvider}
         onUsernameChange={setProfileUsername}
         onConnectProfile={connectProfile}
@@ -1676,6 +1690,8 @@ function TrainOnboarding({
   analysisError,
   analysisElapsedMs,
   summary,
+  skillLevel,
+  onSkillLevelChange,
   onSelectProvider,
   onUsernameChange,
   onConnectProfile,
@@ -1691,6 +1707,8 @@ function TrainOnboarding({
   analysisError: string;
   analysisElapsedMs: number;
   summary: InitializationSummary | null;
+  skillLevel: SkillLevel;
+  onSkillLevelChange: (level: SkillLevel) => void;
   onSelectProvider: (provider: ProfileProvider | null) => void;
   onUsernameChange: (value: string) => void;
   onConnectProfile: (provider: ProfileProvider) => void;
@@ -1790,6 +1808,41 @@ function TrainOnboarding({
             >
               Skip this. Start with random positions.
             </button>
+
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
+                  Chess level
+                </p>
+                <p className="mt-1 text-sm text-[var(--app-muted)]">
+                  We use this only as a starting point. Your training rating will move quickly for the first few sessions.
+                </p>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                {[
+                  ["new_to_chess", "New to chess", "Start at 0"],
+                  ["beginner", "Beginner", "Start at 250"],
+                  ["intermediate", "Intermediate", "Start at 500"],
+                  ["advanced", "Advanced", "Start at 1000"],
+                ].map(([value, label, detail]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => onSkillLevelChange(value as SkillLevel)}
+                    className={[
+                      "rounded-[10px] border p-3 text-left transition",
+                      skillLevel === value
+                        ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)]"
+                        : "border-[var(--app-border-soft)] bg-[var(--app-panel-strong)] hover:border-[var(--app-accent)]",
+                    ].join(" ")}
+                  >
+                    <span className="block text-sm font-bold text-[var(--app-text)]">{label}</span>
+                    <span className="mt-1 block text-xs text-[var(--app-muted)]">{detail}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         ) : null}
 
