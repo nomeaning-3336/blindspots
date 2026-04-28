@@ -198,6 +198,12 @@ export function normalizeQueue(value: Json | null | undefined): TrainingQueueIte
       scheduledAt,
       source,
       cpLoss: typeof candidate.cpLoss === "number" ? candidate.cpLoss : undefined,
+      attempts: normalizeQueueCounter(candidate.attempts),
+      successes: normalizeQueueCounter(candidate.successes),
+      masteryStreak: normalizeQueueCounter(candidate.masteryStreak),
+      lastEvalPreservationScore: normalizeFiniteNumber(candidate.lastEvalPreservationScore),
+      lastAttemptAt: normalizeOptionalString(candidate.lastAttemptAt),
+      masteredAt: normalizeOptionalString(candidate.masteredAt),
       sessionId: typeof candidate.sessionId === "string" ? candidate.sessionId : undefined,
       gameId,
       ply,
@@ -289,6 +295,22 @@ function normalizeMateDistancePlies(value: unknown) {
   if (!Number.isFinite(parsed)) return undefined;
   const normalized = Math.floor(parsed);
   return normalized >= 0 ? normalized : undefined;
+}
+
+function normalizeQueueCounter(value: unknown): number | undefined {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return undefined;
+  const normalized = Math.floor(parsed);
+  return normalized >= 0 ? normalized : undefined;
+}
+
+function normalizeFiniteNumber(value: unknown): number | undefined {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function normalizeOptionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 function normalizeStringArray(value: unknown): string[] | undefined {

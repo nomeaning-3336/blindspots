@@ -4,6 +4,10 @@ const EXPLORE_REFRESH_THRESHOLD = 6;
 const MAX_RECENT_SERVED_FENS = 100;
 const SAME_GAME_PLY_WINDOW = 8;
 const FEN_NEAR_DUPLICATE_THRESHOLD = 0.92;
+const REVISIT_EVAL_PRESERVATION_THRESHOLD = 0.6;
+const MASTER_EVAL_PRESERVATION_THRESHOLD = 0.85;
+const MASTER_MIN_ATTEMPTS = 3;
+const MASTER_SUCCESS_STREAK = 3;
 
 export type TrainingPhase = "opening" | "middlegame" | "endgame" | "tactic" | "unknown";
 
@@ -26,6 +30,12 @@ export type TrainingQueueItem = {
   scheduledAt: string;
   source: "initialization" | "elite" | "revisit";
   cpLoss?: number;
+  attempts?: number;
+  successes?: number;
+  masteryStreak?: number;
+  lastEvalPreservationScore?: number;
+  lastAttemptAt?: string;
+  masteredAt?: string;
   sessionId?: string;
   gameId?: string;
   ply?: number;
@@ -157,8 +167,7 @@ export async function ensureTrainingQueuesHavePositionsCore({
   const readyCount =
     normalizedExploitQueue.length +
     normalizedExploreQueue.length +
-    normalizedRevisitQueue.filter((item) => Date.parse(item.scheduledAt) <= now.getTime()).length +
-    normalizedMasteredQueue.length;
+    normalizedRevisitQueue.filter((item) => Date.parse(item.scheduledAt) <= now.getTime()).length;
 
   if (readyCount < EXPLORE_REFRESH_THRESHOLD || normalizedExploreQueue.length < EXPLORE_REFRESH_THRESHOLD) {
     const excluded = new Set([
@@ -211,8 +220,8 @@ export async function selectAndReserveNextTrainingPositionCore(
   const completedSequenceCount = normalizeSequenceCount(options.completedSequenceCount);
   const shouldExplore = queues.exploreQueue.length > 0 && completedSequenceCount % 3 === 2;
   const sources: Array<[TrainingQueueName, TrainingQueueItem[]]> = shouldExplore
-    ? [["explore", queues.exploreQueue], ["exploit", queues.exploitQueue], ["mastered", queues.masteredQueue]]
-    : [["exploit", queues.exploitQueue], ["explore", queues.exploreQueue], ["mastered", queues.masteredQueue]];
+    ? [["explore", queues.exploreQueue], ["exploit", queues.exploitQueue]]
+    : [["exploit", queues.exploitQueue], ["explore", queues.exploreQueue]];
 
   for (const [queueName, queue] of sources) {
     for (const item of queue) {
@@ -264,24 +273,57 @@ export async function updateQueuesAfterSequenceCore({
     eco?: string;
   };
 }) {
+  const previousItem = findQueueItemByFen(currentQueues, startingFen);
   let queues = removeFenFromAllQueues(currentQueues, startingFen);
 
-  if (evalPreservationScore !== null && evalPreservationScore < 0.6) {
-    const revisitItem = itemFactory(startingFen, "revisit", addDays(now, 1).toISOString(), {
+  if (evalPreservationScore !== null) {
+    const isMasterySuccess = evalPreservationScore >= MASTER_EVAL_PRESERVATION_THRESHOLD;
+    const attemptMetadata = buildAttemptMetadata({
+      previousItem,
+      selectedMetadata,
       sessionId,
-      phase: selectedMetadata?.phase,
-      bucket: selectedMetadata?.bucket,
-      tags: selectedMetadata?.tags && selectedMetadata.tags.length > 0 ? selectedMetadata.tags : undefined,
-      isTactic: selectedMetadata?.isTactic === true ? true : undefined,
-      tacticRating: selectedMetadata?.tacticRating,
-      openingName: selectedMetadata?.openingName,
-      eco: selectedMetadata?.eco,
+      now,
+      evalPreservationScore,
+      isMasterySuccess,
     });
-    if (revisitItem) {
-      queues = {
-        ...queues,
-        revisitQueue: trimQueue([revisitItem, ...queues.revisitQueue.filter((item) => item.fen !== startingFen)]),
-      };
+
+    if (evalPreservationScore < REVISIT_EVAL_PRESERVATION_THRESHOLD) {
+      const revisitItem = itemFactory(startingFen, "revisit", addDays(now, 1).toISOString(), {
+        ...attemptMetadata,
+      });
+      if (revisitItem) {
+        queues = {
+          ...queues,
+          revisitQueue: trimQueue([revisitItem, ...queues.revisitQueue.filter((item) => item.fen !== startingFen)]),
+        };
+      }
+    } else {
+      const reviewedItem = itemFactory(
+        startingFen,
+        previousItem?.source ?? "elite",
+        now.toISOString(),
+        attemptMetadata,
+      );
+
+      if (reviewedItem) {
+        if (shouldPromoteToMastered(reviewedItem)) {
+          queues = {
+            ...queues,
+            masteredQueue: trimQueue([
+              { ...reviewedItem, masteredAt: now.toISOString() },
+              ...queues.masteredQueue.filter((item) => item.fen !== startingFen),
+            ]),
+          };
+        } else {
+          queues = {
+            ...queues,
+            exploitQueue: trimQueue([
+              reviewedItem,
+              ...queues.exploitQueue.filter((item) => item.fen !== startingFen),
+            ]),
+          };
+        }
+      }
     }
   }
 
@@ -459,6 +501,82 @@ function normalizeSequenceCount(value: unknown) {
   const parsed = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(parsed)) return 0;
   return Math.max(0, Math.floor(parsed));
+}
+
+function normalizeNonNegativeInteger(value: unknown) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.floor(parsed));
+}
+
+function findQueueItemByFen(queues: TrainingQueues, fen: string): TrainingQueueItem | null {
+  return (
+    queues.exploitQueue.find((item) => item.fen === fen) ??
+    queues.exploreQueue.find((item) => item.fen === fen) ??
+    queues.revisitQueue.find((item) => item.fen === fen) ??
+    queues.masteredQueue.find((item) => item.fen === fen) ??
+    null
+  );
+}
+
+function buildAttemptMetadata({
+  previousItem,
+  selectedMetadata,
+  sessionId,
+  now,
+  evalPreservationScore,
+  isMasterySuccess,
+}: {
+  previousItem: TrainingQueueItem | null;
+  selectedMetadata?: {
+    phase?: TrainingPhase;
+    bucket?: TrainingBucket;
+    tags?: string[];
+    isTactic?: boolean;
+    tacticRating?: number;
+    openingName?: string;
+    eco?: string;
+  };
+  sessionId: string;
+  now: Date;
+  evalPreservationScore: number;
+  isMasterySuccess: boolean;
+}): Partial<TrainingQueueItem> {
+  const attempts = normalizeNonNegativeInteger(previousItem?.attempts) + 1;
+  const successes = normalizeNonNegativeInteger(previousItem?.successes) + (isMasterySuccess ? 1 : 0);
+  const masteryStreak = isMasterySuccess ? normalizeNonNegativeInteger(previousItem?.masteryStreak) + 1 : 0;
+
+  return {
+    sessionId,
+    cpLoss: previousItem?.cpLoss,
+    gameId: previousItem?.gameId,
+    ply: previousItem?.ply,
+    previousFen: previousItem?.previousFen,
+    playedMove: previousItem?.playedMove,
+    mateDistancePlies: previousItem?.mateDistancePlies,
+    phase: selectedMetadata?.phase ?? previousItem?.phase,
+    bucket: selectedMetadata?.bucket ?? previousItem?.bucket,
+    tags:
+      selectedMetadata?.tags && selectedMetadata.tags.length > 0
+        ? selectedMetadata.tags
+        : previousItem?.tags,
+    isTactic: selectedMetadata?.isTactic ?? previousItem?.isTactic,
+    tacticRating: selectedMetadata?.tacticRating ?? previousItem?.tacticRating,
+    openingName: selectedMetadata?.openingName ?? previousItem?.openingName,
+    eco: selectedMetadata?.eco ?? previousItem?.eco,
+    attempts,
+    successes,
+    masteryStreak,
+    lastEvalPreservationScore: evalPreservationScore,
+    lastAttemptAt: now.toISOString(),
+  };
+}
+
+function shouldPromoteToMastered(item: TrainingQueueItem) {
+  return (
+    normalizeNonNegativeInteger(item.attempts) >= MASTER_MIN_ATTEMPTS &&
+    normalizeNonNegativeInteger(item.masteryStreak) >= MASTER_SUCCESS_STREAK
+  );
 }
 
 function trimQueue(queue: TrainingQueueItem[]) {
