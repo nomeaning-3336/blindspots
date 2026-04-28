@@ -13,7 +13,7 @@ import {
   normalizeRatingDeviation,
 } from "@/lib/training/elo";
 import { normalizeBucketStats, recordBucketResult } from "@/lib/training/bandit-stats";
-import { classifyTrainingBucket } from "@/lib/training/position-metadata";
+import { classifyTrainingBucket, classifyTrainingPhase } from "@/lib/training/position-metadata";
 import type { TrainingBucket, TrainingPhase } from "@/lib/training/queue-core";
 
 export const runtime = "nodejs";
@@ -46,6 +46,38 @@ type CompleteSequencePayload = {
 };
 
 type MoveClassification = "excellent" | "good" | "inaccuracy" | "mistake" | "blunder";
+
+type PositionEvaluation = {
+  index: number;
+  decisionFen: string;
+  userMove: {
+    san: string;
+    uci: string;
+  };
+  evalBefore: number;
+  evalAfter: number;
+  cpLoss: number;
+  classification: MoveClassification;
+  banditResult: "success" | "neutral" | "failure";
+  fenAfterUserMove: string;
+  fenAfterEngineMove: string | null;
+  phase: string;
+  bucket: string;
+  tags: string[];
+};
+
+type SequenceEvaluationResult = {
+  evalPreservationScore: number | null;
+  moveScores: Array<{
+    userMoveIndex: number;
+    cpLoss: number;
+    evalBefore: number;
+    evalAfter: number;
+    classification: MoveClassification;
+  }>;
+  totalCpLoss: number;
+  positionEvaluations: PositionEvaluation[];
+};
 
 const MATE_VISUAL_CP = 10000;
 
@@ -99,7 +131,7 @@ export async function POST(request: Request) {
   const reflectionNote = typeof payload?.reflectionNote === "string" ? payload.reflectionNote : null;
   const challengeElo = normalizeOptionalNumber(payload?.challengeElo);
   const profile = await getOrCreateProfile(userId);
-  const sequenceEvaluation = await calculateSequenceEvaluation(startingFen, moves);
+  const sequenceEvaluation = await calculateSequenceEvaluation(startingFen, moves, selectedBucket, selectedPhase, selectedTags);
   const evalPreservationScore = sequenceEvaluation.evalPreservationScore;
   const profileRatingDeviation = normalizeRatingDeviation(profile.rating_deviation);
 
@@ -143,6 +175,7 @@ export async function POST(request: Request) {
       opponent_elo: opponentElo,
       expected_score: expectedScore,
       actual_score: actualScore,
+      position_evaluations: sequenceEvaluation.positionEvaluations as unknown as Json,
     })
     .select("id")
     .single();
@@ -174,11 +207,10 @@ export async function POST(request: Request) {
   });
 
   const currentStats = normalizeBucketStats(profile.bucket_stats);
-  const bad =
-    evalPreservationScore !== null &&
-    evalPreservationScore !== undefined &&
-    evalPreservationScore < 0.6;
-  const updatedStats = recordBucketResult(currentStats, selectedBucket, !bad);
+  let updatedStats = currentStats;
+  for (const posEval of sequenceEvaluation.positionEvaluations) {
+    updatedStats = recordBucketResult(updatedStats, posEval.bucket, posEval.banditResult === "success");
+  }
 
   const { error: profileError } = await supabase
     .from("user_blindspot_profile")
@@ -204,6 +236,7 @@ export async function POST(request: Request) {
     sessionId: session.id,
     evalPreservationScore,
     moveScores: sequenceEvaluation.moveScores,
+    positionEvaluations: sequenceEvaluation.positionEvaluations,
     queues: {
       exploitCount: queues.exploitQueue.length,
       exploreCount: queues.exploreQueue.length,
@@ -227,7 +260,13 @@ export async function POST(request: Request) {
   });
 }
 
-async function calculateSequenceEvaluation(startingFen: string, moves: Array<{ san: string; uci: string; side: string }>) {
+async function calculateSequenceEvaluation(
+  startingFen: string,
+  moves: Array<{ san: string; uci: string; side: string }>,
+  selectedBucket: string,
+  selectedPhase: string | null,
+  selectedTags: string[] | null,
+) {
   const chess = new Chess(startingFen);
   const userColor = chess.turn();
   let userMoveCount = 0;
@@ -239,10 +278,12 @@ async function calculateSequenceEvaluation(startingFen: string, moves: Array<{ s
     evalAfter: number;
     classification: MoveClassification;
   }> = [];
+  const positionEvaluations: PositionEvaluation[] = [];
 
   for (const move of moves) {
     const isUserMove = chess.turn() === userColor;
-    const evalBefore = isUserMove ? await getPositionEval(chess.fen()) : null;
+    const decisionFen = chess.fen();
+    const evalBefore = isUserMove ? await getPositionEval(decisionFen) : null;
     const played = chess.move({
       from: move.uci.slice(0, 2),
       to: move.uci.slice(2, 4),
@@ -256,12 +297,28 @@ async function calculateSequenceEvaluation(startingFen: string, moves: Array<{ s
       const userDeliveredCheckmate = isCheckmateFen(fenAfterMove);
 
       if (userDeliveredCheckmate) {
+        const classification = classifyUserDeliveredCheckmate();
         moveScores.push({
           userMoveIndex: userMoveCount,
           cpLoss: 0,
           evalBefore: Math.round(evalBeforeCp),
           evalAfter: mateCpForWinningSide(userColor),
-          classification: classifyUserDeliveredCheckmate(),
+          classification,
+        });
+        positionEvaluations.push({
+          index: userMoveCount,
+          decisionFen,
+          userMove: { san: move.san, uci: move.uci },
+          evalBefore: Math.round(evalBeforeCp),
+          evalAfter: mateCpForWinningSide(userColor),
+          cpLoss: 0,
+          classification,
+          banditResult: "success",
+          fenAfterUserMove: fenAfterMove,
+          fenAfterEngineMove: null,
+          phase: selectedPhase ?? classifyTrainingPhase(fenAfterMove),
+          bucket: selectedBucket,
+          tags: selectedTags ?? [],
         });
         userMoveCount += 1;
         continue;
@@ -271,12 +328,32 @@ async function calculateSequenceEvaluation(startingFen: string, moves: Array<{ s
       const afterUserEval = userColor === "w" ? evalAfter.cp : -evalAfter.cp;
       const cpLoss = Math.max(0, Math.round(evalBeforeCp - afterUserEval));
       totalCpLoss += cpLoss;
+      const classification = classifyCpLoss(cpLoss);
       moveScores.push({
         userMoveIndex: userMoveCount,
         cpLoss,
         evalBefore: Math.round(evalBeforeCp),
         evalAfter: Math.round(afterUserEval),
-        classification: classifyCpLoss(cpLoss),
+        classification,
+      });
+
+      // Get engine reply if available (requires engine call; leave null for now)
+      let fenAfterEngineMove: string | null = null;
+
+      positionEvaluations.push({
+        index: userMoveCount,
+        decisionFen,
+        userMove: { san: move.san, uci: move.uci },
+        evalBefore: Math.round(evalBeforeCp),
+        evalAfter: Math.round(afterUserEval),
+        cpLoss,
+        classification,
+        banditResult: getBanditResult(classification),
+        fenAfterUserMove: fenAfterMove,
+        fenAfterEngineMove,
+        phase: selectedPhase ?? classifyTrainingPhase(fenAfterMove),
+        bucket: selectedBucket,
+        tags: selectedTags ?? [],
       });
       userMoveCount += 1;
     }
@@ -289,6 +366,7 @@ async function calculateSequenceEvaluation(startingFen: string, moves: Array<{ s
         : Math.max(0, Math.min(1, 1 - totalCpLoss / (userMoveCount * 100))),
     moveScores,
     totalCpLoss,
+    positionEvaluations,
   };
 }
 
@@ -298,6 +376,12 @@ function classifyCpLoss(cpLoss: number): MoveClassification {
   if (cpLoss <= 180) return "inaccuracy";
   if (cpLoss <= 320) return "mistake";
   return "blunder";
+}
+
+function getBanditResult(classification: MoveClassification): "success" | "neutral" | "failure" {
+  if (classification === "excellent" || classification === "good") return "success";
+  if (classification === "inaccuracy") return "neutral";
+  return "failure";
 }
 
 async function getOrCreateProfile(userId: string) {

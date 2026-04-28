@@ -211,6 +211,7 @@ export type Database = {
           reflection_note: string | null;
           position_fingerprint: Json | null;
           blindspot_cluster_id: string | null;
+          position_evaluations: Json;
           elo_before: number;
           elo_after: number;
           elo_delta: number;
@@ -234,6 +235,7 @@ export type Database = {
           reflection_note?: string | null;
           position_fingerprint?: Json | null;
           blindspot_cluster_id?: string | null;
+          position_evaluations?: Json;
           elo_before: number;
           elo_after: number;
           elo_delta: number;
@@ -257,6 +259,7 @@ export type Database = {
           reflection_note?: string | null;
           position_fingerprint?: Json | null;
           blindspot_cluster_id?: string | null;
+          position_evaluations?: Json;
           elo_before?: number;
           elo_after?: number;
           elo_delta?: number;
