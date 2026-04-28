@@ -24,13 +24,14 @@ import {
 type TrainingState = "active" | "complete" | "drift";
 type OnboardingScreen = "loading" | "connect" | "analysis" | "summary" | "done";
 type ProfileProvider = "chesscom" | "lichess";
-type SkillLevel = "new_to_chess" | "beginner" | "intermediate" | "advanced";
+type SkillLevel = "new_to_chess" | "beginner" | "intermediate" | "advanced" | "expert";
 
 const SKILL_LEVEL_STARTING_ELO: Record<SkillLevel, number> = {
   new_to_chess: 0,
-  beginner: 250,
-  intermediate: 500,
-  advanced: 1000,
+  beginner: 500,
+  intermediate: 1000,
+  advanced: 1500,
+  expert: 2000,
 };
 
 type TrainingMove = {
@@ -342,7 +343,8 @@ export default function TrainPage() {
             payload.preferences.skill_level === "new_to_chess" ||
             payload.preferences.skill_level === "beginner" ||
             payload.preferences.skill_level === "intermediate" ||
-            payload.preferences.skill_level === "advanced"
+            payload.preferences.skill_level === "advanced" ||
+            payload.preferences.skill_level === "expert"
           ) {
             setSkillLevel(payload.preferences.skill_level);
           }
@@ -1723,141 +1725,229 @@ function TrainOnboarding({
   onSkip: () => void;
   onStartTraining: () => void;
 }) {
+  type OnboardingFlowStep = "source" | "username" | "skill";
+  type OnboardingSource = ProfileProvider | "none";
+
+  const [step, setStep] = useState<OnboardingFlowStep>("source");
+  const [source, setSource] = useState<OnboardingSource | null>(selectedProvider);
+  const [direction, setDirection] = useState<1 | -1>(1);
+  const sourceNeedsUsername = source === "lichess" || source === "chesscom";
+  const activeStepIndex = step === "source" ? 0 : step === "username" ? 1 : 2;
+
+  useEffect(() => {
+    if (screen !== "connect") return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName.toLowerCase();
+      const inField =
+        tagName === "input" ||
+        tagName === "textarea" ||
+        tagName === "select" ||
+        target?.getAttribute("contenteditable") === "true";
+
+      if (event.key === "Escape" && !inField) {
+        if (step === "username") goToStep("source");
+        if (step === "skill") goToStep(sourceNeedsUsername ? "username" : "source");
+        return;
+      }
+
+      if (inField) return;
+
+      if (step === "source") {
+        if (event.key === "1") selectSource("lichess");
+        if (event.key === "2") selectSource("chesscom");
+        if (event.key === "3") selectSource("none");
+        if (event.key === "Enter" && source) continueFromSource();
+      }
+
+      if (step === "skill") {
+        const levelByKey: Record<string, SkillLevel> = {
+          "1": "new_to_chess",
+          "2": "beginner",
+          "3": "intermediate",
+          "4": "advanced",
+          "5": "expert",
+        };
+        const selectedLevel = levelByKey[event.key];
+        if (selectedLevel) onSkillLevelChange(selectedLevel);
+        if (event.key === "Enter") finishOnboarding();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [screen, step, source, sourceNeedsUsername, skillLevel]);
+
+  useEffect(() => {
+    if (screen === "connect" && connectionMessage && step === "skill" && sourceNeedsUsername) {
+      goToStep("username");
+    }
+  }, [screen, connectionMessage, step, sourceNeedsUsername]);
+
+  function goToStep(nextStep: OnboardingFlowStep) {
+    const order: Record<OnboardingFlowStep, number> = {
+      source: 0,
+      username: 1,
+      skill: 2,
+    };
+    setDirection(order[nextStep] >= order[step] ? 1 : -1);
+    setStep(nextStep);
+  }
+
+  function selectSource(nextSource: OnboardingSource) {
+    setSource(nextSource);
+    onSelectProvider(nextSource === "none" ? null : nextSource);
+  }
+
+  function continueFromSource() {
+    if (!source) return;
+    goToStep(source === "none" ? "skill" : "username");
+  }
+
+  function finishOnboarding() {
+    if (source === "none") {
+      void onSkip();
+      return;
+    }
+    if (sourceNeedsUsername) {
+      void onConnectProfile(source);
+    }
+  }
+
   return (
     <div
       className={[
-        "grid min-h-[calc(100dvh-92px)] w-full place-items-center px-4 py-8",
+        "grid min-h-[calc(100dvh-92px)] w-full place-items-center overflow-hidden px-4 py-6",
         screen === "analysis" ? "bg-[var(--app-bg)]" : "",
       ].join(" ")}
     >
-      <section className="w-full max-w-[620px] text-center">
+      <section className="w-full max-w-[640px] text-center">
         {screen === "loading" ? (
           <LinearProgress completedSteps={0} />
         ) : null}
 
         {screen === "connect" ? (
-          <div className="grid gap-8">
-            <div className="grid gap-4">
-              <h1 className="text-2xl font-bold text-[var(--app-text)]">
-                We need your games first.
-              </h1>
-              <p className="text-sm leading-7 text-[var(--app-muted)]">
-                We need your Lichess or Chess.com username. We are going to read your
-                games. Yes, the bad ones too. Especially the bad ones.
-              </p>
-            </div>
+          <div className="grid min-h-[min(680px,calc(100dvh-132px))] content-between gap-8">
+            <OnboardingStepHeader stepIndex={activeStepIndex} totalSteps={3} />
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <button
-                type="button"
-                className={onboardingPrimaryButtonClass(selectedProvider === "lichess")}
-                disabled={isConnectingProfile}
-                onClick={() => {
-                  onSelectProvider("lichess");
-                }}
-              >
-                Use Lichess
-              </button>
-              <button
-                type="button"
-                className={onboardingPrimaryButtonClass(selectedProvider === "chesscom")}
-                disabled={isConnectingProfile}
-                onClick={() => {
-                  onSelectProvider("chesscom");
-                }}
-              >
-                Use Chess.com
-              </button>
-            </div>
-
-            {selectedProvider ? (
-              <form
-                className="mx-auto grid w-full max-w-[420px] gap-3 text-left"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  if (!isConnectingProfile && username.trim().length > 0) {
-                    void onConnectProfile(selectedProvider);
-                  }
-                }}
-              >
-                <label className="grid gap-2">
-                  <span className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
-                    Public username
-                  </span>
-                  <input
-                    value={username}
-                    onChange={(event) => onUsernameChange(event.target.value)}
-                    className="app-brutal-input min-h-12 px-4 text-base text-[var(--app-text)] outline-none transition focus:border-[var(--app-accent)]"
-                    placeholder={
-                      selectedProvider === "lichess"
-                        ? "Your Lichess username"
-                        : "Your Chess.com username"
-                    }
-                    autoComplete="off"
-                  />
-                </label>
-                {connectionMessage ? (
-                  <p className="text-sm text-[var(--app-muted)]">{connectionMessage}</p>
-                ) : null}
-                <button
-                  type="submit"
-                  disabled={isConnectingProfile || username.trim().length === 0}
-                  className="min-h-12 rounded-[8px] border border-[var(--app-accent)] bg-[var(--app-accent)] px-5 text-sm font-bold uppercase tracking-[0.12em] text-black transition hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)] disabled:cursor-not-allowed disabled:border-[var(--app-border)] disabled:bg-[var(--app-surface-subtle)] disabled:text-[var(--app-muted)]"
-                >
-                  {isConnectingProfile ? "Checking..." : "Continue"}
-                </button>
-              </form>
-            ) : null}
-
-            <button
-              type="button"
-              className="mx-auto min-h-11 cursor-pointer text-sm font-bold text-[var(--app-muted)] underline-offset-4 transition hover:text-[var(--app-text)] hover:underline"
-              onClick={() => void onSkip()}
+            <div
+              key={step}
+              className="train-onboarding-step grid gap-7 text-left"
+              data-direction={direction}
             >
-              Skip this. Start with random positions.
-            </button>
+              {step === "source" ? (
+                <>
+                  <OnboardingTitle eyebrow="01 / Source" title="Where do you play?" />
+                  <div className="grid gap-2.5">
+                    <OnboardingChoice index="1" label="Lichess" detail="Use recent public games." selected={source === "lichess"} disabled={isConnectingProfile} onClick={() => selectSource("lichess")} />
+                    <OnboardingChoice index="2" label="Chess.com" detail="Use recent public games." selected={source === "chesscom"} disabled={isConnectingProfile} onClick={() => selectSource("chesscom")} />
+                    <OnboardingChoice index="3" label="Start without an account" detail="Use the fallback position pool." selected={source === "none"} disabled={isConnectingProfile} onClick={() => selectSource("none")} />
+                  </div>
+                  <div className="flex justify-end">
+                    <OnboardingButton disabled={!source || isConnectingProfile} onClick={continueFromSource}>
+                      Continue
+                    </OnboardingButton>
+                  </div>
+                </>
+              ) : null}
 
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
-                  Chess level
-                </p>
-                <p className="mt-1 text-sm text-[var(--app-muted)]">
-                  We use this only as a starting point. Your training rating will move quickly for the first few sessions.
-                </p>
-              </div>
+              {step === "username" && sourceNeedsUsername ? (
+                <form
+                  className="grid gap-7"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!isConnectingProfile && username.trim().length > 0) {
+                      goToStep("skill");
+                    }
+                  }}
+                >
+                  <OnboardingTitle
+                    eyebrow={`02 / ${source === "lichess" ? "Lichess" : "Chess.com"}`}
+                    title="Enter your public username."
+                  />
+                  <label className="grid gap-3">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--app-muted)]">
+                      {source === "lichess" ? "Lichess username" : "Chess.com username"}
+                    </span>
+                    <div className="flex min-h-13 items-center rounded-[6px] border border-[var(--app-border)] bg-[var(--app-surface-input)] transition focus-within:border-[var(--app-accent)]">
+                      <span className="shrink-0 pl-4 text-xs text-[var(--app-muted-soft)]">
+                        {source === "lichess" ? "lichess.org/@/" : "chess.com/member/"}
+                      </span>
+                      <input
+                        aria-label={source === "lichess" ? "Lichess username" : "Chess.com username"}
+                        value={username}
+                        onChange={(event) => onUsernameChange(event.target.value)}
+                        className="min-w-0 flex-1 bg-transparent px-2 py-4 text-base font-bold text-[var(--app-text)] outline-none"
+                        autoComplete="off"
+                        spellCheck={false}
+                        autoFocus
+                      />
+                    </div>
+                    {connectionMessage ? (
+                      <span className="text-sm text-[var(--app-class-blunder)]" role="status">
+                        {connectionMessage}
+                      </span>
+                    ) : null}
+                  </label>
+                  <div className="flex items-center justify-between gap-3">
+                    <OnboardingButton variant="secondary" onClick={() => goToStep("source")}>
+                      Back
+                    </OnboardingButton>
+                    <OnboardingButton type="submit" disabled={isConnectingProfile || username.trim().length === 0}>
+                      Continue
+                    </OnboardingButton>
+                  </div>
+                </form>
+              ) : null}
 
-              <div className="grid gap-2 sm:grid-cols-2">
-                {[
-                  ["new_to_chess", "New to chess", "Start at 0"],
-                  ["beginner", "Beginner", "Start at 250"],
-                  ["intermediate", "Intermediate", "Start at 500"],
-                  ["advanced", "Advanced", "Start at 1000"],
-                ].map(([value, label, detail]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => onSkillLevelChange(value as SkillLevel)}
-                    className={[
-                      "rounded-[10px] border p-3 text-left transition",
-                      skillLevel === value
-                        ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)]"
-                        : "border-[var(--app-border-soft)] bg-[var(--app-panel-strong)] hover:border-[var(--app-accent)]",
-                    ].join(" ")}
-                  >
-                    <span className="block text-sm font-bold text-[var(--app-text)]">{label}</span>
-                    <span className="mt-1 block text-xs text-[var(--app-muted)]">{detail}</span>
-                  </button>
-                ))}
-              </div>
+              {step === "skill" ? (
+                <>
+                  <OnboardingTitle eyebrow="03 / Skill" title="Set your starting point." />
+                  <div className="grid gap-2.5 sm:grid-cols-2">
+                    {[
+                      ["new_to_chess", "1", "New to chess"],
+                      ["beginner", "2", "Beginner"],
+                      ["intermediate", "3", "Intermediate"],
+                      ["advanced", "4", "Advanced"],
+                      ["expert", "5", "Expert"],
+                    ].map(([value, index, label]) => (
+                      <OnboardingChoice
+                        key={value}
+                        index={index}
+                        label={label}
+                        selected={skillLevel === value}
+                        disabled={isConnectingProfile}
+                        onClick={() => onSkillLevelChange(value as SkillLevel)}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <OnboardingButton
+                      variant="secondary"
+                      disabled={isConnectingProfile}
+                      onClick={() => goToStep(sourceNeedsUsername ? "username" : "source")}
+                    >
+                      Back
+                    </OnboardingButton>
+                    <OnboardingButton disabled={isConnectingProfile} onClick={finishOnboarding}>
+                      {isConnectingProfile ? "Checking..." : source === "none" ? "Start training" : "Pull games"}
+                    </OnboardingButton>
+                  </div>
+                </>
+              ) : null}
             </div>
+
+            <p className="text-left text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--app-muted-soft)]">
+              {step === "source" ? "Press 1 / 2 / 3" : step === "username" ? "Enter to continue / Esc to go back" : "Press 1-5 / Esc to go back"}
+            </p>
           </div>
         ) : null}
 
         {screen === "analysis" ? (
           <div className="mx-auto grid w-full max-w-[430px] gap-8">
             <LinearProgress completedSteps={analysisStep} />
-            <div className="mx-auto grid w-fit max-w-full gap-4 text-left">
+            <div className="mx-auto grid w-full max-w-[360px] gap-4 text-left">
               {analysisError ? (
                 <AnalysisLine active={false} done={false} failed label={analysisError} />
               ) : (
@@ -1880,7 +1970,9 @@ function TrainOnboarding({
                 </>
               )}
             </div>
-            <AnalysisElapsedMessage elapsedMs={analysisElapsedMs} />
+            <div className="mx-auto w-full max-w-[360px] text-left">
+              <AnalysisElapsedMessage elapsedMs={analysisElapsedMs} />
+            </div>
           </div>
         ) : null}
 
@@ -1906,6 +1998,134 @@ function TrainOnboarding({
 
       </section>
     </div>
+  );
+}
+
+function OnboardingStepHeader({
+  stepIndex,
+  totalSteps,
+}: {
+  stepIndex: number;
+  totalSteps: number;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--app-muted)]">
+        Step {stepIndex + 1} of {totalSteps}
+      </span>
+      <div className="flex flex-1 justify-end gap-1" aria-hidden="true">
+        {Array.from({ length: totalSteps }).map((_, index) => (
+          <span
+            key={index}
+            className={[
+              "h-0.5 w-8 rounded-full transition-colors duration-300",
+              index <= stepIndex ? "bg-[var(--app-accent)]" : "bg-[var(--app-border-soft)]",
+            ].join(" ")}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OnboardingTitle({
+  eyebrow,
+  title,
+}: {
+  eyebrow: string;
+  title: string;
+}) {
+  return (
+    <div className="grid gap-3 text-center sm:text-left">
+      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--app-accent)]">
+        {eyebrow}
+      </p>
+      <h1 className="text-3xl font-bold leading-tight text-[var(--app-text)] sm:text-4xl">
+        {title}
+      </h1>
+    </div>
+  );
+}
+
+function OnboardingChoice({
+  index,
+  label,
+  detail,
+  selected,
+  disabled,
+  onClick,
+}: {
+  index: string;
+  label: string;
+  detail?: string;
+  selected: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-pressed={selected}
+      onClick={onClick}
+      className={[
+        "grid min-h-20 w-full grid-cols-[34px_minmax(0,1fr)] items-center gap-4 rounded-[6px] border px-4 py-3 text-left transition",
+        "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)]",
+        selected
+          ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)]"
+          : "border-[var(--app-border-soft)] bg-[var(--app-panel-strong)] hover:border-[var(--app-border)]",
+        disabled ? "cursor-wait opacity-60" : "",
+      ].join(" ")}
+    >
+      <span
+        className={[
+          "grid h-8 w-8 place-items-center rounded border text-[10px] font-bold",
+          selected
+            ? "border-[var(--app-accent)] text-[var(--app-accent)]"
+            : "border-[var(--app-border-soft)] text-[var(--app-muted)]",
+        ].join(" ")}
+      >
+        {index}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-bold text-[var(--app-text)]">{label}</span>
+        {detail ? (
+          <span className="mt-1 block text-xs leading-5 text-[var(--app-muted)]">{detail}</span>
+        ) : null}
+      </span>
+    </button>
+  );
+}
+
+function OnboardingButton({
+  type = "button",
+  variant = "primary",
+  disabled,
+  onClick,
+  children,
+}: {
+  type?: "button" | "submit";
+  variant?: "primary" | "secondary";
+  disabled?: boolean;
+  onClick?: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type={type}
+      disabled={disabled}
+      onClick={onClick}
+      className={[
+        "inline-flex min-h-12 items-center justify-center rounded-[6px] border px-5 text-xs font-bold uppercase tracking-[0.14em] transition",
+        "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)]",
+        variant === "primary"
+          ? "border-[var(--app-accent)] bg-[var(--app-accent)] text-black hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
+          : "border-[var(--app-border)] bg-transparent text-[var(--app-text)] hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]",
+        disabled ? "cursor-not-allowed opacity-55 hover:border-[var(--app-border)] hover:bg-transparent hover:text-[var(--app-muted)]" : "",
+      ].join(" ")}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -2065,15 +2285,6 @@ function SummaryStat({ value, label }: { value: string; label: string }) {
       </p>
     </div>
   );
-}
-
-function onboardingPrimaryButtonClass(isActive: boolean) {
-  return [
-    "min-h-12 rounded-[8px] border px-5 text-sm font-bold uppercase tracking-[0.12em] transition disabled:cursor-wait disabled:opacity-70",
-    isActive
-      ? "border-[var(--app-accent)] bg-[var(--app-accent)] text-black"
-      : "border-[var(--app-border)] bg-[var(--app-surface-subtle)] text-[var(--app-text)] hover:border-[var(--app-accent)]",
-  ].join(" ");
 }
 
 function resolveProfileConnectionError(error?: string) {

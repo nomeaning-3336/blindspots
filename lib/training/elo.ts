@@ -1,4 +1,4 @@
-export type SkillLevel = "new_to_chess" | "beginner" | "intermediate" | "advanced";
+export type SkillLevel = "new_to_chess" | "beginner" | "intermediate" | "advanced" | "expert";
 
 export const DEFAULT_RATING_DEVIATION = 650;
 export const MIN_RATING_DEVIATION = 80;
@@ -9,11 +9,13 @@ export function getStartingEloForSkillLevel(skillLevel: SkillLevel) {
     case "new_to_chess":
       return 0;
     case "beginner":
-      return 250;
-    case "intermediate":
       return 500;
-    case "advanced":
+    case "intermediate":
       return 1000;
+    case "advanced":
+      return 1500;
+    case "expert":
+      return 2000;
   }
 }
 
@@ -22,7 +24,8 @@ export function normalizeSkillLevel(value: unknown): SkillLevel {
     value === "new_to_chess" ||
     value === "beginner" ||
     value === "intermediate" ||
-    value === "advanced"
+    value === "advanced" ||
+    value === "expert"
   ) {
     return value;
   }
