@@ -616,6 +616,29 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   transition: width 520ms cubic-bezier(0.66, 0, 0.34, 1), opacity 180ms ease;
 }
 
+.train-onboarding-step {
+  animation: train-onboarding-step-enter 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.train-onboarding-step[data-direction="-1"] {
+  --train-onboarding-enter-x: -14px;
+}
+
+.train-onboarding-step[data-direction="1"] {
+  --train-onboarding-enter-x: 14px;
+}
+
+@keyframes train-onboarding-step-enter {
+  from {
+    opacity: 0;
+    transform: translateX(var(--train-onboarding-enter-x, 14px));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .train-onboarding-step-active {
   animation: train-onboarding-step-active 900ms ease-in-out infinite;
   box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-accent) 34%, transparent);
@@ -639,6 +662,10 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
 @media (prefers-reduced-motion: reduce) {
   .train-onboarding-progress {
     transition: none;
+  }
+
+  .train-onboarding-step {
+    animation: none;
   }
 
   .train-onboarding-step-active {
