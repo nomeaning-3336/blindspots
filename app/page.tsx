@@ -142,7 +142,9 @@ function HeroVisual() {
             className="h-auto w-full object-cover opacity-80"
           />
           <div className="absolute inset-0 flex items-center justify-center">
-            <TrainingBoard />
+            <div className="aspect-square w-[min(82%,72vh)] max-w-[760px]">
+              <TrainingBoard />
+            </div>
           </div>
           <div className="absolute bottom-2 left-0 right-0 flex items-center justify-center">
             <div className="flex items-center gap-2 px-0.5">
