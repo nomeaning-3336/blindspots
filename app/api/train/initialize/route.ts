@@ -6,7 +6,13 @@ import {
   buildTrainInitializationSummary,
   type TrainInitializationSummary,
 } from "@/lib/train-initialization";
-import { getSeededStartingElo } from "@/lib/training/elo";
+import {
+  DEFAULT_RATING_DEVIATION,
+  getSeededStartingElo,
+  getStartingEloForSkillLevel,
+  normalizeSkillLevel,
+  type SkillLevel,
+} from "@/lib/training/elo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,6 +34,7 @@ interface InitializePayload {
   sequenceLength?: number;
   timePressureMode?: string;
   openingFilter?: unknown;
+  skillLevel?: unknown;
 }
 
 export async function GET() {
@@ -60,7 +67,13 @@ export async function POST(request: Request) {
   const action = payload?.action;
 
   if (action === "skip") {
+    const skillLevel = normalizeSkillLevel(payload?.skillLevel);
+    const startingElo = getStartingEloForSkillLevel(skillLevel);
+
     await upsertBlindspotProfile(userId, {
+      blindspots_elo: startingElo,
+      rating_deviation: DEFAULT_RATING_DEVIATION,
+      initial_skill_level: skillLevel,
       initialization_status: "skipped",
       profile_initialized: false,
       weakness_vector: {},
@@ -80,7 +93,13 @@ export async function POST(request: Request) {
 
     const profile = await getBlindspotProfile(userId);
     if (!profile) {
+      const skillLevel = normalizeSkillLevel(payload?.skillLevel);
+      const startingElo = getStartingEloForSkillLevel(skillLevel);
+
       await upsertBlindspotProfile(userId, {
+        blindspots_elo: startingElo,
+        rating_deviation: DEFAULT_RATING_DEVIATION,
+        initial_skill_level: skillLevel,
         initialization_status: "skipped",
         profile_initialized: false,
         weakness_vector: {},
@@ -96,17 +115,22 @@ export async function POST(request: Request) {
   }
 
   if (action === "analyze") {
-    return runInitialization(userId);
+    return runInitialization(userId, normalizeSkillLevel(payload?.skillLevel));
   }
 
   return NextResponse.json({ error: "Unsupported action" }, { status: 400 });
 }
 
-async function runInitialization(userId: string) {
+async function runInitialization(userId: string, skillLevel: SkillLevel) {
   const linkedProfiles = await getLinkedChessProfilesForUser(userId);
 
   if (linkedProfiles.length === 0) {
+    const startingElo = getStartingEloForSkillLevel(skillLevel);
+
     await upsertBlindspotProfile(userId, {
+      blindspots_elo: startingElo,
+      rating_deviation: DEFAULT_RATING_DEVIATION,
+      initial_skill_level: skillLevel,
       initialization_status: "no_games",
       profile_initialized: false,
       weakness_vector: {},
@@ -125,7 +149,12 @@ async function runInitialization(userId: string) {
     const summary = await buildTrainInitializationSummary(linkedProfiles);
 
     if (summary === "no_games") {
+      const startingElo = getStartingEloForSkillLevel(skillLevel);
+
       await upsertBlindspotProfile(userId, {
+        blindspots_elo: startingElo,
+        rating_deviation: DEFAULT_RATING_DEVIATION,
+        initial_skill_level: skillLevel,
         initialization_status: "no_games",
         profile_initialized: false,
         weakness_vector: {},
@@ -139,7 +168,7 @@ async function runInitialization(userId: string) {
       return NextResponse.json({ ok: true, status: "no_games" });
     }
 
-    await persistSuccessfulInitialization(userId, summary);
+    await persistSuccessfulInitialization(userId, summary, skillLevel);
     return NextResponse.json({ ok: true, status: "complete", summary });
   } catch (error) {
     console.error("Training initialization failed", error);
@@ -159,10 +188,17 @@ async function runInitialization(userId: string) {
 async function persistSuccessfulInitialization(
   userId: string,
   summary: TrainInitializationSummary,
+  skillLevel: SkillLevel,
 ) {
+  const skillStartingElo = getStartingEloForSkillLevel(skillLevel);
+  const analyzedStartingElo = getSeededStartingElo(summary.totalCpLoss, summary.totalMoves);
+  const startingElo = Math.round((skillStartingElo + analyzedStartingElo) / 2);
+
   const completedAt = new Date().toISOString();
   await upsertBlindspotProfile(userId, {
-    blindspots_elo: getSeededStartingElo(summary.totalCpLoss, summary.totalMoves),
+    blindspots_elo: startingElo,
+    rating_deviation: DEFAULT_RATING_DEVIATION,
+    initial_skill_level: skillLevel,
     initialization_status: "complete",
     initialization_completed_at: completedAt,
     profile_initialized: true,
@@ -196,7 +232,7 @@ async function getBlindspotProfile(userId: string) {
   const { data, error } = await supabase
     .from("user_blindspot_profile")
     .select(
-      "user_id, blindspots_elo, weakness_vector, mastery_vector, exploit_queue, explore_queue, revisit_queue, mastered_queue, total_sequences, last_session_at, profile_initialized, initialization_status, initialization_completed_at, created_at, updated_at",
+      "user_id, blindspots_elo, rating_deviation, initial_skill_level, weakness_vector, mastery_vector, exploit_queue, explore_queue, revisit_queue, mastered_queue, total_sequences, last_session_at, profile_initialized, initialization_status, initialization_completed_at, created_at, updated_at",
     )
     .eq("user_id", userId)
     .maybeSingle();
@@ -218,7 +254,7 @@ async function getTrainingPreferences(userId: string) {
   const { data, error } = await supabase
     .from("user_training_preferences")
     .select(
-      "user_id, sequence_length, opponent_mode, time_pressure_mode, opening_filter, created_at, updated_at",
+      "user_id, sequence_length, opponent_mode, time_pressure_mode, opening_filter, skill_level, created_at, updated_at",
     )
     .eq("user_id", userId)
     .maybeSingle();
@@ -290,6 +326,7 @@ async function saveTrainingPreferences(
     opponent_mode: "standard",
     time_pressure_mode: preferences.timePressureMode,
     opening_filter: preferences.openingFilter,
+    skill_level: preferences.skillLevel,
   });
 
   if (error) {
@@ -306,10 +343,13 @@ function normalizeTrainingPreferences(payload: InitializePayload | null) {
   const openingFilter = Array.isArray(payload?.openingFilter)
     ? payload.openingFilter
     : [];
+  const skillLevel = normalizeSkillLevel(payload?.skillLevel);
+
   return {
     sequenceLength,
     timePressureMode,
     openingFilter,
+    skillLevel,
   };
 }
 

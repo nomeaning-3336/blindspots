@@ -172,6 +172,7 @@ export type Database = {
           opponent_mode: string;
           time_pressure_mode: string;
           opening_filter: Json;
+          skill_level: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -181,6 +182,7 @@ export type Database = {
           opponent_mode?: string;
           time_pressure_mode?: string;
           opening_filter?: Json;
+          skill_level?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -190,6 +192,7 @@ export type Database = {
           opponent_mode?: string;
           time_pressure_mode?: string;
           opening_filter?: Json;
+          skill_level?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -278,6 +281,8 @@ export type Database = {
         Row: {
           user_id: string;
           blindspots_elo: number;
+          rating_deviation: number;
+          initial_skill_level: string | null;
           weakness_vector: Json;
           mastery_vector: Json;
           exploit_queue: Json;
@@ -298,6 +303,8 @@ export type Database = {
         Insert: {
           user_id: string;
           blindspots_elo?: number;
+          rating_deviation?: number;
+          initial_skill_level?: string | null;
           weakness_vector?: Json;
           mastery_vector?: Json;
           exploit_queue?: Json;
@@ -318,6 +325,8 @@ export type Database = {
         Update: {
           user_id?: string;
           blindspots_elo?: number;
+          rating_deviation?: number;
+          initial_skill_level?: string | null;
           weakness_vector?: Json;
           mastery_vector?: Json;
           exploit_queue?: Json;

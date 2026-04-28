@@ -10,6 +10,7 @@ import {
   calculateExpectedScore,
   getKFactor,
   getOpponentElo,
+  normalizeRatingDeviation,
 } from "@/lib/training/elo";
 import { normalizeBucketStats, recordBucketResult } from "@/lib/training/bandit-stats";
 import { classifyTrainingBucket } from "@/lib/training/position-metadata";
@@ -98,16 +99,19 @@ export async function POST(request: Request) {
   const profile = await getOrCreateProfile(userId);
   const sequenceEvaluation = await calculateSequenceEvaluation(startingFen, moves);
   const evalPreservationScore = sequenceEvaluation.evalPreservationScore;
+  const profileRatingDeviation = normalizeRatingDeviation(profile.rating_deviation);
+
   const eloUpdate = calculateEloUpdate({
     currentElo: profile.blindspots_elo,
+    ratingDeviation: profileRatingDeviation,
     totalSequences: profile.total_sequences,
     evalPreservationScore,
     totalCpLoss: sequenceEvaluation.totalCpLoss,
   });
 
-  const fallbackOpponentElo = getOpponentElo(profile.blindspots_elo);
+  const fallbackOpponentElo = getOpponentElo(profile.blindspots_elo, profile.total_sequences);
   const fallbackExpectedScore = calculateExpectedScore(profile.blindspots_elo, fallbackOpponentElo);
-  const kFactor = eloUpdate?.kFactor ?? getKFactor(profile.total_sequences);
+  const kFactor = eloUpdate?.kFactor ?? getKFactor(profile.total_sequences, profileRatingDeviation);
   const completedAt = new Date().toISOString();
   const eloBefore = eloUpdate?.eloBefore ?? profile.blindspots_elo;
   const eloAfter = eloUpdate?.eloAfter ?? profile.blindspots_elo;
@@ -177,6 +181,7 @@ export async function POST(request: Request) {
     .from("user_blindspot_profile")
     .update({
       blindspots_elo: eloAfter,
+      rating_deviation: eloUpdate?.ratingDeviationAfter ?? profileRatingDeviation,
       total_sequences: profile.total_sequences + 1,
       last_session_at: completedAt,
       exploit_queue: queues.exploitQueue as unknown as Json,
@@ -213,6 +218,8 @@ export async function POST(request: Request) {
       rawDelta: eloUpdate?.rawDelta ?? 0,
       clampedDelta: eloUpdate?.clampedDelta ?? 0,
       skipped: evalPreservationScore === null,
+      ratingDeviationBefore: eloUpdate?.ratingDeviationBefore ?? profileRatingDeviation,
+      ratingDeviationAfter: eloUpdate?.ratingDeviationAfter ?? profileRatingDeviation,
     },
   });
 }
@@ -294,7 +301,7 @@ async function getOrCreateProfile(userId: string) {
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("user_blindspot_profile")
-    .select("user_id, blindspots_elo, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens, bucket_stats, recent_served_modes")
+    .select("user_id, blindspots_elo, rating_deviation, initial_skill_level, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens, bucket_stats, recent_served_modes")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -308,7 +315,9 @@ async function getOrCreateProfile(userId: string) {
     .from("user_blindspot_profile")
     .insert({
       user_id: userId,
-      blindspots_elo: 1200,
+      blindspots_elo: 250,
+      rating_deviation: 650,
+      initial_skill_level: "beginner",
       total_sequences: 0,
       initialization_status: "skipped",
       profile_initialized: false,
@@ -320,7 +329,7 @@ async function getOrCreateProfile(userId: string) {
       recent_served_modes: [],
       bucket_stats: { opening: { alpha: 1, beta: 1, attempts: 0 }, middlegame: { alpha: 1, beta: 1, attempts: 0 }, endgame: { alpha: 1, beta: 1, attempts: 0 }, tactic: { alpha: 1, beta: 1, attempts: 0 }, opening_gambit: { alpha: 1, beta: 1, attempts: 0 }, opening_development: { alpha: 1, beta: 1, attempts: 0 }, middlegame_attack: { alpha: 1, beta: 1, attempts: 0 }, middlegame_positional: { alpha: 1, beta: 1, attempts: 0 }, endgame_rook: { alpha: 1, beta: 1, attempts: 0 }, endgame_pawn: { alpha: 1, beta: 1, attempts: 0 }, wildcard: { alpha: 1, beta: 1, attempts: 0 } },
     })
-    .select("user_id, blindspots_elo, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens, bucket_stats, recent_served_modes")
+    .select("user_id, blindspots_elo, rating_deviation, initial_skill_level, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens, bucket_stats, recent_served_modes")
     .single();
 
   if (insertError) {
