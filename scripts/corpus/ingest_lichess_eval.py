@@ -244,8 +244,9 @@ def main():
     parser.add_argument(
         "--input",
         type=str,
-        default=str(Path.home() / "Downloads/lichess_db_eval.ieNdvK32.jsonl.zst.part"),
-        help="Path to input .zst file (default: ~/Downloads/lichess_db_eval.ieNdvK32.jsonl.zst.part)",
+        default=str(Path.home() / "Downloads/lichess_db_eval.jsonl.zst"),
+        help="Path to input .zst file (default: ~/Downloads/lichess_db_eval.jsonl.zst). "
+             "Use the .part file if download is still in progress.",
     )
     parser.add_argument(
         "--output",
