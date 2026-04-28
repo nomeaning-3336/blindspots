@@ -286,6 +286,59 @@ async function sampleEliteExplorePositions(count: number, excludeFens: Set<strin
     .slice(0, count);
 }
 
+// ─── Middlegame Positions ────────────────────────────────────────────────────
+
+/**
+ * Sample middlegame seed positions from the elite pool.
+ *
+ * This deliberately does not use training_opening_positions.json. The opening
+ * file is opening-tagged, so asking it for middlegames returns an empty or
+ * misleading seed pool. Elite positions already contain real game positions;
+ * we filter by FEN shape and fullmove number, then enrich with middlegame
+ * metadata before passing through normal queue validation.
+ */
+export async function sampleMiddlegamePositions(
+  count: number,
+  excludeFens: Set<string>,
+  now: Date,
+  bucketFilter?: TrainingBucket,
+): Promise<TrainingQueueItem[]> {
+  if (count <= 0) return [];
+
+  const raw = await readFile(resolve(process.cwd(), "public", "elite_positions.json"), "utf8").catch(() => "[]");
+  const positions = JSON.parse(raw) as ElitePosition[];
+
+  return shuffle(positions)
+    .flatMap((position) => {
+      const fen = typeof position.fen === "string" ? position.fen : "";
+      if (!fen || excludeFens.has(fen)) return [];
+
+      const metadata = classifyMiddlegameSeedFen(fen);
+      if (!metadata) return [];
+      if (bucketFilter && bucketFilter !== "middlegame" && metadata.bucket !== bucketFilter) return [];
+
+      excludeFens.add(fen);
+      const item = queueItemFromFen(fen, "elite", now.toISOString(), {
+        previousFen: enrichPreviousFen(position),
+        playedMove: enrichPlayedMove(position),
+        gameId: enrichGameId(position),
+        ply: enrichPly(position),
+        mateDistancePlies: normalizeMateDistancePlies(
+          position.mateDistancePlies ?? position.mate_distance_plies,
+        ),
+        phase: "middlegame",
+        bucket: metadata.bucket,
+        tags: metadata.tags,
+        isTactic: false,
+        tacticRating: undefined,
+        openingName: undefined,
+        eco: undefined,
+      });
+      return item ? [item] : [];
+    })
+    .slice(0, count);
+}
+
 function trimQueue(queue: TrainingQueueItem[]) {
   return queue.slice(0, MAX_QUEUE_ITEMS);
 }
@@ -539,8 +592,11 @@ export async function samplePhasePositions(
   if (phaseOrBucket === "endgame" || phaseOrBucket === "endgame_pawn" || phaseOrBucket === "endgame_rook") {
     return sampleEndgamePositions(count, excludeFens, now);
   }
+  if (phaseOrBucket === "middlegame" || phaseOrBucket === "middlegame_attack" || phaseOrBucket === "middlegame_positional") {
+    return sampleMiddlegamePositions(count, excludeFens, now, phaseOrBucket as TrainingBucket);
+  }
 
-  // For middlegame/endgame buckets, filter from opening pool
+  // Legacy fallback: filter metadata-tagged rows from the opening pool.
   const positions = await readOpeningPositions();
   return shuffle(positions)
     .flatMap((position) => {
@@ -650,5 +706,62 @@ function enrichOpeningName(pos: OpeningPosition): string | undefined {
 
 function enrichEco(pos: OpeningPosition): string | undefined {
   return typeof pos.eco === "string" ? pos.eco : undefined;
+}
+
+function classifyMiddlegameSeedFen(fen: string): { bucket: TrainingBucket; tags: string[] } | null {
+  const parts = fen.trim().split(/\s+/);
+  if (parts.length < 6) return null;
+
+  const board = parts[0] ?? "";
+  const fullmove = Number.parseInt(parts[5] ?? "", 10);
+  if (!Number.isFinite(fullmove)) return null;
+
+  // Avoid opening seeds. Opening supply already has a dedicated file.
+  if (fullmove <= 10) return null;
+
+  const material = countFenMaterial(board);
+  if (!material) return null;
+
+  // Avoid endgame-ish material. Endgame supply has its own dedicated file.
+  if (material.nonKingPieces <= 6) return null;
+
+  const bucket: TrainingBucket =
+    material.queens > 0 || material.majorPieces >= 4
+      ? "middlegame_attack"
+      : "middlegame_positional";
+
+  return {
+    bucket,
+    tags: [
+      "middlegame",
+      bucket === "middlegame_attack" ? "attack" : "positional",
+    ],
+  };
+}
+
+function countFenMaterial(board: string): {
+  nonKingPieces: number;
+  queens: number;
+  majorPieces: number;
+} | null {
+  if (!board) return null;
+
+  let nonKingPieces = 0;
+  let queens = 0;
+  let majorPieces = 0;
+
+  for (const char of board) {
+    if (char === "/") continue;
+    if (char >= "1" && char <= "8") continue;
+    if (!/[prnbqkPRNBQK]/.test(char)) return null;
+
+    const piece = char.toLowerCase();
+    if (piece === "k") continue;
+    nonKingPieces += 1;
+    if (piece === "q") queens += 1;
+    if (piece === "q" || piece === "r") majorPieces += 1;
+  }
+
+  return { nonKingPieces, queens, majorPieces };
 }
 
