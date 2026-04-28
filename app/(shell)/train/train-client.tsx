@@ -1479,18 +1479,25 @@ export default function TrainPage() {
         <section
           className="flex items-center justify-center rounded-[14px] border border-[var(--app-border-soft)] bg-[var(--app-panel-strong)] p-3 transition-colors sm:p-5 lg:min-h-0 lg:p-8"
         >
-          <div className="relative w-full max-w-[min(92vw,74vh,920px)]">
+          <div className="relative w-full max-w-[min(92vw,74vh,920px)] overflow-visible">
+            {isExploringResults ? (
+              <div className="pointer-events-none absolute right-full top-0 mr-3 h-full w-6 shrink-0">
+                <BoardWithEvalBar evalCp={currentEngineEval} isLoading={isEngineLinesLoading}>
+                  <div />
+                </BoardWithEvalBar>
+              </div>
+            ) : null}
+
             {visualPreferences && !isPositionLoading && hasLoadedPosition ? (
               <>
-              <BoardWithPlayerStrips
-                userSide={userMoveSide}
-                boardFen={boardFen ?? ""}
-                isOpponentThinking={isOpponentThinking}
-                isTrainingActive={state === "active"}
-                isExploring={isExploringResults}
-              >
-                {isExploringResults ? (
-                  <BoardWithEvalBar evalCp={currentEngineEval} isLoading={isEngineLinesLoading}>
+                <BoardWithPlayerStrips
+                  userSide={userMoveSide}
+                  boardFen={boardFen ?? ""}
+                  isOpponentThinking={isOpponentThinking}
+                  isTrainingActive={state === "active"}
+                  isExploring={isExploringResults}
+                >
+                  {isExploringResults ? (
                     <AnalysisBoard
                       fen={boardFen}
                       mode="training"
@@ -1528,36 +1535,35 @@ export default function TrainPage() {
                       onCircleHover={setHoveredAnnotationSquare}
                       onEngineArrowClick={handleExploreMove}
                     />
-                  </BoardWithEvalBar>
-                ) : (
-                  <AnalysisBoard
-                    fen={boardFen}
-                    mode="training"
-                    orientation={boardOrientation}
-                    coordinates
-                    showLegalTargets
-                    lastMove={replayLastMove}
-                    boardTheme={visualPreferences.boardTheme}
-                    pieceTheme={visualPreferences.pieceTheme}
-                    disabled={state !== "active" || isOpponentThinking || isAwaitingStartGesture || (isActiveSetupReplay && activeSetupReplayIndex === 0)}
-                    annotationsDisabled={false}
-                    highlightedSquares={getTrainingBoardHighlights(state)}
-                    onMove={handleMove}
-                    data-testid="train-board"
-                  />
-                )}
-              </BoardWithPlayerStrips>
-              {isAwaitingStartGesture ? (
-                <div
-                  className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-[10px] bg-black/70 backdrop-blur-sm"
-                  data-testid="audio-unlock-overlay"
-                >
-                  <p className="text-sm font-bold uppercase tracking-[0.18em] text-white">
-                    Press any key or click the board to start
-                  </p>
-                </div>
-              ) : null}
-            </>
+                  ) : (
+                    <AnalysisBoard
+                      fen={boardFen}
+                      mode="training"
+                      orientation={boardOrientation}
+                      coordinates
+                      showLegalTargets
+                      lastMove={replayLastMove}
+                      boardTheme={visualPreferences.boardTheme}
+                      pieceTheme={visualPreferences.pieceTheme}
+                      disabled={state !== "active" || isOpponentThinking || isAwaitingStartGesture || (isActiveSetupReplay && activeSetupReplayIndex === 0)}
+                      annotationsDisabled={false}
+                      highlightedSquares={getTrainingBoardHighlights(state)}
+                      onMove={handleMove}
+                      data-testid="train-board"
+                    />
+                  )}
+                </BoardWithPlayerStrips>
+                {isAwaitingStartGesture ? (
+                  <div
+                    className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-[10px] bg-black/70 backdrop-blur-sm"
+                    data-testid="audio-unlock-overlay"
+                  >
+                    <p className="text-sm font-bold uppercase tracking-[0.18em] text-white">
+                      Press any key or click the board to start
+                    </p>
+                  </div>
+                ) : null}
+              </>
             ) : (
               <div
                 className="grid aspect-square w-full place-items-center rounded-[10px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] text-sm font-bold text-[var(--app-muted)]"
