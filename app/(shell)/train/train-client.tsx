@@ -420,8 +420,6 @@ export default function TrainPage() {
       e.preventDefault();
       e.stopPropagation();
 
-      setIsAwaitingStartGesture(false);
-      setPendingInitialEngineMove(null);
       void startPendingInitialEngineMove(pending);
     }
 
@@ -614,7 +612,11 @@ export default function TrainPage() {
   }
 
   async function startPendingInitialEngineMove(pending: NextPositionResponse) {
+    setIsAwaitingStartGesture(false);
+    setPendingInitialEngineMove(null);
+
     await unlockTrainAudio();
+    await primeTrainAudio();
     await playInitialOpponentMoveFromPayload(pending);
   }
 
@@ -632,19 +634,19 @@ export default function TrainPage() {
     if (!applied) return;
 
     initialOpponentMoveRef.current = applied.move;
-    setInitialOpponentMove(applied.move);
 
     setIsOpponentThinking(true);
 
     // Show the "before" position briefly.
     setFen(previousFen);
-    await new Promise<void>((resolve) => { requestAnimationFrame(() => resolve()); });
+    await nextAnimationFrame();
 
     if (initialOpponentRequestRef.current !== requestId) return;
 
     // Apply the move, sound, and visual transition together — synchronized.
-    setLastMove(applied.lastMove);
     setActiveSetupReplayIndex(1);
+    setInitialOpponentMove(applied.move);
+    setLastMove(applied.lastMove);
     setFen(payload.fen!);
     playTrainMoveSound({ move: applied.move, plyRef: moveSoundPlyRef, source: "initial-engine" });
 
@@ -698,11 +700,10 @@ export default function TrainPage() {
         fenAfter: chess.fen(),
       };
       initialOpponentMoveRef.current = move;
-      setInitialOpponentMove(move);
 
       // Show the opponent's position so user sees the "before" state.
       setFen(opponentFen);
-      await new Promise<void>((resolve) => { requestAnimationFrame(() => resolve()); });
+      await nextAnimationFrame();
 
       if (initialOpponentRequestRef.current !== requestId) return;
 
@@ -2073,6 +2074,12 @@ function applyIndexedMove(previousFen: string, playedMove: string): {
 function sleep(ms: number) {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms);
+  });
+}
+
+function nextAnimationFrame() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
   });
 }
 
