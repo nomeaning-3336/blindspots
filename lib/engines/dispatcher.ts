@@ -17,9 +17,15 @@ export async function getOpponentMove(
   fen: string,
   userBlindspotElo: number,
   previousEvalCp?: number,
-  options: { responseDelayMs?: number } = {},
+  options: {
+    responseDelayMs?: number;
+    targetElo?: number;
+  } = {},
 ): Promise<EngineMove> {
-  const targetElo = resolveOpponentTargetElo(userBlindspotElo);
+  const targetElo =
+    typeof options.targetElo === "number"
+      ? options.targetElo
+      : resolveOpponentTargetElo(userBlindspotElo);
   return stockfishHarness.getMove(fen, {
     targetElo,
     userBlindspotElo,
@@ -41,6 +47,26 @@ export async function getPositionLines(
     multiPv: options.multiPv ?? 5,
     timeLimitMs: options.timeLimitMs,
   }) ?? [];
+}
+
+export async function getPositionMateStatus(
+  fen: string,
+  options: { depthLimit?: number; timeLimitMs?: number } = {},
+) {
+  const lines = await getPositionLines(fen, {
+    depthLimit: options.depthLimit ?? 14,
+    multiPv: 1,
+    timeLimitMs: options.timeLimitMs ?? 700,
+  });
+
+  const best = lines[0];
+
+  return {
+    mate: best?.mate ?? null,
+    cp: best?.cp ?? null,
+    depth: best?.depth ?? 0,
+    bestMove: best?.bestMove ?? null,
+  };
 }
 
 export async function getLegalMoveLines(
