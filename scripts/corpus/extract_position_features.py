@@ -513,6 +513,7 @@ def extract_features(row: dict) -> dict | None:
         "normalizedFen": row.get("normalizedFen", fen),
         "source": row.get("source", "lichess_eval"),
         "clusterId": None,
+        "materialSignature": row.get("materialSignature") or features.get("materialSignature"),
         "hardPartition": hard_partition,
         "features": features,
         "featureVectorV0": feature_vector,

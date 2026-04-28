@@ -146,9 +146,9 @@ def cluster_partition(rows: list, partition_key: dict, feature_keys: list, k: in
             cluster_index_to_rows[0].append(row_out)
             cluster_index_to_stats[0]["vectors"].append(standardized[i])
             cluster_index_to_stats[0]["eval_cps"].append(row.get("features", {}).get("evalCpClipped", 0))
-            cluster_index_to_stats[0]["legal_move_counts"].append(row.get("legalMoveCount", 20))
+            cluster_index_to_stats[0]["legal_move_counts"].append(row.get("features", {}).get("legalMoveCount") or row.get("legalMoveCount", 20))
             cluster_index_to_stats[0]["puzzle_count"] += 1 if row.get("isPuzzle", False) else 0
-            msig = row.get("features", {}).get("materialSignature", "")
+            msig = row.get("materialSignature") or row.get("features", {}).get("materialSignature", "")
             if msig:
                 cluster_index_to_stats[0]["material_sigs"][msig] += 1
     else:
@@ -171,7 +171,11 @@ def cluster_partition(rows: list, partition_key: dict, feature_keys: list, k: in
             cluster_index_to_rows[ci].append(row_out)
             cluster_index_to_stats[ci]["vectors"].append(standardized[i])
             cluster_index_to_stats[ci]["eval_cps"].append(row.get("features", {}).get("evalCpClipped", 0))
-            cluster_index_to_stats[ci]["legal_move_counts"].append(row.get("legalMoveCount", 20))
+            cluster_index_to_stats[ci]["legal_move_counts"].append(row.get("features", {}).get("legalMoveCount") or row.get("legalMoveCount", 20))
+            cluster_index_to_stats[ci]["puzzle_count"] += 1 if row.get("isPuzzle", False) else 0
+            msig = row.get("materialSignature") or row.get("features", {}).get("materialSignature", "")
+            if msig:
+                cluster_index_to_stats[ci]["material_sigs"][msig] += 1
             cluster_index_to_stats[ci]["puzzle_count"] += 1 if row.get("isPuzzle", False) else 0
             msig = row.get("features", {}).get("materialSignature", "")
             if msig:
