@@ -607,7 +607,8 @@ export default function TrainPage() {
       setPendingInitialEngineMove(payload);
       setIsAwaitingStartGesture(true);
     } else {
-      void playInitialOpponentMove(payload.fen);
+      setPendingInitialEngineMove(null);
+      setIsAwaitingStartGesture(false);
     }
   }
 
@@ -652,72 +653,6 @@ export default function TrainPage() {
 
     if (initialOpponentRequestRef.current === requestId) {
       setIsOpponentThinking(false);
-    }
-  }
-
-  async function playInitialOpponentMove(targetFen: string) {
-    const requestId = initialOpponentRequestRef.current + 1;
-    initialOpponentRequestRef.current = requestId;
-
-    initialOpponentMoveRef.current = null;
-
-    const parts = targetFen.split(" ");
-    if (parts.length < 2) return;
-    const userTurn = parts[1];
-    const opponentTurn = userTurn === "w" ? "b" : "w";
-    parts[1] = opponentTurn;
-    const opponentFen = parts.join(" ");
-
-    setIsOpponentThinking(true);
-
-    try {
-      const response = await fetch("/api/train/opponent-move", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fen: opponentFen, userBlindspotElo: blindspotsElo }),
-      });
-      const data = (await response.json().catch(() => null)) as OpponentMoveResponse | null;
-      const oppMove = data?.move;
-      if (!response.ok || !oppMove) return;
-
-      if (initialOpponentRequestRef.current !== requestId) return;
-
-      const chess = new Chess(opponentFen);
-      const played = chess.move({
-        from: oppMove.uci.slice(0, 2),
-        to: oppMove.uci.slice(2, 4),
-        promotion: oppMove.uci[4],
-      });
-      if (!played) return;
-
-      if (initialOpponentRequestRef.current !== requestId) return;
-
-      const move: TrainingMove = {
-        san: oppMove.san || played.san,
-        uci: `${played.from}${played.to}${played.promotion ?? ""}`,
-        side: played.color === "w" ? "white" : "black",
-        fenBefore: opponentFen,
-        fenAfter: chess.fen(),
-      };
-      initialOpponentMoveRef.current = move;
-
-      // Show the opponent's position so user sees the "before" state.
-      setFen(opponentFen);
-      await nextAnimationFrame();
-
-      if (initialOpponentRequestRef.current !== requestId) return;
-
-      // Apply the move, sound, and visual transition together — synchronized.
-      setActiveSetupReplayIndex(1);
-      setInitialOpponentMove(move);
-      setLastMove({ from: played.from, to: played.to });
-      setFen(chess.fen());
-      setStartingFen(chess.fen());
-      playTrainMoveSound({ move: played, plyRef: moveSoundPlyRef, source: "initial-engine" });
-    } finally {
-      if (initialOpponentRequestRef.current === requestId) {
-        setIsOpponentThinking(false);
-      }
     }
   }
 
@@ -2338,9 +2273,6 @@ function EloResultCard({ result, isLoading }: { result: EloResult | null; isLoad
   if (isLoading && !result) {
     return (
       <div className="rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-5">
-        <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
-          Blindspots Elo
-        </p>
         <p className="mt-3 text-lg font-bold text-[var(--app-muted)]">Saving result...</p>
       </div>
     );
@@ -2358,14 +2290,13 @@ function EloResultCard({ result, isLoading }: { result: EloResult | null; isLoad
 
   return (
     <div className="rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-5">
-      <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
-        Blindspots Elo
-      </p>
-      <div className="mt-6 flex flex-wrap items-baseline gap-3">
-        <span className="text-3xl font-bold text-[var(--app-text)]">{result.eloBefore}</span>
-        <span className="text-xl font-bold text-[var(--app-muted)]">→</span>
-        <span className="text-3xl font-bold text-[var(--app-text)]">{result.eloAfter}</span>
-        <span className={`text-xl font-bold ${deltaTone}`}>{signedDelta}</span>
+      <div className="flex items-center">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-3xl font-bold text-[var(--app-text)]">{result.eloBefore}</span>
+          <span className="text-xl font-bold text-[var(--app-muted)]">→</span>
+          <span className="text-3xl font-bold text-[var(--app-text)]">{result.eloAfter}</span>
+          <span className={`text-xl font-bold ${deltaTone}`}>{signedDelta}</span>
+        </div>
       </div>
     </div>
   );
