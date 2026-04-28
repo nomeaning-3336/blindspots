@@ -56,12 +56,12 @@ PIECE_VALUES = {
 # Hard partition keys
 # ---------------------------------------------------------------------------
 MATERIAL_FAMILIES = [
-    "queenless",
-    "queens_on",
+    "pawn_endgame",
     "rook_endgame",
     "minor_piece_endgame",
-    "pawn_endgame",
     "mixed_endgame",
+    "queens_on",
+    "queenless",
 ]
 EVAL_BANDS = ["mate", "worse", "equal", "better"]
 
@@ -69,7 +69,7 @@ EVAL_BANDS = ["mate", "worse", "equal", "better"]
 # Feature vector keys — deterministic order
 # ---------------------------------------------------------------------------
 FEATURE_VECTOR_KEYS = [
-    # Material counts (16)
+    # Material counts (10)
     "whitePawns", "blackPawns",
     "whiteKnights", "blackKnights",
     "whiteBishops", "blackBishops",
@@ -117,17 +117,15 @@ def classify_material_family(board: chess.Board) -> str:
     b_non_pawn = sum(1 for p in board.piece_map().values() if p.piece_type != chess.PAWN and p.color == chess.BLACK)
     total_pieces = len(board.piece_map())
 
-    if w_queens == 0 and b_queens == 0:
-        return "queenless"
-    if w_queens > 0 or b_queens > 0:
-        if total_pieces <= 14:
-            return "rook_endgame"
-        return "queens_on"
     if w_non_pawn <= 2 and b_non_pawn <= 2 and total_pieces <= 8:
         return "pawn_endgame"
-    if total_pieces <= 10:
+    if total_pieces <= 10 and w_non_pawn <= 2 and b_non_pawn <= 2:
         return "minor_piece_endgame"
-    return "mixed_endgame"
+    if w_queens == 0 and b_queens == 0:
+        if total_pieces <= 14:
+            return "rook_endgame"
+        return "mixed_endgame"
+    return "queens_on"
 
 
 def classify_eval_band(eval_cp: int | None, mate: int | None) -> str:
@@ -192,15 +190,15 @@ def is_castled_like(board: chess.Board, color: chess.Color) -> int:
 def pawn_shield(board: chess.Board, color: chess.Color) -> int:
     """
     Count friendly pawns on adjacent files one rank directly in front of king.
-    For white: king's rank - 1; for black: king's rank + 1.
+    For white: king's rank + 1 (toward black side); for black: king's rank - 1 (toward white side).
     """
     king_sq = board.king(color)
     kf = chess.square_file(king_sq)
     kr = chess.square_rank(king_sq)
     if color == chess.WHITE:
-        shield_rank = kr - 1
-    else:
         shield_rank = kr + 1
+    else:
+        shield_rank = kr - 1
     if shield_rank < 0 or shield_rank > 7:
         return 0
     count = 0
@@ -218,40 +216,62 @@ def passed_pawns(board: chess.Board, color: chess.Color) -> int:
     """Count passed pawns for the given color."""
     if color == chess.WHITE:
         forward = 1
+        home_rank = 1
+        promotion_rank = 7
     else:
         forward = -1
+        home_rank = 6
+        promotion_rank = 0
     passed = 0
+    enemy_color = chess.BLACK if color == chess.WHITE else chess.WHITE
     for square, piece in board.piece_map().items():
         if piece.piece_type != chess.PAWN or piece.color != color:
             continue
         f = chess.square_file(square)
         r = chess.square_rank(square)
-        # Check if any piece blocks the path directly ahead
-        blocked_ahead = False
-        next_r = r + forward
-        if 0 <= next_r <= 7:
-            sq_ahead = chess.square(f, next_r)
-            if board.piece_at(sq_ahead):
-                blocked_ahead = True
-        if not blocked_ahead:
+        # A pawn is passed if no enemy pawns exist on the same file ahead,
+        # or on the adjacent files ahead (same direction toward promotion).
+        is_passed = True
+        for df in (-1, 0, 1):
+            check_file = f + df
+            if not (0 <= check_file <= 7):
+                continue
+            for check_r in range(r + forward, promotion_rank + forward, forward):
+                if not (0 <= check_r <= 7):
+                    break
+                sq_check = chess.square(check_file, check_r)
+                p = board.piece_at(sq_check)
+                if p and p.piece_type == chess.PAWN and p.color == enemy_color:
+                    is_passed = False
+                    break
+            if not is_passed:
+                break
+        if is_passed:
             passed += 1
     return passed
 
 
 def isolated_pawns(board: chess.Board, color: chess.Color) -> int:
-    """Count isolated pawns (no friendly pawns on adjacent files)."""
+    """Count isolated pawns (no friendly pawns on adjacent files at any rank)."""
     pawn_squares = [sq for sq, p in board.piece_map().items()
                     if p.piece_type == chess.PAWN and p.color == color]
     isolated = 0
     for sq in pawn_squares:
         f = chess.square_file(sq)
-        adjacent = [chess.square(f + df, chess.square_rank(sq))
-                    for df in (-1, 1) if 0 <= f + df <= 7]
-        has_friendly_neighbor = any(
-            board.piece_at(adj) and board.piece_at(adj).piece_type == chess.PAWN
-            and board.piece_at(adj).color == color
-            for adj in adjacent
-        )
+        # Check adjacent files (left and right) at any rank for a friendly pawn
+        has_friendly_neighbor = False
+        for df in (-1, 1):
+            adj_file = f + df
+            if not (0 <= adj_file <= 7):
+                continue
+            for rank in range(8):
+                adj_sq = chess.square(adj_file, rank)
+                p = board.piece_at(adj_sq)
+                if p and p.piece_type == chess.PAWN and p.color == color:
+                    has_friendly_neighbor = True
+                    break
+            if has_friendly_neighbor:
+                break
         if not has_friendly_neighbor:
             isolated += 1
     return isolated
