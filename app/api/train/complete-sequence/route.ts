@@ -45,6 +45,25 @@ type CompleteSequencePayload = {
 
 type MoveClassification = "excellent" | "good" | "inaccuracy" | "mistake" | "blunder";
 
+const MATE_VISUAL_CP = 10000;
+
+function isCheckmateFen(fen: string) {
+  try {
+    const chess = new Chess(fen);
+    return chess.isCheckmate();
+  } catch {
+    return false;
+  }
+}
+
+function mateCpForWinningSide(winner: "w" | "b") {
+  return winner === "w" ? MATE_VISUAL_CP : -MATE_VISUAL_CP;
+}
+
+function classifyUserDeliveredCheckmate(): MoveClassification {
+  return "excellent";
+}
+
 export async function POST(request: Request) {
   const userId = await getOptionalAppUserId();
   if (!userId) {
@@ -222,15 +241,30 @@ async function calculateSequenceEvaluation(startingFen: string, moves: Array<{ s
     if (!played) break;
 
     if (isUserMove) {
-      const evalAfter = await getPositionEval(chess.fen());
-      const beforeUserEval = userColor === "w" ? evalBefore!.cp : -evalBefore!.cp;
+      const fenAfterMove = chess.fen();
+      const evalBeforeCp = userColor === "w" ? evalBefore!.cp : -evalBefore!.cp;
+      const userDeliveredCheckmate = isCheckmateFen(fenAfterMove);
+
+      if (userDeliveredCheckmate) {
+        moveScores.push({
+          userMoveIndex: userMoveCount,
+          cpLoss: 0,
+          evalBefore: Math.round(evalBeforeCp),
+          evalAfter: mateCpForWinningSide(userColor),
+          classification: classifyUserDeliveredCheckmate(),
+        });
+        userMoveCount += 1;
+        continue;
+      }
+
+      const evalAfter = await getPositionEval(fenAfterMove);
       const afterUserEval = userColor === "w" ? evalAfter.cp : -evalAfter.cp;
-      const cpLoss = Math.max(0, Math.round(beforeUserEval - afterUserEval));
+      const cpLoss = Math.max(0, Math.round(evalBeforeCp - afterUserEval));
       totalCpLoss += cpLoss;
       moveScores.push({
         userMoveIndex: userMoveCount,
         cpLoss,
-        evalBefore: Math.round(beforeUserEval),
+        evalBefore: Math.round(evalBeforeCp),
         evalAfter: Math.round(afterUserEval),
         classification: classifyCpLoss(cpLoss),
       });
