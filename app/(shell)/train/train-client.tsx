@@ -1480,14 +1480,6 @@ export default function TrainPage() {
           className="flex items-center justify-center rounded-[14px] border border-[var(--app-border-soft)] bg-[var(--app-panel-strong)] p-3 transition-colors sm:p-5 lg:min-h-0 lg:p-8"
         >
           <div className="relative w-full max-w-[min(92vw,74vh,920px)] overflow-visible">
-            {isExploringResults ? (
-              <div className="pointer-events-none absolute right-full top-0 mr-3 h-full w-6 shrink-0">
-                <BoardWithEvalBar evalCp={currentEngineEval} isLoading={isEngineLinesLoading}>
-                  <div />
-                </BoardWithEvalBar>
-              </div>
-            ) : null}
-
             {visualPreferences && !isPositionLoading && hasLoadedPosition ? (
               <>
                 <BoardWithPlayerStrips
@@ -1498,43 +1490,45 @@ export default function TrainPage() {
                   isExploring={isExploringResults}
                 >
                   {isExploringResults ? (
-                    <AnalysisBoard
-                      fen={boardFen}
-                      mode="training"
-                      orientation={boardOrientation}
-                      coordinates
-                      showLegalTargets={false}
-                      selectedSquare={exploreSelectedSquare}
-                      lastMove={replayLastMove}
-                      lastMoveBadge={boardLastMoveBadge}
-                      boardTheme={visualPreferences.boardTheme}
-                      pieceTheme={visualPreferences.pieceTheme}
-                      highlightedSquares={
-                        hoveredMoveSquares
-                          ? [
-                              { square: hoveredMoveSquares.from, color: "color-mix(in srgb, var(--app-accent) 24%, transparent)" },
-                              { square: hoveredMoveSquares.to, color: "color-mix(in srgb, var(--app-accent) 36%, transparent)" },
-                            ]
-                          : selectedMoveSquares
+                    <BoardWithEvalBar evalCp={currentEngineEval} isLoading={isEngineLinesLoading}>
+                      <AnalysisBoard
+                        fen={boardFen}
+                        mode="training"
+                        orientation={boardOrientation}
+                        coordinates
+                        showLegalTargets={false}
+                        selectedSquare={exploreSelectedSquare}
+                        lastMove={replayLastMove}
+                        lastMoveBadge={boardLastMoveBadge}
+                        boardTheme={visualPreferences.boardTheme}
+                        pieceTheme={visualPreferences.pieceTheme}
+                        highlightedSquares={
+                          hoveredMoveSquares
                             ? [
-                                { square: selectedMoveSquares.from, color: "color-mix(in srgb, var(--app-accent) 24%, transparent)" },
-                                { square: selectedMoveSquares.to, color: "color-mix(in srgb, var(--app-accent) 36%, transparent)" },
+                                { square: hoveredMoveSquares.from, color: "color-mix(in srgb, var(--app-accent) 24%, transparent)" },
+                                { square: hoveredMoveSquares.to, color: "color-mix(in srgb, var(--app-accent) 36%, transparent)" },
                               ]
-                            : undefined
-                      }
-                      engineArrows={buildEngineArrows(boardEngineLines, hoveredEngineLineMove)}
-                      data-testid="train-board"
-                      onMove={(move) => { setExploreSelectedSquare(null); setSelectedMoveIndex(null); handleExploreMove(move); }}
-                      onSquareClick={(square) => {
-                        try {
-                          const chess = new Chess(boardFen);
-                          const piece = chess.get(square as Square);
-                          if (piece && piece.color === chess.turn() && square !== exploreSelectedSquare) { setExploreSelectedSquare(square); } else { setExploreSelectedSquare(null); }
-                        } catch { setExploreSelectedSquare(null); }
-                      }}
-                      onCircleHover={setHoveredAnnotationSquare}
-                      onEngineArrowClick={handleExploreMove}
-                    />
+                            : selectedMoveSquares
+                              ? [
+                                  { square: selectedMoveSquares.from, color: "color-mix(in srgb, var(--app-accent) 24%, transparent)" },
+                                  { square: selectedMoveSquares.to, color: "color-mix(in srgb, var(--app-accent) 36%, transparent)" },
+                                ]
+                              : undefined
+                        }
+                        engineArrows={buildEngineArrows(boardEngineLines, hoveredEngineLineMove)}
+                        data-testid="train-board"
+                        onMove={(move) => { setExploreSelectedSquare(null); setSelectedMoveIndex(null); handleExploreMove(move); }}
+                        onSquareClick={(square) => {
+                          try {
+                            const chess = new Chess(boardFen);
+                            const piece = chess.get(square as Square);
+                            if (piece && piece.color === chess.turn() && square !== exploreSelectedSquare) { setExploreSelectedSquare(square); } else { setExploreSelectedSquare(null); }
+                          } catch { setExploreSelectedSquare(null); }
+                        }}
+                        onCircleHover={setHoveredAnnotationSquare}
+                        onEngineArrowClick={handleExploreMove}
+                      />
+                    </BoardWithEvalBar>
                   ) : (
                     <AnalysisBoard
                       fen={boardFen}
