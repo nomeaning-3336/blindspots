@@ -649,7 +649,7 @@ export default function TrainPage() {
     setInitialOpponentMove(applied.move);
     setLastMove(applied.lastMove);
     setFen(payload.fen!);
-    playTrainMoveSound({ move: applied.move, plyRef: moveSoundPlyRef, source: "initial-engine" });
+    playTrainMoveSound({ move: applied.move, plyRef: moveSoundPlyRef, source: "initial-engine", advanceLivePitch: false });
 
     if (initialOpponentRequestRef.current === requestId) {
       setIsOpponentThinking(false);
