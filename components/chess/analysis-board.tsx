@@ -105,6 +105,12 @@ export function AnalysisBoard({
   dataTestId,
 }: AnalysisBoardProps) {
   const chess = useMemo(() => safeChess(fen), [fen]);
+  function pointerToBoardPoint(clientX: number, clientY: number) {
+  const rect = boardRef.current?.getBoundingClientRect();
+  if (!rect) return { x: clientX, y: clientY };
+  return { x: clientX - rect.left, y: clientY - rect.top };
+}
+
   const [internalSelected, setInternalSelected] = useState<string | null>(null);
   const [dragFrom, setDragFrom] = useState<string | null>(null);
   const [hoveredSquare, setHoveredSquare] = useState<string | null>(null);
@@ -116,6 +122,7 @@ export function AnalysisBoard({
   const [annotationMode, setAnnotationMode] = useState<BoardMode>("analysis");
   const [annotationCircles, setAnnotationCircles] = useState<string[]>([]);
   const [annotationArrows, setAnnotationArrows] = useState<BoardAnnotationArrow[]>([]);
+  const boardRef = useRef<HTMLDivElement | null>(null);
   const dragOriginRef = useRef<{ x: number; y: number } | null>(null);
   const dragPreviewOriginRef = useRef<{
     pointer: { x: number; y: number };
@@ -153,14 +160,15 @@ export function AnalysisBoard({
 
     function handleWindowPointerMove(event: PointerEvent) {
       const previewOrigin = dragPreviewOriginRef.current;
+      const boardPointer = pointerToBoardPoint(event.clientX, event.clientY);
       setDragPosition(
         previewOrigin
           ? dragPreviewPosition({
-              pointer: { x: event.clientX, y: event.clientY },
+              pointer: boardPointer,
               originPointer: previewOrigin.pointer,
               originCenter: previewOrigin.center,
             })
-          : { x: event.clientX, y: event.clientY },
+          : boardPointer,
       );
       setHoveredSquare(squareFromPoint(event.clientX, event.clientY));
     }
@@ -342,7 +350,7 @@ export function AnalysisBoard({
 
     event.preventDefault();
     event.stopPropagation();
-    const pointer = { x: event.clientX, y: event.clientY };
+    const pointer = pointerToBoardPoint(event.clientX, event.clientY);
     dragOriginRef.current = { x: event.clientX, y: event.clientY };
     dragPreviewOriginRef.current = {
       pointer,
@@ -407,6 +415,7 @@ export function AnalysisBoard({
 
   return (
     <div
+      ref={boardRef}
       data-testid={dataTestId}
       className={[
         "relative aspect-square w-full overflow-hidden rounded-[10px] border border-[var(--app-border)] bg-[var(--app-panel-deep)] shadow-[var(--app-shadow)]",
@@ -577,7 +586,7 @@ function DraggedPiece({
 
   return (
     <div
-      className="pointer-events-none fixed z-[9999] flex items-center justify-center"
+      className="pointer-events-none absolute z-[9999] flex items-center justify-center"
       style={{
         left: x,
         top: y,
