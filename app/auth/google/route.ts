@@ -6,16 +6,32 @@ function isSupabaseSessionCookie(name: string) {
   return /^sb-.*-auth-token(?:\.\d+)?$/.test(name);
 }
 
-function clearStaleSupabaseSessionCookies(request: Request, response: NextResponse) {
-  const cookieHeader = request.headers.get("cookie");
-  if (!cookieHeader) return response;
+function isSupabaseCodeVerifierCookie(name: string) {
+  return /^sb-.*-auth-token-code-verifier$/.test(name);
+}
 
-  const cookieNames = cookieHeader
+function getCookieNames(request: Request) {
+  const cookieHeader = request.headers.get("cookie");
+  if (!cookieHeader) return [];
+
+  return cookieHeader
     .split(";")
     .map((part) => part.trim().split("=")[0])
     .filter(Boolean);
+}
 
-  for (const name of cookieNames) {
+function clearAllSupabaseAuthFlowCookies(request: Request, response: NextResponse) {
+  for (const name of getCookieNames(request)) {
+    if (isSupabaseSessionCookie(name) || isSupabaseCodeVerifierCookie(name)) {
+      response.cookies.delete(name);
+    }
+  }
+
+  return response;
+}
+
+function clearStaleSupabaseSessionCookies(request: Request, response: NextResponse) {
+  for (const name of getCookieNames(request)) {
     if (isSupabaseSessionCookie(name)) {
       response.cookies.delete(name);
     }
@@ -33,7 +49,7 @@ function redirectWithError(request: Request, nextPath: string) {
     303,
   );
 
-  return clearStaleSupabaseSessionCookies(request, response);
+  return clearAllSupabaseAuthFlowCookies(request, response);
 }
 
 export async function GET(request: Request) {
@@ -41,6 +57,20 @@ export async function GET(request: Request) {
   const nextPath = normalizeNextPath(url.searchParams.get("next"));
   const callbackUrl = new URL("/auth/callback", request.url);
   callbackUrl.searchParams.set("next", nextPath);
+
+  const clean = url.searchParams.get("clean") === "1";
+  const cookieNames = getCookieNames(request);
+  const hasExistingSessionCookies = cookieNames.some(isSupabaseSessionCookie);
+  const hasExistingCodeVerifier = cookieNames.some(isSupabaseCodeVerifierCookie);
+
+  if (!clean && (hasExistingSessionCookies || hasExistingCodeVerifier)) {
+    const cleanUrl = new URL("/auth/google", request.url);
+    cleanUrl.searchParams.set("next", nextPath);
+    cleanUrl.searchParams.set("clean", "1");
+
+    const response = NextResponse.redirect(cleanUrl, 303);
+    return clearAllSupabaseAuthFlowCookies(request, response);
+  }
 
   const { supabase, applyCookies } = await createSupabaseRouteHandlerClient();
 
