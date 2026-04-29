@@ -352,7 +352,7 @@ export function AnalysisBoard({
     setHoveredSquare(square);
     setDragPosition(isOwnTurnPiece ? pointer : null);
     if (isOwnTurnPiece) {
-      setDragPieceSize(event.currentTarget.getBoundingClientRect().width * 0.86);
+      setDragPieceSize(event.currentTarget.getBoundingClientRect().width);
       if (selectedSquare === undefined) setInternalSelected(square);
     }
   }
@@ -576,11 +576,8 @@ function DraggedPiece({
   if (!piece) return null;
 
   return (
-    <img
-      src={pieceAsset(pieceAssetSet, pieceCodeForAsset(piece.color, piece.type))}
-      alt=""
-      draggable={false}
-      className="pointer-events-none fixed z-[9999] object-contain drop-shadow-[0_16px_22px_rgba(0,0,0,0.5)]"
+    <div
+      className="pointer-events-none fixed z-[9999] flex items-center justify-center"
       style={{
         left: x,
         top: y,
@@ -588,7 +585,14 @@ function DraggedPiece({
         height: size,
         transform: "translate(-50%, -50%)",
       }}
-    />
+    >
+      <img
+        src={pieceAsset(pieceAssetSet, pieceCodeForAsset(piece.color, piece.type))}
+        alt=""
+        draggable={false}
+        className="h-[86%] w-[86%] object-contain drop-shadow-[0_16px_22px_rgba(0,0,0,0.5)]"
+      />
+    </div>
   );
 }
 

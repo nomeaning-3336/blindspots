@@ -1,6 +1,6 @@
 # Train FEN Sampling Findings
 
-Generated: 2026-04-27T18:40:30.217Z
+Generated: 2026-04-29T12:27:35.911Z
 
 Total samples: 30
 
@@ -22,50 +22,48 @@ Run only with a dedicated QA account, not a production profile.
 
 ## Critical Failures
 
-- [HIGH] recommender_warning (completed_sequence_count_static): completedSequenceCount was 2 for all samples. chooseServeMode will see the same profile state unless complete-sequence is called. QA loop does not call complete-sequence, so this is expected but should be noted.
+- [HIGH] recommender_warning (no_tactic_injection): No tactic positions were served across 30 samples. Tactic injection may not be working.
+  Stage: api_response, Expected: (some tactic serves), Actual: (no tactic serves)
+- [HIGH] recommender_warning (completed_sequence_count_static): completedSequenceCount was -1 for all samples. chooseServeMode will see the same profile state unless complete-sequence is called. QA loop does not call complete-sequence, so this is expected but should be noted.
   Stage: profile_state, Expected: (grows with complete-sequence calls), Actual: (1 unique value across 30 samples)
-- [HIGH] recommender_warning (recent_served_modes_not_growing): recent_served_modes count did not grow after initial load. Persistence may be broken.
-  Stage: persistence, Expected: (increases), Actual: (50 → 50)
 
 ## Distribution
 
 
 ### Serve Mode
 
-- middlegame: 17
-- opening: 11
-- tactic: 2
+- : 30
 
 ### Phase
 
-- middlegame: 17
-- opening: 11
-- tactic: 2
+- : 30
 
 ### Bucket
 
-- middlegame: 17
-- opening: 11
-- tactic: 2
+- : 30
 
 ### Source
 
-- elite: 30
+- : 30
 
 ### Test Mode
 
 - api-sampling-plus-mocked-ui-replay: 30
 
-### Tactic: yes=2 no=28
+### Tactic: yes=0 no=30
 
-### API invalid FEN: 0
+### API invalid FEN: 30
 
-### UI board FEN unreadable: 28
+### UI board FEN unreadable: 30
 
-### UI board mismatch (verified but wrong): 2
+### UI board mismatch (verified but wrong): 0
 
 ### Terminal/checkmate: 0
 
+
+### Repeated FENs
+
+- 30x: 
 
 ## Sample Table
 
@@ -73,49 +71,49 @@ Run only with a dedicated QA account, not a production profile.
 sample | testMode | serveMode | phase | bucket | source | apiValid | uiVerified | clientMatch | terminal | screenshot
 
 ---|---|---|---|---|---|---|---|---|---|---|---
-1 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-2 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-3 | mock | opening | opening | opening | elite | true | false | false | false | yes
-4 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-5 | mock | opening | opening | opening | elite | true | false | false | false | yes
-6 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-7 | mock | opening | opening | opening | elite | true | false | false | false | yes
-8 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-9 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-10 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-11 | mock | opening | opening | opening | elite | true | false | false | false | yes
-12 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-13 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-14 | mock | opening | opening | opening | elite | true | false | false | false | yes
-15 | mock | opening | opening | opening | elite | true | false | false | false | yes
-16 | mock | tactic | tactic | tactic | elite | true | true | false | false | yes
-17 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-18 | mock | tactic | tactic | tactic | elite | true | true | false | false | yes
-19 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-20 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-21 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-22 | mock | opening | opening | opening | elite | true | false | false | false | yes
-23 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-24 | mock | opening | opening | opening | elite | true | false | false | false | yes
-25 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-26 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-27 | mock | opening | opening | opening | elite | true | false | false | false | yes
-28 | mock | middlegame | middlegame | middlegame | elite | true | false | false | false | yes
-29 | mock | opening | opening | opening | elite | true | false | false | false | yes
-30 | mock | opening | opening | opening | elite | true | false | false | false | yes
+1 | mock |  |  |  |  | false | false | false | false | no
+2 | mock |  |  |  |  | false | false | false | false | no
+3 | mock |  |  |  |  | false | false | false | false | no
+4 | mock |  |  |  |  | false | false | false | false | no
+5 | mock |  |  |  |  | false | false | false | false | no
+6 | mock |  |  |  |  | false | false | false | false | no
+7 | mock |  |  |  |  | false | false | false | false | no
+8 | mock |  |  |  |  | false | false | false | false | no
+9 | mock |  |  |  |  | false | false | false | false | no
+10 | mock |  |  |  |  | false | false | false | false | no
+11 | mock |  |  |  |  | false | false | false | false | no
+12 | mock |  |  |  |  | false | false | false | false | no
+13 | mock |  |  |  |  | false | false | false | false | no
+14 | mock |  |  |  |  | false | false | false | false | no
+15 | mock |  |  |  |  | false | false | false | false | no
+16 | mock |  |  |  |  | false | false | false | false | no
+17 | mock |  |  |  |  | false | false | false | false | no
+18 | mock |  |  |  |  | false | false | false | false | no
+19 | mock |  |  |  |  | false | false | false | false | no
+20 | mock |  |  |  |  | false | false | false | false | no
+21 | mock |  |  |  |  | false | false | false | false | no
+22 | mock |  |  |  |  | false | false | false | false | no
+23 | mock |  |  |  |  | false | false | false | false | no
+24 | mock |  |  |  |  | false | false | false | false | no
+25 | mock |  |  |  |  | false | false | false | false | no
+26 | mock |  |  |  |  | false | false | false | false | no
+27 | mock |  |  |  |  | false | false | false | false | no
+28 | mock |  |  |  |  | false | false | false | false | no
+29 | mock |  |  |  |  | false | false | false | false | no
+30 | mock |  |  |  |  | false | false | false | false | no
 
 ## All Findings
 
 
-### recommender_warning [medium] (only_elite_source)
+### recommender_warning [high] (no_tactic_injection)
 
 Stage: api_response
 
-Expected: (seed + elite sources)
+Expected: (some tactic serves)
 
-Actual: (only elite)
+Actual: (no tactic serves)
 
-Notes: All 30 positions came from elite source. Opening/tactic seed sources were not observed. This may indicate seed-path bypass or empty seed pools.
+Notes: No tactic positions were served across 30 samples. Tactic injection may not be working.
 
 ### recommender_warning [high] (completed_sequence_count_static)
 
@@ -125,14 +123,4 @@ Expected: (grows with complete-sequence calls)
 
 Actual: (1 unique value across 30 samples)
 
-Notes: completedSequenceCount was 2 for all samples. chooseServeMode will see the same profile state unless complete-sequence is called. QA loop does not call complete-sequence, so this is expected but should be noted.
-
-### recommender_warning [high] (recent_served_modes_not_growing)
-
-Stage: persistence
-
-Expected: (increases)
-
-Actual: (50 → 50)
-
-Notes: recent_served_modes count did not grow after initial load. Persistence may be broken.
+Notes: completedSequenceCount was -1 for all samples. chooseServeMode will see the same profile state unless complete-sequence is called. QA loop does not call complete-sequence, so this is expected but should be noted.
