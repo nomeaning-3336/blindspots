@@ -68,6 +68,7 @@ export function PublicHeaderClient({ isSignedIn }: { isSignedIn: boolean }) {
   const nextPath =
     pathname && pathname !== "/" ? pathname : "/train";
   const signUpHref = `/sign-up?next=${encodeURIComponent("/train")}`;
+  const isAuthPage = pathname === "/sign-in" || pathname === "/auth/email";
 
   return (
     <header
@@ -83,9 +84,11 @@ export function PublicHeaderClient({ isSignedIn }: { isSignedIn: boolean }) {
             <LogoMark />
           </Link>
         </h1>
-        <div className="app-shell-nav flex flex-wrap items-center justify-end gap-2">
+        <div className="app-shell-nav flex min-h-9 flex-wrap items-center justify-end gap-2">
           {isSignedIn ? (
             <AppShellNav isSignedIn />
+          ) : isAuthPage ? (
+            <div className="min-h-9 w-28" />
           ) : (
             <HeaderLink href={signUpHref} primary>
               Find your blindspots
