@@ -126,6 +126,7 @@ type EvalGraphPoint = {
 type ExploratoryPosition = {
   fen: string;
   lastMove: { from: string; to: string } | null;
+  move?: TrainingMove;
 };
 
 type NextPositionResponse = {
@@ -304,6 +305,7 @@ export default function TrainPage() {
   const [pendingInitialEngineMove, setPendingInitialEngineMove] = useState<NextPositionResponse | null>(null);
   const [analysisStep, setAnalysisStep] = useState(0);
   const [analysisError, setAnalysisError] = useState("");
+  const [asyncMoveEvaluations, setAsyncMoveEvaluations] = useState<Record<number, { status: "pending" | "done" | "error"; moveScore?: MoveScore; positionEvaluation?: unknown }>>({});
   const [analysisElapsedMs, setAnalysisElapsedMs] = useState(0);
   const [initializationSummary, setInitializationSummary] =
     useState<InitializationSummary | null>(null);
@@ -547,6 +549,7 @@ export default function TrainPage() {
         setFen("");
         setHasLoadedPosition(false);
         setMoves([]);
+        setAsyncMoveEvaluations({});
         setInitialOpponentMove(null);
         setCurrentChallengeElo(null);
         setSequenceLength(DEFAULT_SEQUENCE_LENGTH);
@@ -832,6 +835,13 @@ export default function TrainPage() {
       setMoves(movesAfterUserMove);
       warmEngineLinesForSequence(movesAfterUserMove);
 
+      void evaluateUserMoveAsync({
+        userMoveIndex: userMoveCountAfterMove - 1,
+        decisionFen: boardFen!,
+        uci: userTrainingMove.uci,
+        san: userTrainingMove.san,
+      });
+
       if (chess.isGameOver()) {
         completingRef.current = true;
         setState("complete");
@@ -861,9 +871,17 @@ export default function TrainPage() {
       if (!playedMove) return;
 
       playTrainMoveSound({ move: playedMove, plyRef: moveSoundPlyRef });
-      const nextExploratoryPosition = {
+      const currentFen = boardFen;
+      const nextExploratoryPosition: ExploratoryPosition = {
         fen: chess.fen(),
         lastMove: { from: playedMove.from, to: playedMove.to },
+        move: {
+          san: playedMove.san,
+          uci: `${playedMove.from}${playedMove.to}${playedMove.promotion ?? ""}`,
+          side: (playedMove.color === "w" ? "white" : "black") as "white" | "black",
+          fenBefore: currentFen,
+          fenAfter: chess.fen(),
+        },
       };
       const nextHistory = [
         ...exploratoryHistory.slice(0, exploratoryHistoryIndex + 1),
@@ -933,10 +951,82 @@ export default function TrainPage() {
     }
   }
 
+  async function evaluateUserMoveAsync(input: {
+    userMoveIndex: number;
+    decisionFen: string;
+    uci: string;
+    san: string;
+  }) {
+    setAsyncMoveEvaluations((current) => ({
+      ...current,
+      [input.userMoveIndex]: { status: "pending" },
+    }));
+
+    try {
+      const response = await fetch("/api/train/evaluate-move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          decisionFen: input.decisionFen,
+          uci: input.uci,
+          san: input.san,
+          selectedBucket: selectedBucketRef.current,
+          selectedPhase: selectedPhaseRef.current,
+          selectedTags: selectedTagsRef.current,
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok || !payload?.moveScore) {
+        throw new Error(payload?.error ?? "Move evaluation failed");
+      }
+
+      setAsyncMoveEvaluations((current) => ({
+        ...current,
+        [input.userMoveIndex]: {
+          status: "done",
+          moveScore: {
+            ...payload.moveScore,
+            userMoveIndex: input.userMoveIndex,
+          },
+          positionEvaluation: {
+            ...payload.positionEvaluation,
+            index: input.userMoveIndex,
+          },
+        },
+      }));
+
+      // Also merge into the moves array immediately so the graph/table updates without waiting for complete-sequence
+      setMoves((current) =>
+        current.map((m, i) => {
+          if (m.side !== userMoveSide) return m;
+          const moveIdx = current.filter((x) => x.side === userMoveSide).indexOf(m);
+          if (moveIdx !== input.userMoveIndex) return m;
+          return {
+            ...m,
+            cpLoss: payload.moveScore.cpLoss,
+            evalBefore: payload.moveScore.evalBefore,
+            evalAfter: payload.moveScore.evalAfter,
+            classification: payload.moveScore.classification,
+          };
+        }),
+      );
+    } catch {
+      setAsyncMoveEvaluations((current) => ({
+        ...current,
+        [input.userMoveIndex]: { status: "error" },
+      }));
+    }
+  }
+
   async function completeSequence(finalMoves: TrainingMove[]) {
     const requestId = completionRequestRef.current + 1;
     completionRequestRef.current = requestId;
     setIsCompletingSequence(true);
+
+    // Wait for pending async move evaluations (up to 1200ms)
+    await new Promise<void>((resolve) => setTimeout(resolve, 1200));
 
     try {
       const response = await fetch("/api/train/complete-sequence", {
@@ -1481,6 +1571,9 @@ export default function TrainPage() {
       return;
     }
 
+    const currentIndex = exploratoryHistoryIndex;
+    const movingForward = nextIndex > currentIndex;
+
     setHoveredEngineLineIndex(null);
     setHoveredMoveSquares(null);
     setExploratoryHistoryIndex(nextIndex);
@@ -1488,6 +1581,14 @@ export default function TrainPage() {
     const position = nextIndex >= 0 ? exploratoryHistory[nextIndex] : null;
     setExploratoryFen(position?.fen ?? null);
     setExploratoryLastMove(position?.lastMove ?? null);
+
+    if (movingForward && position?.move) {
+      playTrainMoveSound({
+        move: position.move,
+        source: "replay",
+        advanceLivePitch: false,
+      });
+    }
   }
 
   function navigateExploreTo(
@@ -1565,7 +1666,7 @@ export default function TrainPage() {
                   isExploring={isExploringResults}
                 >
                   {isExploringResults ? (
-                    <BoardWithEvalBar evalCp={currentEngineEval} isLoading={isEngineLinesLoading}>
+                    <BoardWithEvalBar evalCp={currentEngineEval} isLoading={isEngineLinesLoading} orientation={boardOrientation}>
                       <AnalysisBoard
                         fen={boardFen}
                         mode="training"
@@ -1652,6 +1753,7 @@ export default function TrainPage() {
               eloResult={eloResult}
               isSaving={isCompletingSequence}
               moves={moves}
+              asyncMoveEvaluations={asyncMoveEvaluations}
               userSide={userMoveSide}
               startingFen={startingFen}
               mode={resultMode}
@@ -2796,10 +2898,13 @@ function EngineLinesSection({
               onPointerEnter={() => onHoverLine?.(index)}
               onPointerLeave={() => onHoverLine?.(null)}
             >
-              <div className="grid grid-cols-[26px_minmax(0,1fr)_auto_auto_72px] items-center gap-2">
+              <div className="grid grid-cols-[26px_auto_minmax(0,1fr)_auto_auto_72px] items-center gap-2">
                 <span className="text-right text-[10px] font-bold text-[var(--app-muted-soft)]">
                   #{index + 1}
                 </span>
+                {cls && !isSelectedUserMove ? (
+                  <ClassificationBadge classification={cls} />
+                ) : <span />}
                 <strong className="min-w-0 truncate text-sm font-bold" style={{ color: lineColor }}>
                   {formatClassifiedMoveLead(lead, cls)}
                 </strong>
@@ -2807,8 +2912,6 @@ function EngineLinesSection({
                   <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--app-accent)]">
                     Your move
                   </span>
-                ) : cls ? (
-                  <ClassificationBadge classification={cls} />
                 ) : null}
                 <span className="justify-self-end text-[10px] font-bold tabular-nums text-[var(--app-muted-soft)]">
                   {formatEval(line.cp)} d{line.depth || 18}
@@ -2828,10 +2931,12 @@ function EngineLinesSection({
 function BoardWithEvalBar({
   evalCp,
   isLoading,
+  orientation,
   children,
 }: {
   evalCp?: number;
   isLoading: boolean;
+  orientation: "white" | "black";
   children: ReactNode;
 }) {
   const [lastEvalCp, setLastEvalCp] = useState<number | null>(null);
@@ -2845,17 +2950,22 @@ function BoardWithEvalBar({
   const whitePct = 50 + (clamped / 600) * 42;
   const blackPct = 100 - whitePct;
 
+  // top segment = Black side, bottom segment = White side (always, per bar convention)
+  // then flip if board is black-oriented: White moves to top, Black moves to bottom
+  const topPct = orientation === "white" ? blackPct : whitePct;
+  const bottomPct = orientation === "white" ? whitePct : blackPct;
+
   return (
     <div className="relative w-full overflow-visible">
       <div className="pointer-events-none absolute right-full top-0 mr-3 h-full w-6 shrink-0">
         <div className="relative h-full overflow-hidden rounded-[4px] border border-[var(--app-border-soft)] bg-black">
           <div
             className="absolute left-0 right-0 top-0 bg-white transition-[height] duration-200"
-            style={{ height: `${whitePct}%` }}
+            style={{ height: `${bottomPct}%` }}
           />
           <div
             className="absolute left-0 right-0 bottom-0 bg-black transition-[height] duration-200"
-            style={{ height: `${blackPct}%` }}
+            style={{ height: `${topPct}%` }}
           />
           <span className="absolute inset-x-0 top-1 text-center text-[9px] font-bold text-black">
             {typeof displayEvalCp === "number" ? formatEval(displayEvalCp) : isLoading ? "..." : "--"}
@@ -2872,6 +2982,7 @@ function ResultsPanel({
   eloResult,
   isSaving,
   moves,
+  asyncMoveEvaluations,
   userSide,
   startingFen,
   mode,
@@ -2894,6 +3005,7 @@ function ResultsPanel({
   eloResult: EloResult | null;
   isSaving: boolean;
   moves: TrainingMove[];
+  asyncMoveEvaluations: Record<number, { status: "pending" | "done" | "error"; moveScore?: MoveScore; positionEvaluation?: unknown }>;
   userSide: TrainingMove["side"];
   startingFen: string;
   mode: ResultMode;

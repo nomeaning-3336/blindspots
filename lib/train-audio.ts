@@ -8,6 +8,7 @@ export type PlayTrainSoundOptions = {
   advanceLivePitch?: boolean;
   plyRef?: { current: number };
   source?: "live" | "replay" | "initial-engine";
+  _retryAfterPrime?: boolean;
 };
 
 export type TrainSoundMove = {
@@ -91,20 +92,16 @@ let _unlockListenersRegistered = false;
 
 export const TRAIN_AUDIO_MANAGER = _instance;
 
-export function pingPongScaleIndex(plyIndex: number): number {
-  const maxIndex = MOVE_SCALE_RATIOS.length - 1;
-  if (maxIndex <= 0) return 0;
-  const period = maxIndex * 2;
-  const normalized = ((plyIndex % period) + period) % period;
-  return normalized <= maxIndex ? normalized : period - normalized;
+export function pingPongScaleIndex(_plyIndex: number): number {
+  return 0;
 }
 
-export function pitchRatioForPly(plyIndex: number) {
-  return MOVE_SCALE_RATIOS[pingPongScaleIndex(plyIndex)];
+export function pitchRatioForPly(_plyIndex: number) {
+  return 1.0;
 }
 
-export function scaleLabelForPly(plyIndex: number): string {
-  return MOVE_SCALE_LABELS[pingPongScaleIndex(plyIndex)];
+export function scaleLabelForPly(_plyIndex: number): string {
+  return "default";
 }
 
 export function primeTrainAudio(): Promise<void> {
@@ -176,16 +173,28 @@ export function playTrainMoveSound(options: PlayTrainSoundOptions): boolean {
 
   if (!buffer) {
     _instance._skippedBufferMissing += 1;
+    if (!options._retryAfterPrime) {
+      void primeTrainAudio().then(() => {
+        playTrainMoveSound({ ...options, advanceLivePitch: false, _retryAfterPrime: true });
+      }).catch(() => {});
+    }
     if (process.env.NODE_ENV !== "production") {
       // eslint-disable-next-line no-console
-      console.warn(`[train-audio] buffer missing for "${soundName}", sound skipped`);
+      console.warn(`[train-audio] buffer missing for "${soundName}", queued one retry`);
     }
     return false;
   }
 
   if (ctx.state === "suspended") {
     _instance._skippedContextSuspended += 1;
-    void ctx.resume().catch(() => {});
+    if (!options._retryAfterPrime) {
+      void ctx.resume()
+        .then(() => primeTrainAudio())
+        .then(() => {
+          playTrainMoveSound({ ...options, advanceLivePitch: false, _retryAfterPrime: true });
+        })
+        .catch(() => {});
+    }
     return false;
   }
 
@@ -193,9 +202,9 @@ export function playTrainMoveSound(options: PlayTrainSoundOptions): boolean {
     return false;
   }
 
-  const effectivePitchIndex = pitchIndex ?? plyRef?.current ?? 0;
-  const scaleIdx = pingPongScaleIndex(effectivePitchIndex);
-  const playbackRate = pitchRatioForPly(effectivePitchIndex);
+  const effectivePitchIndex = 0;
+  const scaleIdx = 0;
+  const playbackRate = 1.0;
   const startedAt = performance.now();
   const setupMs = startedAt - requestedAt;
 
