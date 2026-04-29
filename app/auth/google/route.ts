@@ -19,17 +19,33 @@ export async function GET(request: Request) {
   callbackUrl.searchParams.set("next", nextPath);
 
   const { supabase, applyCookies } = await createSupabaseRouteHandlerClient();
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      redirectTo: callbackUrl.toString(),
-      queryParams: {
-        prompt: "select_account",
-      },
-    },
-  });
 
-  if (error || !data.url) {
+  let data;
+  let error;
+
+  try {
+    const result = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: callbackUrl.toString(),
+        queryParams: {
+          prompt: "select_account",
+        },
+      },
+    });
+    data = result.data;
+    error = result.error;
+  } catch (e) {
+    error = e as Error;
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    if (error || !data?.url) {
+      console.warn("[auth] Google OAuth failed to start", error);
+    }
+  }
+
+  if (error || !data?.url) {
     return redirectWithError(request, nextPath);
   }
 

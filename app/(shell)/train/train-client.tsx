@@ -1078,6 +1078,23 @@ export default function TrainPage() {
           skillLevel,
         }),
       });
+
+      // Refresh profile Elo after saving settings, then transition to training.
+      // startFirstSession is only called from onboarding paths where we need the
+      // saved Elo (not analyzed games blend), so we refetch the profile directly.
+      try {
+        const initResponse = await fetch("/api/train/initialize", { cache: "no-store" });
+        const initPayload = await initResponse.json().catch(() => null);
+        if (typeof initPayload?.profile?.blindspots_elo === "number") {
+          setBlindspotsElo(initPayload.profile.blindspots_elo);
+        }
+        if (initPayload?.preferences?.skill_level) {
+          setSkillLevel(initPayload.preferences.skill_level);
+        }
+      } catch {
+        // Non-critical — keep existing Elo state on refresh failure
+      }
+
       setOnboardingScreen("done");
       void loadNextPosition();
     } finally {
@@ -1642,7 +1659,7 @@ export default function TrainPage() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="flex items-end gap-3" aria-label="Blindspots Elo">
-                    <span className="text-5xl font-bold leading-none text-[var(--app-text)]">{rating}</span>
+                    <span className="text-5xl font-bold leading-none text-[var(--app-text)]">{rating ?? "--"}</span>
                   </div>
                 </div>
                 <div className="rounded border border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-4 py-3 text-right">
