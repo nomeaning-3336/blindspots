@@ -295,6 +295,8 @@ export type Database = {
           recent_served_fens: Json;
           recent_served_modes: Json;
           bucket_stats: Json;
+          cluster_stats: Json;
+          recent_clusters: Json;
           total_sequences: number;
           last_session_at: string | null;
           profile_initialized: boolean;
@@ -317,6 +319,8 @@ export type Database = {
           recent_served_fens?: Json;
           recent_served_modes?: Json;
           bucket_stats?: Json;
+          cluster_stats?: Json;
+          recent_clusters?: Json;
           total_sequences?: number;
           last_session_at?: string | null;
           profile_initialized?: boolean;
@@ -339,6 +343,8 @@ export type Database = {
           recent_served_fens?: Json;
           recent_served_modes?: Json;
           bucket_stats?: Json;
+          cluster_stats?: Json;
+          recent_clusters?: Json;
           total_sequences?: number;
           last_session_at?: string | null;
           profile_initialized?: boolean;

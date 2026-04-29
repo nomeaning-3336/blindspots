@@ -38,6 +38,7 @@ artifacts/
 
 # corpus / eval cache
 *.jsonl
+public/corpus/
 *.jsonl.zst
 *.zst.part
 *.parquet
