@@ -157,12 +157,6 @@ function HeroVisual() {
 
         <div className="relative z-10 aspect-square w-[min(88vw,42rem,72vh)]">
           <TrainingBoard />
-          <div className="pointer-events-none absolute bottom-3 left-0 right-0 flex items-center justify-center">
-            <span className="flex items-center gap-2 rounded-full bg-black/35 px-2 py-1 backdrop-blur-sm">
-              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: "var(--app-class-best)" }} />
-              <span className="text-sm font-bold text-[var(--app-text)]">Black</span>
-            </span>
-          </div>
         </div>
       </div>
     </div>

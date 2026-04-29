@@ -57,10 +57,11 @@ ALTER TABLE user_blindspot_profile
 Shape per cluster:
 ```json
 {
-  "v0:middlegame:black:mixed_endgame:equal:lichess_eval:nonpuzzle:0": {
+  "app:v0:middlegame:opening_gambit": {
     "attempts": 5,
     "successes": 1,
     "failures": 4,
+    "neutralCount": 0,
     "posteriorAlpha": 5,
     "posteriorBeta": 2,
     "lastServedAt": "2026-04-28T20:00:00Z"
@@ -68,7 +69,9 @@ Shape per cluster:
 }
 ```
 
-**Advantage:** Single column, no schema migration, easy to update in `complete-sequence` route.
+> **Note:** Stage 1 uses coarse `app:v0:{phase}:{bucket}` cluster IDs (derived from the existing `phase` and `bucket` of each position) rather than the fine-grained corpus pipeline IDs. This keeps the app decoupled from the corpus clustering details and allows the corpus pipeline to evolve independently. The corpus pipeline will eventually map its own fine-grained IDs back to these coarse IDs for serving.
+
+**Advantage:** Single column, small migration, easy to update in `complete-sequence` route.
 
 **Disadvantage:** No per-cluster indexes, hard to query "which clusters has this user never tried?", but not needed for V0.
 

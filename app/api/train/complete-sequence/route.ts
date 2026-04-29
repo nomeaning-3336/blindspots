@@ -63,6 +63,7 @@ type PositionEvaluation = {
   fenAfterEngineMove: string | null;
   phase: string;
   bucket: string;
+  clusterId: string;
   tags: string[];
 };
 
@@ -212,6 +213,10 @@ export async function POST(request: Request) {
     updatedStats = recordBucketResult(updatedStats, posEval.bucket, posEval.banditResult === "success");
   }
 
+  const currentClusterStats = normalizeClusterStats(profile.cluster_stats);
+  const updatedClusterStats = recordClusterResults(currentClusterStats, sequenceEvaluation.positionEvaluations, completedAt);
+  const updatedRecentClusters = updateRecentClusters(profile.recent_clusters, sequenceEvaluation.positionEvaluations);
+
   const { error: profileError } = await supabase
     .from("user_blindspot_profile")
     .update({
@@ -224,6 +229,8 @@ export async function POST(request: Request) {
       revisit_queue: queues.revisitQueue as unknown as Json,
       mastered_queue: queues.masteredQueue as unknown as Json,
       bucket_stats: updatedStats as unknown as Json,
+      cluster_stats: updatedClusterStats as unknown as Json,
+      recent_clusters: updatedRecentClusters as unknown as Json,
     })
     .eq("user_id", userId);
 
@@ -305,6 +312,7 @@ async function calculateSequenceEvaluation(
           evalAfter: mateCpForWinningSide(userColor),
           classification,
         });
+        const checkmatePhase = selectedPhase ?? classifyTrainingPhase(fenAfterMove);
         positionEvaluations.push({
           index: userMoveCount,
           decisionFen,
@@ -316,8 +324,9 @@ async function calculateSequenceEvaluation(
           banditResult: "success",
           fenAfterUserMove: fenAfterMove,
           fenAfterEngineMove: null,
-          phase: selectedPhase ?? classifyTrainingPhase(fenAfterMove),
+          phase: checkmatePhase,
           bucket: selectedBucket,
+          clusterId: deriveCoarseClusterId(checkmatePhase, selectedBucket),
           tags: selectedTags ?? [],
         });
         userMoveCount += 1;
@@ -340,6 +349,7 @@ async function calculateSequenceEvaluation(
       // Get engine reply if available (requires engine call; leave null for now)
       let fenAfterEngineMove: string | null = null;
 
+      const regularPhase = selectedPhase ?? classifyTrainingPhase(fenAfterMove);
       positionEvaluations.push({
         index: userMoveCount,
         decisionFen,
@@ -351,8 +361,9 @@ async function calculateSequenceEvaluation(
         banditResult: getBanditResult(classification),
         fenAfterUserMove: fenAfterMove,
         fenAfterEngineMove,
-        phase: selectedPhase ?? classifyTrainingPhase(fenAfterMove),
+        phase: regularPhase,
         bucket: selectedBucket,
+        clusterId: deriveCoarseClusterId(regularPhase, selectedBucket),
         tags: selectedTags ?? [],
       });
       userMoveCount += 1;
@@ -384,11 +395,132 @@ function getBanditResult(classification: MoveClassification): "success" | "neutr
   return "failure";
 }
 
+// ---------------------------------------------------------------------------
+// Cluster stats helpers (Stage 1: build user signal for future corpus recommender)
+// ---------------------------------------------------------------------------
+
+type ClusterStatEntry = {
+  attempts: number;
+  successes: number;
+  failures: number;
+  neutralCount: number;
+  posteriorAlpha: number;
+  posteriorBeta: number;
+  lastServedAt: string;
+};
+
+type ClusterStats = Record<string, ClusterStatEntry>;
+
+/**
+ * Coarse cluster ID used by the app for bandit tracking.
+ * Separate from fine-grained corpus pipeline cluster IDs to keep the two
+ * systems decoupled — the app uses phase+bucket, the corpus pipeline uses
+ * the full 6-partition + MiniBatchKMeans clustering.
+ */
+function deriveCoarseClusterId(phase: string, bucket: string): string {
+  return `app:v0:${phase}:${bucket}`;
+}
+
+function normalizeClusterStats(raw: unknown): ClusterStats {
+  if (!raw || typeof raw !== "object") return {};
+  const candidate = raw as Record<string, unknown>;
+  const result: ClusterStats = {};
+  for (const [key, entry] of Object.entries(candidate)) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    const attempts = typeof e.attempts === "number" && e.attempts >= 0 ? e.attempts : 0;
+    const successes = typeof e.successes === "number" && e.successes >= 0 ? e.successes : 0;
+    const failures = typeof e.failures === "number" && e.failures >= 0 ? e.failures : 0;
+    const neutralCount = typeof e.neutralCount === "number" && e.neutralCount >= 0 ? e.neutralCount : 0;
+    const posteriorAlpha = typeof e.posteriorAlpha === "number" && e.posteriorAlpha > 0 ? e.posteriorAlpha : 1;
+    const posteriorBeta = typeof e.posteriorBeta === "number" && e.posteriorBeta > 0 ? e.posteriorBeta : 1;
+    const lastServedAt = typeof e.lastServedAt === "string" ? e.lastServedAt : "";
+    result[key] = { attempts, successes, failures, neutralCount, posteriorAlpha, posteriorBeta, lastServedAt };
+  }
+  return result;
+}
+
+/**
+ * Update cluster_stats from a single session's position evaluations.
+ * posteriorAlpha = failures + 1, posteriorBeta = successes + 1
+ * (Beta distribution parameterized so higher alpha relative to beta = more weakness).
+ */
+function recordClusterResults(
+  stats: ClusterStats,
+  evaluations: PositionEvaluation[],
+  nowIso: string,
+): ClusterStats {
+  const updated = { ...stats };
+  const counts: Record<string, { successes: number; failures: number; neutralCount: number }> = {};
+  for (const ev of evaluations) {
+    const cid = ev.clusterId;
+    if (!cid) continue;
+    if (!counts[cid]) counts[cid] = { successes: 0, failures: 0, neutralCount: 0 };
+    if (ev.banditResult === "success") counts[cid].successes++;
+    else if (ev.banditResult === "failure") counts[cid].failures++;
+    else counts[cid].neutralCount++;
+  }
+  for (const [cid, delta] of Object.entries(counts)) {
+    const existing = updated[cid] ?? {
+      attempts: 0,
+      successes: 0,
+      failures: 0,
+      neutralCount: 0,
+      posteriorAlpha: 1,
+      posteriorBeta: 1,
+      lastServedAt: "",
+    };
+    const attempts = existing.attempts + delta.successes + delta.failures + delta.neutralCount;
+    const successes = existing.successes + delta.successes;
+    const failures = existing.failures + delta.failures;
+    const neutralCount = existing.neutralCount + delta.neutralCount;
+    updated[cid] = {
+      attempts,
+      successes,
+      failures,
+      neutralCount,
+      posteriorAlpha: failures + 1,
+      posteriorBeta: successes + 1,
+      lastServedAt: nowIso,
+    };
+  }
+  return updated;
+}
+
+/**
+ * Build the updated recent_clusters array from a session's evaluations.
+ * New cluster IDs from this session are prepended, duplicates removed,
+ * and the list is trimmed to `limit` entries.
+ */
+function updateRecentClusters(raw: unknown, evaluations: PositionEvaluation[], limit = 20): string[] {
+  const existing: string[] = Array.isArray(raw) ? (raw as string[]) : [];
+  const newIds = evaluations
+    .map((ev) => ev.clusterId)
+    .filter((cid): cid is string => !!cid);
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const id of newIds) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    result.push(id);
+  }
+  for (const id of existing) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    result.push(id);
+  }
+  return result.slice(0, limit);
+}
+
+// ---------------------------------------------------------------------------
+// Profile access
+// ---------------------------------------------------------------------------
+
 async function getOrCreateProfile(userId: string) {
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("user_blindspot_profile")
-    .select("user_id, blindspots_elo, rating_deviation, initial_skill_level, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens, bucket_stats, recent_served_modes")
+    .select("user_id, blindspots_elo, rating_deviation, initial_skill_level, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens, bucket_stats, recent_served_modes, cluster_stats, recent_clusters")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -416,7 +548,7 @@ async function getOrCreateProfile(userId: string) {
       recent_served_modes: [],
       bucket_stats: { opening: { alpha: 1, beta: 1, attempts: 0 }, middlegame: { alpha: 1, beta: 1, attempts: 0 }, endgame: { alpha: 1, beta: 1, attempts: 0 }, tactic: { alpha: 1, beta: 1, attempts: 0 }, opening_gambit: { alpha: 1, beta: 1, attempts: 0 }, opening_development: { alpha: 1, beta: 1, attempts: 0 }, middlegame_attack: { alpha: 1, beta: 1, attempts: 0 }, middlegame_positional: { alpha: 1, beta: 1, attempts: 0 }, endgame_rook: { alpha: 1, beta: 1, attempts: 0 }, endgame_pawn: { alpha: 1, beta: 1, attempts: 0 }, wildcard: { alpha: 1, beta: 1, attempts: 0 } },
     })
-    .select("user_id, blindspots_elo, rating_deviation, initial_skill_level, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens, bucket_stats, recent_served_modes")
+    .select("user_id, blindspots_elo, rating_deviation, initial_skill_level, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens, bucket_stats, recent_served_modes, cluster_stats, recent_clusters")
     .single();
 
   if (insertError) {

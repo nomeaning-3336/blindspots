@@ -1,0 +1,39 @@
+diff --git a/supabase/migrations/20260428_add_training_position_evaluations.sql b/supabase/migrations/20260428_add_training_position_evaluations.sql
+new file mode 100644
+index 0000000..f657d2c
+--- /dev/null
++++ b/supabase/migrations/20260428_add_training_position_evaluations.sql
+@@ -0,0 +1,5 @@
++alter table public.training_sessions
++  add column if not exists position_evaluations jsonb not null default '[]'::jsonb;
++
++comment on column public.training_sessions.position_evaluations is
++  'Per-user-move decision point evaluations for a completed training sequence.';
+diff --git a/lib/supabase/database.ts b/lib/supabase/database.ts
+index 9421abd..e28dd88 100644
+--- a/lib/supabase/database.ts
++++ b/lib/supabase/database.ts
+@@ -187,6 +187,7 @@ export type Database = {
+           reflection_note: string | null;
+           position_fingerprint: Json | null;
+           blindspot_cluster_id: string | null;
++          position_evaluations: Json;
+           elo_before: number;
+           elo_after: number;
+           elo_delta: number;
+@@ -212,6 +213,7 @@ export type Database = {
+           reflection_note?: string | null;
+           position_fingerprint?: Json | null;
+           blindspot_cluster_id?: string | null;
++          position_evaluations?: Json;
+           elo_before: number;
+           elo_after: number;
+           elo_delta: number;
+@@ -237,6 +239,7 @@ export type Database = {
+           reflection_note?: string | null;
+           position_fingerprint?: Json | null;
+           blindspot_cluster_id?: string | null;
++          position_evaluations?: Json;
+           elo_before?: number;
+           elo_after?: number;
+           elo_delta?: number;
