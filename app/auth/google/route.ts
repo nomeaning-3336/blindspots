@@ -2,14 +2,38 @@ import { NextResponse } from "next/server";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server";
 import { normalizeNextPath } from "@/lib/app-auth";
 
+function isSupabaseSessionCookie(name: string) {
+  return /^sb-.*-auth-token(?:\.\d+)?$/.test(name);
+}
+
+function clearStaleSupabaseSessionCookies(request: Request, response: NextResponse) {
+  const cookieHeader = request.headers.get("cookie");
+  if (!cookieHeader) return response;
+
+  const cookieNames = cookieHeader
+    .split(";")
+    .map((part) => part.trim().split("=")[0])
+    .filter(Boolean);
+
+  for (const name of cookieNames) {
+    if (isSupabaseSessionCookie(name)) {
+      response.cookies.delete(name);
+    }
+  }
+
+  return response;
+}
+
 function redirectWithError(request: Request, nextPath: string) {
-  return NextResponse.redirect(
+  const response = NextResponse.redirect(
     new URL(
       `/sign-in?next=${encodeURIComponent(nextPath)}&error=oauth-failed`,
       request.url,
     ),
     303,
   );
+
+  return clearStaleSupabaseSessionCookies(request, response);
 }
 
 export async function GET(request: Request) {
@@ -49,5 +73,6 @@ export async function GET(request: Request) {
     return redirectWithError(request, nextPath);
   }
 
-  return applyCookies(NextResponse.redirect(data.url, 303));
+  const response = applyCookies(NextResponse.redirect(data.url, 303)) as NextResponse;
+  return clearStaleSupabaseSessionCookies(request, response);
 }
