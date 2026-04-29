@@ -5,7 +5,7 @@ import { getOpponentMove } from "@/lib/engines/dispatcher";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const FIXED_OPPONENT_THINK_MS = 1000;
+const TRAIN_ENGINE_TIME_LIMIT_MS = 1000;
 
 type OpponentMovePayload = {
   fen?: unknown;
@@ -27,7 +27,8 @@ export async function POST(request: Request) {
     normalizeElo(payload?.userBlindspotElo),
     normalizeOptionalNumber(payload?.previousEvalCp),
     {
-      responseDelayMs: FIXED_OPPONENT_THINK_MS,
+      responseDelayMs: 0,
+      timeLimitMs: TRAIN_ENGINE_TIME_LIMIT_MS,
       targetElo: normalizeOptionalNumber(payload?.challengeElo),
     },
   );

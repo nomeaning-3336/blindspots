@@ -20,6 +20,7 @@ export async function getOpponentMove(
   options: {
     responseDelayMs?: number;
     targetElo?: number;
+    timeLimitMs?: number;
   } = {},
 ): Promise<EngineMove> {
   const targetElo =
@@ -31,6 +32,7 @@ export async function getOpponentMove(
     userBlindspotElo,
     previousEvalCp,
     responseDelayMs: options.responseDelayMs,
+    timeLimitMs: options.timeLimitMs,
   });
 }
 

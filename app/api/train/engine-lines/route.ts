@@ -9,6 +9,8 @@ import { classifyRankedMove } from "@/lib/move-classification";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const TRAIN_ENGINE_TIME_LIMIT_MS = 1000;
+
 type EngineLinesPayload = {
   fen?: unknown;
 };
@@ -34,7 +36,7 @@ export async function POST(request: Request) {
   try {
     lines = await getPositionLines(fen, {
       depthLimit: limitKind === "depth" ? depthLimitValue : undefined,
-      timeLimitMs: limitKind === "time" ? timeLimitValue : undefined,
+      timeLimitMs: limitKind === "time" ? timeLimitValue : TRAIN_ENGINE_TIME_LIMIT_MS,
       multiPv: linesShown,
     });
   } catch (error: unknown) {
