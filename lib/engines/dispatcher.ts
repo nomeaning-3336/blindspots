@@ -34,8 +34,14 @@ export async function getOpponentMove(
   });
 }
 
-export async function getPositionEval(fen: string) {
-  return stockfishHarness.getEval(fen, { depthLimit: 16 });
+export async function getPositionEval(
+  fen: string,
+  options: { depthLimit?: number; timeLimitMs?: number } = {},
+) {
+  return stockfishHarness.getEval(fen, {
+    depthLimit: options.depthLimit ?? 16,
+    timeLimitMs: options.timeLimitMs,
+  });
 }
 
 export async function getPositionLines(
