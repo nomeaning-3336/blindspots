@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server";
 import { normalizeNextPath } from "@/lib/app-auth";
-
-function isSupabaseSessionCookie(name: string) {
-  return /^sb-.*-auth-token(?:\.\d+)?$/.test(name);
-}
-
-function isSupabaseCodeVerifierCookie(name: string) {
-  return /^sb-.*-auth-token-code-verifier$/.test(name);
-}
+import {
+  SUPABASE_AUTH_COOKIE_DELETE_PATHS,
+  isSupabaseAuthFlowCookie,
+  isSupabaseCodeVerifierCookie,
+  isSupabaseSessionCookie,
+} from "@/lib/supabase/auth-cookies";
 
 function getCookieNamesFromHeader(cookieHeader: string | null) {
   if (!cookieHeader) return [];
@@ -18,17 +16,22 @@ function getCookieNamesFromHeader(cookieHeader: string | null) {
     .filter(Boolean);
 }
 
+function appendExpiredCookie(response: NextResponse, name: string, path: string) {
+  response.headers.append(
+    "Set-Cookie",
+    `${name}=; Path=${path}; Max-Age=0; SameSite=Lax`,
+  );
+}
+
 function clearAllSupabaseAuthFlowCookies(request: Request, response: NextResponse) {
   const cookieHeader = request.headers.get("cookie");
   const cookieNames = getCookieNamesFromHeader(cookieHeader);
 
   for (const name of cookieNames) {
-    if (isSupabaseSessionCookie(name) || isSupabaseCodeVerifierCookie(name)) {
-      // Use Max-Age=0 to immediately expire the cookie in the browser's jar.
-      response.headers.append(
-        "Set-Cookie",
-        `${name}=; Path=/; Max-Age=0; SameSite=Lax`,
-      );
+    if (isSupabaseAuthFlowCookie(name)) {
+      for (const path of SUPABASE_AUTH_COOKIE_DELETE_PATHS) {
+        appendExpiredCookie(response, name, path);
+      }
     }
   }
 
@@ -41,10 +44,9 @@ function clearStaleSupabaseSessionCookies(request: Request, response: NextRespon
 
   for (const name of cookieNames) {
     if (isSupabaseSessionCookie(name)) {
-      response.headers.append(
-        "Set-Cookie",
-        `${name}=; Path=/; Max-Age=0; SameSite=Lax`,
-      );
+      for (const path of SUPABASE_AUTH_COOKIE_DELETE_PATHS) {
+        appendExpiredCookie(response, name, path);
+      }
     }
   }
 

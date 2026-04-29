@@ -1,7 +1,15 @@
-export type MoveClassification = "best" | "excellent" | "good" | "inaccuracy" | "mistake" | "blunder";
+export type MoveClassification =
+  | "critical"
+  | "best"
+  | "excellent"
+  | "good"
+  | "inaccuracy"
+  | "mistake"
+  | "blunder";
 
 export type MoveEvaluationLine = {
   cp: number;
+  mate?: number | null;
   bestMove?: string;
 };
 
@@ -30,7 +38,7 @@ export function classifyRankedMove(
   const bestLine = lines[0];
   const candidateLine = lines[index];
   if (!bestLine || !candidateLine) return undefined;
-  if (index === 0) return "best";
+  if (index === 0) return looksCritical(bestLine, lines, fen) ? "critical" : "best";
   return classifyMoveAgainstBest(bestLine, candidateLine, fen);
 }
 
@@ -60,6 +68,7 @@ function worseClassification(left: MoveClassification, right: MoveClassification
 
 function classificationSeverity(classification: MoveClassification) {
   switch (classification) {
+    case "critical":
     case "best":
       return 0;
     case "excellent":
@@ -73,6 +82,65 @@ function classificationSeverity(classification: MoveClassification) {
     case "blunder":
       return 5;
   }
+}
+
+function looksCritical(bestLine: MoveEvaluationLine, lines: MoveEvaluationLine[], fen: string) {
+  if (!bestLine.bestMove || lines.length < 2) return false;
+
+  const danger = moveDangerProfile(lines, fen);
+  if (danger.recommendableAlternatives > 0) return false;
+  if (danger.bestEscapesMate) return true;
+  if (
+    danger.bestMateDistance != null &&
+    danger.shortestAlternativeMate != null &&
+    danger.shortestAlternativeMate < danger.bestMateDistance
+  ) {
+    return true;
+  }
+
+  return (
+    danger.seriousMistakes + danger.blunders > 0 &&
+    danger.nearBestCount <= 1 &&
+    (danger.secondLoss >= 0.085 || danger.seriousMistakes >= 2)
+  );
+}
+
+function moveDangerProfile(lines: MoveEvaluationLine[], fen: string) {
+  const bestLine = lines[0];
+  if (!bestLine || lines.length < 2) {
+    return {
+      recommendableAlternatives: 0,
+      nearBestCount: bestLine ? 1 : 0,
+      seriousMistakes: 0,
+      blunders: 0,
+      secondLoss: 0,
+      bestEscapesMate: false,
+      bestMateDistance: null,
+      shortestAlternativeMate: null,
+    };
+  }
+
+  const alternatives = lines.slice(1);
+  const alternativeClasses = alternatives.map((candidate) => classifyMoveAgainstBest(bestLine, candidate, fen));
+  const losses = alternatives.map((candidate) => expectedScoreLoss(bestLine, candidate, fen));
+  const losingMateAlternatives = alternatives
+    .filter((candidate) => Number.isFinite(candidate.mate) && Number(candidate.mate) < 0)
+    .map((candidate) => Math.abs(Number(candidate.mate)));
+  const bestMateDistance =
+    Number.isFinite(bestLine.mate) && Number(bestLine.mate) < 0 ? Math.abs(Number(bestLine.mate)) : null;
+
+  return {
+    recommendableAlternatives: alternativeClasses.filter((moveClass) =>
+      isRecommendableClassification(moveClass),
+    ).length,
+    nearBestCount: 1 + losses.filter((loss) => loss <= 0.018).length,
+    seriousMistakes: losses.filter((loss) => loss >= 0.13).length,
+    blunders: losses.filter((loss) => loss >= 0.27).length,
+    secondLoss: losses[0] || 0,
+    bestEscapesMate: bestMateDistance == null && losingMateAlternatives.length > 0,
+    bestMateDistance,
+    shortestAlternativeMate: losingMateAlternatives.length ? Math.min(...losingMateAlternatives) : null,
+  };
 }
 
 function expectedScoreLoss(bestLine: MoveEvaluationLine, candidateLine: MoveEvaluationLine, fen: string) {

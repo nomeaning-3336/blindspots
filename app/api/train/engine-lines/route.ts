@@ -47,6 +47,7 @@ export async function POST(request: Request) {
     error: engineError,
     lines: lines.map((line, index) => ({
       cp: line.cp,
+      mate: line.mate,
       depth: line.depth,
       rank: line.rank,
       bestMove: line.bestMove,

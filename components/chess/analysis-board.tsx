@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import { Chess } from "chess.js";
 import type { Move, Square } from "chess.js";
 import { shouldClearAnnotationsOnPointerDown } from "@/lib/board-annotations";
+import { dragPreviewPosition } from "@/lib/board-drag-preview";
 import type { AnalyzeBoardTheme, AnalyzePieceTheme } from "@/lib/analyze-preferences";
 import type { LastMoveBadge } from "@/lib/training-board-ui";
 
@@ -116,6 +117,10 @@ export function AnalysisBoard({
   const [annotationCircles, setAnnotationCircles] = useState<string[]>([]);
   const [annotationArrows, setAnnotationArrows] = useState<BoardAnnotationArrow[]>([]);
   const dragOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const dragPreviewOriginRef = useRef<{
+    pointer: { x: number; y: number };
+    center: { x: number; y: number };
+  } | null>(null);
   const annotationOriginRef = useRef<{ x: number; y: number } | null>(null);
   const activeSelected = selectedSquare !== undefined ? selectedSquare : internalSelected;
   const highlightMap = useMemo(() => normalizeHighlights(highlightedSquares), [highlightedSquares]);
@@ -147,7 +152,16 @@ export function AnalysisBoard({
     const sourceSquare = dragFrom;
 
     function handleWindowPointerMove(event: PointerEvent) {
-      setDragPosition({ x: event.clientX, y: event.clientY });
+      const previewOrigin = dragPreviewOriginRef.current;
+      setDragPosition(
+        previewOrigin
+          ? dragPreviewPosition({
+              pointer: { x: event.clientX, y: event.clientY },
+              originPointer: previewOrigin.pointer,
+              originCenter: previewOrigin.center,
+            })
+          : { x: event.clientX, y: event.clientY },
+      );
       setHoveredSquare(squareFromPoint(event.clientX, event.clientY));
     }
 
@@ -155,6 +169,7 @@ export function AnalysisBoard({
       const targetSquare = squareFromPoint(event.clientX, event.clientY);
       const origin = dragOriginRef.current;
       dragOriginRef.current = null;
+      dragPreviewOriginRef.current = null;
       setDragFrom(null);
       setHoveredSquare(targetSquare);
       setDragPosition(null);
@@ -168,6 +183,7 @@ export function AnalysisBoard({
     }
 
     function handleWindowPointerCancel() {
+      dragPreviewOriginRef.current = null;
       setDragFrom(null);
       setHoveredSquare(null);
       setDragPosition(null);
@@ -326,10 +342,15 @@ export function AnalysisBoard({
 
     event.preventDefault();
     event.stopPropagation();
+    const pointer = { x: event.clientX, y: event.clientY };
     dragOriginRef.current = { x: event.clientX, y: event.clientY };
+    dragPreviewOriginRef.current = {
+      pointer,
+      center: pointer,
+    };
     setDragFrom(square);
     setHoveredSquare(square);
-    setDragPosition(isOwnTurnPiece ? { x: event.clientX, y: event.clientY } : null);
+    setDragPosition(isOwnTurnPiece ? pointer : null);
     if (isOwnTurnPiece) {
       setDragPieceSize(event.currentTarget.getBoundingClientRect().width * 0.86);
       if (selectedSquare === undefined) setInternalSelected(square);
@@ -622,18 +643,31 @@ function BoardAnnotations({
         const uy = dy / len;
         const lineEndX = to.x - ux * nodeRadius;
         const lineEndY = to.y - uy * nodeRadius;
+        return (
+          <line
+            key={`engine-line-${arrow.from}-${arrow.to}-${index}`}
+            x1={from.x}
+            y1={from.y}
+            x2={lineEndX}
+            y2={lineEndY}
+            stroke={color}
+            strokeWidth={0.03}
+            strokeLinecap="butt"
+            opacity={opacity}
+          />
+        );
+      })}
+      {engineArrows?.map((arrow, index) => {
+        const to = squareCenter(arrow.to, orientation);
+        if (!to) return null;
+        const rank = arrow.rank ?? index + 1;
+        const color = arrow.color ?? engineArrowColor(rank);
+        const isHoveredTarget = hoveredSquare === arrow.to || index === localHoveredEngineIndex;
+        const opacity = arrow.emphasis || isHoveredTarget ? 1 : engineArrowOpacity(rank);
+        const nodeRadius = arrow.emphasis || isHoveredTarget ? 0.18 : 0.14;
         const label = arrow.label ? displayEvalText(arrow.label) : "";
         return (
-          <g key={`engine-${arrow.from}-${arrow.to}-${index}`} opacity={opacity}>
-            <line
-              x1={from.x}
-              y1={from.y}
-              x2={lineEndX}
-              y2={lineEndY}
-              stroke={color}
-              strokeWidth={0.03}
-              strokeLinecap="butt"
-            />
+          <g key={`engine-node-${arrow.from}-${arrow.to}-${index}`} opacity={opacity}>
             {label ? (
               <>
                 <circle

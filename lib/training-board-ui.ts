@@ -45,8 +45,25 @@ export function moveHighlightFill(
   return `color-mix(in srgb, ${classificationColor(classification)} ${alpha}%, transparent)`;
 }
 
+export function moveHighlightsForClassifiedMove(
+  move: { from: string; to: string } | null | undefined,
+  classification: MoveClassification | undefined,
+) {
+  if (!move) return undefined;
+  return [
+    { square: move.from, color: moveHighlightFill(classification, "from") },
+    { square: move.to, color: moveHighlightFill(classification, "to") },
+  ];
+}
+
+export function formatClassifiedMoveLead(lead: string, classification: MoveClassification | undefined) {
+  return classification ? `${lead} (${classificationLabel(classification)})` : lead;
+}
+
 export function classificationColor(classification?: MoveClassification) {
   switch (classification) {
+    case "critical":
+      return "var(--app-class-critical)";
     case "best":
       return "var(--app-class-best)";
     case "excellent":
@@ -66,6 +83,8 @@ export function classificationColor(classification?: MoveClassification) {
 
 export function classificationIcon(classification: MoveClassification) {
   switch (classification) {
+    case "critical":
+      return "/analyze/classification-icons/critical.png";
     case "best":
       return "/analyze/classification-icons/best.png";
     case "excellent":
@@ -83,12 +102,14 @@ export function classificationIcon(classification: MoveClassification) {
 
 export function classificationLabel(classification: MoveClassification) {
   switch (classification) {
+    case "critical":
+      return "Critical";
     case "best":
       return "Best";
     case "excellent":
       return "Excellent";
     case "good":
-      return "Good";
+      return "Okay";
     case "inaccuracy":
       return "Inaccuracy";
     case "mistake":

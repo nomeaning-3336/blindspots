@@ -2319,7 +2319,15 @@
   function renderEvalBar(value, label) {
     const clamped = clampEvalBarValue(value);
     const whiteShare = ((clamped + 10) / 20) * 100;
-    ui.evalBarFill.style.height = `${Math.max(0, Math.min(100, whiteShare))}%`;
+    const boundedWhiteShare = Math.max(0, Math.min(100, whiteShare));
+    ui.evalBarFill.style.height = `${boundedWhiteShare}%`;
+    if (state.orientation === "black") {
+      ui.evalBarFill.style.top = "0";
+      ui.evalBarFill.style.bottom = "auto";
+    } else {
+      ui.evalBarFill.style.top = "auto";
+      ui.evalBarFill.style.bottom = "0";
+    }
     ui.evalBarValue.textContent = String(label || "0.0").replace(/^\+/, "");
   }
 
@@ -7904,6 +7912,7 @@
       state.orientation = targetOrientation;
       saveSettings();
       renderBoard();
+      renderEvalChart();
       renderMeta();
     }
   }
@@ -7975,6 +7984,7 @@
     state.orientation = state.orientation === "white" ? "black" : "white";
     saveSettings();
     renderBoard();
+    renderEvalChart();
     renderMeta();
   }
 

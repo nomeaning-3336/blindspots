@@ -6,6 +6,7 @@ import {
   getSupabaseServerClient,
   getSupabaseServerUser,
 } from "@/lib/supabase/server";
+import { isSupabaseSessionCookie } from "@/lib/supabase/auth-cookies";
 
 export const DEFAULT_APP_ROUTE = "/analysis";
 
@@ -36,7 +37,7 @@ export function normalizeNextPath(value?: string | null) {
 export async function getShellAuthHint() {
   const cookieStore = await cookies();
   return cookieStore.getAll().some(
-    (cookie) => cookie.name.startsWith("sb-") && cookie.name.includes("auth-token"),
+    (cookie) => isSupabaseSessionCookie(cookie.name),
   );
 }
 
@@ -57,7 +58,7 @@ export async function getVerifiedAppUserId(): Promise<GetVerifiedUserResult> {
     const cookieStore = await cookies();
     const cookieNames = cookieStore
       .getAll()
-      .filter((c) => c.name.startsWith("sb-") && c.name.includes("auth-token"))
+      .filter((c) => isSupabaseSessionCookie(c.name))
       .map((c) => c.name);
     console.log(
       "[auth:getVerifiedAppUserId] cookies:",
@@ -86,7 +87,7 @@ export async function getVerifiedAppUserId(): Promise<GetVerifiedUserResult> {
       try {
         const cookieStore = await cookies();
         for (const cookie of cookieStore.getAll()) {
-          if (cookie.name.startsWith("sb-") && cookie.name.includes("auth-token")) {
+          if (isSupabaseSessionCookie(cookie.name)) {
             cookieStore.delete(cookie.name);
           }
         }
@@ -112,7 +113,7 @@ export async function getVerifiedAppUserId(): Promise<GetVerifiedUserResult> {
     try {
       const cookieStore = await cookies();
       for (const cookie of cookieStore.getAll()) {
-        if (cookie.name.startsWith("sb-") && cookie.name.includes("auth-token")) {
+        if (isSupabaseSessionCookie(cookie.name)) {
           cookieStore.delete(cookie.name);
         }
       }

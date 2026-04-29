@@ -33,8 +33,37 @@ test("classifies ranked rows against the first full-position row", () => {
     { cp: -140, bestMove: "a1b1" },
   ];
 
-  assert.equal(classifyRankedMove(0, lines, WHITE_TO_MOVE_FEN), "best");
+  assert.equal(classifyRankedMove(0, lines, WHITE_TO_MOVE_FEN), "critical");
   assert.equal(classifyRankedMove(1, lines, WHITE_TO_MOVE_FEN), "blunder");
   assert.equal(isRecommendableClassification("inaccuracy"), false);
   assert.equal(isRecommendableClassification("good"), true);
+});
+
+test("marks best moves as critical when every alternative is dangerous", () => {
+  const lines = [
+    { cp: 500, bestMove: "a1a2" },
+    { cp: 180, bestMove: "a1b1" },
+    { cp: 100, bestMove: "a1c1" },
+  ];
+
+  assert.equal(classifyRankedMove(0, lines, WHITE_TO_MOVE_FEN), "critical");
+  assert.equal(isRecommendableClassification("critical"), true);
+});
+
+test("keeps ordinary best moves as best when a playable alternative exists", () => {
+  const lines = [
+    { cp: 500, bestMove: "a1a2" },
+    { cp: 470, bestMove: "a1b1" },
+  ];
+
+  assert.equal(classifyRankedMove(0, lines, WHITE_TO_MOVE_FEN), "best");
+});
+
+test("marks best moves as critical when alternatives walk into mate", () => {
+  const lines = [
+    { cp: 0, mate: null, bestMove: "a1a2" },
+    { cp: -1000, mate: -2, bestMove: "a1b1" },
+  ];
+
+  assert.equal(classifyRankedMove(0, lines, WHITE_TO_MOVE_FEN), "critical");
 });
