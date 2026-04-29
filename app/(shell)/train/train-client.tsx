@@ -294,6 +294,7 @@ export default function TrainPage() {
   const [initializationSummary, setInitializationSummary] =
     useState<InitializationSummary | null>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [isStartingTraining, setIsStartingTraining] = useState(false);
   const [visualPreferences, setVisualPreferences] = useState<{
     boardTheme: AnalyzeBoardTheme;
     pieceTheme: AnalyzePieceTheme;
@@ -1064,9 +1065,12 @@ export default function TrainPage() {
   }
 
   async function startFirstSession() {
-    setIsSavingSettings(true);
+    if (isStartingTraining) return;
+    setIsStartingTraining(true);
 
     try {
+      setIsSavingSettings(true);
+
       await fetch("/api/train/initialize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1099,6 +1103,7 @@ export default function TrainPage() {
       void loadNextPosition();
     } finally {
       setIsSavingSettings(false);
+      setIsStartingTraining(false);
     }
   }
 
@@ -1513,6 +1518,7 @@ export default function TrainPage() {
         onConnectProfile={connectProfile}
         onSkip={skipConnection}
         onStartTraining={() => void startFirstSession()}
+        isStartingTraining={isStartingTraining}
       />
     );
   }
@@ -1732,6 +1738,7 @@ function TrainOnboarding({
   onConnectProfile,
   onSkip,
   onStartTraining,
+  isStartingTraining,
 }: {
   screen: OnboardingScreen;
   selectedProvider: ProfileProvider | null;
@@ -1749,6 +1756,7 @@ function TrainOnboarding({
   onConnectProfile: (provider: ProfileProvider) => void;
   onSkip: () => void;
   onStartTraining: () => void;
+  isStartingTraining: boolean;
 }) {
   type OnboardingFlowStep = "source" | "username" | "skill";
   type OnboardingSource = ProfileProvider | "none";
@@ -1831,6 +1839,7 @@ function TrainOnboarding({
   }
 
   function finishOnboarding() {
+    if (isStartingTraining) return;
     if (source === "none") {
       void onSkip();
       return;
@@ -1942,8 +1951,8 @@ function TrainOnboarding({
                         index={index}
                         label={label}
                         selected={skillLevel === value}
-                        disabled={isConnectingProfile}
-                        onClick={() => onSkillLevelChange(value as SkillLevel)}
+                        disabled={isConnectingProfile || isStartingTraining}
+                        onClick={() => { if (!isStartingTraining) onSkillLevelChange(value as SkillLevel); }}
                       />
                     ))}
                   </div>
@@ -2013,10 +2022,17 @@ function TrainOnboarding({
             </div>
             <button
               type="button"
-              className="mx-auto min-h-12 rounded-[8px] border border-[var(--app-accent)] bg-[var(--app-accent)] px-6 text-sm font-bold uppercase tracking-[0.12em] text-black transition hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
+              disabled={isStartingTraining}
               onClick={onStartTraining}
+              className={[
+                "mx-auto min-h-12 cursor-pointer rounded-[8px] border border-[var(--app-accent)] bg-[var(--app-accent)] px-6 text-sm font-bold uppercase tracking-[0.12em] text-black transition",
+                "hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]",
+                isStartingTraining
+                  ? "cursor-wait opacity-70"
+                  : "",
+              ].join(" ")}
             >
-              Start training
+              {isStartingTraining ? "Starting..." : "Start training"}
             </button>
           </div>
         ) : null}
