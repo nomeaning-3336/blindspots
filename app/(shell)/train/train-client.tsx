@@ -2162,7 +2162,9 @@ function OnboardingButton({
         variant === "primary"
           ? "border-[var(--app-accent)] bg-[var(--app-accent)] text-black hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
           : "border-[var(--app-border)] bg-transparent text-[var(--app-text)] hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]",
-        disabled ? "cursor-not-allowed opacity-55 hover:border-[var(--app-border)] hover:bg-transparent hover:text-[var(--app-muted)]" : "",
+        disabled
+          ? "cursor-not-allowed opacity-55 hover:border-[var(--app-border)] hover:bg-transparent hover:text-[var(--app-muted)]"
+          : "cursor-pointer",
       ].join(" ")}
     >
       {children}
