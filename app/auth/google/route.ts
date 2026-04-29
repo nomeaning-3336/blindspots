@@ -10,10 +10,8 @@ function isSupabaseCodeVerifierCookie(name: string) {
   return /^sb-.*-auth-token-code-verifier$/.test(name);
 }
 
-function getCookieNames(request: Request) {
-  const cookieHeader = request.headers.get("cookie");
+function getCookieNamesFromHeader(cookieHeader: string | null) {
   if (!cookieHeader) return [];
-
   return cookieHeader
     .split(";")
     .map((part) => part.trim().split("=")[0])
@@ -21,9 +19,16 @@ function getCookieNames(request: Request) {
 }
 
 function clearAllSupabaseAuthFlowCookies(request: Request, response: NextResponse) {
-  for (const name of getCookieNames(request)) {
+  const cookieHeader = request.headers.get("cookie");
+  const cookieNames = getCookieNamesFromHeader(cookieHeader);
+
+  for (const name of cookieNames) {
     if (isSupabaseSessionCookie(name) || isSupabaseCodeVerifierCookie(name)) {
-      response.cookies.delete(name);
+      // Use Max-Age=0 to immediately expire the cookie in the browser's jar.
+      response.headers.append(
+        "Set-Cookie",
+        `${name}=; Path=/; Max-Age=0; SameSite=Lax`,
+      );
     }
   }
 
@@ -31,9 +36,15 @@ function clearAllSupabaseAuthFlowCookies(request: Request, response: NextRespons
 }
 
 function clearStaleSupabaseSessionCookies(request: Request, response: NextResponse) {
-  for (const name of getCookieNames(request)) {
+  const cookieHeader = request.headers.get("cookie");
+  const cookieNames = getCookieNamesFromHeader(cookieHeader);
+
+  for (const name of cookieNames) {
     if (isSupabaseSessionCookie(name)) {
-      response.cookies.delete(name);
+      response.headers.append(
+        "Set-Cookie",
+        `${name}=; Path=/; Max-Age=0; SameSite=Lax`,
+      );
     }
   }
 
@@ -59,7 +70,7 @@ export async function GET(request: Request) {
   callbackUrl.searchParams.set("next", nextPath);
 
   const clean = url.searchParams.get("clean") === "1";
-  const cookieNames = getCookieNames(request);
+  const cookieNames = getCookieNamesFromHeader(request.headers.get("cookie"));
   const hasExistingSessionCookies = cookieNames.some(isSupabaseSessionCookie);
   const hasExistingCodeVerifier = cookieNames.some(isSupabaseCodeVerifierCookie);
 
