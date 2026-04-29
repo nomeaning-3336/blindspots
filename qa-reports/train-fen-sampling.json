@@ -2,104 +2,39 @@
   "samples": [
     {
       "sampleIndex": 1,
-      "timestamp": "2026-04-27T18:38:11.808Z",
+      "timestamp": "2026-04-29T12:27:31.128Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "4r1k1/2pq1p2/n2P2pQ/3B1b2/1pNp1P2/3P4/1PP3PP/5RK1 b - - 0 25",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "c7d6",
-        "source": "elite",
-        "selectedServeMode": "middlegame",
-        "selectedPhase": "middlegame",
-        "selectedBucket": "middlegame",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 9,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 8,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "4r1k1/2pq1p2/n2P2pQ/3B1b2/1pNp1P2/3P4/1PP3PP/5RK1 b - - 0 25",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 32,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "middlegame",
-          "selectedPhase": "middlegame",
-          "selectedBucket": "middlegame",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "tactic",
-            "middlegame",
-            "tactic",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "middlegame"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "tactic",
-            "middlegame"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "tactic"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 2000,
-        "responseToPreviousFenRenderMs": 477,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -108,112 +43,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-1-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-1-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 2,
-      "timestamp": "2026-04-27T18:38:15.057Z",
+      "timestamp": "2026-04-29T12:27:31.234Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "r1bqr3/pp1n1pbk/3p1npp/2pP4/2P5/2N1BN1P/PP1QBPP1/R3K2R w KQ - 4 13",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "e1g1",
-        "source": "elite",
-        "selectedServeMode": "middlegame",
-        "selectedPhase": "middlegame",
-        "selectedBucket": "middlegame",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 8,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 7,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "r1bqr3/pp1n1pbk/3p1npp/2pP4/2P5/2N1BN1P/PP1QBPP1/R3K2R w KQ - 4 13",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 41,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "middlegame",
-          "selectedPhase": "middlegame",
-          "selectedBucket": "middlegame",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "tactic",
-            "middlegame",
-            "tactic",
-            "middlegame",
-            "middlegame",
-            "middlegame"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "tactic"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1013,
-        "responseToPreviousFenRenderMs": 471,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -222,112 +94,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-2-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-2-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 3,
-      "timestamp": "2026-04-27T18:38:18.441Z",
+      "timestamp": "2026-04-29T12:27:31.269Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "r1bqkb1r/pp1ppppp/2n2n2/8/3NP3/2N5/PPP2PPP/R1BQKB1R b KQkq - 2 5",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "e7e5",
-        "source": "elite",
-        "selectedServeMode": "opening",
-        "selectedPhase": "opening",
-        "selectedBucket": "opening",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 7,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 6,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "r1bqkb1r/pp1ppppp/2n2n2/8/3NP3/2N5/PPP2PPP/R1BQKB1R b KQkq - 2 5",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 27,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "opening",
-          "selectedPhase": "opening",
-          "selectedBucket": "opening",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "tactic",
-            "middlegame",
-            "tactic",
-            "middlegame",
-            "middlegame"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1007,
-        "responseToPreviousFenRenderMs": 574,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -336,112 +145,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-3-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-3-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 4,
-      "timestamp": "2026-04-27T18:38:22.141Z",
+      "timestamp": "2026-04-29T12:27:32.851Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "r3k2r/ppp2pp1/2p1bn2/6Np/3PP3/4P3/P1q1B1P1/R3QRK1 b kq - 1 15",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "e6g4",
-        "source": "elite",
-        "selectedServeMode": "middlegame",
-        "selectedPhase": "middlegame",
-        "selectedBucket": "middlegame",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 6,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 5,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "r3k2r/ppp2pp1/2p1bn2/6Np/3PP3/4P3/P1q1B1P1/R3QRK1 b kq - 1 15",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 49,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "middlegame",
-          "selectedPhase": "middlegame",
-          "selectedBucket": "middlegame",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "tactic",
-            "middlegame",
-            "tactic",
-            "middlegame"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1263,
-        "responseToPreviousFenRenderMs": 523,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -450,112 +196,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-4-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-4-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 5,
-      "timestamp": "2026-04-27T18:38:34.839Z",
+      "timestamp": "2026-04-29T12:27:32.976Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "r2qk2r/1bpp1ppp/p1n2n2/1pb1p3/4P3/1B1P1N2/PPP2PPP/RNBQ1RK1 w kq - 1 8",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "c2c3",
-        "source": "elite",
-        "selectedServeMode": "opening",
-        "selectedPhase": "opening",
-        "selectedBucket": "opening",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 5,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 11,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "r2qk2r/1bpp1ppp/p1n2n2/1pb1p3/4P3/1B1P1N2/PPP2PPP/RNBQ1RK1 w kq - 1 8",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 33,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "opening",
-          "selectedPhase": "opening",
-          "selectedBucket": "opening",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "tactic",
-            "middlegame",
-            "tactic"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 10278,
-        "responseToPreviousFenRenderMs": 538,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -564,112 +247,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-5-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-5-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 6,
-      "timestamp": "2026-04-27T18:38:38.998Z",
+      "timestamp": "2026-04-29T12:27:34.620Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "2r1kr2/p1Q4p/4bq2/2B2pp1/8/5P1P/P4KP1/3RR3 w - - 4 28",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "c7d7",
-        "source": "elite",
-        "selectedServeMode": "middlegame",
-        "selectedPhase": "middlegame",
-        "selectedBucket": "middlegame",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 11,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 10,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "2r1kr2/p1Q4p/4bq2/2B2pp1/8/5P1P/P4KP1/3RR3 w - - 4 28",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 56,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "middlegame",
-          "selectedPhase": "middlegame",
-          "selectedBucket": "middlegame",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "tactic",
-            "middlegame"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1715,
-        "responseToPreviousFenRenderMs": 556,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -678,112 +298,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-6-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-6-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 7,
-      "timestamp": "2026-04-27T18:38:42.149Z",
+      "timestamp": "2026-04-29T12:27:34.681Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "rnb1k2r/pp2ppbp/3p1np1/2q5/4PB2/2P2N2/PP1N1PPP/R2QKB1R w KQkq - 0 8",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "h2h3",
-        "source": "elite",
-        "selectedServeMode": "opening",
-        "selectedPhase": "opening",
-        "selectedBucket": "opening",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 10,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 9,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "rnb1k2r/pp2ppbp/3p1np1/2q5/4PB2/2P2N2/PP1N1PPP/R2QKB1R w KQkq - 0 8",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 39,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "opening",
-          "selectedPhase": "opening",
-          "selectedBucket": "opening",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "tactic"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1191,
-        "responseToPreviousFenRenderMs": 480,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -792,112 +349,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-7-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-7-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 8,
-      "timestamp": "2026-04-27T18:38:45.644Z",
+      "timestamp": "2026-04-29T12:27:34.738Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "1r1q1rk1/pb3pp1/1p2p2p/3nP3/3PN3/3B4/P2Q1PPP/R3R1K1 w - - 2 18",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "e4d6",
-        "source": "elite",
-        "selectedServeMode": "middlegame",
-        "selectedPhase": "middlegame",
-        "selectedBucket": "middlegame",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 9,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 8,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "1r1q1rk1/pb3pp1/1p2p2p/3nP3/3PN3/3B4/P2Q1PPP/R3R1K1 w - - 2 18",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 44,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "middlegame",
-          "selectedPhase": "middlegame",
-          "selectedBucket": "middlegame",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1067,
-        "responseToPreviousFenRenderMs": 472,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -906,112 +400,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-8-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-8-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 9,
-      "timestamp": "2026-04-27T18:38:49.333Z",
+      "timestamp": "2026-04-29T12:27:34.785Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "5bk1/3q3p/6p1/1p1p4/p2Pp3/1PP1B1P1/P3Q2P/6K1 b - - 0 25",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "a4b3",
-        "source": "elite",
-        "selectedServeMode": "middlegame",
-        "selectedPhase": "middlegame",
-        "selectedBucket": "middlegame",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 8,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 7,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "5bk1/3q3p/6p1/1p1p4/p2Pp3/1PP1B1P1/P3Q2P/6K1 b - - 0 25",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 31,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "middlegame",
-          "selectedPhase": "middlegame",
-          "selectedBucket": "middlegame",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1549,
-        "responseToPreviousFenRenderMs": 452,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -1020,112 +451,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-9-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-9-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 10,
-      "timestamp": "2026-04-27T18:38:53.137Z",
+      "timestamp": "2026-04-29T12:27:34.826Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "5rk1/1pr1b1pp/p1b1pp2/3p4/3P4/1PN1PNP1/RP2KPP1/R7 b - - 2 20",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "f8c8",
-        "source": "elite",
-        "selectedServeMode": "middlegame",
-        "selectedPhase": "middlegame",
-        "selectedBucket": "middlegame",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 7,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 6,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "5rk1/1pr1b1pp/p1b1pp2/3p4/3P4/1PN1PNP1/RP2KPP1/R7 b - - 2 20",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 28,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "middlegame",
-          "selectedPhase": "middlegame",
-          "selectedBucket": "middlegame",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1214,
-        "responseToPreviousFenRenderMs": 461,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -1134,112 +502,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-10-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-10-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 11,
-      "timestamp": "2026-04-27T18:38:57.083Z",
+      "timestamp": "2026-04-29T12:27:34.867Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "rnbqk2r/ppp1bppp/4pn2/3p4/3P4/5NP1/PPP1PPBP/RNBQ1RK1 b kq - 0 5",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "e8g8",
-        "source": "elite",
-        "selectedServeMode": "opening",
-        "selectedPhase": "opening",
-        "selectedBucket": "opening",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 6,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 5,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "rnbqk2r/ppp1bppp/4pn2/3p4/3P4/5NP1/PPP1PPBP/RNBQ1RK1 b kq - 0 5",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 32,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "opening",
-          "selectedPhase": "opening",
-          "selectedBucket": "opening",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1097,
-        "responseToPreviousFenRenderMs": 683,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -1248,112 +553,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-11-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-11-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 12,
-      "timestamp": "2026-04-27T18:39:09.189Z",
+      "timestamp": "2026-04-29T12:27:34.961Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "r4rk1/1p2npp1/1q2p3/p2pN1Pp/3NnP2/2P4b/PP2BP1P/R2QR1K1 w - - 1 18",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "d1d3",
-        "source": "elite",
-        "selectedServeMode": "middlegame",
-        "selectedPhase": "middlegame",
-        "selectedBucket": "middlegame",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 5,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 11,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "r4rk1/1p2npp1/1q2p3/p2pN1Pp/3NnP2/2P4b/PP2BP1P/R2QR1K1 w - - 1 18",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 42,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "middlegame",
-          "selectedPhase": "middlegame",
-          "selectedBucket": "middlegame",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 10049,
-        "responseToPreviousFenRenderMs": 447,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -1362,112 +604,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-12-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-12-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 13,
-      "timestamp": "2026-04-27T18:39:12.438Z",
+      "timestamp": "2026-04-29T12:27:35.009Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "r2qkb1r/3b1p2/p1n1p3/1p1p1p1p/3P4/2NBP1P1/PP2NP1P/2RQ1RK1 w kq - 0 13",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "h2h4",
-        "source": "elite",
-        "selectedServeMode": "middlegame",
-        "selectedPhase": "middlegame",
-        "selectedBucket": "middlegame",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 11,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 10,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "r2qkb1r/3b1p2/p1n1p3/1p1p1p1p/3P4/2NBP1P1/PP2NP1P/2RQ1RK1 w kq - 0 13",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 33,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "middlegame",
-          "selectedPhase": "middlegame",
-          "selectedBucket": "middlegame",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1209,
-        "responseToPreviousFenRenderMs": 604,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -1476,112 +655,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-13-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-13-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 14,
-      "timestamp": "2026-04-27T18:39:15.978Z",
+      "timestamp": "2026-04-29T12:27:35.063Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "r1bqkb1r/pppp1ppp/2n2n2/8/2PP4/5N2/PP3PPP/RNBQKB1R b KQkq - 0 5",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "f8b4",
-        "source": "elite",
-        "selectedServeMode": "opening",
-        "selectedPhase": "opening",
-        "selectedBucket": "opening",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 10,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 9,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "r1bqkb1r/pppp1ppp/2n2n2/8/2PP4/5N2/PP3PPP/RNBQKB1R b KQkq - 0 5",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 30,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "opening",
-          "selectedPhase": "opening",
-          "selectedBucket": "opening",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "opening",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1068,
-        "responseToPreviousFenRenderMs": 723,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -1590,112 +706,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-14-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-14-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 15,
-      "timestamp": "2026-04-27T18:39:19.813Z",
+      "timestamp": "2026-04-29T12:27:35.103Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "rnbq1rk1/pp2ppbp/6p1/8/3PP3/5N2/P3BPPP/1RBQK2R b K - 0 10",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "d8a5",
-        "source": "elite",
-        "selectedServeMode": "opening",
-        "selectedPhase": "opening",
-        "selectedBucket": "opening",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 9,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 8,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "rnbq1rk1/pp2ppbp/6p1/8/3PP3/5N2/P3BPPP/1RBQK2R b K - 0 10",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 34,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "opening",
-          "selectedPhase": "opening",
-          "selectedBucket": "opening",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "opening",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "opening",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "opening",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "opening"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1541,
-        "responseToPreviousFenRenderMs": 481,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -1704,230 +757,100 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-15-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-15-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 16,
-      "timestamp": "2026-04-27T18:39:23.751Z",
+      "timestamp": "2026-04-29T12:27:35.385Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "r1bqkb1r/pppp1ppp/2n2n2/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 2 4",
+        "fen": "",
         "previousFen": "",
         "playedMove": "",
-        "source": "elite",
-        "selectedServeMode": "tactic",
-        "selectedPhase": "tactic",
-        "selectedBucket": "tactic",
-        "tags": [
-          "tactic",
-          "italian",
-          "bishop_gambit"
-        ],
-        "isTactic": true,
-        "tacticRating": 920,
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
+        "tags": [],
+        "isTactic": false,
+        "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "seed",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 8,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 8,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "r1bqkb1r/pppp1ppp/2n2n2/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 2 4",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 1,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 32,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "tactic",
-          "selectedServeMode": "tactic",
-          "selectedPhase": "tactic",
-          "selectedBucket": "tactic",
-          "phaseFallbackUsed": false,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "opening",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "opening",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "opening"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "tactic",
-            "opening",
-            "opening",
-            "middlegame",
-            "middlegame"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1227,
-        "responseToPreviousFenRenderMs": 435,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
-        "uiVerified": true,
+        "uiVerified": false,
         "clientFenMatchesExpected": false,
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-16-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-16-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 17,
-      "timestamp": "2026-04-27T18:39:26.884Z",
+      "timestamp": "2026-04-29T12:27:35.437Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "1r3r2/3n3p/b3pk2/3p4/N1pP1P2/1p2KN2/4B2P/1R5R w - - 0 28",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "h1g1",
-        "source": "elite",
-        "selectedServeMode": "middlegame",
-        "selectedPhase": "middlegame",
-        "selectedBucket": "middlegame",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 8,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 7,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "1r3r2/3n3p/b3pk2/3p4/N1pP1P2/1p2KN2/4B2P/1R5R w - - 0 28",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 32,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "middlegame",
-          "selectedPhase": "middlegame",
-          "selectedBucket": "middlegame",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "tactic",
-            "opening",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "opening"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "tactic",
-            "opening",
-            "opening",
-            "middlegame",
-            "middlegame"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "middlegame",
-            "tactic",
-            "opening",
-            "opening",
-            "middlegame"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 998,
-        "responseToPreviousFenRenderMs": 447,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -1936,230 +859,100 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-17-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-17-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 18,
-      "timestamp": "2026-04-27T18:39:30.537Z",
+      "timestamp": "2026-04-29T12:27:35.491Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "3r2k1/pp3ppp/2p5/4P3/1P6/P4N2/5PPP/4R1K1 w - - 0 1",
+        "fen": "",
         "previousFen": "",
         "playedMove": "",
-        "source": "elite",
-        "selectedServeMode": "tactic",
-        "selectedPhase": "tactic",
-        "selectedBucket": "tactic",
-        "tags": [
-          "tactic",
-          "rook_endgame",
-          "opposition"
-        ],
-        "isTactic": true,
-        "tacticRating": 750,
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
+        "tags": [],
+        "isTactic": false,
+        "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "seed",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 7,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 7,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "3r2k1/pp3ppp/2p5/4P3/1P6/P4N2/5PPP/4R1K1 w - - 0 1",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 0,
-          "nearDuplicateReason": null,
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 21,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "tactic",
-          "selectedServeMode": "tactic",
-          "selectedPhase": "tactic",
-          "selectedBucket": "tactic",
-          "phaseFallbackUsed": false,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "middlegame",
-            "tactic",
-            "opening",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "middlegame",
-            "tactic",
-            "opening",
-            "opening",
-            "middlegame"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "tactic",
-            "middlegame",
-            "tactic",
-            "opening",
-            "opening"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1464,
-        "responseToPreviousFenRenderMs": 441,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
-        "uiVerified": true,
+        "uiVerified": false,
         "clientFenMatchesExpected": false,
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-18-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-18-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 19,
-      "timestamp": "2026-04-27T18:39:33.645Z",
+      "timestamp": "2026-04-29T12:27:35.523Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "1r5r/2b1kppp/5nb1/pPPp4/3Np3/2P4P/P2NBPP1/2R1K2R b K - 1 20",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "e4e3",
-        "source": "elite",
-        "selectedServeMode": "middlegame",
-        "selectedPhase": "middlegame",
-        "selectedBucket": "middlegame",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 7,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 6,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "1r5r/2b1kppp/5nb1/pPPp4/3Np3/2P4P/P2NBPP1/2R1K2R b K - 1 20",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 36,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "middlegame",
-          "selectedPhase": "middlegame",
-          "selectedBucket": "middlegame",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "tactic",
-            "middlegame",
-            "tactic",
-            "opening",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "tactic",
-            "middlegame",
-            "tactic",
-            "opening",
-            "opening"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "middlegame",
-            "tactic",
-            "middlegame",
-            "tactic",
-            "opening"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1056,
-        "responseToPreviousFenRenderMs": 496,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -2168,112 +961,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-19-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-19-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 20,
-      "timestamp": "2026-04-27T18:39:36.472Z",
+      "timestamp": "2026-04-29T12:27:35.577Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "5rk1/2r1qpp1/2P1p2p/1p6/1p2B3/1P2P1P1/2Q2P1P/2R3K1 w - - 1 23",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "c2d3",
-        "source": "elite",
-        "selectedServeMode": "middlegame",
-        "selectedPhase": "middlegame",
-        "selectedBucket": "middlegame",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 6,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 5,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "5rk1/2r1qpp1/2P1p2p/1p6/1p2B3/1P2P1P1/2Q2P1P/2R3K1 w - - 1 23",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 31,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "middlegame",
-          "selectedPhase": "middlegame",
-          "selectedBucket": "middlegame",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "middlegame",
-            "tactic",
-            "middlegame",
-            "tactic",
-            "opening",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "middlegame",
-            "tactic",
-            "middlegame",
-            "tactic",
-            "opening"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "middlegame",
-            "middlegame",
-            "tactic",
-            "middlegame",
-            "tactic"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1116,
-        "responseToPreviousFenRenderMs": 477,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -2282,112 +1012,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-20-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-20-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 21,
-      "timestamp": "2026-04-27T18:39:49.411Z",
+      "timestamp": "2026-04-29T12:27:35.604Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "r2r2k1/pp1b1pbp/6p1/1NpPp3/P7/1nP3PP/1P3PB1/R1B2RK1 w - - 1 18",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "a1a3",
-        "source": "elite",
-        "selectedServeMode": "middlegame",
-        "selectedPhase": "middlegame",
-        "selectedBucket": "middlegame",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 5,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 11,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "r2r2k1/pp1b1pbp/6p1/1NpPp3/P7/1nP3PP/1P3PB1/R1B2RK1 w - - 1 18",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 27,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "middlegame",
-          "selectedPhase": "middlegame",
-          "selectedBucket": "middlegame",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "middlegame",
-            "middlegame",
-            "tactic",
-            "middlegame",
-            "tactic",
-            "opening",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "opening"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "middlegame",
-            "middlegame",
-            "tactic",
-            "middlegame",
-            "tactic"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "tactic",
-            "middlegame"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 10470,
-        "responseToPreviousFenRenderMs": 459,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -2396,112 +1063,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-21-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-21-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 22,
-      "timestamp": "2026-04-27T18:39:54.461Z",
+      "timestamp": "2026-04-29T12:27:35.632Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "rnbqk2r/ppp2ppp/3ppn2/8/1bPP4/2NBP3/PP3PPP/R1BQK1NR b KQkq - 1 5",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "c7c5",
-        "source": "elite",
-        "selectedServeMode": "opening",
-        "selectedPhase": "opening",
-        "selectedBucket": "opening",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 11,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 10,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "rnbqk2r/ppp2ppp/3ppn2/8/1bPP4/2NBP3/PP3PPP/R1BQK1NR b KQkq - 1 5",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 34,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "opening",
-          "selectedPhase": "opening",
-          "selectedBucket": "opening",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "tactic",
-            "middlegame",
-            "tactic",
-            "opening",
-            "opening",
-            "middlegame",
-            "middlegame"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "tactic",
-            "middlegame"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "tactic"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 2679,
-        "responseToPreviousFenRenderMs": 516,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -2510,112 +1114,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-22-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-22-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 23,
-      "timestamp": "2026-04-27T18:39:57.496Z",
+      "timestamp": "2026-04-29T12:27:35.658Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "r4rk1/ppqn1ppp/2p1pb2/8/2PPQ3/1P3N2/PB3PPP/3RR1K1 b - - 6 15",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "a8d8",
-        "source": "elite",
-        "selectedServeMode": "middlegame",
-        "selectedPhase": "middlegame",
-        "selectedBucket": "middlegame",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 10,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 9,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "r4rk1/ppqn1ppp/2p1pb2/8/2PPQ3/1P3N2/PB3PPP/3RR1K1 b - - 6 15",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 39,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "middlegame",
-          "selectedPhase": "middlegame",
-          "selectedBucket": "middlegame",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "tactic",
-            "middlegame",
-            "tactic",
-            "opening",
-            "opening",
-            "middlegame"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "tactic"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 975,
-        "responseToPreviousFenRenderMs": 431,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -2624,112 +1165,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-23-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-23-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 24,
-      "timestamp": "2026-04-27T18:40:01.388Z",
+      "timestamp": "2026-04-29T12:27:35.686Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "r1b1k2r/p2p1ppp/4pB2/q1p5/1b2P3/2N1Q3/PPP2PPP/R3KB1R b KQkq - 0 10",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "g7f6",
-        "source": "elite",
-        "selectedServeMode": "opening",
-        "selectedPhase": "opening",
-        "selectedBucket": "opening",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 9,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 8,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "r1b1k2r/p2p1ppp/4pB2/q1p5/1b2P3/2N1Q3/PPP2PPP/R3KB1R b KQkq - 0 10",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 27,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "opening",
-          "selectedPhase": "opening",
-          "selectedBucket": "opening",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "tactic",
-            "middlegame",
-            "tactic",
-            "opening",
-            "opening"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1542,
-        "responseToPreviousFenRenderMs": 527,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -2738,112 +1216,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-24-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-24-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 25,
-      "timestamp": "2026-04-27T18:40:05.127Z",
+      "timestamp": "2026-04-29T12:27:35.724Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "r1b1r1k1/1pp2pbp/4P1p1/p1n5/2PQ2n1/2N3P1/PP4BP/R1B1R1K1 b - - 0 15",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "g7d4",
-        "source": "elite",
-        "selectedServeMode": "middlegame",
-        "selectedPhase": "middlegame",
-        "selectedBucket": "middlegame",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 8,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 7,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "r1b1r1k1/1pp2pbp/4P1p1/p1n5/2PQ2n1/2N3P1/PP4BP/R1B1R1K1 b - - 0 15",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 40,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "middlegame",
-          "selectedPhase": "middlegame",
-          "selectedBucket": "middlegame",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "tactic",
-            "middlegame",
-            "tactic",
-            "opening"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1348,
-        "responseToPreviousFenRenderMs": 531,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -2852,112 +1267,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-25-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-25-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 26,
-      "timestamp": "2026-04-27T18:40:09.575Z",
+      "timestamp": "2026-04-29T12:27:35.762Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "r2qr1k1/2nb1p2/3p1bp1/pp3p1p/3P1N1P/P1N1P1P1/1PQ1BP2/1K1R3R w - - 0 18",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "c3d5",
-        "source": "elite",
-        "selectedServeMode": "middlegame",
-        "selectedPhase": "middlegame",
-        "selectedBucket": "middlegame",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 7,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 6,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "r2qr1k1/2nb1p2/3p1bp1/pp3p1p/3P1N1P/P1N1P1P1/1PQ1BP2/1K1R3R w - - 0 18",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 47,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "middlegame",
-          "selectedPhase": "middlegame",
-          "selectedBucket": "middlegame",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "tactic",
-            "middlegame",
-            "tactic"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 2477,
-        "responseToPreviousFenRenderMs": 429,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -2966,112 +1318,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-26-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-26-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 27,
-      "timestamp": "2026-04-27T18:40:13.387Z",
+      "timestamp": "2026-04-29T12:27:35.786Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "r1bq1rk1/p2nbpp1/2pp1n1p/1p2pN2/3PP1P1/P1N1B2P/1PP2P2/R2QKB1R b KQ - 0 10",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "f8e8",
-        "source": "elite",
-        "selectedServeMode": "opening",
-        "selectedPhase": "opening",
-        "selectedBucket": "opening",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 6,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 5,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "r1bq1rk1/p2nbpp1/2pp1n1p/1p2pN2/3PP1P1/P1N1B2P/1PP2P2/R2QKB1R b KQ - 0 10",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 28,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "opening",
-          "selectedPhase": "opening",
-          "selectedBucket": "opening",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "tactic",
-            "middlegame"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "opening",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 955,
-        "responseToPreviousFenRenderMs": 709,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -3080,112 +1369,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-27-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-27-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 28,
-      "timestamp": "2026-04-27T18:40:21.766Z",
+      "timestamp": "2026-04-29T12:27:35.848Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "r4rk1/1R2ppbp/2n3p1/p2P2B1/4P1b1/5N2/q3BPPP/3Q1RK1 b - - 0 15",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "g4f3",
-        "source": "elite",
-        "selectedServeMode": "middlegame",
-        "selectedPhase": "middlegame",
-        "selectedBucket": "middlegame",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 5,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 11,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "r4rk1/1R2ppbp/2n3p1/p2P2B1/4P1b1/5N2/q3BPPP/3Q1RK1 b - - 0 15",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 50,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "middlegame",
-          "selectedPhase": "middlegame",
-          "selectedBucket": "middlegame",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "opening",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame",
-            "tactic"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "opening",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "opening"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 6506,
-        "responseToPreviousFenRenderMs": 509,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -3194,112 +1420,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-28-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-28-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 29,
-      "timestamp": "2026-04-27T18:40:25.718Z",
+      "timestamp": "2026-04-29T12:27:35.878Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "rnbq1rk1/p4ppp/1ppbpn2/3pN3/3P1B2/2NBPQ2/PPP2PPP/R3K2R b KQ - 7 10",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "c8b7",
-        "source": "elite",
-        "selectedServeMode": "opening",
-        "selectedPhase": "opening",
-        "selectedBucket": "opening",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 11,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 10,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "rnbq1rk1/p4ppp/1ppbpn2/3pN3/3P1B2/2NBPQ2/PPP2PPP/R3K2R b KQ - 7 10",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 30,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "opening",
-          "selectedPhase": "opening",
-          "selectedBucket": "opening",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "middlegame"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "opening"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1050,
-        "responseToPreviousFenRenderMs": 470,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -3308,112 +1471,49 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-29-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-29-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     },
     {
       "sampleIndex": 30,
-      "timestamp": "2026-04-27T18:40:28.908Z",
+      "timestamp": "2026-04-29T12:27:35.908Z",
       "testMode": "api-sampling-plus-mocked-ui-replay",
       "url": "/train",
       "api": {
-        "fen": "r1bq1rk1/pp2ppbp/2n2np1/2pp4/3P1B2/4PN1P/PPP1BPP1/RN1Q1RK1 w - - 2 8",
+        "fen": "",
         "previousFen": "",
-        "playedMove": "c2c3",
-        "source": "elite",
-        "selectedServeMode": "opening",
-        "selectedPhase": "opening",
-        "selectedBucket": "opening",
+        "playedMove": "",
+        "source": "",
+        "selectedServeMode": "",
+        "selectedPhase": "",
+        "selectedBucket": "",
         "tags": [],
         "isTactic": false,
         "tacticRating": null,
         "openingName": null,
         "eco": null,
-        "debug": {
-          "selectedQueue": "explore",
-          "queueCountsBefore": {
-            "exploit": 0,
-            "explore": 10,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "queueCountsAfter": {
-            "exploit": 0,
-            "explore": 9,
-            "revisit": 1,
-            "mastered": 0
-          },
-          "selectedFen": "r1bq1rk1/pp2ppbp/2n2np1/2pp4/3P1B2/4PN1P/PPP1BPP1/RN1Q1RK1 w - - 2 8",
-          "wasDueRevisit": false,
-          "completedSequenceCount": 2,
-          "rejectedRecentExactCount": 0,
-          "rejectedNearDuplicateCount": 18,
-          "nearDuplicateReason": "fen_similarity",
-          "rejectedInvalidCount": 0,
-          "rejectedInvalidReasons": [],
-          "selectedFenValidity": {
-            "ok": true,
-            "legalMoveCount": 39,
-            "mateDistancePlies": null
-          },
-          "requestedServeMode": "endgame",
-          "selectedServeMode": "opening",
-          "selectedPhase": "opening",
-          "selectedBucket": "opening",
-          "phaseFallbackUsed": true,
-          "recentServedModesCount": 50,
-          "recentServedModesPreview": [
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame"
-          ],
-          "dueRevisitCount": 0,
-          "profileUserId": "d770fbae-f238-42c1-9381-ceae0bd0e680",
-          "recentServedModesSource": "optional-query",
-          "optionalRecentServedModesRawCount": 50,
-          "recentServedModesBeforeCount": 50,
-          "recentServedModesBeforePreview": [
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame",
-            "middlegame"
-          ],
-          "nextRecentServedModesCount": 50,
-          "nextRecentServedModesPreview": [
-            "opening",
-            "opening",
-            "middlegame",
-            "opening",
-            "middlegame"
-          ]
-        }
+        "debug": {}
       },
       "client": {
-        "boardFenBeforeSetup": "8/2k3pp/p2r4/2K1p3/1R2Pp2/P4P2/6PP/8 w - - 0 57",
+        "boardFenBeforeSetup": null,
         "boardFenAfterSetup": null,
         "moveTableRows": 0,
         "highlightedSquares": [],
         "overlayVisible": false
       },
       "timing": {
-        "nextPositionRequestMs": 1403,
-        "responseToPreviousFenRenderMs": 499,
+        "nextPositionRequestMs": 0,
+        "responseToPreviousFenRenderMs": 0,
         "gestureToSetupMoveMs": 0,
         "gestureToFinalFenRenderMs": 0
       },
       "validity": {
-        "apiValid": true,
+        "apiValid": false,
         "previousFenValid": false,
         "playedMoveLegalFromPreviousFen": false,
         "finalFenMatchesPlayedMove": false,
@@ -3422,23 +1522,25 @@
         "terminal": false
       },
       "artifacts": {
-        "beforeScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-30-before.png",
-        "afterScreenshot": "C:\\Users\\eypentest3\\Downloads\\blindspots\\qa-reports\\raw\\train-fen-screenshots\\sample-30-after.png",
+        "beforeScreenshot": "",
+        "afterScreenshot": "",
         "trace": ""
       },
-      "errors": []
+      "errors": [
+        "HTTP 401"
+      ]
     }
   ],
   "playthroughs": [],
   "findings": [
     {
       "type": "recommender_warning",
-      "code": "only_elite_source",
-      "expectedFen": "(seed + elite sources)",
-      "actualFen": "(only elite)",
+      "code": "no_tactic_injection",
+      "expectedFen": "(some tactic serves)",
+      "actualFen": "(no tactic serves)",
       "stage": "api_response",
-      "severity": "medium",
-      "notes": "All 30 positions came from elite source. Opening/tactic seed sources were not observed. This may indicate seed-path bypass or empty seed pools."
+      "severity": "high",
+      "notes": "No tactic positions were served across 30 samples. Tactic injection may not be working."
     },
     {
       "type": "recommender_warning",
@@ -3447,16 +1549,7 @@
       "actualFen": "(1 unique value across 30 samples)",
       "stage": "profile_state",
       "severity": "high",
-      "notes": "completedSequenceCount was 2 for all samples. chooseServeMode will see the same profile state unless complete-sequence is called. QA loop does not call complete-sequence, so this is expected but should be noted."
-    },
-    {
-      "type": "recommender_warning",
-      "code": "recent_served_modes_not_growing",
-      "expectedFen": "(increases)",
-      "actualFen": "(50 → 50)",
-      "stage": "persistence",
-      "severity": "high",
-      "notes": "recent_served_modes count did not grow after initial load. Persistence may be broken."
+      "notes": "completedSequenceCount was -1 for all samples. chooseServeMode will see the same profile state unless complete-sequence is called. QA loop does not call complete-sequence, so this is expected but should be noted."
     }
   ],
   "reportMode": "api-sampling-plus-mocked-ui-replay",
@@ -3467,73 +1560,73 @@
     "completedSequenceCountExpectedToRemainConstant": true
   },
   "recentModesCounts": [
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50,
-    50
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1
   ],
   "completedSequenceCounts": [
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1
   ],
   "uniqueCompletedCountValues": [
-    2
+    -1
   ],
-  "uiUnverifiedCount": 28,
+  "uiUnverifiedCount": 30,
   "uiBoardFenUnreadableCount": 30,
-  "uiMismatchCount": 2
+  "uiMismatchCount": 0
 }
