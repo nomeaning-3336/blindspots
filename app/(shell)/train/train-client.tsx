@@ -2952,24 +2952,37 @@ function BoardWithEvalBar({
   const whitePct = 50 + (clamped / 600) * 42;
   const blackPct = 100 - whitePct;
 
-  // top segment = Black side, bottom segment = White side (always, per bar convention)
-  // then flip if board is black-oriented: White moves to top, Black moves to bottom
-  const topPct = orientation === "white" ? blackPct : whitePct;
-  const bottomPct = orientation === "white" ? whitePct : blackPct;
+  // Determine which side is top/bottom based on board orientation
+  const topSide = orientation === "white" ? "black" : "white";
+  const bottomSide = orientation === "white" ? "white" : "black";
+
+  const topPct = topSide === "white" ? whitePct : blackPct;
+  const bottomPct = bottomSide === "white" ? whitePct : blackPct;
 
   return (
     <div className="relative w-full overflow-visible">
       <div className="pointer-events-none absolute right-full top-0 mr-3 h-full w-6 shrink-0">
         <div className="relative h-full overflow-hidden rounded-[4px] border border-[var(--app-border-soft)] bg-black">
           <div
-            className="absolute left-0 right-0 top-0 bg-white transition-[height] duration-200"
-            style={{ height: `${bottomPct}%` }}
-          />
-          <div
-            className="absolute left-0 right-0 bottom-0 bg-black transition-[height] duration-200"
+            className={[
+              "absolute left-0 right-0 top-0 transition-[height] duration-200",
+              topSide === "white" ? "bg-white" : "bg-black",
+            ].join(" ")}
             style={{ height: `${topPct}%` }}
           />
-          <span className="absolute inset-x-0 top-1 text-center text-[9px] font-bold text-black">
+          <div
+            className={[
+              "absolute left-0 right-0 bottom-0 transition-[height] duration-200",
+              bottomSide === "white" ? "bg-white" : "bg-black",
+            ].join(" ")}
+            style={{ height: `${bottomPct}%` }}
+          />
+          <span
+            className={[
+              "absolute inset-x-0 top-1 text-center text-[9px] font-bold",
+              topSide === "white" ? "text-black" : "text-white",
+            ].join(" ")}
+          >
             {typeof displayEvalCp === "number" ? formatEval(displayEvalCp) : isLoading ? "..." : "--"}
           </span>
         </div>
