@@ -16,10 +16,17 @@ import {
   classificationColor,
   classificationIcon,
   classificationLabel,
+  formatClassifiedMoveLead,
   getTrainingBoardHighlights,
   moveBadgeForPosition,
+  moveHighlightsForClassifiedMove,
   type MoveClassification,
 } from "@/lib/training-board-ui";
+import {
+  postMortemNavigationAction,
+  type PostMortemNavigationKey,
+} from "@/lib/training-postmortem-navigation";
+import { runStartTrainingTransition } from "@/lib/train-onboarding-transition";
 
 type TrainingState = "active" | "complete" | "drift";
 type OnboardingScreen = "loading" | "connect" | "analysis" | "summary" | "done";
@@ -43,6 +50,12 @@ type TrainingMove = {
   cpLoss?: number;
   evalBefore?: number;
   evalAfter?: number;
+  classification?: MoveClassification;
+};
+
+type MoveHighlightTarget = {
+  from: string;
+  to: string;
   classification?: MoveClassification;
 };
 
@@ -94,6 +107,7 @@ type VisibleSequencePosition = {
 
 type EngineLineResult = {
   cp: number;
+  mate?: number | null;
   depth: number;
   rank: number;
   bestMove: string;
@@ -279,7 +293,7 @@ export default function TrainPage() {
   const [isPositionLoading, setIsPositionLoading] = useState(true);
   const [hoveredAnnotationSquare, setHoveredAnnotationSquare] = useState<string | null>(null);
   const [hoveredEngineLineIndex, setHoveredEngineLineIndex] = useState<number | null>(null);
-  const [hoveredMoveSquares, setHoveredMoveSquares] = useState<{ from: string; to: string } | null>(null);
+  const [hoveredMoveSquares, setHoveredMoveSquares] = useState<MoveHighlightTarget | null>(null);
   const [onboardingScreen, setOnboardingScreen] = useState<OnboardingScreen>("loading");
   const [selectedProvider, setSelectedProvider] = useState<ProfileProvider | null>(null);
   const [profileUsername, setProfileUsername] = useState("");
@@ -1001,13 +1015,16 @@ export default function TrainPage() {
   }
 
   async function skipConnection() {
-    await fetch("/api/train/initialize", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "skip", skillLevel }),
-    });
     setBlindspotsElo(SKILL_LEVEL_STARTING_ELO[skillLevel]);
-    await startFirstSession();
+    await startFirstSession({
+      persistOnboarding: async () => {
+        await fetch("/api/train/initialize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "skip", skillLevel }),
+        });
+      },
+    });
   }
 
   function beginAnalysis() {
@@ -1064,43 +1081,48 @@ export default function TrainPage() {
     }, 3000);
   }
 
-  async function startFirstSession() {
+  async function refreshProfileAfterOnboardingStart() {
+    try {
+      const initResponse = await fetch("/api/train/initialize", { cache: "no-store" });
+      const initPayload = await initResponse.json().catch(() => null);
+      if (typeof initPayload?.profile?.blindspots_elo === "number") {
+        setBlindspotsElo(initPayload.profile.blindspots_elo);
+      }
+      if (initPayload?.preferences?.skill_level) {
+        setSkillLevel(initPayload.preferences.skill_level);
+      }
+    } catch {
+      // Non-critical — keep existing Elo state on refresh failure.
+    }
+  }
+
+  async function startFirstSession(options: { persistOnboarding?: () => Promise<void> } = {}) {
     if (isStartingTraining) return;
     setIsStartingTraining(true);
 
     try {
       setIsSavingSettings(true);
-
-      await fetch("/api/train/initialize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "save_settings",
-          sequenceLength: normalizeSequenceLength(sequenceLength),
-          timePressureMode: "none",
-          openingFilter: [],
-          skillLevel,
-        }),
+      await runStartTrainingTransition({
+        enterTrainingSurface() {
+          setOnboardingScreen("done");
+        },
+        persistOnboarding: options.persistOnboarding,
+        async saveSettings() {
+          await fetch("/api/train/initialize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "save_settings",
+              sequenceLength: normalizeSequenceLength(sequenceLength),
+              timePressureMode: "none",
+              openingFilter: [],
+              skillLevel,
+            }),
+          });
+        },
+        loadPosition: loadNextPosition,
       });
-
-      // Refresh profile Elo after saving settings, then transition to training.
-      // startFirstSession is only called from onboarding paths where we need the
-      // saved Elo (not analyzed games blend), so we refetch the profile directly.
-      try {
-        const initResponse = await fetch("/api/train/initialize", { cache: "no-store" });
-        const initPayload = await initResponse.json().catch(() => null);
-        if (typeof initPayload?.profile?.blindspots_elo === "number") {
-          setBlindspotsElo(initPayload.profile.blindspots_elo);
-        }
-        if (initPayload?.preferences?.skill_level) {
-          setSkillLevel(initPayload.preferences.skill_level);
-        }
-      } catch {
-        // Non-critical — keep existing Elo state on refresh failure
-      }
-
-      setOnboardingScreen("done");
-      void loadNextPosition();
+      void refreshProfileAfterOnboardingStart();
     } finally {
       setIsSavingSettings(false);
       setIsStartingTraining(false);
@@ -1220,6 +1242,9 @@ export default function TrainPage() {
       ? moves[selectedMoveIndex - 1]
       : null;
   const selectedMoveSquares = selectedMove ? moveFromUci(selectedMove.uci) : null;
+  const selectedMoveHighlight = selectedMove && selectedMoveSquares
+    ? { ...selectedMoveSquares, classification: selectedMove.classification }
+    : null;
   const selectedMoveUci = selectedMove?.uci ?? null;
   const currentEngineLines = isExploringResults
     ? engineLineCache[boardFen] ?? []
@@ -1311,37 +1336,32 @@ export default function TrainPage() {
       if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
       if (shouldIgnoreTrainShortcut(event)) return;
 
-      // Switch from results → explore on first keypress
-      if (resultMode !== "explore") {
-        // Align with the existing auto-switch: land on the last position
+      event.preventDefault();
+      event.stopPropagation();
+
+      const action = postMortemNavigationAction({
+        key: event.key as PostMortemNavigationKey,
+        resultMode,
+        activeExploreIndex,
+        visibleSequenceLength: visibleSequencePositions.length,
+        exploratoryHistoryLength: exploratoryHistory.length,
+        exploratoryHistoryIndex,
+      });
+
+      if (action.type === "enter-explore") {
         setExploreIndex(Math.max(0, visibleSequencePositions.length - 1));
         resetExploratoryLine();
         setResultMode("explore");
         return;
       }
 
-      event.preventDefault();
-      event.stopPropagation();
-
-      // Exploratory history navigation (hover arrows)
-      if (exploratoryHistory.length > 0) {
-        if (event.key === "ArrowLeft" || event.key === "ArrowUp" || event.key === "Home") {
-          navigateExploratoryLine(exploratoryHistoryIndex - 1);
-        } else {
-          navigateExploratoryLine(exploratoryHistoryIndex + 1);
-        }
+      if (action.type === "branch") {
+        navigateExploratoryLine(action.index);
         return;
       }
 
-      // Visible sequence position navigation
-      if (event.key === "ArrowLeft") {
-        navigateExploreTo(activeExploreIndex - 1, "start");
-      } else if (event.key === "ArrowRight") {
-        navigateExploreTo(activeExploreIndex + 1, "end");
-      } else if (event.key === "ArrowUp" || event.key === "Home") {
-        navigateExploreTo(0, "start");
-      } else {
-        navigateExploreTo(visibleSequencePositions.length - 1, "end");
+      if (action.type === "sequence") {
+        navigateExploreTo(action.index, action.boundary);
       }
     }
 
@@ -1524,7 +1544,7 @@ export default function TrainPage() {
   }
 
   return (
-    <div className="flex min-h-0 w-full flex-1 overflow-auto py-4">
+    <div className="train-session-enter flex min-h-0 w-full flex-1 overflow-auto py-4">
       <div
         className={[
           "grid w-full gap-5 transition-opacity duration-200",
@@ -1559,15 +1579,9 @@ export default function TrainPage() {
                         pieceTheme={visualPreferences.pieceTheme}
                         highlightedSquares={
                           hoveredMoveSquares
-                            ? [
-                                { square: hoveredMoveSquares.from, color: "color-mix(in srgb, var(--app-accent) 24%, transparent)" },
-                                { square: hoveredMoveSquares.to, color: "color-mix(in srgb, var(--app-accent) 36%, transparent)" },
-                              ]
-                            : selectedMoveSquares
-                              ? [
-                                  { square: selectedMoveSquares.from, color: "color-mix(in srgb, var(--app-accent) 24%, transparent)" },
-                                  { square: selectedMoveSquares.to, color: "color-mix(in srgb, var(--app-accent) 36%, transparent)" },
-                                ]
+                            ? moveHighlightsForClassifiedMove(hoveredMoveSquares, hoveredMoveSquares.classification)
+                            : selectedMoveHighlight
+                              ? moveHighlightsForClassifiedMove(selectedMoveHighlight, selectedMoveHighlight.classification)
                               : undefined
                         }
                         engineArrows={buildEngineArrows(boardEngineLines, hoveredEngineLineMove)}
@@ -2787,7 +2801,7 @@ function EngineLinesSection({
                   #{index + 1}
                 </span>
                 <strong className="min-w-0 truncate text-sm font-bold" style={{ color: lineColor }}>
-                  {lead}
+                  {formatClassifiedMoveLead(lead, cls)}
                 </strong>
                 {isSelectedUserMove ? (
                   <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--app-accent)]">
@@ -2892,7 +2906,7 @@ function ResultsPanel({
   hoveredAnnotationSquare: string | null;
   hoveredEngineLineIndex: number | null;
   onEngineLineHover: (index: number | null) => void;
-  onMoveHover: (move: { from: string; to: string } | null) => void;
+  onMoveHover: (move: MoveHighlightTarget | null) => void;
   onNavigate: (index: number) => void;
   onNextPosition: () => void;
   selectedMoveIndex: number | null;
@@ -3086,7 +3100,7 @@ function AnalysisMoveTable({
   isAnalyzing?: boolean;
   compact?: boolean;
   onSelectPosition?: (index: number) => void;
-  onHoverMove?: (move: { from: string; to: string } | null) => void;
+  onHoverMove?: (move: MoveHighlightTarget | null) => void;
 }) {
   return (
     <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)]">
@@ -3115,7 +3129,10 @@ function AnalysisMoveTable({
           ].join(" ")}
           disabled={!onSelectPosition}
           onClick={() => onSelectPosition?.(positionIndex)}
-          onPointerEnter={() => onHoverMove?.(moveFromUci(move.uci))}
+          onPointerEnter={() => {
+            const squares = moveFromUci(move.uci);
+            onHoverMove?.(squares ? { ...squares, classification: move.classification } : null);
+          }}
           onPointerLeave={() => onHoverMove?.(null)}
         >
           <span className="flex min-w-0 items-center gap-2 font-bold">

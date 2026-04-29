@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 import type { Database } from "@/lib/supabase/database";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
+import { isSupabaseSessionCookie } from "@/lib/supabase/auth-cookies";
 
 function isPrefetchRequest(request: NextRequest) {
   const h = request.headers;
@@ -15,8 +16,7 @@ function isPrefetchRequest(request: NextRequest) {
 
 function hasSupabaseAuthCookie(request: NextRequest) {
   for (const cookie of request.cookies.getAll()) {
-    // Supabase SSR cookies start with `sb-` and end with `-auth-token`.
-    if (cookie.name.startsWith("sb-") && cookie.name.includes("auth-token")) {
+    if (isSupabaseSessionCookie(cookie.name)) {
       return true;
     }
   }

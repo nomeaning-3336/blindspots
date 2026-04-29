@@ -3,6 +3,7 @@ import { updateSupabaseSession } from "@/lib/supabase/middleware";
 import { createServerClient } from "@supabase/ssr";
 import type { Database } from "@/lib/supabase/database";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
+import { isSupabaseSessionCookie } from "@/lib/supabase/auth-cookies";
 
 const PROTECTED_ROUTES = ["/train", "/performance", "/account"];
 
@@ -32,7 +33,7 @@ export default async function proxy(request: NextRequest) {
   // Protected route check: redirect unauthenticated users before shell renders
   if (isProtectedRoute(pathname)) {
     const authCookies = request.cookies.getAll().filter(
-      (cookie) => cookie.name.startsWith("sb-") && cookie.name.includes("auth-token"),
+      (cookie) => isSupabaseSessionCookie(cookie.name),
     );
 
     if (authCookies.length > 0) {
@@ -73,7 +74,7 @@ export default async function proxy(request: NextRequest) {
       if (isInvalidSession) {
         // Clear stale auth cookies
         const staleCookies = request.cookies.getAll().filter(
-          (cookie) => cookie.name.startsWith("sb-") && cookie.name.includes("auth-token"),
+          (cookie) => isSupabaseSessionCookie(cookie.name),
         );
         staleCookies.forEach((cookie) => {
           response.cookies.delete(cookie.name);

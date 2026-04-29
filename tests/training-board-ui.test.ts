@@ -9,7 +9,9 @@ const {
   DEFAULT_BLINDSPOTS_ELO,
   buildLastMoveBadge,
   classificationIcon,
+  formatClassifiedMoveLead,
   moveHighlightFill,
+  moveHighlightsForClassifiedMove,
   getTrainingBoardHighlights,
   moveBadgeForPosition,
 } = trainingBoardUi;
@@ -37,9 +39,23 @@ test("moveBadgeForPosition returns a badge for classified sequence moves", () =>
 
 test("classification badges use the same icon assets as analysis", () => {
   assert.equal(classificationIcon("best"), "/analyze/classification-icons/best.png");
+  assert.equal(classificationIcon("critical"), "/analyze/classification-icons/critical.png");
   assert.equal(classificationIcon("good"), "/analyze/classification-icons/okay.png");
   assert.equal(classificationIcon("blunder"), "/analyze/classification-icons/blunder.png");
   assert.equal(buildLastMoveBadge("inaccuracy").icon, "/analyze/classification-icons/inaccuracy.png");
+  assert.deepEqual(buildLastMoveBadge("critical"), {
+    label: "Critical",
+    icon: "/analyze/classification-icons/critical.png",
+    color: "var(--app-class-critical)",
+  });
+  assert.equal(buildLastMoveBadge("good").label, "Okay");
+});
+
+test("engine line move leads include the classification name", () => {
+  assert.equal(formatClassifiedMoveLead("Qxd4", "critical"), "Qxd4 (Critical)");
+  assert.equal(formatClassifiedMoveLead("e4", "excellent"), "e4 (Excellent)");
+  assert.equal(formatClassifiedMoveLead("e4", "good"), "e4 (Okay)");
+  assert.equal(formatClassifiedMoveLead("e4", undefined), "e4");
 });
 
 test("move highlight fills match analysis origin and destination opacity", () => {
@@ -51,6 +67,29 @@ test("move highlight fills match analysis origin and destination opacity", () =>
     moveHighlightFill("mistake", "to"),
     "color-mix(in srgb, var(--app-class-mistake) 52%, transparent)",
   );
+});
+
+test("classified move highlights use the move classification on both squares", () => {
+  assert.deepEqual(moveHighlightsForClassifiedMove({ from: "g5", to: "e4" }, "good"), [
+    {
+      square: "g5",
+      color: "color-mix(in srgb, var(--app-class-good) 34%, transparent)",
+    },
+    {
+      square: "e4",
+      color: "color-mix(in srgb, var(--app-class-good) 52%, transparent)",
+    },
+  ]);
+  assert.deepEqual(moveHighlightsForClassifiedMove({ from: "b4", to: "b8" }, "blunder"), [
+    {
+      square: "b4",
+      color: "color-mix(in srgb, var(--app-class-blunder) 34%, transparent)",
+    },
+    {
+      square: "b8",
+      color: "color-mix(in srgb, var(--app-class-blunder) 52%, transparent)",
+    },
+  ]);
 });
 
 test("moveBadgeForPosition omits unclassified and starting positions", () => {

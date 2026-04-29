@@ -9,6 +9,7 @@ import {
   getSupabaseServiceRoleKey,
   getSupabaseUrl,
 } from "@/lib/supabase/env";
+import { isSupabaseSessionCookie } from "@/lib/supabase/auth-cookies";
 
 let supabaseAdminClient: ReturnType<typeof createClient<Database>> | null = null;
 
@@ -117,7 +118,7 @@ export async function getSupabaseServerUser(): Promise<User | null> {
       try {
         const cookieStore = await cookies();
         for (const cookie of cookieStore.getAll()) {
-          if (cookie.name.startsWith("sb-") && cookie.name.includes("auth-token")) {
+          if (isSupabaseSessionCookie(cookie.name)) {
             cookieStore.delete(cookie.name);
           }
         }
