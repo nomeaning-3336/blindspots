@@ -121,6 +121,7 @@ type EvalGraphPoint = {
   value: number;
   positionIndex: number;
   classification?: MoveClassification;
+  engineCp?: number;
 };
 
 type ExploratoryPosition = {
@@ -1762,6 +1763,7 @@ export default function TrainPage() {
               engineLines={classifiedDisplayLines}
               isEngineLinesLoading={isDisplayLoading}
               hasEngineLineError={hasEngineLineError}
+              currentEngineEval={currentEngineEval}
               isPieceSelected={Boolean(exploreSelectedSquare)}
               hoveredAnnotationSquare={hoveredAnnotationSquare}
               hoveredEngineLineIndex={hoveredEngineLineIndex}
@@ -2989,6 +2991,7 @@ function ResultsPanel({
   positions,
   currentIndex,
   engineLines,
+  currentEngineEval,
   isEngineLinesLoading,
   hasEngineLineError,
   isPieceSelected,
@@ -3012,6 +3015,7 @@ function ResultsPanel({
   positions: SequencePosition[];
   currentIndex: number;
   engineLines: EngineLineResult[];
+  currentEngineEval?: number;
   isEngineLinesLoading: boolean;
   hasEngineLineError?: boolean;
   isPieceSelected: boolean;
@@ -3049,6 +3053,7 @@ function ResultsPanel({
           currentIndex={currentIndex}
           compact
           onSelectPosition={onNavigate}
+          engineCp={currentEngineEval}
         />
         <AnalysisMoveTable
           moves={userMoves}
@@ -3078,7 +3083,7 @@ function ResultsPanel({
   return (
     <div className="flex flex-1 flex-col gap-4 opacity-80 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
       <EloResultCard result={eloResult} isLoading={isSaving} />
-      <EvalGraph points={graphPoints} currentIndex={positions.length - 1} compact />
+      <EvalGraph points={graphPoints} currentIndex={positions.length - 1} compact engineCp={currentEngineEval} />
       <AnalysisMoveTable moves={userMoves} isAnalyzing={isSaving} compact />
       <div className="pt-1">
         <button
@@ -3098,11 +3103,13 @@ function EvalGraph({
   currentIndex,
   compact = false,
   onSelectPosition,
+  engineCp,
 }: {
   points: EvalGraphPoint[];
   currentIndex: number;
   compact?: boolean;
   onSelectPosition?: (index: number) => void;
+  engineCp?: number;
 }) {
   const clampedValues = graphPoints.map((point) => Math.max(-600, Math.min(600, point.value)));
   const width = 520;
@@ -3115,6 +3122,12 @@ function EvalGraph({
     const y = padding + ((600 - value) / 1200) * usableHeight;
     return { ...graphPoints[index]!, x, y, value: graphPoints[index]!.value };
   });
+
+  // Engine reference line (horizontal, monochrome)
+  const hasEngineRef = typeof engineCp === "number" && graphPoints.length >= 2;
+  const engineRefY = hasEngineRef
+    ? padding + ((600 - Math.max(-600, Math.min(600, engineCp))) / 1200) * usableHeight
+    : 0;
 
   return (
     <div className="grid gap-2">
@@ -3129,6 +3142,17 @@ function EvalGraph({
               stroke="color-mix(in srgb, var(--app-border-strong) 16%, transparent)"
               strokeDasharray="5 6"
             />
+            {hasEngineRef ? (
+              <line
+                x1={padding}
+                x2={width - padding}
+                y1={engineRefY}
+                y2={engineRefY}
+                stroke="color-mix(in srgb, var(--app-muted) 40%, transparent)"
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+              />
+            ) : null}
             {points.slice(1).map((point, index) => {
               const previous = points[index]!;
               const color = classificationColor(point.classification);
