@@ -1830,6 +1830,7 @@ export default function TrainPage() {
                 userSide={userMoveSide}
                 isOpponentThinking={isOpponentThinking}
                 showHeaders={false}
+                showEvaluations={false}
               />
             </>
           )}
@@ -3074,6 +3075,7 @@ function ResultsPanel({
           selectedMoveIndex={selectedMoveIndex}
           isAnalyzing={isSaving}
           compact
+          showEvaluations={true}
           onSelectPosition={
             onSelectMove
               ? (index) => onSelectMove(index)
@@ -3097,7 +3099,7 @@ function ResultsPanel({
     <div className="flex flex-1 flex-col gap-4 opacity-80 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
       <EloResultCard result={eloResult} isLoading={isSaving} />
       <EvalGraph points={graphPoints} currentIndex={positions.length - 1} compact engineCp={currentEngineEval} />
-      <AnalysisMoveTable moves={userMoves} isAnalyzing={isSaving} compact />
+      <AnalysisMoveTable moves={userMoves} isAnalyzing={isSaving} compact showEvaluations={true} />
       <div className="pt-1">
         <button
           type="button"
@@ -3240,6 +3242,7 @@ function AnalysisMoveTable({
   selectedMoveIndex,
   isAnalyzing,
   compact = false,
+  showEvaluations = false,
   onSelectPosition,
   onHoverMove,
 }: {
@@ -3248,6 +3251,7 @@ function AnalysisMoveTable({
   selectedMoveIndex?: number | null;
   isAnalyzing?: boolean;
   compact?: boolean;
+  showEvaluations?: boolean;
   onSelectPosition?: (index: number) => void;
   onHoverMove?: (move: MoveHighlightTarget | null) => void;
 }) {
@@ -3285,7 +3289,7 @@ function AnalysisMoveTable({
           onPointerLeave={() => onHoverMove?.(null)}
         >
           <span className="flex min-w-0 items-center gap-2 font-bold">
-            {move.classification ? <ClassificationBadge classification={move.classification} /> : null}
+            {showEvaluations && move.classification ? <ClassificationBadge classification={move.classification} /> : null}
             <span className="truncate" style={{ color: classificationColor(move.classification) }}>
               {move.san}
             </span>
@@ -3297,7 +3301,7 @@ function AnalysisMoveTable({
             {typeof move.evalAfter === "number" ? formatEval(move.evalAfter) : pendingValue}
           </span>
           <span className="overflow-hidden whitespace-nowrap text-right tabular-nums text-[var(--app-muted)]">
-            {typeof move.cpLoss === "number" ? `${move.cpLoss}cp` : pendingValue}
+            {showEvaluations && typeof move.cpLoss === "number" ? `${move.cpLoss}cp` : pendingValue}
           </span>
         </button>
         );
@@ -3311,11 +3315,13 @@ function MoveList({
   userSide,
   isOpponentThinking,
   showHeaders = false,
+  showEvaluations = false,
 }: {
   moves: TrainingMove[];
   userSide: TrainingMove["side"];
   isOpponentThinking: boolean;
   showHeaders?: boolean;
+  showEvaluations?: boolean;
 }) {
   // Build rows keyed by fullmove number from fenBefore.
   // White column gets moves where fenBefore turn was "w".
@@ -3364,22 +3370,22 @@ function MoveList({
           >
             <span data-testid="train-move-row-number" className="text-right text-[var(--app-muted)]">{prefix}</span>
             <span data-testid="train-move-white" className="flex min-w-0 items-center gap-2 pl-8 font-bold">
-              {row.white?.classification ? <ClassificationBadge classification={row.white.classification} /> : null}
+              {showEvaluations && row.white?.classification ? <ClassificationBadge classification={row.white.classification} /> : null}
               <span className="truncate" style={{ color: classificationColor(row.white?.classification) }}>
                 {row.white?.san ?? ""}
               </span>
-              {typeof row.white?.cpLoss === "number" ? (
+              {showEvaluations && typeof row.white?.cpLoss === "number" ? (
                 <span className="shrink-0 text-[11px] font-normal text-[var(--app-muted)]">
                   {row.white.cpLoss}cp
                 </span>
               ) : null}
             </span>
             <span data-testid="train-move-black" className="flex min-w-0 items-center gap-2 font-bold">
-              {row.black?.classification ? <ClassificationBadge classification={row.black.classification} /> : null}
+              {showEvaluations && row.black?.classification ? <ClassificationBadge classification={row.black.classification} /> : null}
               <span className="truncate" style={{ color: classificationColor(row.black?.classification) }}>
                 {row.black?.san ?? ""}
               </span>
-              {typeof row.black?.cpLoss === "number" ? (
+              {showEvaluations && typeof row.black?.cpLoss === "number" ? (
                 <span className="shrink-0 text-[11px] font-normal text-[var(--app-muted)]">
                   {row.black.cpLoss}cp
                 </span>
