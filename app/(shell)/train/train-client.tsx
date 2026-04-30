@@ -115,6 +115,7 @@ type EngineLineResult = {
   pv: string[];
   pvSan: string[];
   classification?: MoveClassification;
+  source?: "multipv" | "candidate";
 };
 
 type EvalGraphPoint = {
@@ -2936,6 +2937,10 @@ function EngineLinesSection({
                 {isSelectedUserMove ? (
                   <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--app-accent)]">
                     Your move
+                  </span>
+                ) : line.source === "candidate" ? (
+                  <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--app-muted-soft)]">
+                    candidate
                   </span>
                 ) : null}
                 <span className="justify-self-end text-[10px] font-bold tabular-nums text-[var(--app-muted-soft)]">

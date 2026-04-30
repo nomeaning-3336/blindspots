@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { Chess } from "chess.js";
 import { getOptionalAppUserId } from "@/lib/app-auth";
-import { getPositionLines, classifyEngineError, type EngineErrorCode } from "@/lib/engines/dispatcher";
+import { getPositionLines, getLegalMoveLines, classifyEngineError, type EngineErrorCode } from "@/lib/engines/dispatcher";
+import { type EngineLine } from "@/lib/engines/types";
 import { getAnalyzePreferencesForUser } from "@/lib/analyze-preferences-store";
 import { normalizeAnalyzePreferences } from "@/lib/analyze-preferences";
-import { classifyRankedMove } from "@/lib/move-classification";
+import { classifyRankedMove, classifyMoveAgainstBest, type MoveEvaluationLine } from "@/lib/move-classification";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,11 +31,11 @@ export async function POST(request: Request) {
   const rawPrefs = await getAnalyzePreferencesForUser(userId);
   const { linesShown, limitKind, timeLimitValue, depthLimitValue } = normalizeAnalyzePreferences(rawPrefs);
 
-  let lines: Awaited<ReturnType<typeof getPositionLines>> = [];
+  let pvLines: Awaited<ReturnType<typeof getPositionLines>> = [];
   let engineError: EngineErrorCode | null = null;
 
   try {
-    lines = await getPositionLines(fen, {
+    pvLines = await getPositionLines(fen, {
       depthLimit: limitKind === "depth" ? depthLimitValue : undefined,
       timeLimitMs: limitKind === "time" ? timeLimitValue : TRAIN_ENGINE_TIME_LIMIT_MS,
       multiPv: linesShown,
@@ -44,10 +45,51 @@ export async function POST(request: Request) {
     console.error(`[engine-lines] Engine error for fen=${fen}:`, error);
   }
 
+  // Scan legal candidate moves to find same-tier moves missing from MultiPV top-N.
+  let candidateLines: Awaited<ReturnType<typeof getLegalMoveLines>> = [];
+  try {
+    candidateLines = await getLegalMoveLines(fen, {
+      depthLimit: limitKind === "depth" ? depthLimitValue : undefined,
+      timeLimitMs: limitKind === "time" ? timeLimitValue : TRAIN_ENGINE_TIME_LIMIT_MS,
+    });
+  } catch {
+    // Best-effort candidate scan — silently skip if it fails.
+  }
+
+  const SAME_TIER_CP_THRESHOLD = 35;
+  const MAX_TOTAL_LINES = Math.max(linesShown + 3, 6);
+
+  function sameTierAsBest(best: MoveEvaluationLine | null | undefined, line: MoveEvaluationLine) {
+    if (!best) return false;
+    if (typeof best.mate === "number" || typeof line.mate === "number") {
+      return best.mate === line.mate;
+    }
+    return Math.abs((best.cp ?? 0) - (line.cp ?? 0)) <= SAME_TIER_CP_THRESHOLD;
+  }
+
+  const merged: Array<EngineLine & { source: "multipv" | "candidate" }> = [];
+  const seenBestMoves = new Set<string>();
+
+  for (const line of pvLines) {
+    if (!line.bestMove || seenBestMoves.has(line.bestMove)) continue;
+    seenBestMoves.add(line.bestMove);
+    merged.push({ ...line, source: "multipv" });
+  }
+
+  const bestLine = candidateLines[0] ?? pvLines[0] ?? null;
+
+  for (const line of candidateLines) {
+    if (merged.length >= MAX_TOTAL_LINES) break;
+    if (!line.bestMove || seenBestMoves.has(line.bestMove)) continue;
+    if (!sameTierAsBest(bestLine, line)) continue;
+    seenBestMoves.add(line.bestMove);
+    merged.push({ ...line, source: "candidate" });
+  }
+
   return NextResponse.json({
     ok: engineError === null,
     error: engineError,
-    lines: lines.map((line, index) => ({
+    lines: merged.map((line, index) => ({
       cp: line.cp,
       mate: line.mate,
       depth: line.depth,
@@ -56,7 +98,11 @@ export async function POST(request: Request) {
       bestSan: uciToSan(fen, line.bestMove),
       pv: line.pv,
       pvSan: pvToSan(fen, line.pv),
-      classification: classifyRankedMove(index, lines, fen),
+      source: line.source,
+      classification:
+        line.source === "candidate"
+          ? classifyMoveAgainstBest(bestLine, line, fen)
+          : classifyRankedMove(index, merged, fen),
     })),
   });
 }
