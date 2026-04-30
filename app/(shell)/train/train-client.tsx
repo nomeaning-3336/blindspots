@@ -122,7 +122,6 @@ type EvalGraphPoint = {
   positionIndex: number;
   classification?: MoveClassification;
   engineCp?: number;
-  graphXIndex?: number;
 };
 
 type ExploratoryPosition = {
@@ -2709,9 +2708,8 @@ function buildEvalGraphPoints(
   moves: TrainingMove[],
   userSide: TrainingMove["side"],
   startingFen: string,
-): [EvalGraphPoint[], EvalGraphPoint[]] {
+): EvalGraphPoint[] {
   const points: EvalGraphPoint[] = [];
-  const engineReplyPoints: EvalGraphPoint[] = [];
   let chess: Chess | null = null;
   try {
     chess = new Chess(startingFen);
@@ -2726,21 +2724,10 @@ function buildEvalGraphPoints(
         points.push({ value: move.evalBefore, positionIndex: index });
       }
       if (typeof move.evalAfter === "number") {
-        const userIdx = points.length;
         points.push({
           value: move.evalAfter,
           positionIndex: index + 1,
           classification: move.classification,
-          graphXIndex: userIdx,
-        });
-      }
-    } else {
-      if (typeof move.evalAfter === "number") {
-        const userIdx = Math.floor(index / 2);
-        engineReplyPoints.push({
-          value: move.evalAfter,
-          positionIndex: index + 1,
-          graphXIndex: userIdx + 0.5,
         });
       }
     }
@@ -2755,7 +2742,7 @@ function buildEvalGraphPoints(
     }
   });
 
-  return [points, engineReplyPoints];
+  return points;
 }
 
 function StatusBanner({
@@ -3081,7 +3068,7 @@ function ResultsPanel({
   const userMoves = moves
     .map((move, index) => ({ ...move, absoluteIndex: index }))
     .filter((move) => move.side === userSide);
-  const [graphPoints, engineReplyPoints] = buildEvalGraphPoints(moves, userSide, startingFen);
+  const graphPoints = buildEvalGraphPoints(moves, userSide, startingFen);
 
   if (mode === "explore") {
     return (
@@ -3099,7 +3086,6 @@ function ResultsPanel({
         />
         <EvalGraph
           points={graphPoints}
-          engineReplyPoints={engineReplyPoints}
           currentIndex={currentIndex}
           compact
           onSelectPosition={onNavigate}
@@ -3134,7 +3120,7 @@ function ResultsPanel({
   return (
     <div className="flex flex-1 flex-col gap-4 opacity-80 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
       <EloResultCard result={eloResult} isLoading={isSaving} />
-      <EvalGraph points={graphPoints} engineReplyPoints={engineReplyPoints} currentIndex={positions.length - 1} compact engineCp={currentEngineEval} />
+      <EvalGraph points={graphPoints} currentIndex={positions.length - 1} compact engineCp={currentEngineEval} />
       <AnalysisMoveTable moves={userMoves} isAnalyzing={isSaving} compact showEvaluations={true} />
       <div className="pt-1">
         <button
@@ -3151,14 +3137,12 @@ function ResultsPanel({
 
 function EvalGraph({
   points: graphPoints,
-  engineReplyPoints = [],
   currentIndex,
   compact = false,
   onSelectPosition,
   engineCp,
 }: {
   points: EvalGraphPoint[];
-  engineReplyPoints?: EvalGraphPoint[];
   currentIndex: number;
   compact?: boolean;
   onSelectPosition?: (index: number) => void;
@@ -3170,20 +3154,10 @@ function EvalGraph({
   const padding = 18;
   const usableWidth = width - padding * 2;
   const usableHeight = height - padding * 2;
-  const maxXIndex = Math.max(1, graphPoints.length - 1);
   const points = clampedValues.map((value, index) => {
-    const xIndex = graphPoints[index]!.graphXIndex ?? index;
-    const x = graphPoints.length <= 1 ? padding : padding + (xIndex / maxXIndex) * usableWidth;
+    const x = padding + (clampedValues.length <= 1 ? 0 : (index / (clampedValues.length - 1)) * usableWidth);
     const y = padding + ((600 - value) / 1200) * usableHeight;
     return { ...graphPoints[index]!, x, y, value: graphPoints[index]!.value };
-  });
-
-  const replyPoints = engineReplyPoints.map((point) => {
-    const xIndex = point.graphXIndex ?? 0;
-    const x = graphPoints.length <= 1 ? padding : padding + (xIndex / maxXIndex) * usableWidth;
-    const clamped = Math.max(-600, Math.min(600, point.value));
-    const y = padding + ((600 - clamped) / 1200) * usableHeight;
-    return { ...point, x, y };
   });
 
   // Engine reference line (horizontal, monochrome)
@@ -3192,23 +3166,8 @@ function EvalGraph({
     ? padding + ((600 - Math.max(-600, Math.min(600, engineCp))) / 1200) * usableHeight
     : 0;
 
-  const hasReplies = replyPoints.length >= 2;
-
   return (
     <div className="grid gap-2">
-      {hasReplies ? (
-        <div className="flex items-center gap-4 px-1">
-          <span className="flex items-center gap-1.5 text-[9px] text-[var(--app-muted)]">
-            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: "var(--app-info, #38bdf8)" }} />
-            Engine replies
-          </span>
-          <span className="flex items-center gap-1.5 text-[9px] text-[var(--app-muted)]">
-            <svg width="16" height="8" viewBox="0 0 16 8" aria-hidden="true">
-              <line x1="0" y1="4" x2="16" y2="4" stroke="color-mix(in srgb, var(--app-info, #38bdf8) 50%, transparent)" strokeWidth="2" strokeDasharray="3 2" />
-            </svg>
-          </span>
-        </div>
-      ) : null}
       <div className={[compact ? "h-28" : "h-36", "overflow-hidden rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)]"].join(" ")}>
         {points.length >= 2 ? (
           <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" role="img" aria-label="Sequence eval graph">
@@ -3229,16 +3188,6 @@ function EvalGraph({
                 stroke="color-mix(in srgb, var(--app-muted) 40%, transparent)"
                 strokeWidth={1.5}
                 strokeDasharray="4 3"
-              />
-            ) : null}
-            {hasReplies ? (
-              <polyline
-                points={replyPoints.map((p) => `${p.x},${p.y}`).join(" ")}
-                fill="none"
-                stroke="color-mix(in srgb, var(--app-info, #38bdf8) 55%, transparent)"
-                strokeWidth={1.5}
-                strokeDasharray="4 3"
-                strokeLinecap="round"
               />
             ) : null}
             {points.slice(1).map((point, index) => {
