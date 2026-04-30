@@ -495,6 +495,7 @@ export default function TrainPage() {
     setResultMode("results");
     setExploreIndex(0);
     resetExploratoryLine();
+    setExploreSelectedSquare(null);
     setSelectedMoveIndex(null);
     setActiveReplayIndex(null);
     setEngineLineCache({});
@@ -642,6 +643,7 @@ export default function TrainPage() {
     setResultMode("results");
     setExploreIndex(0);
     resetExploratoryLine();
+    setExploreSelectedSquare(null);
     setSelectedMoveIndex(null);
     setActiveReplayIndex(null);
     setEngineLineCache({});
@@ -696,6 +698,7 @@ export default function TrainPage() {
     // Apply the move, sound, and visual transition together — synchronized.
     setActiveSetupReplayIndex(1);
     setInitialOpponentMove(applied.move);
+    setExploreSelectedSquare(null);
     setLastMove(applied.lastMove);
     setFen(payload.fen!);
     playTrainMoveSound({ move: applied.move, plyRef: moveSoundPlyRef, source: "initial-engine", advanceLivePitch: false });
@@ -831,6 +834,7 @@ export default function TrainPage() {
       const movesAfterUserMove = [...moves, userTrainingMove];
 
       playTrainMoveSound({ move: playedMove, plyRef: moveSoundPlyRef });
+      setExploreSelectedSquare(null);
       setFen(fenAfterUserMove);
       setLastMove({ from: move.from, to: move.to });
       setMoves(movesAfterUserMove);
@@ -1340,9 +1344,24 @@ export default function TrainPage() {
   const currentEngineLines = isExploringResults
     ? engineLineCache[boardFen] ?? []
     : [];
-  const pieceLinesKey = exploreSelectedSquare ? `${boardFen}::${exploreSelectedSquare}` : null;
+  const hasSelectablePieceOnSquare = (square: string | null) => {
+    if (!square) return false;
+    try {
+      const chess = new Chess(boardFen);
+      const piece = chess.get(square as Square);
+      return Boolean(piece && piece.color === chess.turn());
+    } catch {
+      return false;
+    }
+  };
+  const effectiveExploreSelectedSquare = hasSelectablePieceOnSquare(exploreSelectedSquare)
+    ? exploreSelectedSquare
+    : null;
+  const pieceLinesKey = effectiveExploreSelectedSquare
+    ? `${boardFen}::${effectiveExploreSelectedSquare}`
+    : null;
   const currentPieceLines = pieceLinesKey ? (pieceLineCache[pieceLinesKey] ?? null) : null;
-  const displayLines = exploreSelectedSquare
+  const displayLines = effectiveExploreSelectedSquare
     ? (currentPieceLines ?? [])
     : currentEngineLines;
   const classifiedDisplayLines = useMemo(
@@ -1352,7 +1371,7 @@ export default function TrainPage() {
     })),
     [boardFen, displayLines],
   );
-  const boardEngineLines = exploreSelectedSquare
+  const boardEngineLines = effectiveExploreSelectedSquare
     ? classifiedDisplayLines
     : classifiedDisplayLines.filter((line) => isRecommendableClassification(line.classification));
   const hoveredEngineLineMove =
@@ -1442,6 +1461,7 @@ export default function TrainPage() {
       if (action.type === "enter-explore") {
         setExploreIndex(Math.max(0, visibleSequencePositions.length - 1));
         resetExploratoryLine();
+        setExploreSelectedSquare(null);
         setResultMode("explore");
         return;
       }
@@ -1559,6 +1579,7 @@ export default function TrainPage() {
     const timer = window.setTimeout(() => {
       setExploreIndex(Math.max(0, visibleSequencePositions.length - 1));
       resetExploratoryLine();
+      setExploreSelectedSquare(null);
       setResultMode("explore");
     }, 180);
     return () => window.clearTimeout(timer);
@@ -1603,6 +1624,7 @@ export default function TrainPage() {
     }
     const previousIndex = activeExploreIndex;
     resetExploratoryLine();
+    setExploreSelectedSquare(null);
     setHoveredEngineLineIndex(null);
     setHoveredMoveSquares(null);
     const targetPos = visibleSequencePositions[boundedIndex];
