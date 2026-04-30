@@ -69,10 +69,7 @@ test("builds dashboard summary from profile queues and completed sessions", () =
   assert.equal(summary.recentSessions[0]?.worst, "blunder");
   assert.equal(summary.recentSessions[0]?.moves, 3);
   assert.equal(summary.recentSessions[0]?.href, null);
-  assert.equal(summary.clusters[0]?.id, "app:v0:middlegame:opening_gambit");
-  assert.equal(summary.clusters[0]?.severity, 7);
-  assert.equal(summary.clusters[0]?.phase, "middlegame");
-  assert.equal(summary.clusters[0]?.bucket, "opening_gambit");
+  assert.deepEqual(summary.clusters, []);
 });
 
 test("uses empty-state fallbacks when profile and evaluations are missing", () => {
@@ -85,4 +82,103 @@ test("uses empty-state fallbacks when profile and evaluations are missing", () =
   assert.equal(summary.classifications, null);
   assert.deepEqual(summary.clusters, []);
   assert.deepEqual(summary.recentSessions, []);
+});
+
+test("humanizes old v0 and new v1 cluster ids without exposing raw ids as labels", () => {
+  const summary = buildDashboardSummary({
+    profile: {
+      total_sequences: 2,
+      blindspots_elo: 612,
+      last_session_at: null,
+      exploit_queue: [],
+      explore_queue: [],
+      revisit_queue: [],
+      mastered_queue: [],
+      cluster_stats: {},
+    },
+    sessions: [
+      {
+        id: "session-1",
+        completed_at: "2026-04-30T08:30:00.000Z",
+        started_at: "2026-04-30T08:20:00.000Z",
+        sequence_length: 4,
+        elo_delta: -4,
+        position_evaluations: [
+          { classification: "mistake", clusterId: "app:v0:middlegame:middlegame" },
+          { classification: "mistake", clusterId: "app:v0:middlegame:middlegame" },
+          { classification: "mistake", clusterId: "app:v0:middlegame:middlegame" },
+          { classification: "mistake", clusterId: "app:v0:middlegame:middlegame" },
+          { classification: "mistake", clusterId: "app:v0:middlegame:middlegame" },
+          { classification: "blunder", clusterId: "app:v1:middlegame:middlegame_attack:attack" },
+          { classification: "blunder", clusterId: "app:v1:middlegame:middlegame_attack:attack" },
+          { classification: "blunder", clusterId: "app:v1:middlegame:middlegame_attack:attack" },
+          { classification: "blunder", clusterId: "app:v1:middlegame:middlegame_attack:attack" },
+          { classification: "blunder", clusterId: "app:v1:middlegame:middlegame_attack:attack" },
+          { classification: "inaccuracy", clusterId: "app:v1:endgame:endgame_rook:rook_endgame" },
+          { classification: "inaccuracy", clusterId: "app:v1:endgame:endgame_rook:rook_endgame" },
+          { classification: "inaccuracy", clusterId: "app:v1:endgame:endgame_rook:rook_endgame" },
+          { classification: "inaccuracy", clusterId: "app:v1:endgame:endgame_rook:rook_endgame" },
+          { classification: "inaccuracy", clusterId: "app:v1:endgame:endgame_rook:rook_endgame" },
+          { classification: "mistake", clusterId: "app:v1:tactic:tactic:tactic" },
+          { classification: "mistake", clusterId: "app:v1:tactic:tactic:tactic" },
+          { classification: "mistake", clusterId: "app:v1:tactic:tactic:tactic" },
+          { classification: "mistake", clusterId: "app:v1:tactic:tactic:tactic" },
+          { classification: "mistake", clusterId: "app:v1:tactic:tactic:tactic" },
+          { classification: "mistake", clusterId: "app:v1:opening:opening:b90" },
+          { classification: "mistake", clusterId: "app:v1:opening:opening:b90" },
+          { classification: "mistake", clusterId: "app:v1:opening:opening:b90" },
+          { classification: "mistake", clusterId: "app:v1:opening:opening:b90" },
+          { classification: "mistake", clusterId: "app:v1:opening:opening:b90" },
+        ],
+      },
+    ],
+  });
+
+  const labelsById = new Map(summary.clusters.map((cluster) => [cluster.id, cluster.label]));
+
+  assert.equal(labelsById.get("app:v0:middlegame:middlegame"), "Middlegame");
+  assert.equal(labelsById.get("app:v1:middlegame:middlegame_attack:attack"), "Middlegame — Attack");
+  assert.equal(labelsById.get("app:v1:endgame:endgame_rook:rook_endgame"), "Endgame — Rook Endgame");
+  assert.equal(labelsById.get("app:v1:tactic:tactic:tactic"), "Tactical Positions");
+  assert.equal(labelsById.get("app:v1:opening:opening:b90"), "Opening — B90");
+  for (const cluster of summary.clusters) {
+    assert.notEqual(cluster.label, cluster.id);
+  }
+});
+
+test("hides sparse unknown and wildcard clusters from dashboard patterns", () => {
+  const repeated = Array.from({ length: 5 }, () => [
+    { classification: "mistake", clusterId: "app:v1:unknown:wildcard" },
+    { classification: "mistake", clusterId: "app:v1:opening:wildcard" },
+    { classification: "mistake", clusterId: "app:v1:middlegame:middlegame_attack:attack" },
+  ]).flat();
+
+  const summary = buildDashboardSummary({
+    profile: {
+      total_sequences: 1,
+      blindspots_elo: 612,
+      last_session_at: null,
+      exploit_queue: [],
+      explore_queue: [],
+      revisit_queue: [],
+      mastered_queue: [],
+      cluster_stats: {},
+    },
+    sessions: [
+      {
+        id: "session-1",
+        completed_at: "2026-04-30T08:30:00.000Z",
+        started_at: "2026-04-30T08:20:00.000Z",
+        sequence_length: 4,
+        elo_delta: -4,
+        position_evaluations: [
+          { classification: "blunder", clusterId: "app:v1:endgame:endgame_rook:rook_endgame" },
+          ...repeated,
+        ],
+      },
+    ],
+  });
+
+  assert.equal(summary.clusters.length, 1);
+  assert.equal(summary.clusters[0]?.id, "app:v1:middlegame:middlegame_attack:attack");
 });

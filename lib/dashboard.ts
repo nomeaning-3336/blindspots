@@ -86,6 +86,8 @@ const CLASSIFICATION_KEYS = [
 
 type DashboardClassification = (typeof CLASSIFICATION_KEYS)[number];
 
+const MIN_CLUSTER_ATTEMPTS = 5;
+
 const CLASSIFICATION_SEVERITY: Record<DashboardClassification, number> = {
   best: 0,
   excellent: 1,
@@ -206,16 +208,23 @@ function buildClusterSummaries(
     .map((cluster) => {
       const parsed = parseClusterId(cluster.id);
       const attempts = Math.max(cluster.attempts, clusterAttemptCounts[cluster.id] ?? 0);
+      const phase = cluster.phase ?? parsed.phase;
+      const bucket = cluster.bucket ?? parsed.bucket;
+      const tag = cluster.tag ?? parsed.tag;
       return {
         ...cluster,
         attempts,
-        phase: cluster.phase ?? parsed.phase,
-        bucket: cluster.bucket ?? parsed.bucket,
-        tag: cluster.tag ?? parsed.bucket,
+        label: buildClusterLabel({ phase, bucket, tag }),
+        phase,
+        bucket,
+        tag: tag ?? bucket,
         severity: cluster.critical * 5 + cluster.blunder * 4 + cluster.mistake * 3 + cluster.inaccuracy,
       };
     })
     .filter((cluster) => cluster.severity > 0)
+    .filter((cluster) => cluster.attempts >= MIN_CLUSTER_ATTEMPTS)
+    .filter((cluster) => cluster.phase !== "unknown")
+    .filter((cluster) => cluster.bucket !== "wildcard")
     .sort((left, right) => right.severity - left.severity || right.attempts - left.attempts)
     .slice(0, 8);
 }
@@ -288,11 +297,94 @@ function normalizeClusterAttemptCounts(raw: Json | undefined): Record<string, nu
 }
 
 function parseClusterId(id: string) {
-  const [, , phase, ...bucketParts] = id.split(":");
+  const parts = id.split(":");
+
+  if (parts[0] === "app" && parts[1] === "v1") {
+    return {
+      version: "v1",
+      phase: parts[2] || undefined,
+      bucket: parts[3] || undefined,
+      tag: parts.slice(4).join(":") || undefined,
+    };
+  }
+
+  if (parts[0] === "app" && parts[1] === "v0") {
+    return {
+      version: "v0",
+      phase: parts[2] || undefined,
+      bucket: parts.slice(3).join(":") || undefined,
+      tag: undefined,
+    };
+  }
+
   return {
-    phase: phase || undefined,
-    bucket: bucketParts.join(":") || undefined,
+    version: "unknown",
+    phase: undefined,
+    bucket: undefined,
+    tag: undefined,
   };
+}
+
+function buildClusterLabel({
+  phase,
+  bucket,
+  tag,
+}: {
+  phase?: string;
+  bucket?: string;
+  tag?: string;
+}) {
+  const prettyPhase = humanizeClusterPart(phase);
+  const prettyBucket = humanizeBucket(bucket);
+  const prettyTag = humanizeClusterPart(tag);
+  if (bucket === "tactic") return "Tactical Positions";
+  const parts = [prettyPhase];
+
+  if (prettyBucket && prettyBucket !== prettyPhase) {
+    parts.push(prettyBucket);
+  }
+
+  if (
+    prettyTag &&
+    prettyTag !== "General" &&
+    prettyTag !== prettyPhase &&
+    prettyTag !== prettyBucket
+  ) {
+    parts.push(prettyTag);
+  }
+
+  return parts.filter(Boolean).join(" — ") || "General";
+}
+
+function humanizeBucket(bucket?: string) {
+  if (!bucket) return "";
+  const labels: Record<string, string> = {
+    opening: "Opening",
+    opening_gambit: "Gambit",
+    opening_development: "Development",
+    middlegame: "Middlegame",
+    middlegame_attack: "Attack",
+    middlegame_positional: "Positional",
+    endgame: "Endgame",
+    endgame_rook: "Rook Endgame",
+    endgame_pawn: "Pawn Endgame",
+    tactic: "Tactical Positions",
+    wildcard: "General",
+  };
+  return labels[bucket] ?? humanizeClusterPart(bucket);
+}
+
+function humanizeClusterPart(value?: string) {
+  if (!value) return "";
+  const upper = value.toUpperCase();
+  if (/^[A-E][0-9]{2}$/.test(upper)) return upper;
+
+  return value
+    .replace(/^app:v\d+:/, "")
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function jsonArrayLength(raw: Json | undefined) {

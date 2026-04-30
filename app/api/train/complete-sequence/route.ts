@@ -132,7 +132,16 @@ export async function POST(request: Request) {
   const reflectionNote = typeof payload?.reflectionNote === "string" ? payload.reflectionNote : null;
   const challengeElo = normalizeOptionalNumber(payload?.challengeElo);
   const profile = await getOrCreateProfile(userId);
-  const sequenceEvaluation = await calculateSequenceEvaluation(startingFen, moves, selectedBucket, selectedPhase, selectedTags);
+  const sequenceEvaluation = await calculateSequenceEvaluation({
+    startingFen,
+    moves,
+    selectedBucket,
+    selectedPhase,
+    selectedTags,
+    selectedIsTactic,
+    selectedOpeningName,
+    selectedEco,
+  });
   const evalPreservationScore = sequenceEvaluation.evalPreservationScore;
   const profileRatingDeviation = normalizeRatingDeviation(profile.rating_deviation);
 
@@ -267,13 +276,25 @@ export async function POST(request: Request) {
   });
 }
 
-async function calculateSequenceEvaluation(
-  startingFen: string,
-  moves: Array<{ san: string; uci: string; side: string }>,
-  selectedBucket: string,
-  selectedPhase: string | null,
-  selectedTags: string[] | null,
-) {
+async function calculateSequenceEvaluation({
+  startingFen,
+  moves,
+  selectedBucket,
+  selectedPhase,
+  selectedTags,
+  selectedIsTactic,
+  selectedOpeningName,
+  selectedEco,
+}: {
+  startingFen: string;
+  moves: Array<{ san: string; uci: string; side: string }>;
+  selectedBucket: string;
+  selectedPhase: string | null;
+  selectedTags: string[] | null;
+  selectedIsTactic: boolean | null;
+  selectedOpeningName: string | null;
+  selectedEco: string | null;
+}) {
   const chess = new Chess(startingFen);
   const userColor = chess.turn();
   let userMoveCount = 0;
@@ -326,7 +347,14 @@ async function calculateSequenceEvaluation(
           fenAfterEngineMove: null,
           phase: checkmatePhase,
           bucket: selectedBucket,
-          clusterId: deriveCoarseClusterId(checkmatePhase, selectedBucket),
+          clusterId: deriveAppClusterId({
+            phase: checkmatePhase,
+            bucket: selectedBucket,
+            tags: selectedTags,
+            isTactic: selectedIsTactic,
+            openingName: selectedOpeningName,
+            eco: selectedEco,
+          }),
           tags: selectedTags ?? [],
         });
         userMoveCount += 1;
@@ -363,7 +391,14 @@ async function calculateSequenceEvaluation(
         fenAfterEngineMove,
         phase: regularPhase,
         bucket: selectedBucket,
-        clusterId: deriveCoarseClusterId(regularPhase, selectedBucket),
+        clusterId: deriveAppClusterId({
+          phase: regularPhase,
+          bucket: selectedBucket,
+          tags: selectedTags,
+          isTactic: selectedIsTactic,
+          openingName: selectedOpeningName,
+          eco: selectedEco,
+        }),
         tags: selectedTags ?? [],
       });
       userMoveCount += 1;
@@ -411,14 +446,109 @@ type ClusterStatEntry = {
 
 type ClusterStats = Record<string, ClusterStatEntry>;
 
-/**
- * Coarse cluster ID used by the app for bandit tracking.
- * Separate from fine-grained corpus pipeline cluster IDs to keep the two
- * systems decoupled — the app uses phase+bucket, the corpus pipeline uses
- * the full 6-partition + MiniBatchKMeans clustering.
- */
-function deriveCoarseClusterId(phase: string, bucket: string): string {
-  return `app:v0:${phase}:${bucket}`;
+function deriveAppClusterId({
+  phase,
+  bucket,
+  tags,
+  isTactic,
+  openingName,
+  eco,
+}: {
+  phase: string;
+  bucket: string;
+  tags?: string[] | null;
+  isTactic?: boolean | null;
+  openingName?: string | null;
+  eco?: string | null;
+}): string {
+  const normalizedPhase = normalizeClusterPart(phase || "unknown");
+  const normalizedBucket = normalizeClusterPart(bucket || "wildcard");
+  const primaryKey = pickPrimaryClusterKey({
+    phase: normalizedPhase,
+    bucket: normalizedBucket,
+    tags,
+    isTactic,
+    openingName,
+    eco,
+  });
+
+  return primaryKey
+    ? `app:v1:${normalizedPhase}:${normalizedBucket}:${primaryKey}`
+    : `app:v1:${normalizedPhase}:${normalizedBucket}`;
+}
+
+function pickPrimaryClusterKey({
+  phase,
+  bucket,
+  tags,
+  isTactic,
+  openingName,
+  eco,
+}: {
+  phase: string;
+  bucket: string;
+  tags?: string[] | null;
+  isTactic?: boolean | null;
+  openingName?: string | null;
+  eco?: string | null;
+}): string | null {
+  const normalizedEco = typeof eco === "string" ? normalizeEco(eco) : "";
+  if (phase === "opening" && normalizedEco) return normalizedEco;
+
+  const normalizedTags = (tags ?? []).map(normalizeClusterPart).filter(Boolean);
+
+  const genericTags = new Set([
+    "opening",
+    "middlegame",
+    "endgame",
+    "unknown",
+    "general",
+  ]);
+
+  const redundantTags = new Set([
+    phase,
+    bucket,
+    bucket.replace(`${phase}_`, ""),
+  ]);
+
+  const usefulTag = normalizedTags.find((tag) => {
+    if (!tag) return false;
+    if (genericTags.has(tag)) return false;
+    if (redundantTags.has(tag)) return false;
+    return true;
+  });
+
+  if (usefulTag) return usefulTag;
+
+  if (isTactic || bucket === "tactic") return "tactic";
+
+  if (bucket === "opening_gambit") return "gambit";
+  if (bucket === "opening_development") return "development";
+  if (bucket === "middlegame_attack") return "attack";
+  if (bucket === "middlegame_positional") return "positional";
+  if (bucket === "endgame_rook") return "rook_endgame";
+  if (bucket === "endgame_pawn") return "pawn_endgame";
+
+  const normalizedOpening = typeof openingName === "string" ? normalizeClusterPart(openingName) : "";
+  if (phase === "opening" && normalizedOpening && normalizedOpening.length <= 20) {
+    return normalizedOpening;
+  }
+
+  return null;
+}
+
+function normalizeEco(value: string): string {
+  const match = value.trim().toUpperCase().match(/^[A-E][0-9]{2}/);
+  return match ? match[0].toLowerCase() : "";
+}
+
+function normalizeClusterPart(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 48);
 }
 
 function normalizeClusterStats(raw: unknown): ClusterStats {
