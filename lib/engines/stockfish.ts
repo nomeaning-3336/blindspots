@@ -66,12 +66,21 @@ export const stockfishHarness: EngineHarness = {
         timeLimitMs: options.timeLimitMs,
       });
       const candidates = fullResult.candidates.length > 0
-        ? fullResult.candidates
-        : [{ uci: fullResult.bestMove, cp: null, mate: null, depth: fullResult.depth, rank: 0, pv: [fullResult.bestMove] }];
+        ? fullResult.candidates.filter((candidate) => isValidUciMove(candidate.uci))
+        : isValidUciMove(fullResult.bestMove)
+          ? [{ uci: fullResult.bestMove, cp: null, mate: null, depth: fullResult.depth, rank: 0, pv: [fullResult.bestMove] }]
+          : [];
+      if (candidates.length === 0) {
+        throw new EngineError(
+          `Stockfish returned no legal move for FEN ${fen}.`,
+          "engine_error",
+        );
+      }
       let selected = sampleCandidate(candidates, targetElo);
 
       if (targetElo < 2000) {
         await engine.setMultiPv(1);
+        assertValidEngineMove(fen, selected.uci);
         const selectedFen = fenAfterMove(fen, selected.uci);
         const selectedFull = await engine.search(selectedFen, { depthLimit: fullDepth });
         const selectedShallow = await engine.search(selectedFen, { depthLimit: shallowDepth });
@@ -81,14 +90,15 @@ export const stockfishHarness: EngineHarness = {
           const hiddenCombinationDelta = Math.abs(fullCp - shallowCp);
           if (hiddenCombinationDelta > 80) {
             const shallowBest = await engine.search(fen, { depthLimit: shallowDepth });
-            selected = shallowBest.candidates[0] ?? {
+            const shallowCandidate = shallowBest.candidates.find((candidate) => isValidUciMove(candidate.uci));
+            selected = shallowCandidate ?? (isValidUciMove(shallowBest.bestMove) ? {
               uci: shallowBest.bestMove,
               cp: null,
               mate: null,
               depth: shallowBest.depth,
               rank: 0,
               pv: [shallowBest.bestMove],
-            };
+            } : selected);
           }
         }
       }
@@ -99,6 +109,7 @@ export const stockfishHarness: EngineHarness = {
       return selected;
     });
 
+    assertValidEngineMove(fen, result.uci);
     const san = uciToSan(fen, result.uci);
 
     return {
@@ -419,7 +430,21 @@ function delay(ms: number) {
   });
 }
 
+export function isValidUciMove(value: string | null | undefined): value is string {
+  return typeof value === "string" && /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(value);
+}
+
+export function assertValidEngineMove(fen: string, uci: string | null | undefined): asserts uci is string {
+  if (!isValidUciMove(uci)) {
+    throw new EngineError(
+      `Stockfish returned no legal move for FEN ${fen}.`,
+      "engine_error",
+    );
+  }
+}
+
 function uciToSan(fen: string, uci: string) {
+  assertValidEngineMove(fen, uci);
   const chess = new Chess(fen);
   const move = chess.move({
     from: uci.slice(0, 2),
@@ -433,6 +458,7 @@ function uciToSan(fen: string, uci: string) {
 }
 
 function fenAfterMove(fen: string, uci: string) {
+  assertValidEngineMove(fen, uci);
   const chess = new Chess(fen);
   const move = chess.move({
     from: uci.slice(0, 2),
