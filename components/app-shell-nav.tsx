@@ -31,6 +31,7 @@ const analyzePrefetchLinks = [
 ] as const;
 
 const appLinks = [
+  { href: "/dashboard", label: "Dashboard" },
   { href: "/analysis", label: "Analysis" },
   { href: "/train", label: "Train" },
   { href: "/performance", label: "Performance" },
@@ -132,7 +133,8 @@ export function AppShellNav({
   const pathname = usePathname();
   const nextPath =
     pathname &&
-    (pathname.startsWith("/train") ||
+    (pathname.startsWith("/dashboard") ||
+      pathname.startsWith("/train") ||
       pathname.startsWith("/analysis") ||
       pathname.startsWith("/performance") ||
       pathname.startsWith("/account"))

@@ -17,10 +17,12 @@ export function normalizeNextPath(value?: string | null) {
   if (value === "/app/analyze" || value === "/app/analyze/") return DEFAULT_APP_ROUTE;
   if (value.startsWith("/app/")) return normalizeNextPath(value.slice(4) || DEFAULT_APP_ROUTE);
   if (
+    value === "/dashboard" ||
     value === "/analysis" ||
     value === "/train" ||
     value === "/performance" ||
     value === "/account" ||
+    value.startsWith("/dashboard/") ||
     value.startsWith("/analysis/") ||
     value.startsWith("/train/") ||
     value.startsWith("/performance/") ||
