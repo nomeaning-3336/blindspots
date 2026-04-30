@@ -31,7 +31,7 @@ const analyzePrefetchLinks = [
 ] as const;
 
 const appLinks = [
-  { href: "/dashboard", label: "Dashboard" },
+  { href: "/", label: "Dashboard" },
   { href: "/analysis", label: "Analysis" },
   { href: "/train", label: "Train" },
   { href: "/performance", label: "Performance" },
@@ -133,7 +133,7 @@ export function AppShellNav({
   const pathname = usePathname();
   const nextPath =
     pathname &&
-    (pathname.startsWith("/dashboard") ||
+    (pathname === "/" ||
       pathname.startsWith("/train") ||
       pathname.startsWith("/analysis") ||
       pathname.startsWith("/performance") ||
@@ -162,7 +162,9 @@ export function AppShellNav({
       <nav className="flex flex-wrap items-center gap-2">
         {appLinks.map((link) => {
           const isActive =
-            pathname === link.href || pathname.startsWith(`${link.href}/`);
+            link.href === "/"
+              ? pathname === "/"
+              : pathname === link.href || pathname.startsWith(`${link.href}/`);
 
           return (
             <AppShellLink
