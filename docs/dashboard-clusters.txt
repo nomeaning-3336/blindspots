@@ -1,0 +1,186 @@
+Blindspots dashboard clusters
+Generated from app cluster ID rules as of 2026-04-30.
+
+Cluster ID format
+-----------------
+New sessions write:
+
+  app:v1:<phase>:<bucket>[:<primary_key>]
+
+The dashboard label is derived from phase, bucket, and primary_key.
+The primary_key suffix is omitted when no meaningful key exists.
+
+Important limit
+---------------
+The cluster space is not fully finite.
+
+If a served position includes a useful selectedTags entry, that actual tag wins.
+For opening positions, ECO wins before selectedTags and openingName because ECO is
+bounded and recognizable. If no ECO exists, a useful selectedTags value can win.
+If no ECO or useful tag exists, a short normalized openingName can become the
+primary_key.
+
+So this file lists:
+
+  1. All finite built-in fallback clusters from current bucket rules.
+  2. Dynamic patterns that can be produced from real tags/ECO/opening metadata.
+  3. Backward-compatible legacy v0 cluster forms.
+
+No fine-grained motif tags are invented here.
+
+
+Finite built-in v1 fallback clusters
+------------------------------------
+These are produced when no more specific useful selectedTags value overrides the
+built-in fallback.
+
+app:v1:opening:opening
+  Label: Opening
+
+app:v1:opening:opening_gambit:gambit
+  Label: Opening — Gambit
+
+app:v1:opening:opening_development:development
+  Label: Opening — Development
+
+app:v1:middlegame:middlegame
+  Label: Middlegame
+
+app:v1:middlegame:middlegame_attack:attack
+  Label: Middlegame — Attack
+
+app:v1:middlegame:middlegame_positional:positional
+  Label: Middlegame — Positional
+
+app:v1:endgame:endgame
+  Label: Endgame
+
+app:v1:endgame:endgame_rook:rook_endgame
+  Label: Endgame — Rook Endgame
+
+app:v1:endgame:endgame_pawn:pawn_endgame
+  Label: Endgame — Pawn Endgame
+
+app:v1:tactic:tactic:tactic
+  Label: Tactical Positions
+
+app:v1:unknown:wildcard
+  Label: Unknown — General
+
+
+Dynamic v1 patterns
+-------------------
+These can be produced from existing served-position/request metadata.
+
+Opening ECO fallback:
+
+  app:v1:opening:<bucket>:<normalized_eco>
+
+Rules:
+  - Used only for opening phase.
+  - ECO is preferred over selectedTags and openingName.
+  - ECO must match A00 through E99 shape, normalized lowercase.
+
+Useful selectedTags value:
+
+  app:v1:<phase>:<bucket>:<normalized_selected_tag>
+
+Rules:
+  - selectedTags are normalized to lowercase snake_case.
+  - Generic tags are ignored: opening, middlegame, endgame, unknown, general.
+  - Redundant tags are ignored when they equal phase, bucket, or bucket without
+    the phase prefix.
+  - The first useful normalized tag wins after the ECO check.
+
+Opening name fallback:
+
+  app:v1:opening:<bucket>:<normalized_opening_name>
+
+Rules:
+  - Used only for opening phase.
+  - Used only when no ECO or useful selectedTags value exists.
+  - Used only when the normalized openingName is 20 chars or shorter.
+
+Normalization:
+
+  trim
+  lowercase
+  replace non-alphanumeric runs with "_"
+  trim leading/trailing "_"
+  max length 48 chars
+
+
+Dashboard display filtering
+---------------------------
+The dashboard does not display every persisted cluster key.
+
+Visible dashboard clusters must:
+
+  - have severity greater than 0
+  - have at least 5 attempts
+  - not have phase "unknown"
+  - not have bucket "wildcard"
+
+The dashboard shows at most 8 clusters.
+
+
+Current phases
+--------------
+opening
+middlegame
+endgame
+tactic
+unknown
+
+
+Current buckets
+---------------
+opening
+opening_gambit
+opening_development
+middlegame
+middlegame_attack
+middlegame_positional
+endgame
+endgame_rook
+endgame_pawn
+tactic
+wildcard
+
+
+Legacy v0 forms still supported by dashboard parsing
+----------------------------------------------------
+Existing rows are not migrated. The dashboard humanizes these instead.
+
+app:v0:opening:opening
+  Label: Opening
+
+app:v0:opening:opening_gambit
+  Label: Opening — Gambit
+
+app:v0:opening:opening_development
+  Label: Opening — Development
+
+app:v0:middlegame:middlegame
+  Label: Middlegame
+
+app:v0:middlegame:middlegame_attack
+  Label: Middlegame — Attack
+
+app:v0:middlegame:middlegame_positional
+  Label: Middlegame — Positional
+
+app:v0:endgame:endgame
+  Label: Endgame
+
+app:v0:endgame:endgame_rook
+  Label: Endgame — Rook Endgame
+
+app:v0:endgame:endgame_pawn
+  Label: Endgame — Pawn Endgame
+
+app:v0:tactic:tactic
+  Label: Tactical Positions
+
+app:v0:unknown:wildcard
+  Label: Unknown — General

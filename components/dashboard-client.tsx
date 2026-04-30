@@ -232,7 +232,7 @@ function Clusters({ clusters }: { clusters: DashboardSummary["clusters"] }) {
   if (!clusters.length) {
     return (
       <section>
-        <SectionLabel right="Sorted by severity">Recurring weakness clusters</SectionLabel>
+        <SectionLabel right="Sorted by severity">Where you keep losing evaluation</SectionLabel>
         <Panel className="p-4">
           <div className="text-sm text-[var(--app-text)]">No cluster history yet.</div>
           <div className="mt-1 text-xs leading-6 text-[var(--app-muted)]">
@@ -245,7 +245,7 @@ function Clusters({ clusters }: { clusters: DashboardSummary["clusters"] }) {
 
   return (
     <section>
-      <SectionLabel right="Sorted by severity">Recurring weakness clusters</SectionLabel>
+      <SectionLabel right="Sorted by severity">Where you keep losing evaluation</SectionLabel>
       <Panel>
         <div className="hidden grid-cols-[minmax(180px,1.3fr)_minmax(120px,1fr)_repeat(5,minmax(58px,0.5fr))] border-b border-[var(--app-border-soft)] px-4 py-3 text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)] md:grid">
           <span>Cluster</span>
@@ -262,7 +262,7 @@ function Clusters({ clusters }: { clusters: DashboardSummary["clusters"] }) {
             className="grid grid-cols-2 gap-3 border-b border-[var(--app-border-soft)] px-4 py-4 text-xs last:border-b-0 md:grid-cols-[minmax(180px,1.3fr)_minmax(120px,1fr)_repeat(5,minmax(58px,0.5fr))] md:items-center"
           >
             <div className="col-span-2 min-w-0 md:col-span-1">
-              <div className="truncate font-bold text-[var(--app-text)]">{cluster.label ?? cluster.id}</div>
+              <div className="truncate font-bold text-[var(--app-text)]">{cluster.label ?? "General"}</div>
               <div className="mt-1 text-[10px] text-[var(--app-muted-soft)]">{cluster.attempts} attempts</div>
             </div>
             <div className="col-span-2 flex min-w-0 flex-wrap gap-1.5 md:col-span-1">
