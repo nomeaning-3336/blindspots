@@ -3292,6 +3292,7 @@ function AnalysisMoveTable({
         const positionIndex = (move.absoluteIndex ?? index) + 1;
         const isSelected = selectedMoveIndex != null && selectedMoveIndex === positionIndex;
         const pendingValue = isAnalyzing ? "..." : "--";
+        const visibleClassification = showEvaluations ? move.classification : undefined;
         return (
         <button
           type="button"
@@ -3311,8 +3312,8 @@ function AnalysisMoveTable({
           onPointerLeave={() => onHoverMove?.(null)}
         >
           <span className="flex min-w-0 items-center gap-2 font-bold">
-            {showEvaluations && move.classification ? <ClassificationBadge classification={move.classification} /> : null}
-            <span className="truncate" style={{ color: classificationColor(move.classification) }}>
+            {visibleClassification ? <ClassificationBadge classification={visibleClassification} /> : null}
+            <span className="truncate" style={{ color: classificationColor(visibleClassification) }}>
               {move.san}
             </span>
           </span>
@@ -3381,6 +3382,8 @@ function MoveList({
       ) : null}
       {rows.map((row, index) => {
         const prefix = row.isFirstBlack ? `${row.moveNumber}... ` : `${row.moveNumber}. `;
+        const whiteClassification = showEvaluations ? row.white?.classification : undefined;
+        const blackClassification = showEvaluations ? row.black?.classification : undefined;
         return (
           <div
             data-testid="train-move-row"
@@ -3392,8 +3395,8 @@ function MoveList({
           >
             <span data-testid="train-move-row-number" className="text-right text-[var(--app-muted)]">{prefix}</span>
             <span data-testid="train-move-white" className="flex min-w-0 items-center gap-2 pl-8 font-bold">
-              {showEvaluations && row.white?.classification ? <ClassificationBadge classification={row.white.classification} /> : null}
-              <span className="truncate" style={{ color: classificationColor(row.white?.classification) }}>
+              {whiteClassification ? <ClassificationBadge classification={whiteClassification} /> : null}
+              <span className="truncate" style={{ color: classificationColor(whiteClassification) }}>
                 {row.white?.san ?? ""}
               </span>
               {showEvaluations && typeof row.white?.cpLoss === "number" ? (
@@ -3403,8 +3406,8 @@ function MoveList({
               ) : null}
             </span>
             <span data-testid="train-move-black" className="flex min-w-0 items-center gap-2 font-bold">
-              {showEvaluations && row.black?.classification ? <ClassificationBadge classification={row.black.classification} /> : null}
-              <span className="truncate" style={{ color: classificationColor(row.black?.classification) }}>
+              {blackClassification ? <ClassificationBadge classification={blackClassification} /> : null}
+              <span className="truncate" style={{ color: classificationColor(blackClassification) }}>
                 {row.black?.san ?? ""}
               </span>
               {showEvaluations && typeof row.black?.cpLoss === "number" ? (
