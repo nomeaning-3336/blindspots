@@ -7,34 +7,8 @@ import {
   getSupabaseServerUser,
 } from "@/lib/supabase/server";
 import { isSupabaseSessionCookie } from "@/lib/supabase/auth-cookies";
-
-export const DEFAULT_APP_ROUTE = "/analysis";
-
-export function normalizeNextPath(value?: string | null) {
-  if (!value) return DEFAULT_APP_ROUTE;
-  if (value === "/app") return DEFAULT_APP_ROUTE;
-  if (value === "/analyze" || value === "/analyze/") return DEFAULT_APP_ROUTE;
-  if (value === "/app/analyze" || value === "/app/analyze/") return DEFAULT_APP_ROUTE;
-  if (value.startsWith("/app/")) return normalizeNextPath(value.slice(4) || DEFAULT_APP_ROUTE);
-  if (
-    value === "/dashboard" ||
-    value === "/analysis" ||
-    value === "/train" ||
-    value === "/performance" ||
-    value === "/account" ||
-    value.startsWith("/dashboard/") ||
-    value.startsWith("/analysis/") ||
-    value.startsWith("/train/") ||
-    value.startsWith("/performance/") ||
-    value.startsWith("/account/")
-  ) {
-    return value;
-  }
-  if (value.startsWith("/analyze/")) {
-    return `/analysis/${value.slice("/analyze/".length)}`;
-  }
-  return DEFAULT_APP_ROUTE;
-}
+import { normalizeNextPath } from "@/lib/app-routes";
+export { DEFAULT_APP_ROUTE, normalizeNextPath } from "@/lib/app-routes";
 
 export async function getShellAuthHint() {
   const cookieStore = await cookies();

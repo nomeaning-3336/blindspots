@@ -3,6 +3,9 @@ import { PublicHeaderClient } from "@/components/public-header";
 import { PublicFaq } from "@/components/public-faq";
 import { getOptionalAppUserId } from "@/lib/app-auth";
 import { AnalysisBoard } from "@/components/chess/analysis-board";
+import { DashboardClient } from "@/components/dashboard-client";
+import { ProtectedAppShell } from "@/components/protected-app-shell";
+import { getDashboardSummary } from "@/lib/dashboard-server";
 
 const loopSteps = [
   {
@@ -215,6 +218,19 @@ function DifferenceCard({
 export default async function HomePage() {
   const userId = await getOptionalAppUserId();
   const isSignedIn = Boolean(userId);
+
+  if (userId) {
+    const summary = await getDashboardSummary(userId);
+
+    return (
+      <ProtectedAppShell isSignedIn={true}>
+        <section className="app-scroll w-full overflow-auto pb-8 pt-4 sm:pt-6">
+          <DashboardClient summary={summary} />
+        </section>
+      </ProtectedAppShell>
+    );
+  }
+
   const startHref = isSignedIn ? "/train" : "/sign-up?next=%2Ftrain";
 
   return (
