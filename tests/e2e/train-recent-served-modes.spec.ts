@@ -42,7 +42,7 @@ test.describe("train-recent-served-modes", () => {
 
       if (data.error) {
         console.error(`Call ${i + 1} fetch error:`, data);
-        results.push({ call: i + 1, profileUserId: 'FETCH_ERROR', selectedServeMode: 'ERROR', beforeCount: -1, afterCount: -1, status: -1 });
+        results.push({ call: i + 1, profileUserId: 'FETCH_ERROR', selectedServeMode: 'ERROR', beforeCount: -1, afterCount: -1, rawCount: -1, source: 'ERROR', status: -1 });
         continue;
       }
 
@@ -57,7 +57,7 @@ test.describe("train-recent-served-modes", () => {
         afterCount: (debug?.nextRecentServedModesCount as number) ?? -1,
         rawCount: (debug?.optionalRecentServedModesRawCount as number) ?? -1,
         source: (debug?.recentServedModesSource as string) ?? "unknown",
-        status,
+        status: status ?? -1,
       });
     }
 
