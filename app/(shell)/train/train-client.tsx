@@ -191,10 +191,11 @@ import {
   type PlayTrainSoundOptions,
 } from "@/lib/train-audio";
 
+const postmortemActionTextClassName = "text-center text-xs font-bold uppercase leading-none tracking-[0.12em]";
 const primaryActionClassName =
-  "inline-flex min-h-11 items-center justify-center rounded-[8px] border border-[var(--app-accent)] bg-[var(--app-accent)] px-4 text-center text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]";
+  `inline-flex min-h-11 items-center justify-center rounded-[8px] border border-[var(--app-accent)] bg-[var(--app-accent)] px-4 ${postmortemActionTextClassName} text-black transition hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]`;
 const secondaryActionClassName =
-  "inline-flex min-h-11 items-center justify-center rounded-[8px] border border-[var(--app-border)] bg-transparent px-4 text-center text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]";
+  `inline-flex min-h-11 items-center justify-center rounded-[8px] border border-[var(--app-border)] bg-transparent px-4 ${postmortemActionTextClassName} text-[var(--app-text)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]`;
 
 function readVisualPreferences() {
   let storedPreferences: Partial<AnalyzePreferences> | null = null;

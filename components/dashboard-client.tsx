@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { DashboardClassifications, DashboardSummary } from "@/lib/dashboard";
+import { classificationColor } from "@/lib/training-board-ui";
 
 type DashboardView = "summary" | "clusters";
 
@@ -12,26 +13,28 @@ const CLASS_ROWS: Array<{
   color: string;
   canonical?: boolean;
 }> = [
-  { id: "best", label: "Best", color: "var(--app-class-best)", canonical: true },
-  { id: "excellent", label: "Excellent", color: "var(--app-class-excellent)", canonical: true },
-  { id: "good", label: "Good", color: "var(--app-class-good)", canonical: true },
+  { id: "critical", label: "Critical", color: classificationColor("critical"), canonical: true },
+  { id: "best", label: "Best", color: classificationColor("best"), canonical: true },
+  { id: "excellent", label: "Excellent", color: classificationColor("excellent"), canonical: true },
+  { id: "good", label: "Good", color: classificationColor("good"), canonical: true },
   { id: "okay", label: "Okay", color: "var(--app-class-okay)" },
-  { id: "inaccuracy", label: "Inaccuracy", color: "var(--app-class-inaccuracy)", canonical: true },
-  { id: "mistake", label: "Mistake", color: "var(--app-class-mistake)", canonical: true },
-  { id: "blunder", label: "Blunder", color: "var(--app-class-blunder)", canonical: true },
-  { id: "critical", label: "Critical", color: "var(--app-class-critical)", canonical: true },
+  { id: "inaccuracy", label: "Inaccuracy", color: classificationColor("inaccuracy"), canonical: true },
+  { id: "mistake", label: "Mistake", color: classificationColor("mistake"), canonical: true },
+  { id: "blunder", label: "Blunder", color: classificationColor("blunder"), canonical: true },
 ];
 
 const CLASS_COLORS: Record<string, string> = {
-  best: "var(--app-class-best)",
-  excellent: "var(--app-class-excellent)",
-  good: "var(--app-class-good)",
+  best: classificationColor("best"),
+  excellent: classificationColor("excellent"),
+  good: classificationColor("good"),
   okay: "var(--app-class-okay)",
-  inaccuracy: "var(--app-class-inaccuracy)",
-  mistake: "var(--app-class-mistake)",
-  blunder: "var(--app-class-blunder)",
-  critical: "var(--app-class-critical)",
+  inaccuracy: classificationColor("inaccuracy"),
+  mistake: classificationColor("mistake"),
+  blunder: classificationColor("blunder"),
+  critical: classificationColor("critical"),
 };
+
+const DASHBOARD_CLASSIFICATION_COLUMN_BREAK: keyof DashboardClassifications = "mistake";
 
 export function DashboardClient({ summary }: { summary: DashboardSummary }) {
   const [view, setView] = useState<DashboardView>("summary");
@@ -148,6 +151,13 @@ function MoveClassifications({ classifications }: { classifications: DashboardCl
 
   const total = rows.reduce((sum, row) => sum + classifications[row.id], 0);
   const displayTotal = Math.max(total, 1);
+  const firstProblemIndex = rows.findIndex((row) => row.id === DASHBOARD_CLASSIFICATION_COLUMN_BREAK);
+  const rowCount = Math.max(
+    1,
+    firstProblemIndex > 0
+      ? firstProblemIndex
+      : Math.ceil(rows.length / 2),
+  );
 
   return (
     <section className="min-w-0">
@@ -166,7 +176,10 @@ function MoveClassifications({ classifications }: { classifications: DashboardCl
             );
           })}
         </div>
-        <div className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+        <div
+          className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-flow-col sm:grid-cols-2"
+          style={{ gridTemplateRows: `repeat(${rowCount}, minmax(0, auto))` }}
+        >
           {rows.map((row) => {
             const count = classifications[row.id];
             const pct = total > 0 ? `${((count / total) * 100).toFixed(1)}%` : "0.0%";
