@@ -1,0 +1,65 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: blindspots-production-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy production
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy over SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_KEY: ${{ secrets.KEYPAIR_PEM }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh
+          printf '%s' "$VPS_SSH_KEY" | tr -d '\r' > ~/.ssh/blindspots_deploy_key
+          printf '\n' >> ~/.ssh/blindspots_deploy_key
+          chmod 600 ~/.ssh/blindspots_deploy_key
+
+          ssh-keyscan -p "${VPS_PORT:-22}" "$VPS_HOST" >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/blindspots_deploy_key \
+            -p "${VPS_PORT:-22}" \
+            "$VPS_USER@$VPS_HOST" 'bash -se' <<'EOF'
+          set -euo pipefail
+
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          nvm use 24.12.0
+
+          cd /var/www/blindspots
+
+          test -f .env.production
+
+          git fetch origin main
+          git reset --hard origin/main
+
+          npm ci
+          npm run build
+
+          PORT=3000 pm2 reload blindspots --update-env || PORT=3000 pm2 start npm --name blindspots -- start
+          pm2 save
+
+          sleep 3
+          if ! curl -fsS http://127.0.0.1:3000/api/health > /dev/null; then
+            echo "Health check failed after deploy"
+            pm2 logs blindspots --lines 80 --nostream
+            exit 1
+          fi
+
+          echo "Deploy succeeded and health check passed"
+          EOF
