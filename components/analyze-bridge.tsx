@@ -22,6 +22,8 @@ const ANALYZE_STYLE_ID = "analyze-style";
 const ANALYZE_OVERRIDE_ID = "analyze-react-override";
 const ANALYZE_CHESS_SCRIPT_ID = "analyze-chess-js";
 const ANALYZE_APP_SCRIPT_ID = "analyze-runtime";
+const ANALYZE_PAGE_TITLE =
+  "Blindspots.gg - Chess Training for the Positions You Keep Getting Wrong";
 
 function ensureStyleLink(id: string, href: string) {
   const existing = document.getElementById(id) as HTMLLinkElement | null;
@@ -785,6 +787,7 @@ async function bootAnalyzeRuntime() {
     ANALYZE_APP_SCRIPT_ID,
     `${ANALYZE_BASE_PATH}/standalone.js?v=${encodeURIComponent(ANALYZE_ASSET_VERSION)}`,
   );
+  document.title = ANALYZE_PAGE_TITLE;
 }
 
 function resetAnalyzeBootAssets() {
@@ -809,6 +812,13 @@ export function AnalyzeBridge({
     const host = hostRef.current;
     const hoverCleanups: Array<() => void> = [];
     let themeObserver: MutationObserver | null = null;
+    let titleObserver: MutationObserver | null = null;
+
+    const enforceAnalyzeTitle = () => {
+      if (document.title !== ANALYZE_PAGE_TITLE) {
+        document.title = ANALYZE_PAGE_TITLE;
+      }
+    };
 
     const syncViewportRoom = () => {
       if (!host) return;
@@ -852,6 +862,16 @@ export function AnalyzeBridge({
     };
 
     document.body.classList.add("analyze-embedded");
+    enforceAnalyzeTitle();
+    const titleElement = document.querySelector("title");
+    if (titleElement) {
+      titleObserver = new MutationObserver(enforceAnalyzeTitle);
+      titleObserver.observe(titleElement, {
+        childList: true,
+        characterData: true,
+        subtree: true,
+      });
+    }
     window.__CHESSVIEW_INITIAL_ANALYZE_PREFERENCES__ = initialPreferences;
     window.__CHESSVIEW_ANALYZE_PREFERENCES_PERSIST_URL__ =
       analyzePreferencesPersistUrl;
@@ -901,6 +921,7 @@ export function AnalyzeBridge({
     bootState.promise
       .then(() => {
         if (cancelled) return;
+        enforceAnalyzeTitle();
         syncAppTheme();
         wireVisualHoverState();
         if (host?.querySelector("#app")?.hasChildNodes()) {
@@ -934,6 +955,7 @@ export function AnalyzeBridge({
       window.cancelAnimationFrame(syncLater);
       window.removeEventListener("resize", syncViewportRoom);
       themeObserver?.disconnect();
+      titleObserver?.disconnect();
       hoverCleanups.forEach((cleanup) => cleanup());
       document.body.classList.remove("analyze-embedded");
     };
