@@ -65,11 +65,11 @@ export function classificationColor(classification?: MoveClassification) {
     case "critical":
       return "var(--app-class-critical)";
     case "best":
-      return "var(--app-class-best)";
+      return "var(--app-class-good)";
     case "excellent":
       return "var(--app-class-excellent)";
     case "good":
-      return "var(--app-class-good)";
+      return "var(--app-class-best)";
     case "inaccuracy":
       return "var(--app-class-inaccuracy)";
     case "mistake":
