@@ -43,7 +43,7 @@ export function DashboardClient({ summary }: { summary: DashboardSummary }) {
   return (
     <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-6">
       <Hero summary={summary} hasData={hasData} />
-      <div className="flex justify-end">
+      <div className="flex justify-center">
         <ViewToggle view={view} setView={setView} />
       </div>
       {view === "summary" ? (
@@ -112,7 +112,15 @@ function ProgressSnapshot({ summary, hasData }: { summary: DashboardSummary; has
           sub={summary.eloDeltaSession == null ? undefined : signed(summary.eloDeltaSession)}
           tone={summary.eloDeltaSession == null ? undefined : summary.eloDeltaSession < 0 ? "down" : "up"}
         />
-        <StatTile label="Last session" value={formatDate(summary.lastSessionAt)} sub={summary.lastSessionAt ? undefined : "never"} />
+        <StatTile
+          label="Last session"
+          value={formatDate(summary.lastSessionAt).text}
+          sub={(function() {
+            const { daysAgo } = formatDate(summary.lastSessionAt, true);
+            if (daysAgo == null) return summary.lastSessionAt ? undefined : "never";
+            return formatDaysAgo(daysAgo);
+          })()}
+        />
       </div>
     </section>
   );
@@ -344,11 +352,11 @@ function SectionLabel({ children, right }: { children: React.ReactNode; right?: 
 
 function StatTile({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "up" | "down" }) {
   return (
-    <Panel className="min-h-24 p-4">
-      <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--app-muted)]">{label}</div>
-      <div className="flex min-w-0 items-baseline gap-2">
-        <span className="min-w-0 truncate text-[24px] font-bold leading-none text-[var(--app-text)]">{value}</span>
-        {sub ? <span className={["text-[11px]", toneClass(tone)].join(" ")}>{sub}</span> : null}
+    <Panel className="flex min-h-24 flex-col justify-between p-4">
+      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--app-muted)]">{label}</div>
+      <div className="min-w-0 pt-4">
+        <div className="min-w-0 truncate text-[24px] font-bold leading-none text-[var(--app-text)]">{value}</div>
+        {sub ? <div className={["mt-2 truncate text-[11px] leading-none", toneClass(tone)].join(" ")}>{sub}</div> : null}
       </div>
     </Panel>
   );
@@ -394,11 +402,20 @@ function signed(value: number | null) {
   return value > 0 ? `+${value}` : String(value);
 }
 
-function formatDate(value: string | null) {
-  if (!value) return "-";
+function formatDate(value: string | null, includeDaysAgo = false) {
+  if (!value) return { text: "-", daysAgo: null };
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  if (Number.isNaN(date.getTime())) return { text: "-", daysAgo: null };
+  const text = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  if (!includeDaysAgo) return { text, daysAgo: null };
+  const daysAgo = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+  return { text, daysAgo };
+}
+
+function formatDaysAgo(daysAgo: number) {
+  if (daysAgo <= 0) return "today";
+  if (daysAgo === 1) return "yesterday";
+  return `${daysAgo}d ago`;
 }
 
 function formatDateTime(value: string) {
