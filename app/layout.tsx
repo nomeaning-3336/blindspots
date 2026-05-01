@@ -3,6 +3,7 @@ import { JetBrains_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 import { PageTransition } from "@/components/navigation/page-transition";
 import { getUserAppTheme } from "@/lib/app-theme-store";
+import { PostHogProvider } from "./providers";
 import "./globals.css";
 
 const jetbrainsMono = JetBrains_Mono({
@@ -53,7 +54,9 @@ export default async function RootLayout({
       data-theme={theme ?? undefined}
     >
       <body>
-        <PageTransition>{children}</PageTransition>
+        <PostHogProvider>
+          <PageTransition>{children}</PageTransition>
+        </PostHogProvider>
       </body>
     </html>
   );
