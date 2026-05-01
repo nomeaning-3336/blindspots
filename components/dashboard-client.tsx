@@ -102,7 +102,7 @@ function Hero({ summary, hasData }: { summary: DashboardSummary; hasData: boolea
 function ProgressSnapshot({ summary, hasData }: { summary: DashboardSummary; hasData: boolean }) {
   return (
     <section>
-      <SectionLabel>01 / Progress snapshot</SectionLabel>
+      <SectionLabel>Progress snapshot</SectionLabel>
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <StatTile label="Sequences" value={hasData ? formatNumber(summary.totalSequences) : "-"} sub={hasData ? "completed" : "no data"} />
         <StatTile label="Moves evaluated" value={hasData ? formatNumber(summary.movesEvaluated) : "-"} sub={hasData ? "Stockfish" : "go train"} />
@@ -121,7 +121,7 @@ function ProgressSnapshot({ summary, hasData }: { summary: DashboardSummary; has
 function TrainingQueues({ summary, hasData }: { summary: DashboardSummary; hasData: boolean }) {
   return (
     <section>
-      <SectionLabel>02 / Training queue</SectionLabel>
+      <SectionLabel>Training queue</SectionLabel>
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <QueueTile label="Mastered" value={summary.queueCounts.mastered} hasData={hasData} />
         <QueueTile label="Due for revisit" value={summary.queueCounts.revisit} hasData={hasData} />
@@ -161,7 +161,7 @@ function MoveClassifications({ classifications }: { classifications: DashboardCl
 
   return (
     <section className="min-w-0">
-      <SectionLabel right={`${formatNumber(total)} moves`}>03 / Move classifications</SectionLabel>
+      <SectionLabel right={`${formatNumber(total)} moves`}>Move classifications</SectionLabel>
       <Panel className="p-4">
         <div className="mb-4 flex h-2 overflow-hidden border border-[var(--app-border-soft)] bg-[var(--app-bg)]">
           {rows.map((row) => {
@@ -188,7 +188,7 @@ function MoveClassifications({ classifications }: { classifications: DashboardCl
                 <span className="h-2 w-2" style={{ background: row.color }} />
                 <span className="min-w-0 truncate text-[var(--app-text)]">{row.label}</span>
                 <span className="font-bold text-[var(--app-text)]">{formatNumber(count)}</span>
-                <span className="text-right text-[var(--app-muted-soft)]">{pct}</span>
+                <span className="text-right font-bold text-[var(--app-text)]">{pct}</span>
               </div>
             );
           })}
@@ -202,7 +202,7 @@ function RecentSessions({ sessions }: { sessions: DashboardSummary["recentSessio
   if (!sessions.length) {
     return (
       <section className="min-w-0">
-        <SectionLabel>04 / Recent sessions</SectionLabel>
+        <SectionLabel>Recent sessions</SectionLabel>
         <Panel className="p-4 text-xs leading-6 text-[var(--app-muted)]">
           No completed sessions yet. Go train.
         </Panel>
@@ -335,7 +335,7 @@ function Panel({ children, className = "" }: { children: React.ReactNode; classN
 
 function SectionLabel({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
   return (
-    <div className="mb-3 flex items-center justify-between gap-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--app-muted)]">
+    <div className="mb-3 flex items-center justify-between gap-3 text-[13px] font-bold uppercase tracking-[0.2em] text-[var(--app-muted)]">
       <span>{children}</span>
       {right ? <span className="text-right text-[9px] tracking-[0.16em] text-[var(--app-muted-soft)]">{right}</span> : null}
     </div>
@@ -345,7 +345,7 @@ function SectionLabel({ children, right }: { children: React.ReactNode; right?: 
 function StatTile({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "up" | "down" }) {
   return (
     <Panel className="min-h-24 p-4">
-      <div className="mb-3 text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--app-muted)]">{label}</div>
+      <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--app-muted)]">{label}</div>
       <div className="flex min-w-0 items-baseline gap-2">
         <span className="min-w-0 truncate text-[24px] font-bold leading-none text-[var(--app-text)]">{value}</span>
         {sub ? <span className={["text-[11px]", toneClass(tone)].join(" ")}>{sub}</span> : null}
@@ -357,7 +357,7 @@ function StatTile({ label, value, sub, tone }: { label: string; value: string; s
 function QueueTile({ label, value, hasData }: { label: string; value: number; hasData: boolean }) {
   return (
     <Panel className="min-h-20 p-4">
-      <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--app-muted)]">{label}</div>
+      <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--app-muted)]">{label}</div>
       <div className={["text-[28px] font-bold leading-none", hasData && value > 0 ? "text-[var(--app-text)]" : "text-[var(--app-muted-soft)]"].join(" ")}>
         {hasData ? formatNumber(value) : "-"}
       </div>
