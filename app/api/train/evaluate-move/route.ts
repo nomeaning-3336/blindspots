@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { Chess } from "chess.js";
 import { getOptionalAppUserId } from "@/lib/app-auth";
-import { getPositionEval } from "@/lib/engines/dispatcher";
+import { getPositionEval, getLegalMoveLines } from "@/lib/engines/dispatcher";
+import {
+  classifyMoveAgainstBest,
+  type MoveClassification,
+} from "@/lib/move-classification";
 import { classifyTrainingBucket, classifyTrainingPhase } from "@/lib/training/position-metadata";
 
 export const runtime = "nodejs";
@@ -9,8 +13,6 @@ export const dynamic = "force-dynamic";
 
 const MATE_VISUAL_CP = 10000;
 const EVAL_TIME_LIMIT_MS = 1000;
-
-type MoveClassification = "excellent" | "good" | "inaccuracy" | "mistake" | "blunder";
 
 type EvaluateMovePayload = {
   decisionFen?: unknown;
@@ -21,16 +23,20 @@ type EvaluateMovePayload = {
   selectedTags?: unknown;
 };
 
-function classifyCpLoss(cpLoss: number): MoveClassification {
-  if (cpLoss <= 30) return "excellent";
-  if (cpLoss <= 90) return "good";
-  if (cpLoss <= 180) return "inaccuracy";
-  if (cpLoss <= 320) return "mistake";
-  return "blunder";
+function comparableEval(line: { cp: number }, fen: string) {
+  const cp = Math.max(-100000, Math.min(100000, Number(line.cp) || 0));
+  return fen.split(/\s+/)[1] === "b" ? -cp : cp;
 }
 
 function getBanditResult(classification: MoveClassification): "success" | "neutral" | "failure" {
-  if (classification === "excellent" || classification === "good") return "success";
+  if (
+    classification === "best" ||
+    classification === "critical" ||
+    classification === "excellent" ||
+    classification === "good"
+  ) {
+    return "success";
+  }
   if (classification === "inaccuracy") return "neutral";
   return "failure";
 }
@@ -90,9 +96,8 @@ export async function POST(request: Request) {
 
   const chess = new Chess(decisionFen);
   const userColor = chess.turn();
-  const isUserMove = chess.turn() === userColor;
 
-  if (!isUserMove) {
+  if (chess.turn() !== userColor) {
     return NextResponse.json({ error: "Not user's turn to move." }, { status: 400 });
   }
 
@@ -140,6 +145,65 @@ export async function POST(request: Request) {
     });
   }
 
+  // Evaluate all legal moves from the decision position.
+  let legalLines: Awaited<ReturnType<typeof getLegalMoveLines>> = [];
+  try {
+    legalLines = await getLegalMoveLines(decisionFen, {
+      timeLimitMs: EVAL_TIME_LIMIT_MS,
+    });
+  } catch {
+    legalLines = [];
+  }
+
+  const phase = selectedPhase ?? classifyTrainingPhase(fenAfterUserMove);
+
+  // If legal-lines scan succeeded, score against the best line from the same FEN.
+  if (legalLines.length > 0) {
+    const sortedLines = [...legalLines].sort(
+      (left, right) => comparableEval(right, decisionFen) - comparableEval(left, decisionFen),
+    );
+    const bestLine = sortedLines[0]!;
+    const candidateLine = sortedLines.find((line) => line.bestMove === uci) ?? null;
+
+    if (bestLine && candidateLine) {
+      const rawEvalBefore = comparableEval(bestLine, decisionFen);
+      const rawEvalAfter = comparableEval(candidateLine, decisionFen);
+      const cpLoss = Math.max(0, Math.round(rawEvalBefore - rawEvalAfter));
+
+      const classification =
+        candidateLine.bestMove === bestLine.bestMove
+          ? "best"
+          : (classifyMoveAgainstBest(bestLine, candidateLine, decisionFen) ?? "good");
+
+      return NextResponse.json({
+        ok: true,
+        moveScore: {
+          userMoveIndex: 0,
+          cpLoss,
+          evalBefore: Math.round(rawEvalBefore),
+          evalAfter: Math.round(rawEvalAfter),
+          classification,
+        },
+        positionEvaluation: {
+          decisionFen,
+          userMove: { san, uci },
+          evalBefore: Math.round(rawEvalBefore),
+          evalAfter: Math.round(rawEvalAfter),
+          cpLoss,
+          classification,
+          banditResult: getBanditResult(classification),
+          fenAfterUserMove,
+          fenAfterEngineMove: null,
+          phase,
+          bucket: selectedBucket,
+          clusterId: deriveCoarseClusterId(phase, selectedBucket),
+          tags: selectedTags ?? [],
+        },
+      });
+    }
+  }
+
+  // Fallback: independent before/after eval (only when legal-lines scan is unavailable).
   const [evalBefore, evalAfter] = await Promise.all([
     getPositionEval(decisionFen, { timeLimitMs: EVAL_TIME_LIMIT_MS }),
     getPositionEval(fenAfterUserMove, { timeLimitMs: EVAL_TIME_LIMIT_MS }),
@@ -147,9 +211,9 @@ export async function POST(request: Request) {
 
   const evalBeforeSigned = userColor === "w" ? evalBefore.cp : -(evalBefore.cp);
   const evalAfterSigned = userColor === "w" ? evalAfter.cp : -(evalAfter.cp);
-  const cpLoss = Math.max(0, Math.round(evalBeforeSigned - evalAfterSigned));
+  const rawCpLoss = evalBeforeSigned - evalAfterSigned;
+  const cpLoss = Math.max(0, Math.min(10000, Math.round(rawCpLoss)));
   const classification = classifyCpLoss(cpLoss);
-  const phase = selectedPhase ?? classifyTrainingPhase(fenAfterUserMove);
 
   return NextResponse.json({
     ok: true,
@@ -182,4 +246,12 @@ function normalizeTags(value: unknown): string[] | null {
   if (!Array.isArray(value)) return null;
   const strings = value.filter((item): item is string => typeof item === "string");
   return strings.length > 0 ? strings : null;
+}
+
+function classifyCpLoss(cpLoss: number): MoveClassification {
+  if (cpLoss <= 30) return "excellent";
+  if (cpLoss <= 90) return "good";
+  if (cpLoss <= 180) return "inaccuracy";
+  if (cpLoss <= 320) return "mistake";
+  return "blunder";
 }
