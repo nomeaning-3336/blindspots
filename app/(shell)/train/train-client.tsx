@@ -192,7 +192,9 @@ import {
 } from "@/lib/train-audio";
 
 const primaryActionClassName =
-  "min-h-11 rounded-[8px] border border-[var(--app-accent)] bg-[var(--app-accent)] px-4 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]";
+  "inline-flex min-h-11 items-center justify-center rounded-[8px] border border-[var(--app-accent)] bg-[var(--app-accent)] px-4 text-center text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]";
+const secondaryActionClassName =
+  "inline-flex min-h-11 items-center justify-center rounded-[8px] border border-[var(--app-border)] bg-transparent px-4 text-center text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]";
 
 function readVisualPreferences() {
   let storedPreferences: Partial<AnalyzePreferences> | null = null;
@@ -899,6 +901,8 @@ export default function TrainPage() {
       setExploratoryLastMove(nextExploratoryPosition.lastMove);
       setHoveredEngineLineIndex(null);
       setHoveredMoveSquares(null);
+      setExploreSelectedSquare(null);
+      void fetchEngineLinesForFen(nextExploratoryPosition.fen);
     } catch {
       // The board only emits legal moves, but ignore stale exploratory FENs.
     }
@@ -1604,6 +1608,10 @@ export default function TrainPage() {
     const position = nextIndex >= 0 ? exploratoryHistory[nextIndex] : null;
     setExploratoryFen(position?.fen ?? null);
     setExploratoryLastMove(position?.lastMove ?? null);
+    setExploreSelectedSquare(null);
+    if (position?.fen) {
+      void fetchEngineLinesForFen(position.fen);
+    }
 
     if (movingForward && position?.move) {
       playTrainMoveSound({
@@ -3109,7 +3117,7 @@ function ResultsPanel({
               : undefined
           }
         />
-        <div className="mt-auto pt-1">
+        <div className="mt-auto grid grid-cols-2 gap-2 pt-1">
           <button
             type="button"
             className={`${primaryActionClassName} w-full`}
@@ -3117,6 +3125,9 @@ function ResultsPanel({
           >
             Next position
           </button>
+          <a href="/" className={`${secondaryActionClassName} w-full`}>
+            Return to Dashboard
+          </a>
         </div>
       </div>
     );
@@ -3127,7 +3138,7 @@ function ResultsPanel({
       <EloResultCard result={eloResult} isLoading={isSaving} />
       <EvalGraph points={graphPoints} currentIndex={positions.length - 1} compact engineCp={currentEngineEval} />
       <AnalysisMoveTable moves={userMoves} isAnalyzing={isSaving} compact showEvaluations={true} />
-      <div className="pt-1">
+      <div className="grid grid-cols-2 gap-2 pt-1">
         <button
           type="button"
           className={`${primaryActionClassName} w-full`}
@@ -3135,6 +3146,9 @@ function ResultsPanel({
         >
           Next position
         </button>
+        <a href="/" className={`${secondaryActionClassName} w-full`}>
+          Return to Dashboard
+        </a>
       </div>
     </div>
   );
