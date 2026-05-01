@@ -86,10 +86,14 @@ export async function POST(request: Request) {
     merged.push({ ...line, source: "candidate" });
   }
 
+  const sorted = [...merged].sort((left, right) =>
+    compareEngineLinesForSideToMove(right, left, fen),
+  );
+
   return NextResponse.json({
     ok: engineError === null,
     error: engineError,
-    lines: merged.map((line, index) => ({
+    lines: sorted.map((line, index) => ({
       cp: line.cp,
       mate: line.mate,
       depth: line.depth,
@@ -102,7 +106,7 @@ export async function POST(request: Request) {
       classification:
         line.source === "candidate"
           ? classifyMoveAgainstBest(bestLine, line, fen)
-          : classifyRankedMove(index, merged, fen),
+          : classifyRankedMove(index, sorted, fen),
     })),
   });
 }
@@ -143,4 +147,32 @@ function pvToSan(fen: string, pv: string[]) {
     san.push(move.san);
   }
   return san;
+}
+
+function comparableEval(line: MoveEvaluationLine, fen: string) {
+  const cp = Math.max(-100000, Math.min(100000, Number(line.cp) || 0));
+  return fen.split(/\s+/)[1] === "b" ? -cp : cp;
+}
+
+function mateSortScore(mate: number | null) {
+  if (mate === null) return 0;
+  if (mate > 0) return 100000 - Math.min(99, mate) * 1000;
+  return -100000 + Math.min(99, Math.abs(mate)) * 1000;
+}
+
+function compareEngineLinesForSideToMove(
+  left: MoveEvaluationLine,
+  right: MoveEvaluationLine,
+  fen: string,
+) {
+  const leftMate = typeof left.mate === "number" ? left.mate : null;
+  const rightMate = typeof right.mate === "number" ? right.mate : null;
+
+  if (leftMate !== null || rightMate !== null) {
+    const leftScore = mateSortScore(leftMate);
+    const rightScore = mateSortScore(rightMate);
+    if (leftScore !== rightScore) return leftScore - rightScore;
+  }
+
+  return comparableEval(left, fen) - comparableEval(right, fen);
 }
