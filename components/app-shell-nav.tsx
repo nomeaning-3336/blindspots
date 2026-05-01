@@ -30,12 +30,16 @@ const analyzePrefetchLinks = [
   },
 ] as const;
 
-const appLinks = [
+const authenticatedAppLinks = [
   { href: "/", label: "Dashboard" },
   { href: "/analysis", label: "Analysis" },
   { href: "/train", label: "Train" },
   { href: "/performance", label: "Performance" },
   { href: "/account", label: "Account" },
+];
+
+const publicAppLinks = [
+  { href: "/analysis", label: "Analysis" },
 ];
 
 function linkClassName(isActive: boolean) {
@@ -140,6 +144,7 @@ export function AppShellNav({
       pathname.startsWith("/account"))
       ? pathname
       : "/train";
+  const visibleLinks = isSignedIn ? authenticatedAppLinks : publicAppLinks;
 
   useEffect(() => {
     const scheduleIdle = window.requestIdleCallback ?? window.setTimeout;
@@ -160,7 +165,7 @@ export function AppShellNav({
         .join(" ")}
     >
       <nav className="flex flex-wrap items-center gap-2">
-        {appLinks.map((link) => {
+        {visibleLinks.map((link) => {
           const isActive =
             link.href === "/"
               ? pathname === "/"
