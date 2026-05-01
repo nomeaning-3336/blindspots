@@ -314,7 +314,7 @@ function ViewToggle({
               "-ml-px first:ml-0 border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] transition",
               active
                 ? "relative z-10 border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
-                : "border-[var(--app-border)] bg-transparent text-[var(--app-muted)] hover:border-[var(--app-accent)] hover:text-[var(--app-text)]",
+                : "cursor-pointer border-[var(--app-border)] bg-transparent text-[var(--app-muted)] hover:border-[var(--app-accent)] hover:text-[var(--app-text)]",
             ].join(" ")}
           >
             {item}
