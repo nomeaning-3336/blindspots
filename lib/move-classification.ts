@@ -1,9 +1,9 @@
 export type MoveClassification =
-  | "critical"
+  | "brilliant"
   | "best"
-  | "excellent"
   | "good"
-  | "inaccuracy"
+  | "interesting"
+  | "dubious"
   | "mistake"
   | "blunder";
 
@@ -13,21 +13,28 @@ export type MoveEvaluationLine = {
   bestMove?: string;
 };
 
+const CP_CEILING = 1000;
+const WIN_CHANCE_BLUNDER_LOSS = 20;
+const WIN_CHANCE_MISTAKE_LOSS = 10;
+const WIN_CHANCE_DUBIOUS_LOSS = 5;
+const WIN_CHANCE_FORCED_BEST_GAP = 10;
+const WIN_CHANCE_GOOD_GAIN = 5;
+const INTERESTING_SACRIFICE_MIN_CP = -200;
+
 export function classifyMoveAgainstBest(
   bestLine: MoveEvaluationLine | null | undefined,
   candidateLine: MoveEvaluationLine | null | undefined,
   fen: string,
 ): MoveClassification | undefined {
   if (!bestLine || !candidateLine) return undefined;
-  if (candidateLine.bestMove && bestLine.bestMove && candidateLine.bestMove === bestLine.bestMove) {
-    return "best";
-  }
 
-  const scoreLoss = expectedScoreLoss(bestLine, candidateLine, fen);
-  const cpLoss = centipawnLoss(bestLine, candidateLine, fen);
-  const byExpected = classifyExpectedScoreLoss(scoreLoss);
-  const byCp = classifyCentipawnLoss(cpLoss);
-  return worseClassification(byExpected, byCp);
+  return classifyEvaluatedMove({
+    previous: bestLine,
+    next: candidateLine,
+    color: sideToMove(fen),
+    prevMoves: [bestLine],
+    move: candidateLine.bestMove,
+  });
 }
 
 export function classifyRankedMove(
@@ -38,133 +45,130 @@ export function classifyRankedMove(
   const bestLine = lines[0];
   const candidateLine = lines[index];
   if (!bestLine || !candidateLine) return undefined;
-  if (index === 0) return looksCritical(bestLine, lines, fen) ? "critical" : "best";
+  if (index === 0) {
+    return hasForcedBestMoveGap(lines, sideToMove(fen)) ? "best" : "good";
+  }
+
   return classifyMoveAgainstBest(bestLine, candidateLine, fen);
 }
 
+export function classifyEvaluatedMove({
+  previous,
+  next,
+  color,
+  prevprev,
+  prevMoves = [],
+  isSacrifice = false,
+  move,
+}: {
+  previous: MoveEvaluationLine | null | undefined;
+  next: MoveEvaluationLine | null | undefined;
+  color: "w" | "b";
+  prevprev?: MoveEvaluationLine | null;
+  prevMoves?: MoveEvaluationLine[];
+  isSacrifice?: boolean;
+  move?: string;
+}): MoveClassification | undefined {
+  if (!next) return undefined;
+
+  return getAnnotation({
+    previous,
+    next,
+    color,
+    prevprev,
+    prevMoves,
+    isSacrifice,
+    move,
+  });
+}
+
 export function isRecommendableClassification(classification: MoveClassification | undefined) {
-  return classification !== "inaccuracy" && classification !== "mistake" && classification !== "blunder";
+  return classification !== "dubious" && classification !== "mistake" && classification !== "blunder";
 }
 
-function classifyExpectedScoreLoss(scoreLoss: number): MoveClassification {
-  if (scoreLoss <= 0.018) return "excellent";
-  if (scoreLoss <= 0.075) return "good";
-  if (scoreLoss <= 0.16) return "inaccuracy";
-  if (scoreLoss <= 0.27) return "mistake";
-  return "blunder";
-}
+function getAnnotation({
+  prevprev,
+  previous,
+  next,
+  color,
+  prevMoves,
+  isSacrifice,
+  move,
+}: {
+  prevprev?: MoveEvaluationLine | null;
+  previous: MoveEvaluationLine | null | undefined;
+  next: MoveEvaluationLine;
+  color: "w" | "b";
+  prevMoves: MoveEvaluationLine[];
+  isSacrifice?: boolean;
+  move?: string;
+}): MoveClassification | undefined {
+  const { prevCP, nextCP } = normalizeScores(previous ?? { cp: 0 }, next, color);
+  const winChanceDiff = getWinChance(prevCP) - getWinChance(nextCP);
 
-function classifyCentipawnLoss(cpLoss: number): MoveClassification {
-  if (cpLoss <= 30) return "excellent";
-  if (cpLoss <= 90) return "good";
-  if (cpLoss <= 180) return "inaccuracy";
-  if (cpLoss <= 320) return "mistake";
-  return "blunder";
-}
+  if (winChanceDiff > WIN_CHANCE_BLUNDER_LOSS) return "blunder";
+  if (winChanceDiff > WIN_CHANCE_MISTAKE_LOSS) return "mistake";
+  if (winChanceDiff > WIN_CHANCE_DUBIOUS_LOSS) return "dubious";
 
-function worseClassification(left: MoveClassification, right: MoveClassification): MoveClassification {
-  return classificationSeverity(left) >= classificationSeverity(right) ? left : right;
-}
+  if (prevMoves.length > 1) {
+    const bestGap = normalizeScores(prevMoves[0]!, prevMoves[1]!, color);
+    const playedBestMove = Boolean(move && prevMoves[0]?.bestMove && move === prevMoves[0].bestMove);
 
-function classificationSeverity(classification: MoveClassification) {
-  switch (classification) {
-    case "critical":
-    case "best":
-      return 0;
-    case "excellent":
-      return 1;
-    case "good":
-      return 2;
-    case "inaccuracy":
-      return 3;
-    case "mistake":
-      return 4;
-    case "blunder":
-      return 5;
-  }
-}
+    if (
+      getWinChance(bestGap.prevCP) - getWinChance(bestGap.nextCP) >
+        WIN_CHANCE_FORCED_BEST_GAP &&
+      playedBestMove
+    ) {
+      const gain = normalizeScores(prevprev ?? { cp: 0 }, prevMoves[0]!, color);
+      if (isSacrifice) return "brilliant";
+      if (getWinChance(gain.nextCP) - getWinChance(gain.prevCP) > WIN_CHANCE_GOOD_GAIN) {
+        return "good";
+      }
+      return "best";
+    }
 
-function looksCritical(bestLine: MoveEvaluationLine, lines: MoveEvaluationLine[], fen: string) {
-  if (!bestLine.bestMove || lines.length < 2) return false;
-
-  const danger = moveDangerProfile(lines, fen);
-  if (danger.recommendableAlternatives > 0) return false;
-  if (danger.bestEscapesMate) return true;
-  if (
-    danger.bestMateDistance != null &&
-    danger.shortestAlternativeMate != null &&
-    danger.shortestAlternativeMate < danger.bestMateDistance
-  ) {
-    return true;
+    if (isSacrifice && nextCP > INTERESTING_SACRIFICE_MIN_CP) {
+      return "interesting";
+    }
   }
 
-  return (
-    danger.seriousMistakes + danger.blunders > 0 &&
-    danger.nearBestCount <= 1 &&
-    (danger.secondLoss >= 0.085 || danger.seriousMistakes >= 2)
-  );
+  return undefined;
 }
 
-function moveDangerProfile(lines: MoveEvaluationLine[], fen: string) {
-  const bestLine = lines[0];
-  if (!bestLine || lines.length < 2) {
-    return {
-      recommendableAlternatives: 0,
-      nearBestCount: bestLine ? 1 : 0,
-      seriousMistakes: 0,
-      blunders: 0,
-      secondLoss: 0,
-      bestEscapesMate: false,
-      bestMateDistance: null,
-      shortestAlternativeMate: null,
-    };
-  }
+function hasForcedBestMoveGap(lines: MoveEvaluationLine[], color: "w" | "b") {
+  if (lines.length < 2 || !lines[0]?.bestMove) return false;
+  const { prevCP, nextCP } = normalizeScores(lines[0]!, lines[1]!, color);
+  return getWinChance(prevCP) - getWinChance(nextCP) > WIN_CHANCE_FORCED_BEST_GAP;
+}
 
-  const alternatives = lines.slice(1);
-  const alternativeClasses = alternatives.map((candidate) => classifyMoveAgainstBest(bestLine, candidate, fen));
-  const losses = alternatives.map((candidate) => expectedScoreLoss(bestLine, candidate, fen));
-  const losingMateAlternatives = alternatives
-    .filter((candidate) => Number.isFinite(candidate.mate) && Number(candidate.mate) < 0)
-    .map((candidate) => Math.abs(Number(candidate.mate)));
-  const bestMateDistance =
-    Number.isFinite(bestLine.mate) && Number(bestLine.mate) < 0 ? Math.abs(Number(bestLine.mate)) : null;
-
+function normalizeScores(
+  previous: MoveEvaluationLine,
+  next: MoveEvaluationLine,
+  color: "w" | "b",
+): { prevCP: number; nextCP: number } {
   return {
-    recommendableAlternatives: alternativeClasses.filter((moveClass) =>
-      isRecommendableClassification(moveClass),
-    ).length,
-    nearBestCount: 1 + losses.filter((loss) => loss <= 0.018).length,
-    seriousMistakes: losses.filter((loss) => loss >= 0.13).length,
-    blunders: losses.filter((loss) => loss >= 0.27).length,
-    secondLoss: losses[0] || 0,
-    bestEscapesMate: bestMateDistance == null && losingMateAlternatives.length > 0,
-    bestMateDistance,
-    shortestAlternativeMate: losingMateAlternatives.length ? Math.min(...losingMateAlternatives) : null,
+    prevCP: normalizeScore(previous, color),
+    nextCP: normalizeScore(next, color),
   };
 }
 
-function expectedScoreLoss(bestLine: MoveEvaluationLine, candidateLine: MoveEvaluationLine, fen: string) {
-  return Math.max(
-    0,
-    expectedScoreFromEval(comparableEval(bestLine, fen)) -
-      expectedScoreFromEval(comparableEval(candidateLine, fen)),
-  );
+function normalizeScore(line: MoveEvaluationLine, color: "w" | "b"): number {
+  let cp = Number(line.cp) || 0;
+  if (color === "b") cp *= -1;
+  if (Number.isFinite(line.mate)) {
+    cp = CP_CEILING * Math.sign(Number(line.mate));
+  }
+  return clamp(cp, -CP_CEILING, CP_CEILING);
 }
 
-function centipawnLoss(bestLine: MoveEvaluationLine, candidateLine: MoveEvaluationLine, fen: string) {
-  return Math.max(0, comparableEval(bestLine, fen) - comparableEval(candidateLine, fen));
+function getWinChance(centipawns: number) {
+  return 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * centipawns)) - 1);
 }
 
-function comparableEval(line: MoveEvaluationLine, fen: string) {
-  const cp = Math.max(-100000, Math.min(100000, Number(line.cp) || 0));
-  return sideToMove(fen) === "b" ? -cp : cp;
-}
-
-function expectedScoreFromEval(evalCp: number) {
-  const cp = Math.max(-2000, Math.min(2000, Number(evalCp) || 0));
-  return 1 / (1 + Math.exp(-cp / 180));
-}
-
-function sideToMove(fen: string) {
+function sideToMove(fen: string): "w" | "b" {
   return fen.split(/\s+/)[1] === "b" ? "b" : "w";
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
 }

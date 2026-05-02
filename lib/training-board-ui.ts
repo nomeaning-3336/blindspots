@@ -62,15 +62,15 @@ export function formatClassifiedMoveLead(lead: string, classification: MoveClass
 
 export function classificationColor(classification?: MoveClassification) {
   switch (classification) {
-    case "critical":
+    case "brilliant":
       return "var(--app-class-critical)";
     case "best":
       return "var(--app-class-good)";
-    case "excellent":
-      return "var(--app-class-excellent)";
     case "good":
       return "var(--app-class-best)";
-    case "inaccuracy":
+    case "interesting":
+      return "var(--app-class-excellent)";
+    case "dubious":
       return "var(--app-class-inaccuracy)";
     case "mistake":
       return "var(--app-class-mistake)";
@@ -83,15 +83,15 @@ export function classificationColor(classification?: MoveClassification) {
 
 export function classificationIcon(classification: MoveClassification) {
   switch (classification) {
-    case "critical":
+    case "brilliant":
       return "/analyze/classification-icons/critical.png";
     case "best":
       return "/analyze/classification-icons/best.png";
-    case "excellent":
-      return "/analyze/classification-icons/excellent.png";
     case "good":
       return "/analyze/classification-icons/okay.png";
-    case "inaccuracy":
+    case "interesting":
+      return "/analyze/classification-icons/excellent.png";
+    case "dubious":
       return "/analyze/classification-icons/inaccuracy.png";
     case "mistake":
       return "/analyze/classification-icons/mistake.png";
@@ -102,16 +102,16 @@ export function classificationIcon(classification: MoveClassification) {
 
 export function classificationLabel(classification: MoveClassification) {
   switch (classification) {
-    case "critical":
-      return "Critical";
+    case "brilliant":
+      return "Brilliant";
     case "best":
       return "Best";
-    case "excellent":
-      return "Excellent";
     case "good":
-      return "Okay";
-    case "inaccuracy":
-      return "Inaccuracy";
+      return "Good";
+    case "interesting":
+      return "Interesting";
+    case "dubious":
+      return "Dubious";
     case "mistake":
       return "Mistake";
     case "blunder":

@@ -45,7 +45,7 @@ type CompleteSequencePayload = {
   challengeElo?: unknown;
 };
 
-type MoveClassification = "excellent" | "good" | "inaccuracy" | "mistake" | "blunder";
+type MoveClassification = "brilliant" | "best" | "good" | "interesting" | "dubious" | "mistake" | "blunder";
 
 type PositionEvaluation = {
   index: number;
@@ -96,7 +96,7 @@ function mateCpForWinningSide(winner: "w" | "b") {
 }
 
 function classifyUserDeliveredCheckmate(): MoveClassification {
-  return "excellent";
+  return "good";
 }
 
 export async function POST(request: Request) {
@@ -417,16 +417,16 @@ async function calculateSequenceEvaluation({
 }
 
 function classifyCpLoss(cpLoss: number): MoveClassification {
-  if (cpLoss <= 30) return "excellent";
+  if (cpLoss <= 30) return "good";
   if (cpLoss <= 90) return "good";
-  if (cpLoss <= 180) return "inaccuracy";
+  if (cpLoss <= 180) return "dubious";
   if (cpLoss <= 320) return "mistake";
   return "blunder";
 }
 
 function getBanditResult(classification: MoveClassification): "success" | "neutral" | "failure" {
-  if (classification === "excellent" || classification === "good") return "success";
-  if (classification === "inaccuracy") return "neutral";
+  if (classification === "good" || classification === "best") return "success";
+  if (classification === "dubious") return "neutral";
   return "failure";
 }
 

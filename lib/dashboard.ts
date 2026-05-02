@@ -2,13 +2,13 @@ import type { Json } from "@/lib/supabase/database";
 
 export type DashboardClassifications = {
   best: number;
-  excellent: number;
   good: number;
   okay: number;
-  inaccuracy: number;
+  interesting: number;
+  brilliant: number;
+  dubious: number;
   mistake: number;
   blunder: number;
-  critical: number;
 };
 
 export type DashboardSummary = {
@@ -29,10 +29,11 @@ export type DashboardSummary = {
     id: string;
     label?: string;
     attempts: number;
-    inaccuracy: number;
+    interesting: number;
+    dubious: number;
     mistake: number;
     blunder: number;
-    critical: number;
+    brilliant: number;
     phase?: string;
     bucket?: string;
     tag?: string;
@@ -75,13 +76,13 @@ type BuildDashboardSummaryInput = {
 
 const CLASSIFICATION_KEYS = [
   "best",
-  "excellent",
   "good",
   "okay",
-  "inaccuracy",
+  "interesting",
+  "brilliant",
+  "dubious",
   "mistake",
   "blunder",
-  "critical",
 ] as const;
 
 type DashboardClassification = (typeof CLASSIFICATION_KEYS)[number];
@@ -90,13 +91,13 @@ const MIN_CLUSTER_ATTEMPTS = 5;
 
 const CLASSIFICATION_SEVERITY: Record<DashboardClassification, number> = {
   best: 0,
-  excellent: 1,
-  good: 2,
+  good: 1,
   okay: 2,
-  inaccuracy: 3,
-  mistake: 4,
-  blunder: 5,
-  critical: 6,
+  interesting: 3,
+  brilliant: 4,
+  dubious: 5,
+  mistake: 6,
+  blunder: 7,
 };
 
 type PositionEvaluationInput = {
@@ -110,10 +111,11 @@ type PositionEvaluationInput = {
 type ClusterAccumulator = {
   id: string;
   attempts: number;
-  inaccuracy: number;
+  interesting: number;
+  dubious: number;
   mistake: number;
   blunder: number;
-  critical: number;
+  brilliant: number;
   phase?: string;
   bucket?: string;
   tag?: string;
@@ -157,13 +159,13 @@ export function buildDashboardSummary({
 function emptyClassificationCounts(): DashboardClassifications {
   return {
     best: 0,
-    excellent: 0,
     good: 0,
     okay: 0,
-    inaccuracy: 0,
+    interesting: 0,
+    brilliant: 0,
+    dubious: 0,
     mistake: 0,
     blunder: 0,
-    critical: 0,
   };
 }
 
@@ -187,17 +189,19 @@ function buildClusterSummaries(
     const cluster = clusters.get(evaluation.clusterId) ?? {
       id: evaluation.clusterId,
       attempts: 0,
-      inaccuracy: 0,
+      interesting: 0,
+      dubious: 0,
       mistake: 0,
       blunder: 0,
-      critical: 0,
+      brilliant: 0,
     };
 
     cluster.attempts += 1;
-    if (evaluation.classification === "inaccuracy") cluster.inaccuracy += 1;
+    if (evaluation.classification === "dubious") cluster.dubious += 1;
     if (evaluation.classification === "mistake") cluster.mistake += 1;
     if (evaluation.classification === "blunder") cluster.blunder += 1;
-    if (evaluation.classification === "critical") cluster.critical += 1;
+    if (evaluation.classification === "brilliant") cluster.brilliant += 1;
+    if (evaluation.classification === "interesting") cluster.interesting += 1;
     cluster.phase ??= evaluation.phase ?? parseClusterId(evaluation.clusterId).phase;
     cluster.bucket ??= evaluation.bucket ?? parseClusterId(evaluation.clusterId).bucket;
     cluster.tag ??= evaluation.tags[0];
@@ -218,7 +222,7 @@ function buildClusterSummaries(
         phase,
         bucket,
         tag: tag ?? bucket,
-        severity: cluster.critical * 5 + cluster.blunder * 4 + cluster.mistake * 3 + cluster.inaccuracy,
+        severity: cluster.brilliant * 5 + cluster.blunder * 4 + cluster.mistake * 3 + cluster.dubious + cluster.interesting,
       };
     })
     .filter((cluster) => cluster.severity > 0)
