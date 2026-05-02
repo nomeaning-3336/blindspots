@@ -193,9 +193,9 @@ import {
 
 const postmortemActionTextClassName = "text-center text-xs font-bold uppercase leading-none tracking-[0.12em]";
 const primaryActionClassName =
-  `app-brutal-button inline-flex min-h-11 items-center justify-center px-4 py-3 text-sm`;
+  `app-brutal-button inline-flex min-h-11 min-w-0 items-center justify-center px-4 py-3 text-sm`;
 const secondaryActionClassName =
-  `inline-flex min-h-11 items-center justify-center rounded-[8px] border border-[#050505] bg-[var(--app-panel-solid)] px-4 py-3 text-xs font-bold uppercase tracking-[0.04em] text-[var(--app-text)] shadow-[3px_3px_0_#050505] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#050505]`;
+  `inline-flex min-h-11 min-w-0 items-center justify-center rounded-[8px] border border-[#050505] bg-[var(--app-panel-solid)] px-3 py-3 text-[11px] font-bold uppercase tracking-[0.04em] text-[var(--app-text)] shadow-[3px_3px_0_#050505] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#050505] sm:px-4 sm:text-xs`;
 
 function readVisualPreferences() {
   let storedPreferences: Partial<AnalyzePreferences> | null = null;
@@ -1678,17 +1678,17 @@ export default function TrainPage() {
   }
 
   return (
-    <div className="app-paper-shell train-session-enter flex min-h-0 w-full flex-1 overflow-auto py-4">
+    <div className="app-paper-shell train-session-enter flex min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden px-4 py-4">
       <div
         className={[
-          "mx-auto grid w-full max-w-[96rem] gap-6 transition-opacity duration-200",
-          "lg:min-h-[780px] lg:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)] lg:items-start",
+          "mx-auto grid w-full max-w-[100rem] min-w-0 gap-6 transition-opacity duration-200",
+          "lg:min-h-[780px] lg:grid-cols-[minmax(0,1.22fr)_minmax(28rem,0.92fr)] lg:items-start",
         ].join(" ")}
       >
         <section
-          className="app-brutal-section min-w-0 flex items-center justify-center p-4 sm:p-5 lg:min-h-0 lg:p-6"
+          className="app-brutal-section flex min-w-0 items-center justify-center overflow-visible p-3 sm:p-4 lg:min-h-0 lg:p-5"
         >
-          <div className="app-brutal-board-frame relative w-full max-w-[min(92vw,74vh,920px)] overflow-visible">
+          <div className="app-brutal-board-frame relative w-full max-w-[min(92vw,76vh,900px)] overflow-visible">
             {visualPreferences && !isPositionLoading && hasLoadedPosition ? (
               <>
                 <BoardWithPlayerStrips
@@ -1775,10 +1775,10 @@ export default function TrainPage() {
         <aside
           data-testid="train-move-panel"
           className={[
-            "app-brutal-section flex flex-col",
+            "app-brutal-section flex min-w-0 max-w-full flex-col overflow-x-hidden",
             state === "complete" && resultMode === "results"
               ? "p-4 sm:p-5"
-              : "p-5 sm:p-6 lg:min-h-[720px]",
+              : "p-4 sm:p-5 lg:min-h-[720px]",
           ].join(" ")}
         >
           {state === "complete" ? (

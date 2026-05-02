@@ -648,7 +648,7 @@ function BoardAnnotations({
         const color = arrow.color ?? engineArrowColor(rank);
         const isHoveredTarget = hoveredSquare === arrow.to || index === localHoveredEngineIndex;
         const opacity = arrow.emphasis || isHoveredTarget ? 1 : engineArrowOpacity(rank);
-        const nodeRadius = arrow.emphasis || isHoveredTarget ? 0.18 : 0.14;
+        const nodeRadius = arrow.emphasis || isHoveredTarget ? 0.16 : 0.125;
         const dx = to.x - from.x;
         const dy = to.y - from.y;
         const len = Math.hypot(dx, dy) || 1;
@@ -664,7 +664,7 @@ function BoardAnnotations({
             x2={lineEndX}
             y2={lineEndY}
             stroke={color}
-            strokeWidth={0.03}
+            strokeWidth={0.024}
             strokeLinecap="butt"
             opacity={opacity}
           />
@@ -677,7 +677,7 @@ function BoardAnnotations({
         const color = arrow.color ?? engineArrowColor(rank);
         const isHoveredTarget = hoveredSquare === arrow.to || index === localHoveredEngineIndex;
         const opacity = arrow.emphasis || isHoveredTarget ? 1 : engineArrowOpacity(rank);
-        const nodeRadius = arrow.emphasis || isHoveredTarget ? 0.18 : 0.14;
+        const nodeRadius = arrow.emphasis || isHoveredTarget ? 0.16 : 0.125;
         const label = arrow.label ? displayEvalText(arrow.label) : "";
         return (
           <g key={`engine-node-${arrow.from}-${arrow.to}-${index}`} opacity={opacity}>
@@ -687,7 +687,9 @@ function BoardAnnotations({
                   cx={to.x}
                   cy={to.y}
                   r={nodeRadius}
-                  fill={color}
+                  fill="var(--app-accent)"
+                  stroke="#050505"
+                  strokeWidth={0.025}
                   className="pointer-events-auto cursor-pointer"
                   onPointerEnter={() => setLocalHoveredEngineIndex(index)}
                   onPointerLeave={() => setLocalHoveredEngineIndex(null)}
@@ -698,7 +700,7 @@ function BoardAnnotations({
                   y={to.y}
                   textAnchor="middle"
                   dominantBaseline="middle"
-                  fontSize={label.startsWith("−") ? 0.125 : 0.145}
+                  fontSize={label.startsWith("−") ? 0.11 : 0.13}
                   fontWeight={800}
                   className="pointer-events-none"
                   letterSpacing={label.startsWith("−") ? 0 : "0.02em"}
