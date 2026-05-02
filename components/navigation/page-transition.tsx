@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 
 type TransitionPhase = "idle" | "leaving" | "loading" | "entering";
 
-const LEAVE_FADE_MS = 360;
 const LEAVE_TIMEOUT_MS = 2500;
 const ENTER_TIMEOUT_MS = 420;
 const SPINNER_DELAY_MS = 520;
@@ -26,7 +25,6 @@ export function PageTransition({ children }: { children: ReactNode }) {
   const contentRef = useRef<HTMLDivElement | null>(null);
   const previousPathname = useRef(pathname);
   const sawRouteLoading = useRef(false);
-  const navigationTimer = useRef<number | null>(null);
   const leaveTimer = useRef<number | null>(null);
   const enterTimer = useRef<number | null>(null);
   const spinnerTimer = useRef<number | null>(null);
@@ -36,7 +34,6 @@ export function PageTransition({ children }: { children: ReactNode }) {
     previousPathname.current = pathname;
     setPhase("entering");
     setShowSpinner(false);
-    if (navigationTimer.current) window.clearTimeout(navigationTimer.current);
     if (leaveTimer.current) window.clearTimeout(leaveTimer.current);
     if (enterTimer.current) window.clearTimeout(enterTimer.current);
     if (spinnerTimer.current) window.clearTimeout(spinnerTimer.current);
@@ -47,7 +44,6 @@ export function PageTransition({ children }: { children: ReactNode }) {
     enterTimer.current = window.setTimeout(() => setPhase("idle"), ENTER_TIMEOUT_MS);
 
     return () => {
-      if (navigationTimer.current) window.clearTimeout(navigationTimer.current);
       if (leaveTimer.current) window.clearTimeout(leaveTimer.current);
       if (enterTimer.current) window.clearTimeout(enterTimer.current);
       if (spinnerTimer.current) window.clearTimeout(spinnerTimer.current);
@@ -104,19 +100,16 @@ export function PageTransition({ children }: { children: ReactNode }) {
       event.preventDefault();
       setPhase("leaving");
       window.__chessSomething?.pauseForNavigation?.();
-      if (navigationTimer.current) window.clearTimeout(navigationTimer.current);
       if (leaveTimer.current) window.clearTimeout(leaveTimer.current);
       if (enterTimer.current) window.clearTimeout(enterTimer.current);
       if (spinnerTimer.current) window.clearTimeout(spinnerTimer.current);
       setShowSpinner(false);
 
-      navigationTimer.current = window.setTimeout(() => {
-        setPhase("loading");
-        spinnerTimer.current = window.setTimeout(() => {
-          setShowSpinner(true);
-        }, SPINNER_DELAY_MS);
-        router.push(`${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
-      }, LEAVE_FADE_MS);
+      setPhase("loading");
+      spinnerTimer.current = window.setTimeout(() => {
+        setShowSpinner(true);
+      }, SPINNER_DELAY_MS);
+      router.push(`${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
 
       leaveTimer.current = window.setTimeout(() => {
         setPhase((currentPhase) =>

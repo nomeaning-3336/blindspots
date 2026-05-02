@@ -5,21 +5,26 @@ import { getSupabaseAdminClient } from "@/lib/supabase/server";
 
 const THEME_COOKIE_NAME = "chessview-theme";
 
+export async function getCookieAppThemeOnly() {
+  try {
+    const cookieStore = await cookies();
+    const themeCookie = cookieStore.get(THEME_COOKIE_NAME);
+    if (themeCookie?.value && APP_THEMES.some((theme) => theme.id === themeCookie.value)) {
+      return themeCookie.value as AppTheme;
+    }
+  } catch {
+    // Cookies not available, ignore
+  }
+
+  return null;
+}
+
 export async function getUserAppTheme() {
   const userId = await getOptionalAppUserId();
 
   if (!userId) {
     // Check for theme cookie for unauthenticated users
-    try {
-      const cookieStore = await cookies();
-      const themeCookie = cookieStore.get(THEME_COOKIE_NAME);
-      if (themeCookie?.value && APP_THEMES.some(t => t.id === themeCookie.value)) {
-        return themeCookie.value as AppTheme;
-      }
-    } catch {
-      // Cookies not available, ignore
-    }
-    return null;
+    return getCookieAppThemeOnly();
   }
 
   return getUserAppThemeForUser(userId);

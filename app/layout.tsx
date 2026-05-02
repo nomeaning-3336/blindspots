@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 import { PageTransition } from "@/components/navigation/page-transition";
-import { getUserAppTheme } from "@/lib/app-theme-store";
+import { getCookieAppThemeOnly } from "@/lib/app-theme-store";
 import { PostHogProvider } from "./providers";
 import "./globals.css";
 
@@ -45,7 +45,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: ReactNode;
 }>) {
-  const theme = await getUserAppTheme();
+  const theme = await getCookieAppThemeOnly();
 
   return (
     <html
