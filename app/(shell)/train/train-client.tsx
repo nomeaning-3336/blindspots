@@ -1333,7 +1333,18 @@ export default function TrainPage() {
     : isActiveSetupReplay
       ? activeSetupCurrentFen
       : activeReplayPosition?.fen ?? (fen ?? "");
-  const sideToMoveLabel = getFenTurnSide(boardFen) === "white" ? "White" : "Black";
+  const boardRailMoves = useMemo(
+    () => displayMoves.map((move, index) => ({ move, index })),
+    [displayMoves],
+  );
+  const opponentRailMoves = useMemo(
+    () => boardRailMoves.filter(({ move }) => move.side !== userMoveSide),
+    [boardRailMoves, userMoveSide],
+  );
+  const userRailMoves = useMemo(
+    () => boardRailMoves.filter(({ move }) => move.side === userMoveSide),
+    [boardRailMoves, userMoveSide],
+  );
   const replayLastMove = isExploringResults
     ? (activeExploratoryPosition?.lastMove ?? exploratoryLastMove ?? lastMoveFromTrainingMove(activeSequencePosition?.move))
     : isActiveSetupReplay
@@ -1692,22 +1703,18 @@ export default function TrainPage() {
         ].join(" ")}
       >
         <section
-          className="app-brutal-section grid min-h-0 min-w-0 grid-cols-1 items-center gap-3 overflow-hidden p-3 sm:p-4 lg:grid-cols-[minmax(5.5rem,0.22fr)_minmax(0,auto)_minmax(8rem,0.32fr)] lg:p-4"
+          className="app-brutal-section grid min-h-0 min-w-0 grid-cols-1 items-center gap-3 overflow-hidden p-3 sm:p-4 lg:grid-cols-[4.75rem_minmax(0,auto)_4.75rem] lg:p-4"
         >
-          <div className="hidden min-h-0 min-w-0 lg:flex lg:h-full lg:flex-col lg:justify-between">
-            <div className="rounded-[10px] border border-[color-mix(in_srgb,var(--app-text)_18%,transparent)] bg-[color-mix(in_srgb,var(--app-panel-solid)_86%,var(--app-bg)_14%)] p-3">
-              <div className="app-brutal-label mb-2">Turn</div>
-              <div className="text-sm font-bold text-[var(--app-text)]">
-                {sideToMoveLabel}
+          <div className="hidden min-h-0 min-w-0 items-start overflow-hidden lg:flex lg:h-full lg:flex-col lg:gap-1.5">
+            {opponentRailMoves.map(({ move, index }) => (
+              <div
+                key={`${move.uci}-${index}`}
+                className="max-w-full truncate text-left text-xs font-bold leading-5 text-[var(--app-text)]"
+              >
+                <span className="mr-1 text-[var(--app-muted)]">{index + 1}.</span>
+                <span>{move.san}</span>
               </div>
-            </div>
-
-            <div className="rounded-[10px] border border-[color-mix(in_srgb,var(--app-text)_18%,transparent)] bg-[color-mix(in_srgb,var(--app-panel-solid)_86%,var(--app-bg)_14%)] p-3">
-              <div className="app-brutal-label mb-2">Move</div>
-              <div className="text-sm font-bold text-[var(--app-text)]">
-                {moves.length + 1} / {sequenceLength}
-              </div>
-            </div>
+            ))}
           </div>
 
           <div className="flex min-h-0 min-w-0 items-center justify-center">
@@ -1803,26 +1810,16 @@ export default function TrainPage() {
             </div>
           </div>
 
-          <div className="hidden min-h-0 min-w-0 lg:flex lg:h-full lg:flex-col">
-            <div className="app-brutal-label mb-3">Moves</div>
-            <div className="min-h-0 space-y-2 overflow-hidden">
-              {moves.length ? (
-                moves.map((move, index) => (
-                  <button
-                    key={`${move.uci}-${index}`}
-                    type="button"
-                    className="w-full min-w-0 rounded-[8px] border border-[color-mix(in_srgb,var(--app-text)_18%,transparent)] bg-[color-mix(in_srgb,var(--app-panel-solid)_86%,var(--app-bg)_14%)] px-3 py-2 text-left text-xs font-bold text-[var(--app-text)] transition hover:border-[var(--app-accent)]"
-                  >
-                    <span className="mr-2 text-[var(--app-muted)]">{index + 1}.</span>
-                    <span className="truncate">{move.san}</span>
-                  </button>
-                ))
-              ) : (
-                <div className="rounded-[8px] border border-dashed border-[color-mix(in_srgb,var(--app-text)_18%,transparent)] px-3 py-4 text-center text-xs font-bold text-[var(--app-muted)]">
-                  No moves yet.
-                </div>
-              )}
-            </div>
+          <div className="hidden min-h-0 min-w-0 items-end overflow-hidden lg:flex lg:h-full lg:flex-col-reverse lg:gap-1.5">
+            {userRailMoves.map(({ move, index }) => (
+              <div
+                key={`${move.uci}-${index}`}
+                className="max-w-full truncate text-right text-xs font-bold leading-5 text-[var(--app-text)]"
+              >
+                <span className="mr-1 text-[var(--app-muted)]">{index + 1}.</span>
+                <span>{move.san}</span>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -2403,9 +2400,9 @@ function BoardWithPlayerStrips({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <PlayerTurnStrip label={opponentLabel} isActive={isOpponentActive} align="end" />
+      <PlayerTurnStrip label={opponentLabel} isActive={isOpponentActive} align="start" />
       {children}
-      <PlayerTurnStrip label={userLabel} isActive={isUserActive} align="start" />
+      <PlayerTurnStrip label={userLabel} isActive={isUserActive} align="end" />
     </div>
   );
 }
