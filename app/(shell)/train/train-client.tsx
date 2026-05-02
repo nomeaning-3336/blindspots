@@ -1687,7 +1687,7 @@ export default function TrainPage() {
       <div
         className={[
           "mx-auto grid h-full min-h-0 w-full max-w-[100rem] min-w-0 gap-4 transition-opacity duration-200",
-          "lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-stretch",
+          "lg:grid-cols-[minmax(0,1.22fr)_minmax(28rem,0.92fr)] lg:items-stretch",
         ].join(" ")}
       >
         <section
