@@ -64,10 +64,10 @@ function TrainingBoard() {
 
 function HeroVisual() {
   return (
-    <div className="relative">
+    <div className="relative max-w-full overflow-x-clip">
       <div
         aria-hidden="true"
-        className="absolute -inset-8 opacity-50"
+        className="absolute inset-0 opacity-50 md:-inset-8"
         style={{
           backgroundImage:
             "linear-gradient(color-mix(in srgb, var(--app-border-strong) 12%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--app-border-strong) 12%, transparent) 1px, transparent 1px)",
@@ -76,7 +76,7 @@ function HeroVisual() {
         }}
       />
 
-      <div className="relative flex min-h-[460px] items-center justify-center overflow-visible">
+      <div className="relative flex min-h-[320px] items-center justify-center overflow-hidden md:min-h-[460px]">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-1/2 h-[95%] w-[95%] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-70 blur-3xl"
@@ -86,7 +86,7 @@ function HeroVisual() {
           }}
         />
 
-        <div className="relative z-10 aspect-square w-[min(88vw,42rem,72vh)]">
+        <div className="relative z-10 aspect-square w-full max-w-[min(92vw,38rem,68vh)]">
           <TrainingBoard />
         </div>
       </div>
@@ -102,11 +102,8 @@ export default async function DisclaimerPage() {
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-transparent">
       <PublicHeaderClient isSignedIn={isSignedIn} />
-      <main className="min-h-0 flex-1 overflow-auto">
-        <section
-          className="mx-auto grid min-h-[calc(100dvh-64px)] w-full gap-10 px-6 py-12 md:grid-cols-[minmax(0,0.88fr)_minmax(0,1.36fr)] md:items-center md:px-10 md:py-16"
-          style={{ maxWidth: "80vw" }}
-        >
+      <main className="min-h-0 flex-1 overflow-y-auto overflow-x-clip">
+        <section className="mx-auto grid min-h-[calc(100dvh-64px)] w-full min-w-0 max-w-full overflow-x-clip gap-10 px-5 py-10 md:max-w-4xl md:grid-cols-[minmax(0,0.88fr)_minmax(0,1.36fr)] md:items-center md:px-10 md:py-16">
           <div className="flex flex-col items-center justify-center text-center">
             <h1 className="text-[clamp(2.75rem,4.8vw,4.25rem)] font-black leading-[0.98] tracking-[-0.06em] text-[var(--app-text)]">
               This website is{" "}
@@ -125,9 +122,9 @@ export default async function DisclaimerPage() {
           <HeroVisual />
         </section>
 
-        <footer className="mx-auto flex w-full max-w-7xl flex-col gap-4 border-t border-[var(--app-border)] px-6 py-6 md:flex-row md:items-center md:justify-between md:px-10">
+        <footer className="mx-auto flex w-full min-w-0 max-w-full flex-col gap-4 overflow-x-clip border-t border-[var(--app-border)] px-6 py-6 md:max-w-7xl md:flex-row md:items-center md:justify-between md:px-10">
           <BrandMark size={20} />
-          <p className="text-[10px] uppercase text-[var(--app-muted)]">
+          <p className="max-w-full break-words text-[10px] uppercase text-[var(--app-muted)]">
             (c) 2026 / No streak counters were harmed
           </p>
         </footer>

@@ -121,10 +121,10 @@ function TrainingBoard() {
 
 function HeroVisual() {
   return (
-    <div className="relative">
+    <div className="relative max-w-full overflow-x-clip">
       <div
         aria-hidden="true"
-        className="absolute -inset-8 opacity-50"
+        className="absolute inset-0 opacity-50 md:-inset-8"
         style={{
           backgroundImage:
             "linear-gradient(color-mix(in srgb, var(--app-border-strong) 12%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--app-border-strong) 12%, transparent) 1px, transparent 1px)",
@@ -133,7 +133,7 @@ function HeroVisual() {
         }}
       />
 
-      <div className="relative flex min-h-[460px] items-center justify-center overflow-visible">
+      <div className="relative flex min-h-[320px] items-center justify-center overflow-hidden md:min-h-[460px]">
         <img
           src="/hero-image.png"
           alt=""
@@ -153,7 +153,7 @@ function HeroVisual() {
           }}
         />
 
-        <div className="relative z-10 aspect-square w-[min(88vw,42rem,72vh)]">
+        <div className="relative z-10 aspect-square w-full max-w-[min(92vw,38rem,68vh)]">
           <TrainingBoard />
         </div>
       </div>
@@ -219,8 +219,8 @@ export default async function LandingPage() {
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-transparent">
       <PublicHeaderClient isSignedIn={isSignedIn} />
-      <main className="min-h-0 flex-1 overflow-auto">
-        <section className="mx-auto grid w-full gap-12 px-6 py-14 md:grid-cols-[1.02fr_0.98fr] md:items-center md:px-10 md:py-20" style={{ maxWidth: '80vw' }}>
+      <main className="min-h-0 flex-1 overflow-y-auto overflow-x-clip">
+        <section className="mx-auto grid w-full min-w-0 max-w-full overflow-x-clip gap-12 px-5 py-14 md:max-w-4xl md:grid-cols-[1.02fr_0.98fr] md:items-center md:px-10 md:py-20">
           <div>
             <h1 className="max-w-3xl text-[clamp(2.75rem,4.8vw,4.25rem)] font-black leading-[0.98] tracking-[-0.06em] text-[var(--app-text)]">
               Chess training for the positions you{" "}
@@ -315,9 +315,9 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <footer className="mx-auto flex w-full max-w-7xl flex-col gap-4 border-t border-[var(--app-border)] px-6 py-6 md:flex-row md:items-center md:justify-between md:px-10">
+        <footer className="mx-auto flex w-full min-w-0 max-w-full flex-col gap-4 overflow-x-clip border-t border-[var(--app-border)] px-6 py-6 md:max-w-7xl md:flex-row md:items-center md:justify-between md:px-10">
           <BrandMark size={20} />
-          <p className="text-[10px] uppercase text-[var(--app-muted)]">
+          <p className="max-w-full break-words text-[10px] uppercase text-[var(--app-muted)]">
             (c) 2026 / No streak counters were harmed
           </p>
         </footer>
