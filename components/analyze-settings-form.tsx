@@ -220,7 +220,6 @@ export function AnalyzeSettingsForm({
       {(sections === "all" || sections === "visual") && (
         <>
           <section className="app-brutal-inset p-5">
-            <p className="text-xs uppercase tracking-[0.24em] text-[var(--app-muted)]">Pieces</p>
             <div className="mt-4 app-theme-grid">
               {PIECE_THEMES.map((theme) => (
                 <label key={theme.id} className="app-theme-option">

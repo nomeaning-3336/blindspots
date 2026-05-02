@@ -13,6 +13,6 @@ export function getHomeCallToAction(isSignedIn: boolean): HomeCallToAction {
 
   return {
     href: "/sign-in",
-    label: "Sign in",
+    label: "I don't mind.",
   };
 }

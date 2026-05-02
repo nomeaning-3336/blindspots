@@ -43,7 +43,7 @@ function PrimaryLink({ href, children }: { href: string; children: React.ReactNo
   return (
     <Link
       href={href}
-      className="inline-flex min-h-12 items-center justify-center rounded border border-[var(--app-accent)] bg-[var(--app-accent)] px-5 py-3 text-xs font-bold uppercase !text-black transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
+      className="app-brutal-button inline-flex min-h-12 items-center justify-center px-5 py-3 text-sm"
     >
       {children}
     </Link>
@@ -103,15 +103,15 @@ export default async function DisclaimerPage() {
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-transparent">
       <PublicHeaderClient isSignedIn={isSignedIn} />
       <main className="min-h-0 flex-1 overflow-y-auto overflow-x-clip">
-        <section className="mx-auto grid min-h-[calc(100dvh-64px)] w-full min-w-0 max-w-full overflow-x-clip gap-10 px-5 py-10 md:max-w-4xl md:grid-cols-[minmax(0,0.88fr)_minmax(0,1.36fr)] md:items-center md:px-10 md:py-16">
-          <div className="flex flex-col items-center justify-center text-center">
-            <h1 className="text-[clamp(2.75rem,4.8vw,4.25rem)] font-black leading-[0.98] tracking-[-0.06em] text-[var(--app-text)]">
+        <section className="mx-auto grid min-h-[calc(100dvh-64px)] w-full min-w-0 max-w-full overflow-x-clip gap-10 px-6 py-10 md:max-w-6xl md:grid-cols-[minmax(0,1fr)_minmax(22rem,1.1fr)] md:items-center md:gap-14 md:px-10 md:py-16">
+          <div className="flex min-w-0 flex-col items-center justify-center px-2 text-center md:px-0">
+            <h1 className="max-w-[11ch] text-[clamp(2.5rem,4.4vw,4.05rem)] font-black leading-[0.98] tracking-[-0.035em] text-[var(--app-text)]">
               This website is{" "}
               <span className="italic text-[var(--app-accent)]">still under development</span>.
             </h1>
 
             <p className="mt-6 max-w-md text-base leading-8 text-[var(--app-muted)]">
-              You can use it while we build. Some things will break. That is not a feature.
+              You can use it while we build. Some things will break. We are not sorry.
             </p>
 
             <div className="mt-9">
