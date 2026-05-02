@@ -1,101 +1,126 @@
-# Future TODOs (maybe):
-
-I want to implement an animated background feature for my site. Instead of only having the board theme and the piece set, I also want a feature that changes the background into something like e.g. an aquarium with fishes or a sky with clouds, or a valley with sheep, or space but these wallpapers need to be simple svg animations, basically some front end worker will be controlling these svg's to create this background
-
 # Blindspots.gg
 
-Blindspots.gg is a position-based chess training simulator.
+Blindspots.gg is a position-based chess training tool that drills the mistakes you actually made in your own games.
 
-Users play short N-move sequences from a given position against a configurable opponent model. Stockfish evaluates each move silently during the sequence. When the sequence ends, the user sees an evaluation graph and can write a short reflection note.
+It pulls your recent Lichess games, runs Stockfish over every move you played, and finds the positions where you lost evaluation. Those positions become your training material. You play them back from one move before the mistake, against a configurable opponent, and the system grades you on how well you preserve the position over a short sequence.
 
-The product does not ask users to choose themes, openings, motifs, or mistake categories. It infers weak position patterns from repeated behavior, groups similar positions, and serves more positions from the areas where the user is losing evaluation. Those positions are the user's blindspots.
+The product does not generate streaks, achievements, or motivational notifications. It does not have an AI coach. It has a database, an engine, and a willingness to be honest about your chess.
 
 ## Product Direction
 
-The core training signal is eval preservation across a sequence.
+The core training signal is eval preservation across a sequence — not whether you found a single "correct" move.
 
-Blindspots.gg is not a puzzle trainer. There are no right or wrong answers, forcing lines, or one-move solutions. The user plays the position out against an opponent model, and the system measures how well they preserve the position over the full sequence.
+Blindspots.gg is not a puzzle trainer. There are no forcing lines or one-move solutions. You play the position out against an opponent, and the system measures how well you held the eval over the full sequence. A position is "passed" when you preserve eval cleanly. A position is "failed" when you blow it again — same as last time, same as the time before.
 
 The main loop is:
 
-1. Select a position from the user's current blindspot profile.
-2. Play a short sequence against the configured opponent model.
-3. Track the hidden Stockfish evaluation after every move.
-4. Score the sequence by evaluation preservation, not by tactic completion.
-5. Store the result, reflection, and position embedding.
-6. Update the user's blindspot profile and serve the next targeted position.
+1. Pull the user's recent Lichess games (incrementally on each visit).
+2. Run Stockfish over the user's moves and identify mistakes.
+3. Each mistake becomes a training position, queued from one move before the blunder.
+4. The user plays the position out against the configured opponent.
+5. Stockfish silently tracks evaluation across the sequence.
+6. The session ends with an eval graph and an optional reflection note.
+7. Pass/fail updates the position's review schedule.
 
-The system should learn structural weakness patterns from play data, not self-reporting.
+Training material comes from the user's own games. The system does not infer abstract weakness clusters from embeddings or behavior models — it just shows the user the positions they actually got wrong, repeatedly, until they stop getting them wrong.
+
+## The Three Queues
+
+Every training session pulls from three queues, in priority order:
+
+**Review queue.** Positions the user previously failed in training, scheduled by spaced repetition. If a position is due today, it goes in this session. This is the highest-priority queue — the whole product depends on users coming back and re-confronting positions they couldn't handle the first time.
+
+**Active queue.** New mistakes from games the user has played since their last sync. Pulled fresh from Lichess on each visit. Recent games (last 7 days) are prioritized over older ones, since fresh mistakes are easier to remember and more emotionally salient.
+
+**Filler queue.** Curated positions used only when the review queue and active queue are empty. Drawn from the Lichess puzzle database, biased toward themes the user has historically struggled with based on their mistake history. This is what keeps the product useful on quiet weeks when the user hasn't played new games and has no review-due positions.
+
+A typical session is 5-10 positions: review-due first, then active, then filler if needed. Anything beyond the cap goes into a backlog the user sees next session.
+
+## Spaced Repetition
+
+Each training position has an `interval_days` field that determines when it next surfaces in the review queue. After a training attempt:
+
+- **Pass** (avg eval delta < 50cp across the sequence, no single move > 300cp): `interval *= 2.5`, schedule for `today + interval`.
+- **Acceptable** (50-150cp avg, no catastrophic single move): `interval *= 1.0`, reschedule at the same interval.
+- **Fail** (150+cp avg, or any single move > 300cp): `interval = 1`, see it again tomorrow.
+
+After a position has been reviewed without failure across a long enough interval (60+ days), it transitions to a "mastered" state — still in the database, surfaced occasionally for verification, but out of the active rotation.
+
+The scheduling math is intentionally simple. SuperMemo-2 lite, not a research project. We don't claim it's optimal — we claim it works.
 
 ## Main Routes
 
-- `/train` - core training session with board, configurable opponent, sequence loop, hidden eval tracking, post-sequence graph, and reflection note.
-- `/profile` - blindspot profile with weakness clusters over time, session history, model confidence, and Blindspots Elo.
-- `/analysis` - standalone analysis board kept as a secondary surface for inspection and review.
-- `/account` - settings, linked chess profiles, analysis preferences, board/piece preferences, and theme preferences.
+- `/train` — core training session with board, configurable opponent, sequence loop, hidden eval tracking, post-sequence graph, and reflection note.
+- `/profile` — session history, queue state (review-due, active, mastered counts), Blindspots Elo over time, and a list of recent mistakes with the option to retire individual positions.
+- `/analysis` — standalone analysis board kept as a secondary surface for inspection and review.
+- `/account` — settings, linked chess profiles, opponent preferences, opening preferences, and board/piece/theme preferences.
 
-Compatibility aliases may exist during migration, but new product work should target the routes above.
+Compatibility aliases may exist during migration, but new product work targets the routes above.
 
 ## Tech Shape
 
 - Next.js App Router for the web app and API routes.
-- Supabase for authentication, persistence, linked chess profiles, user preferences, training sessions, blindspot clusters, and reflection notes.
+- Supabase for authentication, persistence, linked chess profiles, user preferences, training sessions, mistake records, and SRS state.
 - Existing standalone analysis runtime for the `/analysis` surface.
-- Stockfish for silent evaluation tracking during training sequences and analysis-board evaluation.
-- Configurable opponent move generation during training:
-  Maia-2 by default for human-like play near the user's Elo, Stockfish at reduced strength for principled engine opposition, or Leela as a middle-ground opponent.
-- Vector store for position embeddings and similarity search across prior failures, training positions, and blindspot clusters.
+- Stockfish for both the silent evaluation tracking during training sequences and the offline mistake-detection pass over user games.
+- Configurable opponent move generation during training: Maia-2 by default for human-like play near the user's Elo, Stockfish at reduced strength for principled engine opposition, or Leela as a middle-ground opponent.
+- Lichess API for game ingestion. Lichess puzzle database for the filler queue.
 
-## Training Model
+There is no embedding pipeline in the product runtime. Position similarity is not used for recommendation. Theme tagging on filler positions uses the Lichess puzzle theme labels directly.
 
-Training positions can come from linked user games, imported games, curated source pools, or generated positions that match a known weakness cluster.
+## What Gets Persisted
 
-Each training sequence should persist:
+Per training sequence:
 
 - starting FEN and side to move
-- move sequence played by the user and opponent model
+- move sequence played by the user and opponent
 - Stockfish evaluation trace
-- eval-preservation score
+- pass/acceptable/fail label and the eval-preservation score
 - opponent model and strength settings
 - sequence length and timing metadata
-- optional user reflection
-- position vector or lookup key for similarity search
-- blindspot cluster assignment, if known
+- optional user reflection note
+- queue source (review / active / filler)
+- post-attempt SRS state (next interval, next review date)
 
-Blindspot profiles should be derived from stored sequences and position similarity. The user should not need to manually label a position as an opening issue, endgame issue, tactic issue, or structure issue.
+Per mistake (one row per identified mistake from a user's games):
 
-## Position Sourcing
+- source game ID and ply
+- starting FEN (one move before the blunder, so the user gets to make the decision again)
+- the user's actual move from the game and the engine's preferred move
+- eval before and eval after, eval delta
+- date the mistake was first ingested
+- current SRS state (interval, last review, next review)
+- mastered flag
+- retired flag (user manually removed it from rotation)
 
-Training positions can be sourced from:
+Per linked profile:
 
-- user's own games from linked profiles, which become the primary source once enough data is available
-- imported PGNs
-- curated position pools for cold-start users
-- opening-constrained pools based on openings the user has configured in their profile or account settings
-- positions generated to match a known blindspot cluster derived from behavior
+- Lichess username, last sync timestamp, last game ID seen
+- opening preferences (e.g., "I play Caro-Kann as Black")
+- opponent strength preferences
+- session size preferences
 
-Opening-constrained pools let users specify openings they actually play, such as `1.e4 e5 Nc3` as White, `1.e4 c5` as Black, or `1.d4 Nf6` as either side. Positions are then drawn from games that reached those openings.
+## Position Sourcing Priorities
 
-Opening preferences are profile-level configuration, not per-session choices. Training should feel continuous across sessions: if the user has told the system they play the Caro-Kann, every session can factor that into position selection.
+In order:
+
+1. **User's own games from linked Lichess.** Primary source once the user has any game data. Pulled incrementally on each session.
+2. **Imported PGNs.** Optional manual import for users with games elsewhere.
+3. **Lichess puzzle database, theme-biased.** Used as filler when the user's queues are empty. Filtered to a rating band slightly above the user's current Blindspots Elo. Themes are biased toward the user's historical mistake patterns (e.g., user has 12 back-rank failures → filler skews toward back-rank tactics).
+4. **Lichess puzzle database, generic.** Last-resort fallback for cold-start users with no game data and no theme history.
+
+Opening preferences (configured at the profile level, not per-session) further filter all of the above. If a user has told the system they play the Caro-Kann as Black, every Black-to-move position should pull preferentially from Caro-Kann structures across all four sourcing tiers.
 
 ## Project Structure
 
-- `app/`
-  Next.js routes, API handlers, auth entry points, and app-shell pages. Product routes should converge on `/train`, `/profile`, `/analysis`, and `/account`.
-- `components/`
-  Shared UI components for the app shell, training board, eval graph, blindspot profile, account settings, linked profiles, and analysis bridge.
-- `lib/`
-  Domain logic for auth, linked profiles, training sessions, Stockfish evaluation, opponent move generation, position normalization, embeddings, similarity search, and persistence helpers.
-- `public/analyze/`
-  Synced browser assets used by the embedded standalone analysis runtime.
-- `standalone.js`, `standalone.css`, `standalone.html`
-  Source files for the embedded analysis runtime.
-- `scripts/sync-analyze-assets.mjs`
-  Syncs root analysis assets into `public/analyze/`.
-- `supabase/`
-  Database migrations for auth-backed product data, linked profiles, training sessions, blindspot profiles, and user preferences.
-- `tests/`
-  Unit and integration tests for chess-domain scoring, profile updates, persistence helpers, and analysis/training utilities.
+- `app/` — Next.js routes, API handlers, auth entry points, and app-shell pages. Product routes converge on `/train`, `/profile`, `/analysis`, and `/account`.
+- `components/` — Shared UI for the app shell, training board, eval graph, queue summary, account settings, linked profiles, and analysis bridge.
+- `lib/` — Domain logic for auth, linked profiles, Lichess ingestion, mistake detection, training sessions, Stockfish evaluation, opponent move generation, SRS scheduling, and persistence helpers.
+- `public/analyze/` — Synced browser assets used by the embedded standalone analysis runtime.
+- `standalone.js`, `standalone.css`, `standalone.html` — Source files for the embedded analysis runtime.
+- `scripts/sync-analyze-assets.mjs` — Syncs root analysis assets into `public/analyze/`.
+- `supabase/` — Database migrations for auth-backed product data, linked profiles, mistake records, training sessions, SRS state, and user preferences.
+- `tests/` — Unit and integration tests for chess-domain scoring, mistake detection, SRS scheduling, persistence helpers, and analysis/training utilities.
 
 ## Local Development
 
@@ -118,7 +143,7 @@ npm run dev
 - `/analysis`
 - `/account`
 
-The app expects the usual Supabase environment variables in `.env.local`. Training also requires local or remote access to Stockfish, configured opponent move generation, and the configured vector store once those services are wired into the route handlers.
+The app expects the usual Supabase environment variables in `.env.local`. Training also requires local or remote access to Stockfish and configured opponent move generation.
 
 ## Analyze Asset Workflow
 
@@ -146,6 +171,14 @@ The repo should not reintroduce these as primary product surfaces:
 - SAE pages
 - review flows and peer-review backend
 - Chessmemo note-taking as the primary surface
-- generic performance dashboards disconnected from the blindspot training loop
+- generic performance dashboards disconnected from the training loop
+- embedding-based weakness inference and cluster-based recommendation (this approach was tested empirically and did not show signal beyond rating-matched random selection — see the experimental archive in `/research`)
 
-Reflection notes can exist inside completed training sequences, but the product is the simulator and blindspot profile, not a general chess notebook.
+Reflection notes can exist inside completed training sequences, but the product is the simulator, mistake archive, and SRS queue — not a general chess notebook.
+
+## What This Product Is Not
+
+- It is not a puzzle trainer. The positions are full positions with multiple reasonable moves, and you're scored on a sequence, not a single move.
+- It does not infer abstract weakness clusters. It just shows you the positions you actually got wrong.
+- It does not promise improvement. It exposes you to your mistakes repeatedly. Whether you learn from them is between you and your conscience.
+- It is not for absolute beginners. Cold-start filler works, but the product gets meaningfully better once the user has 20+ rated games to mine for material.
