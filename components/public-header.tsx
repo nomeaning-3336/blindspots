@@ -55,7 +55,7 @@ function HeaderLink({
         "inline-flex min-h-9 items-center justify-center px-4 py-2 text-xs",
         primary
           ? "app-brutal-button"
-          : "rounded-[8px] border-2 border-[var(--app-border-strong)] bg-transparent font-bold uppercase text-[var(--app-text)] shadow-[3px_3px_0_var(--app-border-strong)] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_var(--app-border-strong)]",
+          : "app-brutal-button",
       ].join(" ")}
     >
       {children}
