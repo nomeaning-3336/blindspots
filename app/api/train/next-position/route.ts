@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Chess } from "chess.js";
 import { getOptionalAppUserId } from "@/lib/app-auth";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/database";
@@ -122,28 +123,49 @@ if (!optionalError && optionalData) {
   const mistakeResult = await getNextMistakeForTraining(userId);
   if (mistakeResult.mistake) {
     const normalized = normalizeUserMistakeForTraining(mistakeResult.mistake);
-    const response: NextPositionResponse = {
-      mistakeId: normalized.id,
-      fen: normalized.fen,
-      previousFen: normalized.previousFen ?? undefined,
-      playedMove: normalized.playedMove ?? undefined,
-      source: normalized.source,
-      queueSource: mistakeResult.queueSource ?? undefined,
-      sequenceLength,
-      challengeElo,
-    };
+    const mistake = mistakeResult.mistake;
 
-    if (process.env.NODE_ENV !== "production") {
-      response.debug = {
-        queueSource: mistakeResult.queueSource,
+    // Validate FEN before serving
+    const fenValid = isValidFen(mistake.starting_fen);
+    if (!fenValid) {
+      console.error(
+        `[next-position] Invalid FEN in row-based mistake ${mistake.id}: ${mistake.starting_fen.slice(0, 60)}`,
+      );
+      // Fall through to legacy path — do not return invalid data
+    } else {
+      const tags = normalizeThemeTags(mistake.theme_tags);
+      const response: NextPositionResponse = {
         mistakeId: normalized.id,
-        sourceType: mistakeResult.mistake.source_type,
-        servedCount: mistakeResult.mistake.served_count,
-        rowBased: true,
+        fen: normalized.fen,
+        previousFen: normalized.previousFen ?? undefined,
+        playedMove: normalized.playedMove ?? undefined,
+        source: normalized.source,
+        queueSource: mistakeResult.queueSource ?? undefined,
+        selectedServeMode: mistakeResult.queueSource ?? undefined,
+        tags,
+        openingName: mistake.opening_name ?? undefined,
+        eco: mistake.eco ?? undefined,
+        cpLoss: mistake.cp_loss ?? undefined,
+        sequenceLength,
+        challengeElo,
       };
-    }
 
-    return NextResponse.json(response);
+      if (process.env.NODE_ENV !== "production") {
+        response.debug = {
+          queueSource: mistakeResult.queueSource,
+          mistakeId: normalized.id,
+          sourceType: mistake.source_type,
+          cpLoss: mistake.cp_loss,
+          reviewCount: mistake.review_count,
+          intervalDays: mistake.interval_days,
+          nextReviewAt: mistake.next_review_at ?? undefined,
+          servedCount: mistake.served_count,
+          rowBased: true,
+        };
+      }
+
+      return NextResponse.json(response);
+    }
   }
 
   const queues = await ensureTrainingQueuesHavePositions({
@@ -732,5 +754,20 @@ function classifyPhaseFromFen(fen: string): string {
     return "middlegame";
   } catch {
     return "unknown";
+  }
+}
+
+function normalizeThemeTags(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const tags = value.filter((x): x is string => typeof x === "string");
+  return tags.length > 0 ? tags : undefined;
+}
+
+function isValidFen(fen: string) {
+  try {
+    new Chess(fen);
+    return true;
+  } catch {
+    return false;
   }
 }

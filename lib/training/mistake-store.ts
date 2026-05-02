@@ -1,5 +1,8 @@
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
+import type { Database } from "@/lib/supabase/database";
 import { nextIntervalDays, shouldMasterMistake, addDays, type TrainingOutcome } from "./mistake-srs";
+
+type UserMistakeUpdate = Database["public"]["Tables"]["user_mistakes"]["Update"];
 
 export interface UserMistakeRow {
   id: string;
@@ -156,7 +159,7 @@ export async function updateMistakeAfterTraining(input: {
   averageCpLoss: number;
   maxSingleCpLoss: number;
   now?: Date;
-}): Promise<UserMistakeRow | null> {
+}): Promise<UserMistakeRow> {
   const supabase = getSupabaseAdminClient();
   const now = input.now ?? new Date();
 
@@ -168,8 +171,9 @@ export async function updateMistakeAfterTraining(input: {
     .maybeSingle();
 
   if (error || !row) {
-    console.error("[mistake-store] load for update failed", error);
-    return null;
+    throw new Error(
+      `[mistake-store] Failed to load mistake ${input.mistakeId}: ${error?.message ?? "not found"}`,
+    );
   }
 
   const currentInterval = Math.max(1, row.interval_days ?? 1);
@@ -179,7 +183,7 @@ export async function updateMistakeAfterTraining(input: {
   });
   const nextReviewDate = addDays(now, newInterval);
 
-  const updates: Record<string, unknown> = {
+  const updates: UserMistakeUpdate = {
     review_count: (row.review_count ?? 0) + 1,
     last_attempt_at: now.toISOString(),
     next_review_at: nextReviewDate.toISOString(),
@@ -204,18 +208,19 @@ export async function updateMistakeAfterTraining(input: {
 
   const { data: updated, error: updateError } = await supabase
     .from("user_mistakes")
-    .update(updates as never)
+    .update(updates)
     .eq("id", input.mistakeId)
     .eq("user_id", input.userId)
     .select("*")
     .single();
 
-  if (updateError) {
-    console.error("[mistake-store] update failed", updateError);
-    return null;
+  if (updateError || !updated) {
+    throw new Error(
+      `[mistake-store] Failed to update mistake ${input.mistakeId}: ${updateError?.message ?? "no row returned"}`,
+    );
   }
 
-  return updated as unknown as UserMistakeRow;
+  return updated as UserMistakeRow;
 }
 
 export function normalizeUserMistakeForTraining(row: UserMistakeRow): {

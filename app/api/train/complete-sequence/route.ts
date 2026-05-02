@@ -160,16 +160,6 @@ export async function POST(request: Request) {
   const selectedMistakeId = typeof payload?.selectedMistakeId === "string" ? payload.selectedMistakeId : null;
   const queueSource = typeof payload?.queueSource === "string" ? payload.queueSource : null;
 
-  if (selectedMistakeId) {
-    await updateMistakeAfterTraining({
-      userId,
-      mistakeId: selectedMistakeId,
-      outcome: trainingOutcome,
-      averageCpLoss,
-      maxSingleCpLoss,
-    });
-  }
-
   const eloUpdate = calculateEloUpdate({
     currentElo: profile.blindspots_elo,
     ratingDeviation: profileRatingDeviation,
@@ -225,7 +215,24 @@ export async function POST(request: Request) {
   }
 
   if (selectedMistakeId) {
-    // Row-based mistake path: update Elo only, skip legacy queue/bucket/cluster stats
+    // Row-based mistake path: update SRS state first (session insert succeeded), then Elo
+    try {
+      await updateMistakeAfterTraining({
+        userId,
+        mistakeId: selectedMistakeId,
+        outcome: trainingOutcome,
+        averageCpLoss,
+        maxSingleCpLoss,
+      });
+    } catch (mistakeUpdateError) {
+      console.error("[complete-sequence] SRS update failed", mistakeUpdateError);
+      return NextResponse.json(
+        { error: "Failed to update mistake SRS state." },
+        { status: 500 },
+      );
+    }
+
+    // Update Elo only, skip legacy queue/bucket/cluster stats
     const { error: profileError } = await supabase
       .from("user_blindspot_profile")
       .update({
