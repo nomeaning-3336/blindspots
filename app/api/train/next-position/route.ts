@@ -23,6 +23,7 @@ import { selectAndReserveNextTrainingPositionCore, type TrainingBucket } from "@
 import { normalizeBucketStats, thompsonSample, type BucketStats } from "@/lib/training/bandit-stats";
 import { getPositionMateStatus } from "@/lib/engines/dispatcher";
 import { getOpponentElo } from "@/lib/training/elo";
+import { getNextMistakeForTraining, normalizeUserMistakeForTraining } from "@/lib/training/mistake-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,6 +43,9 @@ type NextPositionResponse = {
   openingName?: string;
   eco?: string;
   challengeElo?: number;
+  mistakeId?: string;
+  queueSource?: string;
+  cpLoss?: number;
   error?: string;
   debug?: Record<string, unknown>;
 };
@@ -113,6 +117,34 @@ if (!optionalError && optionalData) {
     ? profile.blindspots_elo
     : Number(profile?.blindspots_elo ?? 500);
   const challengeElo = getOpponentElo(userElo);
+
+  // Row-based mistake training — priority path
+  const mistakeResult = await getNextMistakeForTraining(userId);
+  if (mistakeResult.mistake) {
+    const normalized = normalizeUserMistakeForTraining(mistakeResult.mistake);
+    const response: NextPositionResponse = {
+      mistakeId: normalized.id,
+      fen: normalized.fen,
+      previousFen: normalized.previousFen ?? undefined,
+      playedMove: normalized.playedMove ?? undefined,
+      source: normalized.source,
+      queueSource: mistakeResult.queueSource ?? undefined,
+      sequenceLength,
+      challengeElo,
+    };
+
+    if (process.env.NODE_ENV !== "production") {
+      response.debug = {
+        queueSource: mistakeResult.queueSource,
+        mistakeId: normalized.id,
+        sourceType: mistakeResult.mistake.source_type,
+        servedCount: mistakeResult.mistake.served_count,
+        rowBased: true,
+      };
+    }
+
+    return NextResponse.json(response);
+  }
 
   const queues = await ensureTrainingQueuesHavePositions({
     ...queuesBeforeRefill,
