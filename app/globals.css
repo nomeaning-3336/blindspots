@@ -343,7 +343,6 @@ textarea {
 .app-shell-nav button:focus-visible {
   border-color: var(--app-nav-hover-bg) !important;
   background: var(--app-nav-hover-bg) !important;
-  color: var(--app-nav-hover-text) !important;
 }
 
 ::selection {
@@ -413,8 +412,8 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   .app-brutal-button:focus-visible {
     transform: translate(2px, 2px);
     box-shadow: 3px 3px 0 #050505;
-    background: #050505;
-    color: #ffffff;
+    background: #ffffff;
+    color: #050505;
   }
 
   .app-brutal-button:active {
