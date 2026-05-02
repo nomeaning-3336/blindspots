@@ -1693,7 +1693,7 @@ export default function TrainPage() {
         <section
           className="app-brutal-section flex min-h-0 min-w-0 items-center justify-center overflow-visible p-3 sm:p-4 lg:p-4"
         >
-          <div className="app-brutal-board-frame relative w-full max-w-[min(92vw,calc(100dvh-9.25rem),900px)] overflow-visible">
+          <div className="app-brutal-board-frame relative w-full max-w-[min(88vw,calc(100dvh-12rem),840px)] overflow-visible">
             {boardFen ? (
               <>
                 <BoardWithPlayerStrips
