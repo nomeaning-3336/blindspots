@@ -131,6 +131,7 @@ export type Database = {
       };
       linked_chess_profiles: {
         Row: {
+          id: string;
           user_id: string;
           provider: "chesscom" | "lichess";
           username: string;
@@ -138,10 +139,17 @@ export type Database = {
           raw_elo: number | null;
           initialization_status: string;
           initialization_completed_at: string | null;
+          last_sync_at: string | null;
+          last_game_id_seen: string | null;
+          last_sync_status: "idle" | "running" | "success" | "error" | null;
+          last_sync_error: string | null;
+          last_sync_game_count: number;
+          last_sync_mistake_count: number;
           created_at: string;
           updated_at: string;
         };
         Insert: {
+          id?: string;
           user_id: string;
           provider: "chesscom" | "lichess";
           username: string;
@@ -149,10 +157,17 @@ export type Database = {
           raw_elo?: number | null;
           initialization_status?: string;
           initialization_completed_at?: string | null;
+          last_sync_at?: string | null;
+          last_game_id_seen?: string | null;
+          last_sync_status?: "idle" | "running" | "success" | "error" | null;
+          last_sync_error?: string | null;
+          last_sync_game_count?: number;
+          last_sync_mistake_count?: number;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
+          id?: string;
           user_id?: string;
           provider?: "chesscom" | "lichess";
           username?: string;
@@ -160,6 +175,12 @@ export type Database = {
           raw_elo?: number | null;
           initialization_status?: string;
           initialization_completed_at?: string | null;
+          last_sync_at?: string | null;
+          last_game_id_seen?: string | null;
+          last_sync_status?: "idle" | "running" | "success" | "error" | null;
+          last_sync_error?: string | null;
+          last_sync_game_count?: number;
+          last_sync_mistake_count?: number;
           created_at?: string;
           updated_at?: string;
         };
