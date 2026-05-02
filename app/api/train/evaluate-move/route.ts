@@ -31,13 +31,12 @@ function comparableEval(line: { cp: number }, fen: string) {
 function getBanditResult(classification: MoveClassification): "success" | "neutral" | "failure" {
   if (
     classification === "best" ||
-    classification === "critical" ||
-    classification === "excellent" ||
+    classification === "brilliant" ||
     classification === "good"
   ) {
     return "success";
   }
-  if (classification === "inaccuracy") return "neutral";
+  if (classification === "dubious") return "neutral";
   return "failure";
 }
 
@@ -113,7 +112,7 @@ export async function POST(request: Request) {
   const fenAfterUserMove = chess.fen();
 
   if (isCheckmateFen(fenAfterUserMove)) {
-    const classification: MoveClassification = "excellent";
+    const classification: MoveClassification = "good";
     const evalBefore = await getPositionEval(decisionFen, { timeLimitMs: EVAL_TIME_LIMIT_MS });
     const evalBeforeSigned = userColor === "w" ? evalBefore.cp : -(evalBefore.cp);
     const phase = selectedPhase ?? classifyTrainingPhase(fenAfterUserMove);
@@ -249,9 +248,9 @@ function normalizeTags(value: unknown): string[] | null {
 }
 
 function classifyCpLoss(cpLoss: number): MoveClassification {
-  if (cpLoss <= 30) return "excellent";
+  if (cpLoss <= 30) return "good";
   if (cpLoss <= 90) return "good";
-  if (cpLoss <= 180) return "inaccuracy";
+  if (cpLoss <= 180) return "dubious";
   if (cpLoss <= 320) return "mistake";
   return "blunder";
 }
