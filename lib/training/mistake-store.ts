@@ -1,0 +1,237 @@
+import { getSupabaseAdminClient } from "@/lib/supabase/server";
+import { nextIntervalDays, shouldMasterMistake, addDays, type TrainingOutcome } from "./mistake-srs";
+
+export interface UserMistakeRow {
+  id: string;
+  user_id: string;
+  source_type: string;
+  source_provider: string | null;
+  source_game_id: string | null;
+  source_game_url: string | null;
+  linked_profile_id: string | null;
+  game_played_at: string | null;
+  ply: number | null;
+  user_color: string | null;
+  starting_fen: string;
+  decision_fen: string | null;
+  actual_move_uci: string | null;
+  actual_move_san: string | null;
+  best_move_uci: string | null;
+  best_move_san: string | null;
+  eval_before_cp: number | null;
+  eval_after_cp: number | null;
+  cp_loss: number | null;
+  theme_tags: unknown;
+  opening_name: string | null;
+  eco: string | null;
+  status: string;
+  interval_days: number;
+  review_count: number;
+  pass_count: number;
+  acceptable_count: number;
+  fail_count: number;
+  last_attempt_at: string | null;
+  next_review_at: string | null;
+  first_ingested_at: string;
+  last_served_at: string | null;
+  served_count: number;
+  mastered_at: string | null;
+  retired_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NextMistakeResult {
+  mistake: UserMistakeRow | null;
+  queueSource: "review" | "active" | "filler" | null;
+}
+
+export async function getNextMistakeForTraining(
+  userId: string,
+  now: Date = new Date(),
+): Promise<NextMistakeResult> {
+  const supabase = getSupabaseAdminClient();
+  const nowISO = now.toISOString();
+
+  const { data: review, error: reviewError } = await supabase
+    .from("user_mistakes")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("status", "review")
+    .is("retired_at", null)
+    .is("mastered_at", null)
+    .lte("next_review_at", nowISO)
+    .order("next_review_at", { ascending: true })
+    .order("fail_count", { ascending: false })
+    .order("cp_loss", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (reviewError) {
+    console.error("[mistake-store] review query failed", reviewError);
+  }
+
+  if (review) {
+    await supabase
+      .from("user_mistakes")
+      .update({
+        served_count: (review.served_count ?? 0) + 1,
+        last_served_at: nowISO,
+      })
+      .eq("id", review.id)
+      .eq("user_id", userId);
+
+    return { mistake: review as unknown as UserMistakeRow, queueSource: "review" };
+  }
+
+  const { data: active, error: activeError } = await supabase
+    .from("user_mistakes")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .is("retired_at", null)
+    .is("mastered_at", null)
+    .eq("review_count", 0)
+    .in("source_type", ["own_game", "imported_pgn"])
+    .order("game_played_at", { ascending: false, nullsFirst: false })
+    .order("cp_loss", { ascending: false, nullsFirst: false })
+    .order("first_ingested_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (activeError) {
+    console.error("[mistake-store] active query failed", activeError);
+  }
+
+  if (active) {
+    await supabase
+      .from("user_mistakes")
+      .update({
+        served_count: (active.served_count ?? 0) + 1,
+        last_served_at: nowISO,
+      })
+      .eq("id", active.id)
+      .eq("user_id", userId);
+
+    return { mistake: active as unknown as UserMistakeRow, queueSource: "active" };
+  }
+
+  const { data: filler, error: fillerError } = await supabase
+    .from("user_mistakes")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .eq("source_type", "lichess_puzzle_filler")
+    .is("retired_at", null)
+    .is("mastered_at", null)
+    .order("last_served_at", { ascending: true, nullsFirst: true })
+    .order("first_ingested_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (fillerError) {
+    console.error("[mistake-store] filler query failed", fillerError);
+  }
+
+  if (filler) {
+    await supabase
+      .from("user_mistakes")
+      .update({
+        served_count: (filler.served_count ?? 0) + 1,
+        last_served_at: nowISO,
+      })
+      .eq("id", filler.id)
+      .eq("user_id", userId);
+
+    return { mistake: filler as unknown as UserMistakeRow, queueSource: "filler" };
+  }
+
+  return { mistake: null, queueSource: null };
+}
+
+export async function updateMistakeAfterTraining(input: {
+  userId: string;
+  mistakeId: string;
+  outcome: TrainingOutcome;
+  averageCpLoss: number;
+  maxSingleCpLoss: number;
+  now?: Date;
+}): Promise<UserMistakeRow | null> {
+  const supabase = getSupabaseAdminClient();
+  const now = input.now ?? new Date();
+
+  const { data: row, error } = await supabase
+    .from("user_mistakes")
+    .select("*")
+    .eq("id", input.mistakeId)
+    .eq("user_id", input.userId)
+    .maybeSingle();
+
+  if (error || !row) {
+    console.error("[mistake-store] load for update failed", error);
+    return null;
+  }
+
+  const currentInterval = Math.max(1, row.interval_days ?? 1);
+  const newInterval = nextIntervalDays({
+    currentIntervalDays: currentInterval,
+    outcome: input.outcome,
+  });
+  const nextReviewDate = addDays(now, newInterval);
+
+  const updates: Record<string, unknown> = {
+    review_count: (row.review_count ?? 0) + 1,
+    last_attempt_at: now.toISOString(),
+    next_review_at: nextReviewDate.toISOString(),
+    interval_days: newInterval,
+  };
+
+  if (input.outcome === "pass") {
+    updates.pass_count = (row.pass_count ?? 0) + 1;
+  } else if (input.outcome === "acceptable") {
+    updates.acceptable_count = (row.acceptable_count ?? 0) + 1;
+  } else {
+    updates.fail_count = (row.fail_count ?? 0) + 1;
+  }
+
+  if (shouldMasterMistake({ intervalDays: newInterval, outcome: input.outcome })) {
+    updates.status = "mastered";
+    updates.mastered_at = now.toISOString();
+    updates.next_review_at = null;
+  } else {
+    updates.status = "review";
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from("user_mistakes")
+    .update(updates as never)
+    .eq("id", input.mistakeId)
+    .eq("user_id", input.userId)
+    .select("*")
+    .single();
+
+  if (updateError) {
+    console.error("[mistake-store] update failed", updateError);
+    return null;
+  }
+
+  return updated as unknown as UserMistakeRow;
+}
+
+export function normalizeUserMistakeForTraining(row: UserMistakeRow): {
+  id: string;
+  fen: string;
+  previousFen: string | null;
+  playedMove: string | null;
+  source: string;
+  queueSource: string;
+} {
+  return {
+    id: row.id,
+    fen: row.starting_fen,
+    previousFen: null,
+    playedMove: row.actual_move_uci ?? null,
+    source: row.source_type,
+    queueSource: row.status === "review" ? "review" : row.source_type,
+  };
+}

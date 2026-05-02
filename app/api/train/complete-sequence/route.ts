@@ -15,6 +15,8 @@ import {
 import { normalizeBucketStats, recordBucketResult } from "@/lib/training/bandit-stats";
 import { classifyTrainingBucket, classifyTrainingPhase } from "@/lib/training/position-metadata";
 import type { TrainingBucket, TrainingPhase } from "@/lib/training/queue-core";
+import { classifyTrainingOutcome } from "@/lib/training/mistake-srs";
+import { updateMistakeAfterTraining } from "@/lib/training/mistake-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,9 +45,11 @@ type CompleteSequencePayload = {
   selectedOpeningName?: unknown;
   selectedEco?: unknown;
   challengeElo?: unknown;
+  selectedMistakeId?: unknown;
+  queueSource?: unknown;
 };
 
-type MoveClassification = "brilliant" | "best" | "good" | "interesting" | "dubious" | "mistake" | "blunder";
+type MoveClassification = "brilliant" | "critical" | "best" | "excellent" | "good" | "okay" | "inaccuracy" | "mistake" | "blunder";
 
 type PositionEvaluation = {
   index: number;
@@ -145,6 +149,27 @@ export async function POST(request: Request) {
   const evalPreservationScore = sequenceEvaluation.evalPreservationScore;
   const profileRatingDeviation = normalizeRatingDeviation(profile.rating_deviation);
 
+  const averageCpLoss = Math.max(0, Math.round(
+    sequenceEvaluation.moveScores.length > 0
+      ? sequenceEvaluation.totalCpLoss / sequenceEvaluation.moveScores.length
+      : 0,
+  ));
+  const maxSingleCpLoss = Math.max(0, ...sequenceEvaluation.moveScores.map((s) => s.cpLoss), 0);
+  const trainingOutcome = classifyTrainingOutcome({ averageCpLoss, maxSingleCpLoss });
+
+  const selectedMistakeId = typeof payload?.selectedMistakeId === "string" ? payload.selectedMistakeId : null;
+  const queueSource = typeof payload?.queueSource === "string" ? payload.queueSource : null;
+
+  if (selectedMistakeId) {
+    await updateMistakeAfterTraining({
+      userId,
+      mistakeId: selectedMistakeId,
+      outcome: trainingOutcome,
+      averageCpLoss,
+      maxSingleCpLoss,
+    });
+  }
+
   const eloUpdate = calculateEloUpdate({
     currentElo: profile.blindspots_elo,
     ratingDeviation: profileRatingDeviation,
@@ -186,6 +211,11 @@ export async function POST(request: Request) {
       expected_score: expectedScore,
       actual_score: actualScore,
       position_evaluations: sequenceEvaluation.positionEvaluations as unknown as Json,
+      selected_mistake_id: selectedMistakeId,
+      queue_source: queueSource,
+      training_outcome: trainingOutcome,
+      average_cp_loss: averageCpLoss,
+      max_single_cp_loss: maxSingleCpLoss,
     })
     .select("id")
     .single();
@@ -194,6 +224,50 @@ export async function POST(request: Request) {
     throw new Error(`Failed to save training session: ${sessionError.message}`);
   }
 
+  if (selectedMistakeId) {
+    // Row-based mistake path: update Elo only, skip legacy queue/bucket/cluster stats
+    const { error: profileError } = await supabase
+      .from("user_blindspot_profile")
+      .update({
+        blindspots_elo: eloAfter,
+        rating_deviation: eloUpdate?.ratingDeviationAfter ?? profileRatingDeviation,
+        total_sequences: profile.total_sequences + 1,
+        last_session_at: completedAt,
+      })
+      .eq("user_id", userId);
+
+    if (profileError) {
+      throw new Error(`Failed to update Blindspots Elo: ${profileError.message}`);
+    }
+
+    return NextResponse.json({
+      ok: true,
+      sessionId: session.id,
+      evalPreservationScore,
+      moveScores: sequenceEvaluation.moveScores,
+      positionEvaluations: sequenceEvaluation.positionEvaluations,
+      elo: {
+        eloBefore,
+        eloAfter,
+        eloDelta,
+        kFactor,
+        opponentElo,
+        expectedScore,
+        actualScore,
+        rawDelta: eloUpdate?.rawDelta ?? 0,
+        clampedDelta: eloUpdate?.clampedDelta ?? 0,
+        skipped: evalPreservationScore === null,
+        ratingDeviationBefore: eloUpdate?.ratingDeviationBefore ?? profileRatingDeviation,
+        ratingDeviationAfter: eloUpdate?.ratingDeviationAfter ?? profileRatingDeviation,
+      },
+      trainingOutcome,
+      averageCpLoss,
+      maxSingleCpLoss,
+      selectedMistakeId: selectedMistakeId,
+    });
+  }
+
+  // Legacy JSON-queue path
   const queues = await updateQueuesAfterSequence({
     currentQueues: {
       exploitQueue: normalizeQueue(profile.exploit_queue),
@@ -273,6 +347,10 @@ export async function POST(request: Request) {
       ratingDeviationBefore: eloUpdate?.ratingDeviationBefore ?? profileRatingDeviation,
       ratingDeviationAfter: eloUpdate?.ratingDeviationAfter ?? profileRatingDeviation,
     },
+    trainingOutcome,
+    averageCpLoss,
+    maxSingleCpLoss,
+    selectedMistakeId: selectedMistakeId ?? undefined,
   });
 }
 
@@ -419,14 +497,14 @@ async function calculateSequenceEvaluation({
 function classifyCpLoss(cpLoss: number): MoveClassification {
   if (cpLoss <= 30) return "good";
   if (cpLoss <= 90) return "good";
-  if (cpLoss <= 180) return "dubious";
+  if (cpLoss <= 180) return "inaccuracy";
   if (cpLoss <= 320) return "mistake";
   return "blunder";
 }
 
 function getBanditResult(classification: MoveClassification): "success" | "neutral" | "failure" {
-  if (classification === "good" || classification === "best") return "success";
-  if (classification === "dubious") return "neutral";
+  if (classification === "brilliant" || classification === "critical" || classification === "best" || classification === "excellent" || classification === "good" || classification === "okay") return "success";
+  if (classification === "inaccuracy") return "neutral";
   return "failure";
 }
 

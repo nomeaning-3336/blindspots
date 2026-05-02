@@ -146,6 +146,9 @@ type NextPositionResponse = {
   openingName?: string;
   eco?: string;
   challengeElo?: number;
+  mistakeId?: string;
+  queueSource?: string;
+  cpLoss?: number;
   error?: string;
 };
 
@@ -340,6 +343,8 @@ export default function TrainPage() {
   const selectedTacticRatingRef = useRef<number | null>(null);
   const selectedOpeningNameRef = useRef<string | null>(null);
   const selectedEcoRef = useRef<string | null>(null);
+  const currentMistakeIdRef = useRef<string | null>(null);
+  const currentQueueSourceRef = useRef<string | null>(null);
   const [initialOpponentMove, setInitialOpponentMove] = useState<TrainingMove | null>(null);
   const [displayStartingFen, setDisplayStartingFen] = useState<string>("");
   const [hasLoadedPosition, setHasLoadedPosition] = useState(false);
@@ -634,6 +639,11 @@ export default function TrainPage() {
         : typeof debug?.eco === "string"
           ? (debug.eco as string)
           : null;
+
+    currentMistakeIdRef.current =
+      typeof payload.mistakeId === "string" ? payload.mistakeId : null;
+    currentQueueSourceRef.current =
+      typeof payload.queueSource === "string" ? payload.queueSource : null;
 
     completingRef.current = false;
     initialOpponentMoveRef.current = null;
@@ -1060,6 +1070,8 @@ export default function TrainPage() {
           selectedTacticRating: selectedTacticRatingRef.current,
           selectedOpeningName: selectedOpeningNameRef.current,
           selectedEco: selectedEcoRef.current,
+          selectedMistakeId: currentMistakeIdRef.current,
+          queueSource: currentQueueSourceRef.current,
           challengeElo: currentChallengeElo,
         }),
       });
