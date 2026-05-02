@@ -125,7 +125,7 @@ export default async function DisclaimerPage() {
         <footer className="mx-auto flex w-full min-w-0 max-w-full flex-col gap-4 overflow-x-clip border-t border-[var(--app-border)] px-6 py-6 md:max-w-7xl md:flex-row md:items-center md:justify-between md:px-10">
           <BrandMark size={20} />
           <p className="max-w-full break-words text-[10px] uppercase text-[var(--app-muted)]">
-            (c) 2026 / No streak counters were harmed
+            (c) 2026 / No rooks were sacrificed
           </p>
         </footer>
       </main>
