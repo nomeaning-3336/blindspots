@@ -413,12 +413,12 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   .app-brutal-button:focus-visible {
     transform: translate(2px, 2px);
     box-shadow: 3px 3px 0 #050505;
-    background: color-mix(in srgb, var(--app-accent) 88%, white);
-    color: #050505;
+    background: #050505;
+    color: #ffffff;
   }
 
   .app-brutal-button:active {
-    transform: translate(5px, 5px);
+    transform: translate(4px, 4px);
     box-shadow: 0 0 0 #050505;
   }
 
