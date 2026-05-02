@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server";
 import { normalizeNextPath } from "@/lib/app-auth";
+import { publicUrl } from "@/lib/public-origin";
 import {
   SUPABASE_AUTH_COOKIE_DELETE_PATHS,
   isSupabaseAuthFlowCookie,
@@ -33,9 +34,9 @@ function clearSupabaseAuthFlowCookies(request: Request, response: NextResponse) 
 
 function redirectToSignIn(request: Request, nextPath: string) {
   return NextResponse.redirect(
-    new URL(
+    publicUrl(
+      request,
       `/sign-in?next=${encodeURIComponent(nextPath)}&error=auth-callback`,
-      request.url,
     ),
     303,
   );
@@ -66,6 +67,6 @@ export async function GET(request: Request) {
   }
 
   return applyCookies(
-    NextResponse.redirect(new URL(nextPath, request.url), 303),
+    NextResponse.redirect(publicUrl(request, nextPath), 303),
   );
 }

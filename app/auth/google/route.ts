@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server";
 import { normalizeNextPath } from "@/lib/app-auth";
+import { publicUrl } from "@/lib/public-origin";
 import {
   SUPABASE_AUTH_COOKIE_DELETE_PATHS,
   isSupabaseAuthFlowCookie,
@@ -55,9 +56,9 @@ function clearStaleSupabaseSessionCookies(request: Request, response: NextRespon
 
 function redirectWithError(request: Request, nextPath: string) {
   const response = NextResponse.redirect(
-    new URL(
+    publicUrl(
+      request,
       `/sign-in?next=${encodeURIComponent(nextPath)}&error=oauth-failed`,
-      request.url,
     ),
     303,
   );
@@ -68,7 +69,7 @@ function redirectWithError(request: Request, nextPath: string) {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const nextPath = normalizeNextPath(url.searchParams.get("next"));
-  const callbackUrl = new URL("/auth/callback", request.url);
+  const callbackUrl = publicUrl(request, "/auth/callback");
   callbackUrl.searchParams.set("next", nextPath);
 
   const clean = url.searchParams.get("clean") === "1";
@@ -77,7 +78,7 @@ export async function GET(request: Request) {
   const hasExistingCodeVerifier = cookieNames.some(isSupabaseCodeVerifierCookie);
 
   if (!clean && (hasExistingSessionCookies || hasExistingCodeVerifier)) {
-    const cleanUrl = new URL("/auth/google", request.url);
+    const cleanUrl = publicUrl(request, "/auth/google");
     cleanUrl.searchParams.set("next", nextPath);
     cleanUrl.searchParams.set("clean", "1");
 
