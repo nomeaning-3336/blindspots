@@ -52,10 +52,10 @@ function HeaderLink({
     <Link
       href={href}
       className={[
-        "inline-flex min-h-9 items-center justify-center rounded border px-4 py-2 text-xs font-bold uppercase transition",
+        "inline-flex min-h-9 items-center justify-center px-4 py-2 text-xs",
         primary
-          ? "border-[var(--app-accent)] bg-[var(--app-accent)] !text-black"
-          : "border-[var(--app-border)] bg-transparent text-[var(--app-text)]",
+          ? "app-brutal-button"
+          : "rounded-[8px] border-2 border-[var(--app-border-strong)] bg-transparent font-bold uppercase text-[var(--app-text)] shadow-[3px_3px_0_var(--app-border-strong)] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_var(--app-border-strong)]",
       ].join(" ")}
     >
       {children}
