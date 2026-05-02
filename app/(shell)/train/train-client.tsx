@@ -179,6 +179,8 @@ const ANALYSIS_FAILURE_MESSAGE =
 const DEFAULT_SEQUENCE_LENGTH = 4;
 const MIN_SEQUENCE_LENGTH = 1;
 const MAX_SEQUENCE_LENGTH = 9;
+const DEFAULT_TRAINING_FEN =
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 // Train audio - managed by lib/train-audio.ts
 import {
   primeTrainAudio,
@@ -274,7 +276,7 @@ const mockRep = {
 export default function TrainPage() {
   const [state, setState] = useState<TrainingState>("active");
   const [startingFen, setStartingFen] = useState<string>("");
-  const [fen, setFen] = useState<string>("");
+  const [fen, setFen] = useState<string>(DEFAULT_TRAINING_FEN);
   const [moves, setMoves] = useState<TrainingMove[]>(mockRep.moveHistory);
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(null);
   const [sequenceLength, setSequenceLength] = useState(mockRep.sequenceLength);
@@ -319,7 +321,10 @@ export default function TrainPage() {
   const [visualPreferences, setVisualPreferences] = useState<{
     boardTheme: AnalyzeBoardTheme;
     pieceTheme: AnalyzePieceTheme;
-  } | null>(null);
+  }>({
+    boardTheme: "midnight",
+    pieceTheme: "maestro",
+  });
   const [pieceLineCache, setPieceLineCache] = useState<Record<string, EngineLineResult[]>>({});
   const [pieceLinesLoadingKey, setPieceLinesLoadingKey] = useState<string | null>(null);
   const moveSoundPlyRef = useRef(0);
@@ -1678,18 +1683,18 @@ export default function TrainPage() {
   }
 
   return (
-    <div className="app-paper-shell train-session-enter flex min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden px-4 py-4">
+    <div className="app-paper-shell train-session-enter flex h-[calc(100dvh-64px)] min-h-0 w-full flex-1 overflow-hidden px-3 py-3">
       <div
         className={[
-          "mx-auto grid w-full max-w-[100rem] min-w-0 gap-6 transition-opacity duration-200",
-          "lg:min-h-[780px] lg:grid-cols-[minmax(0,1.22fr)_minmax(28rem,0.92fr)] lg:items-start",
+          "mx-auto grid h-full min-h-0 w-full max-w-[100rem] min-w-0 gap-4 transition-opacity duration-200",
+          "lg:grid-cols-[minmax(0,1.22fr)_minmax(28rem,0.92fr)] lg:items-stretch",
         ].join(" ")}
       >
         <section
-          className="app-brutal-section flex min-w-0 items-center justify-center overflow-visible p-3 sm:p-4 lg:min-h-0 lg:p-5"
+          className="app-brutal-section flex min-h-0 min-w-0 items-center justify-center overflow-visible p-3 sm:p-4 lg:p-4"
         >
-          <div className="app-brutal-board-frame relative w-full max-w-[min(92vw,76vh,900px)] overflow-visible">
-            {visualPreferences && !isPositionLoading && hasLoadedPosition ? (
+          <div className="app-brutal-board-frame relative w-full max-w-[min(92vw,calc(100dvh-9.25rem),900px)] overflow-visible">
+            {boardFen ? (
               <>
                 <BoardWithPlayerStrips
                   userSide={userMoveSide}
@@ -1711,6 +1716,7 @@ export default function TrainPage() {
                         lastMoveBadge={boardLastMoveBadge}
                         boardTheme={visualPreferences.boardTheme}
                         pieceTheme={visualPreferences.pieceTheme}
+                        disabled={isPositionLoading || !hasLoadedPosition}
                         highlightedSquares={
                           hoveredMoveSquares
                             ? moveHighlightsForClassifiedMove(hoveredMoveSquares, hoveredMoveSquares.classification)
@@ -1742,7 +1748,7 @@ export default function TrainPage() {
                       lastMove={replayLastMove}
                       boardTheme={visualPreferences.boardTheme}
                       pieceTheme={visualPreferences.pieceTheme}
-                      disabled={state !== "active" || isOpponentThinking || isAwaitingStartGesture || (isActiveSetupReplay && activeSetupReplayIndex === 0)}
+                      disabled={isPositionLoading || !hasLoadedPosition || state !== "active" || isOpponentThinking || isAwaitingStartGesture || (isActiveSetupReplay && activeSetupReplayIndex === 0)}
                       annotationsDisabled={false}
                       highlightedSquares={getTrainingBoardHighlights(state)}
                       onMove={handleMove}
@@ -1760,6 +1766,13 @@ export default function TrainPage() {
                     </p>
                   </div>
                 ) : null}
+                {isPositionLoading ? (
+                  <div className="pointer-events-none absolute inset-0 z-50 grid place-items-center bg-black/20">
+                    <div className="app-brutal-section-soft px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
+                      Loading position
+                    </div>
+                  </div>
+                ) : null}
               </>
             ) : (
               <div
@@ -1775,10 +1788,10 @@ export default function TrainPage() {
         <aside
           data-testid="train-move-panel"
           className={[
-            "app-brutal-section flex min-w-0 max-w-full flex-col overflow-x-hidden",
+            "app-brutal-section flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden",
             state === "complete" && resultMode === "results"
-              ? "p-4 sm:p-5"
-              : "p-4 sm:p-5 lg:min-h-[720px]",
+              ? "p-3 sm:p-4"
+              : "p-3 sm:p-4",
           ].join(" ")}
         >
           {state === "complete" ? (

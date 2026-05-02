@@ -433,21 +433,21 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   .app-brutal-section {
     border: 1px solid color-mix(in srgb, var(--app-text) 72%, transparent);
     background: var(--app-panel-solid);
-    box-shadow: 5px 5px 0 #050505;
+    box-shadow: 4px 4px 0 #050505;
     border-radius: 12px;
   }
 
   .app-brutal-section-soft {
     border: 1px solid color-mix(in srgb, var(--app-text) 32%, transparent);
     background: color-mix(in srgb, var(--app-panel-solid) 88%, var(--app-bg) 12%);
-    box-shadow: 3px 3px 0 #050505;
+    box-shadow: 2px 2px 0 #050505;
     border-radius: 10px;
   }
 
   .app-brutal-board-frame {
     border: 1px solid #050505;
     background: var(--app-panel-solid);
-    box-shadow: 4px 4px 0 #050505;
+    box-shadow: 3px 3px 0 #050505;
     border-radius: 10px;
     overflow: hidden;
   }
