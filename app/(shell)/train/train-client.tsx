@@ -1333,6 +1333,7 @@ export default function TrainPage() {
     : isActiveSetupReplay
       ? activeSetupCurrentFen
       : activeReplayPosition?.fen ?? (fen ?? "");
+  const sideToMoveLabel = getFenTurnSide(boardFen) === "white" ? "White" : "Black";
   const replayLastMove = isExploringResults
     ? (activeExploratoryPosition?.lastMove ?? exploratoryLastMove ?? lastMoveFromTrainingMove(activeSequencePosition?.move))
     : isActiveSetupReplay
@@ -1691,97 +1692,137 @@ export default function TrainPage() {
         ].join(" ")}
       >
         <section
-          className="app-brutal-section flex min-h-0 min-w-0 items-center justify-center overflow-visible p-3 sm:p-4 lg:p-4"
+          className="app-brutal-section grid min-h-0 min-w-0 grid-cols-1 items-center gap-3 overflow-hidden p-3 sm:p-4 lg:grid-cols-[minmax(5.5rem,0.22fr)_minmax(0,auto)_minmax(8rem,0.32fr)] lg:p-4"
         >
-          <div className="app-brutal-board-frame relative w-full max-w-[min(88vw,calc(100dvh-12rem),840px)] overflow-visible">
-            {boardFen ? (
-              <>
-                <BoardWithPlayerStrips
-                  userSide={userMoveSide}
-                  boardFen={boardFen ?? ""}
-                  isOpponentThinking={isOpponentThinking}
-                  isTrainingActive={state === "active"}
-                  isExploring={isExploringResults}
-                >
-                  {isExploringResults ? (
-                    <BoardWithEvalBar evalCp={currentEngineEval} isLoading={isEngineLinesLoading} orientation={boardOrientation}>
+          <div className="hidden min-h-0 min-w-0 lg:flex lg:h-full lg:flex-col lg:justify-between">
+            <div className="rounded-[10px] border border-[color-mix(in_srgb,var(--app-text)_18%,transparent)] bg-[color-mix(in_srgb,var(--app-panel-solid)_86%,var(--app-bg)_14%)] p-3">
+              <div className="app-brutal-label mb-2">Turn</div>
+              <div className="text-sm font-bold text-[var(--app-text)]">
+                {sideToMoveLabel}
+              </div>
+            </div>
+
+            <div className="rounded-[10px] border border-[color-mix(in_srgb,var(--app-text)_18%,transparent)] bg-[color-mix(in_srgb,var(--app-panel-solid)_86%,var(--app-bg)_14%)] p-3">
+              <div className="app-brutal-label mb-2">Move</div>
+              <div className="text-sm font-bold text-[var(--app-text)]">
+                {moves.length + 1} / {sequenceLength}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex min-h-0 min-w-0 items-center justify-center">
+            <div className="app-brutal-board-frame relative w-full max-w-[min(82vw,calc(100dvh-12.5rem),800px)] overflow-visible">
+              {boardFen ? (
+                <>
+                  <BoardWithPlayerStrips
+                    userSide={userMoveSide}
+                    boardFen={boardFen ?? ""}
+                    isOpponentThinking={isOpponentThinking}
+                    isTrainingActive={state === "active"}
+                    isExploring={isExploringResults}
+                  >
+                    {isExploringResults ? (
+                      <BoardWithEvalBar evalCp={currentEngineEval} isLoading={isEngineLinesLoading} orientation={boardOrientation}>
+                        <AnalysisBoard
+                          fen={boardFen}
+                          mode="training"
+                          orientation={boardOrientation}
+                          coordinates
+                          showLegalTargets={false}
+                          selectedSquare={exploreSelectedSquare}
+                          lastMove={replayLastMove}
+                          lastMoveBadge={boardLastMoveBadge}
+                          boardTheme={visualPreferences.boardTheme}
+                          pieceTheme={visualPreferences.pieceTheme}
+                          disabled={isPositionLoading || !hasLoadedPosition}
+                          highlightedSquares={
+                            hoveredMoveSquares
+                              ? moveHighlightsForClassifiedMove(hoveredMoveSquares, hoveredMoveSquares.classification)
+                              : selectedMoveHighlight
+                                ? moveHighlightsForClassifiedMove(selectedMoveHighlight, selectedMoveHighlight.classification)
+                                : undefined
+                          }
+                          engineArrows={buildEngineArrows(boardEngineLines, hoveredEngineLineMove)}
+                          data-testid="train-board"
+                          onMove={(move) => { setExploreSelectedSquare(null); setSelectedMoveIndex(null); handleExploreMove(move); }}
+                          onSquareClick={(square) => {
+                            try {
+                              const chess = new Chess(boardFen);
+                              const piece = chess.get(square as Square);
+                              if (piece && piece.color === chess.turn() && square !== exploreSelectedSquare) { setExploreSelectedSquare(square); } else { setExploreSelectedSquare(null); }
+                            } catch { setExploreSelectedSquare(null); }
+                          }}
+                          onCircleHover={setHoveredAnnotationSquare}
+                          onEngineArrowClick={handleExploreMove}
+                        />
+                      </BoardWithEvalBar>
+                    ) : (
                       <AnalysisBoard
                         fen={boardFen}
                         mode="training"
                         orientation={boardOrientation}
                         coordinates
-                        showLegalTargets={false}
-                        selectedSquare={exploreSelectedSquare}
+                        showLegalTargets
                         lastMove={replayLastMove}
-                        lastMoveBadge={boardLastMoveBadge}
                         boardTheme={visualPreferences.boardTheme}
                         pieceTheme={visualPreferences.pieceTheme}
-                        disabled={isPositionLoading || !hasLoadedPosition}
-                        highlightedSquares={
-                          hoveredMoveSquares
-                            ? moveHighlightsForClassifiedMove(hoveredMoveSquares, hoveredMoveSquares.classification)
-                            : selectedMoveHighlight
-                              ? moveHighlightsForClassifiedMove(selectedMoveHighlight, selectedMoveHighlight.classification)
-                              : undefined
-                        }
-                        engineArrows={buildEngineArrows(boardEngineLines, hoveredEngineLineMove)}
+                        disabled={isPositionLoading || !hasLoadedPosition || state !== "active" || isOpponentThinking || isAwaitingStartGesture || (isActiveSetupReplay && activeSetupReplayIndex === 0)}
+                        annotationsDisabled={false}
+                        highlightedSquares={getTrainingBoardHighlights(state)}
+                        onMove={handleMove}
                         data-testid="train-board"
-                        onMove={(move) => { setExploreSelectedSquare(null); setSelectedMoveIndex(null); handleExploreMove(move); }}
-                        onSquareClick={(square) => {
-                          try {
-                            const chess = new Chess(boardFen);
-                            const piece = chess.get(square as Square);
-                            if (piece && piece.color === chess.turn() && square !== exploreSelectedSquare) { setExploreSelectedSquare(square); } else { setExploreSelectedSquare(null); }
-                          } catch { setExploreSelectedSquare(null); }
-                        }}
-                        onCircleHover={setHoveredAnnotationSquare}
-                        onEngineArrowClick={handleExploreMove}
                       />
-                    </BoardWithEvalBar>
-                  ) : (
-                    <AnalysisBoard
-                      fen={boardFen}
-                      mode="training"
-                      orientation={boardOrientation}
-                      coordinates
-                      showLegalTargets
-                      lastMove={replayLastMove}
-                      boardTheme={visualPreferences.boardTheme}
-                      pieceTheme={visualPreferences.pieceTheme}
-                      disabled={isPositionLoading || !hasLoadedPosition || state !== "active" || isOpponentThinking || isAwaitingStartGesture || (isActiveSetupReplay && activeSetupReplayIndex === 0)}
-                      annotationsDisabled={false}
-                      highlightedSquares={getTrainingBoardHighlights(state)}
-                      onMove={handleMove}
-                      data-testid="train-board"
-                    />
-                  )}
-                </BoardWithPlayerStrips>
-                {isAwaitingStartGesture ? (
-                  <div
-                    className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-[10px] bg-black/70 backdrop-blur-sm"
-                    data-testid="audio-unlock-overlay"
-                  >
-                    <p className="text-sm font-bold uppercase tracking-[0.18em] text-white">
-                      Press any key or click the board to start
-                    </p>
-                  </div>
-                ) : null}
-                {isPositionLoading ? (
-                  <div className="pointer-events-none absolute inset-0 z-50 grid place-items-center bg-black/20">
-                    <div className="app-brutal-section-soft px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
-                      Loading position
+                    )}
+                  </BoardWithPlayerStrips>
+                  {isAwaitingStartGesture ? (
+                    <div
+                      className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-[10px] bg-black/70 backdrop-blur-sm"
+                      data-testid="audio-unlock-overlay"
+                    >
+                      <p className="text-sm font-bold uppercase tracking-[0.18em] text-white">
+                        Press any key or click the board to start
+                      </p>
                     </div>
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <div
-                className="grid aspect-square w-full place-items-center rounded-[10px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] text-sm font-bold text-[var(--app-muted)]"
-                aria-live="polite"
-              >
-                Finding something you mishandle...
-              </div>
-            )}
+                  ) : null}
+                  {isPositionLoading ? (
+                    <div className="pointer-events-none absolute inset-0 z-50 grid place-items-center bg-black/20">
+                      <div className="app-brutal-section-soft px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
+                        Loading position
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div
+                  className="grid aspect-square w-full place-items-center rounded-[10px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] text-sm font-bold text-[var(--app-muted)]"
+                  aria-live="polite"
+                >
+                  Finding something you mishandle...
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="hidden min-h-0 min-w-0 lg:flex lg:h-full lg:flex-col">
+            <div className="app-brutal-label mb-3">Moves</div>
+            <div className="min-h-0 space-y-2 overflow-hidden">
+              {moves.length ? (
+                moves.map((move, index) => (
+                  <button
+                    key={`${move.uci}-${index}`}
+                    type="button"
+                    className="w-full min-w-0 rounded-[8px] border border-[color-mix(in_srgb,var(--app-text)_18%,transparent)] bg-[color-mix(in_srgb,var(--app-panel-solid)_86%,var(--app-bg)_14%)] px-3 py-2 text-left text-xs font-bold text-[var(--app-text)] transition hover:border-[var(--app-accent)]"
+                  >
+                    <span className="mr-2 text-[var(--app-muted)]">{index + 1}.</span>
+                    <span className="truncate">{move.san}</span>
+                  </button>
+                ))
+              ) : (
+                <div className="rounded-[8px] border border-dashed border-[color-mix(in_srgb,var(--app-text)_18%,transparent)] px-3 py-4 text-center text-xs font-bold text-[var(--app-muted)]">
+                  No moves yet.
+                </div>
+              )}
+            </div>
           </div>
         </section>
 
@@ -1870,13 +1911,6 @@ export default function TrainPage() {
                 )
               ) : null}
 
-              <MoveList
-                moves={displayMoves}
-                userSide={userMoveSide}
-                isOpponentThinking={isOpponentThinking}
-                showHeaders={false}
-                showEvaluations={false}
-              />
             </>
           )}
         </aside>
@@ -2369,16 +2403,31 @@ function BoardWithPlayerStrips({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <PlayerTurnStrip label={opponentLabel} isActive={isOpponentActive} />
+      <PlayerTurnStrip label={opponentLabel} isActive={isOpponentActive} align="end" />
       {children}
-      <PlayerTurnStrip label={userLabel} isActive={isUserActive} />
+      <PlayerTurnStrip label={userLabel} isActive={isUserActive} align="start" />
     </div>
   );
 }
 
-function PlayerTurnStrip({ label, isActive }: { label: string; isActive: boolean }) {
+type PlayerStripAlign = "start" | "end";
+
+function PlayerTurnStrip({
+  label,
+  isActive,
+  align = "start",
+}: {
+  label: string;
+  isActive: boolean;
+  align?: PlayerStripAlign;
+}) {
   return (
-    <div className="flex h-7 items-center gap-2 px-0.5">
+    <div
+      className={[
+        "flex h-7 items-center gap-2 px-0.5",
+        align === "end" ? "justify-end" : "justify-start",
+      ].join(" ")}
+    >
       <span
         className="h-2.5 w-2.5 shrink-0 rounded-full transition-colors duration-300"
         style={{ background: isActive ? "var(--app-class-best)" : "var(--app-border)" }}
