@@ -422,6 +422,56 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
     box-shadow: 0 0 0 #050505;
   }
 
+  .app-paper-shell {
+    background:
+      linear-gradient(color-mix(in srgb, var(--app-border-strong) 5%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in srgb, var(--app-border-strong) 5%, transparent) 1px, transparent 1px),
+      var(--app-bg);
+    background-size: 32px 32px, 32px 32px, auto;
+  }
+
+  .app-brutal-section {
+    border: 1px solid color-mix(in srgb, var(--app-text) 72%, transparent);
+    background: var(--app-panel-solid);
+    box-shadow: 7px 7px 0 #050505;
+    border-radius: 12px;
+  }
+
+  .app-brutal-section-soft {
+    border: 1px solid color-mix(in srgb, var(--app-text) 32%, transparent);
+    background: color-mix(in srgb, var(--app-panel-solid) 88%, var(--app-bg) 12%);
+    box-shadow: 5px 5px 0 #050505;
+    border-radius: 10px;
+  }
+
+  .app-brutal-board-frame {
+    border: 1px solid #050505;
+    background: var(--app-panel-solid);
+    box-shadow: 7px 7px 0 #050505;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .app-brutal-heading {
+    font-weight: 800;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--app-text);
+  }
+
+  .app-brutal-label {
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--app-text) 72%, transparent);
+  }
+
+  .app-brutal-row {
+    border: 1px solid color-mix(in srgb, var(--app-text) 14%, transparent);
+    background: color-mix(in srgb, var(--app-panel-solid) 84%, var(--app-bg) 16%);
+  }
+
   .app-brutal-card-auth {
     border: 1px solid var(--app-border);
     background:
