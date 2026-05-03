@@ -32,7 +32,7 @@ export function moveBadgeForPosition(position?: ClassifiedSequencePosition | nul
   return classification ? buildLastMoveBadge(classification) : null;
 }
 
-export function getTrainingBoardHighlights(state: "active" | "complete" | "drift") {
+export function getTrainingBoardHighlights(state: "active" | "resolving" | "complete" | "drift") {
   if (state === "drift") return DRIFT_BOARD_HIGHLIGHTS;
   return undefined;
 }

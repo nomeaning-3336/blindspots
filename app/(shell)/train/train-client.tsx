@@ -36,7 +36,7 @@ import {
 } from "@/lib/training-postmortem-navigation";
 import { runStartTrainingTransition } from "@/lib/train-onboarding-transition";
 
-type TrainingState = "active" | "complete" | "drift";
+type TrainingState = "active" | "complete" | "drift" | "resolving";
 type OnboardingScreen = "loading" | "connect" | "analysis" | "summary" | "done";
 type ProfileProvider = "chesscom" | "lichess";
 type SkillLevel = "new_to_chess" | "beginner" | "intermediate" | "advanced" | "expert";
@@ -587,11 +587,23 @@ export default function TrainPage() {
     if (nextState === "complete") {
       return;
     }
+    if (nextState === "resolving") {
+      return;
+    }
     if (nextState === "drift") {
       setFen(startingFen);
       setMoves([...mockRep.moveHistory, { san: "Rb8?", uci: "b4b8", side: "white" }]);
     }
   }
+
+  // Resolve "resolving" state: after a brief dwell, transition to "complete"
+  useEffect(() => {
+    if (state !== "resolving") return;
+    const timer = window.setTimeout(() => {
+      setState("complete");
+    }, 550);
+    return () => window.clearTimeout(timer);
+  }, [state]);
 
   async function loadNextPosition() {
     const cachedPosition = cachedNextPosition;
@@ -926,14 +938,14 @@ export default function TrainPage() {
 
       if (chess.isGameOver()) {
         completingRef.current = true;
-        setState("complete");
+        setState("resolving");
         void completeSequence(movesAfterUserMove);
         return;
       }
 
       if (userMoveCountAfterMove >= sequenceLength) {
         completingRef.current = true;
-        setState("complete");
+        setState("resolving");
         void completeSequence(movesAfterUserMove);
         return;
       }
@@ -1027,7 +1039,7 @@ export default function TrainPage() {
       warmEngineLinesForSequence(finalMoves);
 
       if (chess.isGameOver()) {
-        setState("complete");
+        setState("resolving");
         void completeSequence(finalMoves);
       }
     } finally {
@@ -1475,6 +1487,7 @@ export default function TrainPage() {
     isExploringResults
       ? "w-[min(88vw,calc(100dvh-10.25rem),836px)]"
       : "w-[min(82vw,calc(100dvh-12.5rem),800px)]",
+    state === "resolving" ? "train-resolving-board" : "",
   ].join(" ");
   const isEngineLinesLoading = Boolean(
     isExploringResults && engineLineLoadingFen === boardFen,
@@ -1855,6 +1868,19 @@ export default function TrainPage() {
                       />
                     )}
                   </BoardWithPlayerStrips>
+                  {state === "resolving" && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[10px] bg-black/60 backdrop-blur-sm">
+                      <div className="train-resolution-overlay">
+                        <div className="train-resolution-card">
+                          <svg className="train-resolution-check" viewBox="0 0 36 36">
+                            <circle cx="18" cy="18" r="16" />
+                            <path d="M10 18 L16 24 L26 12" />
+                          </svg>
+                          <span className="train-resolution-text">Sequence complete</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {isAwaitingStartGesture ? (
                     <div
                       className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-[10px] bg-black/70 backdrop-blur-sm"
