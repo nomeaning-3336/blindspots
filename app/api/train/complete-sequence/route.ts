@@ -60,6 +60,8 @@ type PositionEvaluation = {
   };
   evalBefore: number;
   evalAfter: number;
+  mateBefore?: number | null;
+  mateAfter?: number | null;
   cpLoss: number;
   classification: MoveClassification;
   banditResult: "success" | "neutral" | "failure";
@@ -78,6 +80,8 @@ type SequenceEvaluationResult = {
     cpLoss: number;
     evalBefore: number;
     evalAfter: number;
+    mateBefore?: number | null;
+    mateAfter?: number | null;
     classification: MoveClassification;
   }>;
   totalCpLoss: number;
@@ -389,6 +393,8 @@ async function calculateSequenceEvaluation({
     cpLoss: number;
     evalBefore: number;
     evalAfter: number;
+    mateBefore?: number | null;
+    mateAfter?: number | null;
     classification: MoveClassification;
   }> = [];
   const positionEvaluations: PositionEvaluation[] = [];
@@ -411,11 +417,14 @@ async function calculateSequenceEvaluation({
 
       if (userDeliveredCheckmate) {
         const classification = classifyUserDeliveredCheckmate();
+        const mateBeforeVal = evalBefore?.mate ?? null;
         moveScores.push({
           userMoveIndex: userMoveCount,
           cpLoss: 0,
           evalBefore: Math.round(evalBeforeCp),
           evalAfter: mateCpForWinningSide(userColor),
+          mateBefore: mateBeforeVal,
+          mateAfter: 0,
           classification,
         });
         const checkmatePhase = selectedPhase ?? classifyTrainingPhase(fenAfterMove);
@@ -425,6 +434,8 @@ async function calculateSequenceEvaluation({
           userMove: { san: move.san, uci: move.uci },
           evalBefore: Math.round(evalBeforeCp),
           evalAfter: mateCpForWinningSide(userColor),
+          mateBefore: mateBeforeVal,
+          mateAfter: 0,
           cpLoss: 0,
           classification,
           banditResult: "success",
@@ -451,11 +462,15 @@ async function calculateSequenceEvaluation({
       const cpLoss = Math.max(0, Math.round(evalBeforeCp - afterUserEval));
       totalCpLoss += cpLoss;
       const classification = classifyCpLoss(cpLoss);
+      const mateBeforeVal = evalBefore?.mate ?? null;
+      const mateAfterVal = evalAfter.mate ?? null;
       moveScores.push({
         userMoveIndex: userMoveCount,
         cpLoss,
         evalBefore: Math.round(evalBeforeCp),
         evalAfter: Math.round(afterUserEval),
+        mateBefore: mateBeforeVal,
+        mateAfter: mateAfterVal,
         classification,
       });
 
@@ -469,6 +484,8 @@ async function calculateSequenceEvaluation({
         userMove: { san: move.san, uci: move.uci },
         evalBefore: Math.round(evalBeforeCp),
         evalAfter: Math.round(afterUserEval),
+        mateBefore: mateBeforeVal,
+        mateAfter: mateAfterVal,
         cpLoss,
         classification,
         banditResult: getBanditResult(classification),

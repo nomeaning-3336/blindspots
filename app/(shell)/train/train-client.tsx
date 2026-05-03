@@ -3,7 +3,15 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Chess, type Square } from "chess.js";
 import { AnalysisBoard, type BoardMove, type EngineArrow } from "@/components/chess/analysis-board";
-import { classifyRankedMove, isRecommendableClassification } from "@/lib/move-classification";
+import {
+  classifyRankedMove,
+  isRecommendableClassification,
+} from "@/lib/move-classification";
+import {
+  formatEvalLabel,
+  formatLossLabel,
+  graphValueFromEval,
+} from "@/lib/training/eval-format";
 import {
   analyzeBoardThemeForAppTheme,
   normalizeAnalyzePreferences,
@@ -50,6 +58,8 @@ type TrainingMove = {
   cpLoss?: number;
   evalBefore?: number;
   evalAfter?: number;
+  mateBefore?: number | null;
+  mateAfter?: number | null;
   classification?: MoveClassification;
 };
 
@@ -85,6 +95,8 @@ type MoveScore = {
   cpLoss: number;
   evalBefore?: number;
   evalAfter?: number;
+  mateBefore?: number | null;
+  mateAfter?: number | null;
   classification?: MoveClassification;
 };
 
@@ -123,6 +135,7 @@ type EvalGraphPoint = {
   positionIndex: number;
   classification?: MoveClassification;
   engineCp?: number;
+  mate?: number | null;
 };
 
 type ExploratoryPosition = {
@@ -2662,6 +2675,8 @@ function applyMoveScores(
           cpLoss: score.cpLoss,
           evalBefore: score.evalBefore,
           evalAfter: score.evalAfter,
+          mateBefore: score.mateBefore ?? null,
+          mateAfter: score.mateAfter ?? null,
           classification: score.classification,
         }
       : move;
@@ -2807,13 +2822,18 @@ function buildEvalGraphPoints(
     const fenBefore = move.fenBefore ?? chess?.fen();
     if (move.side === userSide) {
       if (points.length === 0 && typeof move.evalBefore === "number") {
-        points.push({ value: move.evalBefore, positionIndex: index });
+        points.push({
+          value: graphValueFromEval(move.evalBefore, move.mateBefore),
+          positionIndex: index,
+          mate: move.mateBefore ?? null,
+        });
       }
       if (typeof move.evalAfter === "number") {
         points.push({
-          value: move.evalAfter,
+          value: graphValueFromEval(move.evalAfter, move.mateAfter),
           positionIndex: index + 1,
           classification: move.classification,
+          mate: move.mateAfter ?? null,
         });
       }
     }
@@ -3244,7 +3264,7 @@ function EvalGraph({
   onSelectPosition?: (index: number) => void;
   engineCp?: number;
 }) {
-  const clampedValues = graphPoints.map((point) => Math.max(-600, Math.min(600, point.value)));
+  const clampedValues = graphPoints.map((point) => Math.max(-10, Math.min(10, point.value)));
   const width = 520;
   const height = compact ? 108 : 128;
   const padding = 18;
@@ -3252,14 +3272,14 @@ function EvalGraph({
   const usableHeight = height - padding * 2;
   const points = clampedValues.map((value, index) => {
     const x = padding + (clampedValues.length <= 1 ? 0 : (index / (clampedValues.length - 1)) * usableWidth);
-    const y = padding + ((600 - value) / 1200) * usableHeight;
+    const y = padding + ((10 - value) / 20) * usableHeight;
     return { ...graphPoints[index]!, x, y, value: graphPoints[index]!.value };
   });
 
   // Engine reference line (horizontal, monochrome)
   const hasEngineRef = typeof engineCp === "number" && graphPoints.length >= 2;
   const engineRefY = hasEngineRef
-    ? padding + ((600 - Math.max(-600, Math.min(600, engineCp))) / 1200) * usableHeight
+    ? padding + ((10 - Math.max(-10, Math.min(10, engineCp / 100))) / 20) * usableHeight
     : 0;
 
   return (
@@ -3339,7 +3359,7 @@ function EvalGraph({
                   textAnchor="middle"
                   className="pointer-events-none fill-[var(--app-muted)] text-[9px] font-bold"
                 >
-                  {formatEval(point.value)}
+                {formatEvalLabel(point.value, point.mate)}
                 </text>
               </g>
             ))}
@@ -3414,13 +3434,13 @@ function AnalysisMoveTable({
             </span>
           </span>
           <span className="overflow-hidden whitespace-nowrap text-right tabular-nums text-[var(--app-muted)]">
-            {typeof move.evalBefore === "number" ? formatEval(move.evalBefore) : pendingValue}
+            {typeof move.evalBefore === "number" ? formatEvalLabel(move.evalBefore, move.mateBefore) : pendingValue}
           </span>
           <span className="overflow-hidden whitespace-nowrap text-right tabular-nums text-[var(--app-muted)]">
-            {typeof move.evalAfter === "number" ? formatEval(move.evalAfter) : pendingValue}
+            {typeof move.evalAfter === "number" ? formatEvalLabel(move.evalAfter, move.mateAfter) : pendingValue}
           </span>
           <span className="overflow-hidden whitespace-nowrap text-right tabular-nums text-[var(--app-muted)]">
-            {showEvaluations && typeof move.cpLoss === "number" ? `${move.cpLoss}cp` : pendingValue}
+            {showEvaluations ? formatLossLabel(move.cpLoss, move.mateAfter) : pendingValue}
           </span>
         </button>
         );
