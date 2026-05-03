@@ -89,7 +89,7 @@ function PrimaryLink({ href, children }: { href: string; children: React.ReactNo
   return (
     <Link
       href={href}
-      className="inline-flex min-h-12 items-center justify-center rounded border border-[var(--app-accent)] bg-[var(--app-accent)] px-5 py-3 text-xs font-bold uppercase !text-black transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
+      className="app-brutal-button inline-flex min-h-12 items-center justify-center px-5 py-3 text-sm"
     >
       {children}
     </Link>

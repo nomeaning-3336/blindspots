@@ -14,27 +14,27 @@ const CLASS_ROWS: Array<{
   canonical?: boolean;
 }> = [
   { id: "brilliant", label: "Brilliant", color: classificationColor("brilliant"), canonical: true },
+  { id: "critical", label: "Critical", color: classificationColor("critical"), canonical: true },
   { id: "best", label: "Best", color: classificationColor("best"), canonical: true },
+  { id: "excellent", label: "Excellent", color: classificationColor("excellent"), canonical: true },
   { id: "good", label: "Good", color: classificationColor("good"), canonical: true },
-  { id: "okay", label: "Okay", color: "var(--app-class-okay)" },
-  { id: "interesting", label: "Interesting", color: classificationColor("interesting"), canonical: true },
-  { id: "dubious", label: "Dubious", color: classificationColor("dubious"), canonical: true },
+  { id: "okay", label: "Okay", color: classificationColor("okay"), canonical: true },
+  { id: "inaccuracy", label: "Inaccuracy", color: classificationColor("inaccuracy"), canonical: true },
   { id: "mistake", label: "Mistake", color: classificationColor("mistake"), canonical: true },
   { id: "blunder", label: "Blunder", color: classificationColor("blunder"), canonical: true },
 ];
 
 const CLASS_COLORS: Record<string, string> = {
+  brilliant: classificationColor("brilliant"),
+  critical: classificationColor("critical"),
   best: classificationColor("best"),
+  excellent: classificationColor("excellent"),
   good: classificationColor("good"),
-  okay: "var(--app-class-okay)",
-  interesting: classificationColor("interesting"),
-  dubious: classificationColor("dubious"),
+  okay: classificationColor("okay"),
+  inaccuracy: classificationColor("inaccuracy"),
   mistake: classificationColor("mistake"),
   blunder: classificationColor("blunder"),
-  brilliant: classificationColor("brilliant"),
 };
-
-const DASHBOARD_CLASSIFICATION_COLUMN_BREAK: keyof DashboardClassifications = "mistake";
 
 export function DashboardClient({ summary }: { summary: DashboardSummary }) {
   const [view, setView] = useState<DashboardView>("summary");
@@ -159,13 +159,7 @@ function MoveClassifications({ classifications }: { classifications: DashboardCl
 
   const total = rows.reduce((sum, row) => sum + classifications[row.id], 0);
   const displayTotal = Math.max(total, 1);
-  const firstProblemIndex = rows.findIndex((row) => row.id === DASHBOARD_CLASSIFICATION_COLUMN_BREAK);
-  const rowCount = Math.max(
-    1,
-    firstProblemIndex > 0
-      ? firstProblemIndex
-      : Math.ceil(rows.length / 2),
-  );
+  const rowCount = Math.max(1, Math.ceil(rows.length / 2));
 
   return (
     <section className="min-w-0">
@@ -268,19 +262,20 @@ function Clusters({ clusters }: { clusters: DashboardSummary["clusters"] }) {
     <section>
       <SectionLabel right="Sorted by severity">Where you keep losing evaluation</SectionLabel>
       <Panel>
-        <div className="hidden grid-cols-[minmax(180px,1.3fr)_minmax(120px,1fr)_repeat(4,minmax(58px,0.5fr))] border-b border-[var(--app-border-soft)] px-4 py-3 text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)] md:grid">
+        <div className="hidden grid-cols-[minmax(180px,1.3fr)_minmax(120px,1fr)_repeat(6,minmax(58px,0.5fr))] border-b border-[var(--app-border-soft)] px-4 py-3 text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)] md:grid">
           <span>Cluster</span>
           <span>Phase / bucket</span>
           <span className="text-right">Tries</span>
-          <span className="text-right text-[var(--app-class-dubious)]">Dub.</span>
+          <span className="text-right text-[var(--app-class-brilliant)]">Bril.</span>
+          <span className="text-right text-[var(--app-class-critical)]">Crit.</span>
+          <span className="text-right text-[var(--app-class-inaccuracy)]">Inacc.</span>
           <span className="text-right text-[var(--app-class-mistake)]">Mist.</span>
           <span className="text-right text-[var(--app-class-blunder)]">Blun.</span>
-          <span className="text-right text-[var(--app-class-brilliant)]">Bri.</span>
         </div>
         {clusters.map((cluster) => (
           <div
             key={cluster.id}
-            className="grid grid-cols-2 gap-3 border-b border-[var(--app-border-soft)] px-4 py-4 text-xs last:border-b-0 md:grid-cols-[minmax(180px,1.3fr)_minmax(120px,1fr)_repeat(4,minmax(58px,0.5fr))] md:items-center"
+            className="grid grid-cols-2 gap-3 border-b border-[var(--app-border-soft)] px-4 py-4 text-xs last:border-b-0 md:grid-cols-[minmax(180px,1.3fr)_minmax(120px,1fr)_repeat(6,minmax(58px,0.5fr))] md:items-center"
           >
             <div className="col-span-2 min-w-0 md:col-span-1">
               <div className="truncate font-bold text-[var(--app-text)]">{cluster.label ?? "General"}</div>
@@ -291,10 +286,11 @@ function Clusters({ clusters }: { clusters: DashboardSummary["clusters"] }) {
               <Tag>{cluster.tag ?? cluster.bucket ?? "unlabeled"}</Tag>
             </div>
             <ClusterNumber label="Tries" value={cluster.attempts} />
-            <ClusterNumber label="Dub." value={cluster.dubious} color="var(--app-class-dubious)" />
+            <ClusterNumber label="Bril." value={cluster.brilliant} color="var(--app-class-brilliant)" />
+            <ClusterNumber label="Crit." value={cluster.critical} color="var(--app-class-critical)" />
+            <ClusterNumber label="Inacc." value={cluster.inaccuracy} color="var(--app-class-inaccuracy)" />
             <ClusterNumber label="Mist." value={cluster.mistake} color="var(--app-class-mistake)" />
             <ClusterNumber label="Blun." value={cluster.blunder} color="var(--app-class-blunder)" />
-            <ClusterNumber label="Bri." value={cluster.brilliant} color="var(--app-class-brilliant)" />
           </div>
         ))}
       </Panel>

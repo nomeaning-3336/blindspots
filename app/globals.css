@@ -49,9 +49,12 @@
   --app-tooltip-border: var(--app-border-strong);
   --app-tooltip-text: var(--app-text);
   --app-tooltip-muted: var(--app-muted);
-  --app-class-critical: #60a5fa;
-  --app-class-critical-soft: rgba(96, 165, 250, 0.16);
-  --app-class-critical-border: rgba(96, 165, 250, 0.3);
+  --app-class-brilliant: #67e8f9;
+  --app-class-brilliant-soft: rgba(103, 232, 249, 0.16);
+  --app-class-brilliant-border: rgba(103, 232, 249, 0.3);
+  --app-class-critical: #2563eb;
+  --app-class-critical-soft: rgba(37, 99, 235, 0.18);
+  --app-class-critical-border: rgba(37, 99, 235, 0.32);
   --app-class-best: #a3e635;
   --app-class-best-soft: rgba(163, 230, 53, 0.16);
   --app-class-best-border: rgba(163, 230, 53, 0.28);
@@ -61,9 +64,9 @@
   --app-class-good: #22c55e;
   --app-class-good-soft: rgba(34, 197, 94, 0.15);
   --app-class-good-border: rgba(34, 197, 94, 0.26);
-  --app-class-okay: #dce8ad;
-  --app-class-okay-soft: rgba(220, 232, 173, 0.14);
-  --app-class-okay-border: rgba(220, 232, 173, 0.24);
+  --app-class-okay: #9acd32;
+  --app-class-okay-soft: rgba(154, 205, 50, 0.16);
+  --app-class-okay-border: rgba(154, 205, 50, 0.28);
   --app-class-inaccuracy: #fbbf24;
   --app-class-inaccuracy-soft: rgba(251, 191, 36, 0.16);
   --app-class-inaccuracy-border: rgba(251, 191, 36, 0.28);
@@ -730,6 +733,40 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   animation: train-session-enter 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+.train-panel-enter {
+  animation: train-panel-enter 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes train-panel-enter {
+  from {
+    opacity: 0.5;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.train-loading-dots {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 1px;
+}
+
+.train-loading-dot {
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: train-loading-dot 1.4s infinite ease-in-out both;
+}
+
+.train-loading-dot:nth-child(1) { animation-delay: 0s; }
+.train-loading-dot:nth-child(2) { animation-delay: 0.16s; }
+.train-loading-dot:nth-child(3) { animation-delay: 0.32s; }
+
 @keyframes train-onboarding-step-active {
   0% {
     transform: scale(0.96);
@@ -756,6 +793,17 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   }
 }
 
+@keyframes train-loading-dot {
+  0%, 80%, 100% {
+    opacity: 0.3;
+    transform: scale(0.6);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .train-onboarding-progress {
     transition: none;
@@ -772,5 +820,15 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
 
   .train-session-enter {
     animation: none;
+  }
+
+  .train-panel-enter {
+    animation: none;
+  }
+
+  .train-loading-dot {
+    animation: none;
+    opacity: 1;
+    transform: none;
   }
 }
