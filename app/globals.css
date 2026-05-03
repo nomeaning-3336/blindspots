@@ -832,3 +832,87 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
     transform: none;
   }
 }
+
+/* Train screen state transition.
+   During play, the board is centered by translating the board column rightward
+   by half the post-mortem column width (measured synchronously via ResizeObserver).
+   On completion, the board slides left and the results panel reveals from the right. */
+.train-layout-grid {
+  --train-board-center-offset: 0px;
+}
+
+.train-postmortem-panel {
+  min-width: 0;
+  height: 100%;
+  opacity: 0;
+  transform: translateX(24px);
+  pointer-events: none;
+  will-change: opacity, transform;
+  animation: train-postmortem-reveal 280ms cubic-bezier(0.16, 1, 0.3, 1) 200ms both;
+}
+
+.train-postmortem-panel[data-testid="train-move-panel"] {
+  pointer-events: auto;
+}
+
+@media (min-width: 1024px) {
+  .train-layout-grid > :first-child {
+    will-change: transform, filter;
+  }
+
+  .train-layout-grid[data-train-layout-state="playing"] > :first-child {
+    transform: translateX(var(--train-board-center-offset, 0px));
+    filter: brightness(1);
+  }
+
+  .train-layout-grid[data-train-layout-state="results"] > :first-child {
+    animation: train-board-slide-left 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+@keyframes train-board-slide-left {
+  from {
+    transform: translateX(var(--train-board-center-offset, 0px));
+    filter: brightness(0.88);
+  }
+
+  to {
+    transform: translateX(0);
+    filter: brightness(1);
+  }
+}
+
+@keyframes train-postmortem-reveal {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .train-layout-grid > :first-child,
+  .train-postmortem-panel {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .train-layout-grid[data-train-layout-state="playing"] > :first-child {
+    transform: translateX(var(--train-board-center-offset, 0px));
+    filter: none;
+  }
+
+  .train-layout-grid[data-train-layout-state="results"] > :first-child {
+    transform: translateX(0);
+    filter: none;
+  }
+
+  .train-postmortem-panel {
+    opacity: 1;
+    transform: none;
+  }
+}
