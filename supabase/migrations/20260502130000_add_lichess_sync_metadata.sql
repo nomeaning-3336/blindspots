@@ -20,9 +20,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS linked_chess_profiles_id_unique
 ALTER TABLE public.linked_chess_profiles
   ALTER COLUMN id SET NOT NULL;
 
--- Add FK from user_mistakes to linked_chess_profiles
-ALTER TABLE public.user_mistakes
-  ADD CONSTRAINT IF NOT EXISTS user_mistakes_linked_profile_id_fkey
-  FOREIGN KEY (linked_profile_id)
-  REFERENCES public.linked_chess_profiles(id)
-  ON DELETE SET NULL;
+-- Add FK from user_mistakes to linked_chess_profiles (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'user_mistakes_linked_profile_id_fkey'
+      AND conrelid = 'public.user_mistakes'::regclass
+  ) THEN
+    ALTER TABLE public.user_mistakes
+      ADD CONSTRAINT user_mistakes_linked_profile_id_fkey
+      FOREIGN KEY (linked_profile_id)
+      REFERENCES public.linked_chess_profiles(id)
+      ON DELETE SET NULL;
+  END IF;
+END $$;
