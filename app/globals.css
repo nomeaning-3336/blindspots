@@ -854,14 +854,6 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   --train-board-center-offset: 0px;
 }
 
-.train-resolving-board {
-  opacity: 0.58;
-  filter: brightness(0.68) blur(1px);
-  transition:
-    opacity 1000ms var(--train-motion-soft),
-    filter 1000ms var(--train-motion-soft);
-}
-
 .train-postmortem-panel {
   min-width: 0;
   height: 100%;
@@ -1006,12 +998,24 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .train-resolution-card {
-    animation: none;
+  .train-layout-grid > :first-child,
+  .train-postmortem-panel {
+    animation: none !important;
+    transition: none !important;
   }
 
-  .train-resolution-check path {
-    animation: none;
-    stroke-dashoffset: 0;
+  .train-layout-grid[data-train-layout-state="playing"] > :first-child {
+    transform: none;
+    filter: none;
+  }
+
+  .train-layout-grid[data-train-layout-state="results"] > :first-child {
+    transform: translateX(0);
+    filter: none;
+  }
+
+  .train-postmortem-panel {
+    opacity: 1;
+    transform: none;
   }
 }

@@ -1488,7 +1488,6 @@ export default function TrainPage() {
     isExploringResults
       ? "w-[min(88vw,calc(100dvh-10.25rem),836px)]"
       : "w-[min(82vw,calc(100dvh-12.5rem),800px)]",
-    state === "resolving" ? "train-resolving-board" : "",
   ].join(" ");
   const isEngineLinesLoading = Boolean(
     isExploringResults && engineLineLoadingFen === boardFen,
@@ -1869,19 +1868,6 @@ export default function TrainPage() {
                       />
                     )}
                   </BoardWithPlayerStrips>
-                  {state === "resolving" && (
-                    <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[10px] bg-black/60 backdrop-blur-sm">
-                      <div className="train-resolution-overlay">
-                        <div className="train-resolution-card">
-                          <svg className="train-resolution-check" viewBox="0 0 36 36">
-                            <circle cx="18" cy="18" r="16" />
-                            <path d="M10 18 L16 24 L26 12" />
-                          </svg>
-                          <span className="train-resolution-text">Sequence complete</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                   {isAwaitingStartGesture ? (
                     <div
                       className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-[10px] bg-black/70 backdrop-blur-sm"
@@ -1892,10 +1878,22 @@ export default function TrainPage() {
                       </p>
                     </div>
                   ) : null}
-                  {isPositionLoading ? (
+                  {isPositionLoading || state === "resolving" ? (
                     <div className="pointer-events-none absolute inset-0 z-50 grid place-items-center bg-black/20">
-                      <div className="app-brutal-section-soft px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
-                        <LoadingPositionText />
+                      <div className="app-brutal-section-soft flex flex-col items-center gap-2 px-4 py-3 text-center">
+                        <span className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
+                          {state === "resolving" ? "Sequence complete" : <LoadingPositionText />}
+                        </span>
+                        {state === "resolving" ? (
+                          <span className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
+                            Preparing analysis
+                          </span>
+                        ) : null}
+                        <div className="flex gap-1.5" aria-hidden="true">
+                          <span className="train-loading-dot" />
+                          <span className="train-loading-dot [animation-delay:120ms]" />
+                          <span className="train-loading-dot [animation-delay:240ms]" />
+                        </div>
                       </div>
                     </div>
                   ) : null}
