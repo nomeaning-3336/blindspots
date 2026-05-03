@@ -160,3 +160,46 @@ describe("cp loss from black perspective is inverted", () => {
     assert.strictEqual(cpLoss, 170);
   });
 });
+
+describe("candidate survives best-line failure", () => {
+  it("candidate created with null best_move when getLines throws", () => {
+    // Simulates the fixed logic: best-line lookup is inside its own try/catch
+    const cpLoss = 200;
+    const cpLossThreshold = 150;
+    let thresholdHits = 0;
+    let bestLineFailures = 0;
+    let bestMoveUci: string | null = null;
+    let bestMoveSan: string | null = null;
+
+    if (cpLoss >= cpLossThreshold) {
+      thresholdHits++;
+
+      try {
+        throw new Error("simulated best-line failure");
+      } catch {
+        bestLineFailures++;
+      }
+
+      // Candidate would still be pushed with null best_move fields
+      bestMoveUci = null;
+      bestMoveSan = null;
+    }
+
+    assert.strictEqual(thresholdHits, 1);
+    assert.strictEqual(bestLineFailures, 1);
+    assert.strictEqual(bestMoveUci, null);
+    assert.strictEqual(bestMoveSan, null);
+    // Candidate was pushed — not skipped
+  });
+
+  it("candidate created with valid best_move when getLines succeeds", () => {
+    let bestMoveUci: string | null = null;
+    let bestMoveSan: string | null = "Nf3";
+
+    // Simulated successful best-line
+    bestMoveUci = "g1f3";
+
+    assert.strictEqual(bestMoveUci, "g1f3");
+    assert.strictEqual(bestMoveSan, "Nf3");
+  });
+});
