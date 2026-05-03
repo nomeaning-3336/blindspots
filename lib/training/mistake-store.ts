@@ -249,7 +249,7 @@ export function normalizeUserMistakeForTraining(row: UserMistakeRow): {
     id: row.id,
     fen: row.starting_fen,
     decisionFen: row.decision_fen ?? null,
-    previousFen: null,
+    previousFen: row.decision_fen ? row.starting_fen : null,
     playedMove,
     actualMoveUci: row.actual_move_uci ?? null,
     actualMoveSan: row.actual_move_san ?? null,
