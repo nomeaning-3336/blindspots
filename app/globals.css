@@ -853,11 +853,11 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
 }
 
 .train-resolving-board {
-  opacity: 0.65;
-  filter: brightness(0.75) blur(1px);
+  opacity: 0.58;
+  filter: brightness(0.68) blur(1px);
   transition:
-    opacity 180ms cubic-bezier(0.16, 1, 0.3, 1),
-    filter 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    opacity 420ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 420ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .train-postmortem-panel {
@@ -948,7 +948,7 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   box-shadow: 0 18px 50px color-mix(in srgb, var(--app-bg) 65%, transparent);
   padding: 14px 16px;
   border-radius: 12px;
-  animation: train-resolution-card-in 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: train-resolution-card-in 260ms cubic-bezier(0.16, 1, 0.3, 1) 320ms both;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -974,7 +974,7 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   fill: none;
   stroke-dasharray: 24;
   stroke-dashoffset: 24;
-  animation: train-resolution-check-draw 240ms cubic-bezier(0.16, 1, 0.3, 1) 80ms forwards;
+  animation: train-resolution-check-draw 300ms cubic-bezier(0.16, 1, 0.3, 1) 460ms forwards;
 }
 
 .train-resolution-text {

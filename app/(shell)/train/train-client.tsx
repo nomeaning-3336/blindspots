@@ -599,9 +599,10 @@ export default function TrainPage() {
   // Resolve "resolving" state: after a brief dwell, transition to "complete"
   useEffect(() => {
     if (state !== "resolving") return;
+    const RESOLUTION_DWELL_MS = 950;
     const timer = window.setTimeout(() => {
       setState("complete");
-    }, 550);
+    }, RESOLUTION_DWELL_MS);
     return () => window.clearTimeout(timer);
   }, [state]);
 
