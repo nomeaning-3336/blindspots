@@ -136,7 +136,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid sequence." }, { status: 400 });
   }
 
-  const sequenceLength = normalizeSequenceLength(payload?.sequenceLength);
+  const sequenceLength = 4;
   const reflectionNote = typeof payload?.reflectionNote === "string" ? payload.reflectionNote : null;
   const challengeElo = normalizeOptionalNumber(payload?.challengeElo);
   const profile = await getOrCreateProfile(userId);

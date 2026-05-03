@@ -119,7 +119,7 @@ if (!optionalError && optionalData) {
     masteredQueue: normalizeQueue(profile?.mastered_queue ?? null),
   };
   const queueCountsBefore = getQueueCounts(queuesBeforeRefill);
-  const sequenceLength = normalizeSequenceLength(preferences?.sequence_length);
+  const sequenceLength = 4;
   const userElo = typeof profile?.blindspots_elo === "number"
     ? profile.blindspots_elo
     : Number(profile?.blindspots_elo ?? 500);

@@ -218,7 +218,7 @@ const postmortemActionTextClassName = "text-center text-xs font-bold uppercase l
 const primaryActionClassName =
   `app-brutal-button inline-flex min-h-11 min-w-0 items-center justify-center px-4 py-3 text-sm`;
 const secondaryActionClassName =
-  `inline-flex min-h-11 min-w-0 items-center justify-center rounded-[8px] border border-[#050505] bg-[var(--app-panel-solid)] px-3 py-3 text-[11px] font-bold uppercase tracking-[0.04em] text-[var(--app-text)] shadow-[3px_3px_0_#050505] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#050505] sm:px-4 sm:text-xs`;
+  `inline-flex min-h-11 min-w-0 items-center justify-center rounded-[8px] border border-[#050505] bg-[var(--app-panel-solid)] px-3 py-3 text-sm font-bold uppercase tracking-[0.04em] text-[var(--app-text)] shadow-[3px_3px_0_#050505] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#050505] sm:px-4`;
 
 function readVisualPreferences() {
   let storedPreferences: Partial<AnalyzePreferences> | null = null;
@@ -300,7 +300,7 @@ export default function TrainPage() {
   const [fen, setFen] = useState<string>(DEFAULT_TRAINING_FEN);
   const [moves, setMoves] = useState<TrainingMove[]>(mockRep.moveHistory);
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(null);
-  const [sequenceLength, setSequenceLength] = useState(mockRep.sequenceLength);
+  const [sequenceLength, _setSequenceLength] = useState(4);
   const [skillLevel, setSkillLevel] = useState<SkillLevel>("beginner");
   const [blindspotsElo, setBlindspotsElo] = useState(mockRep.rating);
   const [eloResult, setEloResult] = useState<EloResult | null>(null);
@@ -390,7 +390,6 @@ export default function TrainPage() {
         if (!alive) return;
 
         if (payload.preferences) {
-          setSequenceLength(normalizeSequenceLength(payload.preferences.sequence_length));
           if (
             payload.preferences.skill_level === "new_to_chess" ||
             payload.preferences.skill_level === "beginner" ||
@@ -586,7 +585,6 @@ export default function TrainPage() {
         setAsyncMoveEvaluations({});
         setInitialOpponentMove(null);
         setCurrentChallengeElo(null);
-        setSequenceLength(DEFAULT_SEQUENCE_LENGTH);
         return;
       }
 
@@ -689,7 +687,6 @@ export default function TrainPage() {
     setPieceLineCache({});
     setPieceLinesLoadingKey(null);
     setCurrentChallengeElo(typeof payload.challengeElo === "number" ? payload.challengeElo : null);
-    setSequenceLength(normalizeSequenceLength(payload.sequenceLength));
 
     if (payload.previousFen && payload.playedMove) {
       setPendingInitialEngineMove(payload);
@@ -1249,7 +1246,7 @@ export default function TrainPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               action: "save_settings",
-              sequenceLength: normalizeSequenceLength(sequenceLength),
+              sequenceLength: 4,
               timePressureMode: "none",
               openingFilter: [],
               skillLevel,
@@ -1733,20 +1730,8 @@ export default function TrainPage() {
         ].join(" ")}
       >
         <section
-          className="app-brutal-section grid min-h-0 min-w-0 grid-cols-1 items-center gap-3 overflow-hidden p-3 sm:p-4 lg:grid-cols-[4.75rem_minmax(0,auto)_4.75rem] lg:p-4"
+          className="app-brutal-section flex min-h-0 min-w-0 items-center justify-center overflow-hidden p-3 sm:p-4 lg:p-4"
         >
-          <div className="hidden min-h-0 min-w-0 items-start overflow-hidden lg:flex lg:h-full lg:flex-col lg:gap-1.5">
-            {opponentRailMoves.map(({ move, index }) => (
-              <div
-                key={`${move.uci}-${index}`}
-                className="max-w-full truncate text-left text-xs font-bold leading-5 text-[var(--app-text)]"
-              >
-                <span className="mr-1 text-[var(--app-muted)]">{index + 1}.</span>
-                <span>{move.san}</span>
-              </div>
-            ))}
-          </div>
-
           <div className="flex min-h-0 min-w-0 items-center justify-center">
             <div className="app-brutal-board-frame relative w-full max-w-[min(82vw,calc(100dvh-12.5rem),800px)] overflow-visible">
               {boardFen ? (
@@ -1838,18 +1823,6 @@ export default function TrainPage() {
                 </div>
               )}
             </div>
-          </div>
-
-          <div className="hidden min-h-0 min-w-0 items-end overflow-hidden lg:flex lg:h-full lg:flex-col-reverse lg:gap-1.5">
-            {userRailMoves.map(({ move, index }) => (
-              <div
-                key={`${move.uci}-${index}`}
-                className="max-w-full truncate text-right text-xs font-bold leading-5 text-[var(--app-text)]"
-              >
-                <span className="mr-1 text-[var(--app-muted)]">{index + 1}.</span>
-                <span>{move.san}</span>
-              </div>
-            ))}
           </div>
         </section>
 
@@ -2991,13 +2964,10 @@ function EngineLinesSection({
       : "Engine lines unavailable";
   return (
     <section className="grid gap-2" aria-live="polite">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center gap-3">
         <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">
           Engine lines
         </h2>
-        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted-soft)]">
-          {isLoading ? "Depth 18" : `${lines.length || 0} lines`}
-        </span>
       </div>
       <div className={["grid gap-2", isLoading ? "opacity-60" : ""].join(" ")}>
         {lines.length === 0 ? (
@@ -3184,23 +3154,24 @@ function ResultsPanel({
     return (
       <div className="flex flex-1 flex-col gap-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
         <EloResultCard result={eloResult} isLoading={isSaving} />
-        <EngineLinesSection
-          lines={engineLines}
-          isLoading={isEngineLinesLoading}
-          hasError={hasEngineLineError}
-          revealBadLines={isPieceSelected}
-          hoveredDestinationSquare={hoveredAnnotationSquare}
-          hoveredIndex={hoveredEngineLineIndex}
-          onHoverLine={onEngineLineHover}
-          selectedMoveUci={selectedMoveUci}
-        />
         <EvalGraph
           points={graphPoints}
           currentIndex={currentIndex}
           compact
           onSelectPosition={onNavigate}
           engineCp={currentEngineEval}
-        />
+        >
+          <EngineLinesSection
+            lines={engineLines}
+            isLoading={isEngineLinesLoading}
+            hasError={hasEngineLineError}
+            revealBadLines={isPieceSelected}
+            hoveredDestinationSquare={hoveredAnnotationSquare}
+            hoveredIndex={hoveredEngineLineIndex}
+            onHoverLine={onEngineLineHover}
+            selectedMoveUci={selectedMoveUci}
+          />
+        </EvalGraph>
         <AnalysisMoveTable
           moves={userMoves}
           currentIndex={currentIndex}
@@ -3257,12 +3228,14 @@ function EvalGraph({
   compact = false,
   onSelectPosition,
   engineCp,
+  children,
 }: {
   points: EvalGraphPoint[];
   currentIndex: number;
   compact?: boolean;
   onSelectPosition?: (index: number) => void;
   engineCp?: number;
+  children?: ReactNode;
 }) {
   const clampedValues = graphPoints.map((point) => Math.max(-10, Math.min(10, point.value)));
   const width = 520;
@@ -3369,6 +3342,7 @@ function EvalGraph({
             No eval data here yet
           </div>
         )}
+        {children ? <div className="border-t border-[var(--app-border-soft)]">{children}</div> : null}
       </div>
     </div>
   );
