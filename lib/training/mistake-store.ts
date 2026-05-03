@@ -1,6 +1,7 @@
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database";
 import { nextIntervalDays, shouldMasterMistake, addDays, type TrainingOutcome } from "./mistake-srs";
+import { inferLegalMoveBetweenFens } from "./fen-transition";
 
 type UserMistakeUpdate = Database["public"]["Tables"]["user_mistakes"]["Update"];
 
@@ -226,16 +227,34 @@ export async function updateMistakeAfterTraining(input: {
 export function normalizeUserMistakeForTraining(row: UserMistakeRow): {
   id: string;
   fen: string;
+  decisionFen: string | null;
   previousFen: string | null;
   playedMove: string | null;
+  actualMoveUci: string | null;
+  actualMoveSan: string | null;
+  bestMoveUci: string | null;
+  bestMoveSan: string | null;
   source: string;
   queueSource: string;
 } {
+  let playedMove: string | null = null;
+  if (row.decision_fen && row.decision_fen !== row.starting_fen) {
+    playedMove = inferLegalMoveBetweenFens({
+      fromFen: row.starting_fen,
+      toFen: row.decision_fen,
+    });
+  }
+
   return {
     id: row.id,
     fen: row.starting_fen,
+    decisionFen: row.decision_fen ?? null,
     previousFen: null,
-    playedMove: row.actual_move_uci ?? null,
+    playedMove,
+    actualMoveUci: row.actual_move_uci ?? null,
+    actualMoveSan: row.actual_move_san ?? null,
+    bestMoveUci: row.best_move_uci ?? null,
+    bestMoveSan: row.best_move_san ?? null,
     source: row.source_type,
     queueSource: row.status === "review" ? "review" : row.source_type,
   };
