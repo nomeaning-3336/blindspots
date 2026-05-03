@@ -30,6 +30,9 @@ export interface LichessSyncResult {
   evalsAttempted: number;
   evalsSucceeded: number;
   candidateMistakesFound: number;
+  thresholdHits: number;
+  bestLineFailures: number;
+  insertErrors: string[];
   topCpLosses: TopCpLoss[];
   errors: string[];
 }
@@ -138,6 +141,9 @@ export async function syncLichessMistakesForUser(input: {
       evalsAttempted: 0,
       evalsSucceeded: 0,
       candidateMistakesFound: 0,
+      thresholdHits: 0,
+      bestLineFailures: 0,
+      insertErrors: [],
       topCpLosses: [],
       errors: [],
     };
@@ -174,6 +180,8 @@ export async function syncLichessMistakesForUser(input: {
           result.evalsAttempted += gameAnalysis.evalsAttempted;
           result.evalsSucceeded += gameAnalysis.evalsSucceeded;
           result.candidateMistakesFound += gameAnalysis.candidates.length;
+          result.thresholdHits += gameAnalysis.thresholdHits;
+          result.bestLineFailures += gameAnalysis.bestLineFailures;
           result.topCpLosses.push(...gameAnalysis.allCpLosses);
           totalMovesAnalyzed += gameAnalysis.movesAnalyzed;
 
@@ -190,7 +198,9 @@ export async function syncLichessMistakesForUser(input: {
                 .insert(deduplicated as any);
 
               if (insertError) {
-                result.errors.push(`Insert failed: ${insertError.message}`);
+                const msg = `Insert failed (${deduplicated.length} candidates): ${insertError.message}`;
+                result.insertErrors.push(msg);
+                result.errors.push(msg);
               } else {
                 mistakesInserted += deduplicated.length;
               }
@@ -293,6 +303,8 @@ export async function buildMistakeCandidatesFromGame(input: {
   userId: string;
   username: string;
   moveCap: number;
+  getEval?: typeof getPositionEval;
+  getLines?: typeof getPositionLines;
 }): Promise<{
   candidates: MistakeCandidate[];
   movesAnalyzed: number;
@@ -302,14 +314,18 @@ export async function buildMistakeCandidatesFromGame(input: {
   emptyParsedMoves: boolean;
   evalsAttempted: number;
   evalsSucceeded: number;
+  thresholdHits: number;
+  bestLineFailures: number;
   allCpLosses: TopCpLoss[];
 }> {
   const { game, profileId, userId, username, moveCap } = input;
+  const getEval = input.getEval ?? getPositionEval;
+  const getLines = input.getLines ?? getPositionLines;
   const moves = (game.moves ?? "").trim();
   const rawTokens = moves.split(/\s+/).filter(Boolean);
 
   if (!moves) {
-    return { candidates: [], movesAnalyzed: 0, parsedMoveCount: 0, rawMoveTokensSeen: 0, userColorMissing: false, emptyParsedMoves: true, evalsAttempted: 0, evalsSucceeded: 0, allCpLosses: [] };
+    return { candidates: [], movesAnalyzed: 0, parsedMoveCount: 0, rawMoveTokensSeen: 0, userColorMissing: false, emptyParsedMoves: true, evalsAttempted: 0, evalsSucceeded: 0, thresholdHits: 0, bestLineFailures: 0, allCpLosses: [] };
   }
 
   const parsedMoves = parseLichessMoveText(moves);
@@ -345,7 +361,7 @@ export async function buildMistakeCandidatesFromGame(input: {
   };
 
   if (!userColor || parsedMoves.length === 0) {
-    return { candidates: [], movesAnalyzed: 0, evalsAttempted: 0, evalsSucceeded: 0, allCpLosses: [], ...base };
+    return { candidates: [], movesAnalyzed: 0, evalsAttempted: 0, evalsSucceeded: 0, thresholdHits: 0, bestLineFailures: 0, allCpLosses: [], ...base };
   }
 
   const candidates: MistakeCandidate[] = [];
@@ -353,6 +369,8 @@ export async function buildMistakeCandidatesFromGame(input: {
   let movesAnalyzed = 0;
   let evalsAttempted = 0;
   let evalsSucceeded = 0;
+  let thresholdHits = 0;
+  let bestLineFailures = 0;
 
   const gameId = game.id ?? `lichess-${Date.now()}`;
   const gameUrl = game.id ? `https://lichess.org/${game.id}` : "";
@@ -400,31 +418,39 @@ export async function buildMistakeCandidatesFromGame(input: {
       });
 
       if (cpLoss >= CP_LOSS_THRESHOLD) {
-        const lines = await getPositionLines(parsed.fenBefore, {
-          depthLimit: EVAL_DEPTH,
-          multiPv: 1,
-          timeLimitMs: EVAL_TIME_MS,
-        });
-        const bestLine = lines[0] as { bestMove?: string; san?: string } | undefined;
-        const bestMoveUci = bestLine?.bestMove ?? null;
+        thresholdHits++;
 
+        let bestMoveUci: string | null = null;
         let bestMoveSan: string | null = null;
-        if (bestMoveUci) {
-          try {
-            const clone = new Chess(parsed.fenBefore);
-            if (UCI_MOVE_RE.test(bestMoveUci)) {
-              clone.move({
-                from: bestMoveUci.slice(0, 2),
-                to: bestMoveUci.slice(2, 4),
-                promotion: bestMoveUci[4] as never,
-              });
-            } else {
-              clone.move(bestMoveUci);
+
+        try {
+          const lines = await getLines(parsed.fenBefore, {
+            depthLimit: EVAL_DEPTH,
+            multiPv: 1,
+            timeLimitMs: EVAL_TIME_MS,
+          });
+          const bestLine = lines[0] as { bestMove?: string; san?: string } | undefined;
+          bestMoveUci = bestLine?.bestMove ?? null;
+
+          if (bestMoveUci) {
+            try {
+              const clone = new Chess(parsed.fenBefore);
+              if (UCI_MOVE_RE.test(bestMoveUci)) {
+                clone.move({
+                  from: bestMoveUci.slice(0, 2),
+                  to: bestMoveUci.slice(2, 4),
+                  promotion: bestMoveUci[4] as never,
+                });
+              } else {
+                clone.move(bestMoveUci);
+              }
+              bestMoveSan = clone.history({ verbose: true }).pop()?.san ?? null;
+            } catch {
+              bestMoveSan = null;
             }
-            bestMoveSan = clone.history({ verbose: true }).pop()?.san ?? null;
-          } catch {
-            bestMoveSan = null;
           }
+        } catch {
+          bestLineFailures++;
         }
 
         const previousMove = parsedMoves[parsed.ply - 1];
@@ -461,7 +487,7 @@ export async function buildMistakeCandidatesFromGame(input: {
     }
   }
 
-  return { candidates, movesAnalyzed, evalsAttempted, evalsSucceeded, allCpLosses, ...base };
+  return { candidates, movesAnalyzed, evalsAttempted, evalsSucceeded, thresholdHits, bestLineFailures, allCpLosses, ...base };
 }
 
 // ---------------------------------------------------------------------------
