@@ -140,6 +140,19 @@ export function AnalysisBoard({
     return sourceSquare && chess ? legalMovesFrom(chess, sourceSquare) : [];
   }, [activeSelected, chess, dragFrom]);
   const activeTargets = legalTargets ?? computedTargets;
+  const bestEngineArrowByTarget = useMemo(() => {
+    const bestBySquare = new Map<string, { arrow: EngineArrow; rank: number }>();
+
+    engineArrows?.forEach((arrow, index) => {
+      const rank = arrow.rank ?? index + 1;
+      const current = bestBySquare.get(arrow.to);
+      if (!current || rank < current.rank) {
+        bestBySquare.set(arrow.to, { arrow, rank });
+      }
+    });
+
+    return bestBySquare;
+  }, [engineArrows]);
 
   useEffect(() => {
     setInternalSelected(null);
@@ -268,6 +281,12 @@ export function AnalysisBoard({
   }, [engineArrows, hoveredSquare, annotationCircles, onCircleHover]);
 
   function handleSquareClick(square: string) {
+    const engineTarget = bestEngineArrowByTarget.get(square);
+    if (engineTarget && onEngineArrowClick) {
+      onEngineArrowClick({ from: engineTarget.arrow.from, to: engineTarget.arrow.to });
+      return;
+    }
+
     onSquareClick?.(square);
 
     if (!annotationsDisabled && mode === "analysis") {
@@ -632,6 +651,23 @@ function BoardAnnotations({
 }) {
   const [localHoveredEngineIndex, setLocalHoveredEngineIndex] = useState<number | null>(null);
   const hasEngineArrows = (engineArrows?.length ?? 0) > 0;
+  const engineTargetNodes = useMemo(() => {
+    const bestBySquare = new Map<
+      string,
+      { arrow: EngineArrow; index: number; rank: number }
+    >();
+
+    engineArrows?.forEach((arrow, index) => {
+      const rank = arrow.rank ?? index + 1;
+      const current = bestBySquare.get(arrow.to);
+      if (!current || rank < current.rank) {
+        bestBySquare.set(arrow.to, { arrow, index, rank });
+      }
+    });
+
+    return Array.from(bestBySquare.values()).sort((a, b) => a.index - b.index);
+  }, [engineArrows]);
+
   if (arrows.length === 0 && circles.length === 0 && !hasEngineArrows && !previewArrow) return null;
 
   return (
@@ -670,10 +706,9 @@ function BoardAnnotations({
           />
         );
       })}
-      {engineArrows?.map((arrow, index) => {
+      {engineTargetNodes.map(({ arrow, index, rank }) => {
         const to = squareCenter(arrow.to, orientation);
         if (!to) return null;
-        const rank = arrow.rank ?? index + 1;
         const color = arrow.color ?? engineArrowColor(rank);
         const isHoveredTarget = hoveredSquare === arrow.to || index === localHoveredEngineIndex;
         const opacity = arrow.emphasis || isHoveredTarget ? 1 : engineArrowOpacity(rank);
@@ -687,9 +722,7 @@ function BoardAnnotations({
                   cx={to.x}
                   cy={to.y}
                   r={nodeRadius}
-                  fill="var(--app-accent)"
-                  stroke="#050505"
-                  strokeWidth={0.025}
+                  fill={color}
                   className="pointer-events-auto cursor-pointer"
                   onPointerEnter={() => setLocalHoveredEngineIndex(index)}
                   onPointerLeave={() => setLocalHoveredEngineIndex(null)}

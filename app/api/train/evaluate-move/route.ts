@@ -32,11 +32,14 @@ function getBanditResult(classification: MoveClassification): "success" | "neutr
   if (
     classification === "best" ||
     classification === "brilliant" ||
-    classification === "good"
+    classification === "critical" ||
+    classification === "excellent" ||
+    classification === "good" ||
+    classification === "okay"
   ) {
     return "success";
   }
-  if (classification === "dubious") return "neutral";
+  if (classification === "inaccuracy") return "neutral";
   return "failure";
 }
 
@@ -250,7 +253,7 @@ function normalizeTags(value: unknown): string[] | null {
 function classifyCpLoss(cpLoss: number): MoveClassification {
   if (cpLoss <= 30) return "good";
   if (cpLoss <= 90) return "good";
-  if (cpLoss <= 180) return "dubious";
+  if (cpLoss <= 180) return "inaccuracy";
   if (cpLoss <= 320) return "mistake";
   return "blunder";
 }

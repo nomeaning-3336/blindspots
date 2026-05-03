@@ -200,6 +200,8 @@ const ANALYSIS_FAILURE_MESSAGE =
 const DEFAULT_SEQUENCE_LENGTH = 4;
 const MIN_SEQUENCE_LENGTH = 1;
 const MAX_SEQUENCE_LENGTH = 9;
+const EVAL_GRAPH_RANGE = 14;
+const MIN_EVAL_GRAPH_SPAN = 2;
 const DEFAULT_TRAINING_FEN =
   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 // Train audio - managed by lib/train-audio.ts
@@ -1427,6 +1429,12 @@ export default function TrainPage() {
   const hoveredEngineLineMove =
     hoveredEngineLineIndex == null ? null : classifiedDisplayLines[hoveredEngineLineIndex]?.bestMove ?? null;
   const currentEngineEval = currentEngineLines[0]?.cp;
+  const boardFrameClassName = [
+    "app-brutal-board-frame relative max-w-full overflow-visible",
+    isExploringResults
+      ? "w-[min(88vw,calc(100dvh-10.25rem),836px)]"
+      : "w-[min(82vw,calc(100dvh-12.5rem),800px)]",
+  ].join(" ");
   const isEngineLinesLoading = Boolean(
     isExploringResults && engineLineLoadingFen === boardFen,
   );
@@ -1722,7 +1730,7 @@ export default function TrainPage() {
   }
 
   return (
-    <div className="app-paper-shell train-session-enter flex h-[calc(100dvh-64px)] min-h-0 w-full flex-1 overflow-hidden px-3 py-3">
+    <div className="-mx-4 -mb-4 flex h-full min-h-0 w-[calc(100%+2rem)] flex-1 overflow-hidden px-3 py-3 md:-mx-6 md:w-[calc(100%+3rem)]">
       <div
         className={[
           "mx-auto grid h-full min-h-0 w-full max-w-[100rem] min-w-0 gap-4 transition-opacity duration-200",
@@ -1733,7 +1741,7 @@ export default function TrainPage() {
           className="app-brutal-section flex min-h-0 min-w-0 items-center justify-center overflow-hidden p-3 sm:p-4 lg:p-4"
         >
           <div className="flex min-h-0 min-w-0 items-center justify-center">
-            <div className="app-brutal-board-frame relative w-full max-w-[min(82vw,calc(100dvh-12.5rem),800px)] overflow-visible">
+            <div className={boardFrameClassName}>
               {boardFen ? (
                 <>
                   <BoardWithPlayerStrips
@@ -1809,7 +1817,7 @@ export default function TrainPage() {
                   {isPositionLoading ? (
                     <div className="pointer-events-none absolute inset-0 z-50 grid place-items-center bg-black/20">
                       <div className="app-brutal-section-soft px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
-                        Loading position
+                        <LoadingPositionText />
                       </div>
                     </div>
                   ) : null}
@@ -1835,6 +1843,7 @@ export default function TrainPage() {
               : "p-3 sm:p-4",
           ].join(" ")}
         >
+          <div key={state === "complete" ? "results" : "active"} className="train-panel-enter flex flex-1 flex-col gap-4">
           {state === "complete" ? (
             <ResultsPanel
               eloResult={eloResult}
@@ -1854,6 +1863,7 @@ export default function TrainPage() {
               hoveredAnnotationSquare={hoveredAnnotationSquare}
               hoveredEngineLineIndex={hoveredEngineLineIndex}
               onEngineLineHover={setHoveredEngineLineIndex}
+              onEngineLineSelect={handleExploreMove}
               onMoveHover={setHoveredMoveSquares}
               onNavigate={navigateExploreTo}
               onNextPosition={() => switchState("active")}
@@ -1865,54 +1875,24 @@ export default function TrainPage() {
               }}
             />
           ) : (
-            <>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="flex items-end gap-3" aria-label="Blindspots Elo">
-                    <span className="text-5xl font-bold leading-none text-[var(--app-text)]">{rating ?? "--"}</span>
-                  </div>
-                </div>
-                <div className="rounded border border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-4 py-3 text-right">
-                  <p className="text-lg font-bold text-[var(--app-text)]">
-                    Move {moveProgress} of {sequenceLength}
-                  </p>
-                </div>
-              </div>
-
-              {state === "drift" ? (
-                <StatusBanner
-                  title="Eval dropped"
-                  detail="Saved for later. You will see it again."
-                  action="Again"
-                  tone="warning"
-                  onAction={() => switchState("active")}
-                />
-              ) : isActiveSetupReplay && activeSetupReplayIndex === 0 ? (
-                <div className="mt-8 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-5 py-5">
-                  <p className="text-lg font-bold text-[var(--app-text)]">Before engine move</p>
-                </div>
-              ) : moves.length === 0 && !isOpponentThinking && !isPositionLoading ? (
-                positionLoadError ? (
-                  <div className="mt-8 rounded-[8px] border border-red-800 bg-red-950 px-5 py-5">
-                    <p className="text-lg font-bold text-red-400">Failed to load position</p>
-                    <p className="mt-1 text-sm text-red-300">{positionLoadError}</p>
-                    <button
-                      className="mt-3 rounded bg-red-800 px-4 py-2 text-sm text-white hover:bg-red-700"
-                      onClick={() => {
-                        setPositionLoadError(null);
-                        void loadNextPosition();
-                      }}
-                    >
-                      Retry
-                    </button>
-                  </div>
-                ) : (
-                  <PromptCard side={userMoveSide} />
-                )
-              ) : null}
-
-            </>
+            <ActivePlayPanel
+              rating={rating}
+              moveProgress={moveProgress}
+              sequenceLength={sequenceLength}
+              moves={moves}
+              userSide={userMoveSide}
+              startingFen={startingFen}
+              state={state}
+              isActiveSetupReplay={isActiveSetupReplay}
+              activeSetupReplayIndex={activeSetupReplayIndex}
+              isOpponentThinking={isOpponentThinking}
+              isPositionLoading={isPositionLoading}
+              positionLoadError={positionLoadError}
+              onLoadNextPosition={() => { setPositionLoadError(null); void loadNextPosition(); }}
+              onResumeTraining={() => switchState("active")}
+            />
           )}
+          </div>
         </aside>
       </div>
     </div>
@@ -2442,14 +2422,115 @@ function PlayerTurnStrip({
   );
 }
 
-function PromptCard({ side }: { side: "white" | "black" }) {
-  const label =
-    side === "white"
-      ? "White to move. Make it count."
-      : "Black to move. Try not to improvise.";
+function ActivePlayPanel({
+  rating,
+  moveProgress,
+  sequenceLength,
+  moves,
+  userSide,
+  startingFen,
+  state,
+  isActiveSetupReplay,
+  activeSetupReplayIndex,
+  isOpponentThinking,
+  isPositionLoading,
+  positionLoadError,
+  onLoadNextPosition,
+  onResumeTraining,
+}: {
+  rating: number | null;
+  moveProgress: number;
+  sequenceLength: number;
+  moves: TrainingMove[];
+  userSide: "white" | "black";
+  startingFen: string;
+  state: TrainingState;
+  isActiveSetupReplay: boolean;
+  activeSetupReplayIndex: number | null;
+  isOpponentThinking: boolean;
+  isPositionLoading: boolean;
+  positionLoadError: string | null;
+  onLoadNextPosition: () => void;
+  onResumeTraining: () => void;
+}) {
+  const userMoves = moves
+    .map((move, index) => ({ ...move, absoluteIndex: index }))
+    .filter((move) => move.side === userSide);
+  const graphPoints = buildEvalGraphPoints(moves, userSide, startingFen);
+
   return (
-    <div data-testid="train-prompt" className="mt-8 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-5 py-5">
-      <p className="text-lg font-bold text-[var(--app-text)]">{label}</p>
+    <div className="flex flex-1 flex-col gap-4">
+      {/* Rating header + move progress */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">Blindspots Elo</p>
+          <span className="text-5xl font-bold leading-none text-[var(--app-text)]">{rating ?? "--"}</span>
+        </div>
+        <div className="flex flex-col items-end gap-1.5 rounded border border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-4 py-3">
+          <p className="text-sm font-bold text-[var(--app-text)]">
+            Move {moveProgress} of {sequenceLength}
+          </p>
+          <div className="flex gap-1.5" aria-hidden="true">
+            {Array.from({ length: sequenceLength }, (_, i) => (
+              <span
+                key={i}
+                className="inline-block h-2 w-2 rounded-full"
+                style={{
+                  background: i < moveProgress ? "var(--app-accent)" : "var(--app-border)",
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Status banners (drift, setup replay, error) */}
+      {state === "drift" ? (
+        <StatusBanner
+          title="Eval dropped"
+          detail="Saved for later. You will see it again."
+          action="Again"
+          tone="warning"
+          onAction={onResumeTraining}
+        />
+      ) : isActiveSetupReplay && activeSetupReplayIndex === 0 ? (
+        <div className="rounded-[8px] border border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-5 py-5">
+          <p className="text-lg font-bold text-[var(--app-text)]">Before engine move</p>
+        </div>
+      ) : moves.length === 0 && !isOpponentThinking && !isPositionLoading ? (
+        positionLoadError ? (
+          <div className="rounded-[8px] border border-red-800 bg-red-950 px-5 py-5">
+            <p className="text-lg font-bold text-red-400">Failed to load position</p>
+            <p className="mt-1 text-sm text-red-300">{positionLoadError}</p>
+            <button
+              className="mt-3 rounded bg-red-800 px-4 py-2 text-sm text-white hover:bg-red-700"
+              onClick={() => {
+                onLoadNextPosition();
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        ) : null
+      ) : null}
+
+      {/* Engine lines — locked placeholder */}
+      <section className="opacity-40">
+        <h2 className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">Engine lines</h2>
+        <div className="mt-2 min-h-[38px] rounded-none border border-dashed border-[var(--app-border-soft)] px-3 py-2.5 text-xs font-bold text-[var(--app-muted)]">
+          Locked. Play the position first.
+        </div>
+      </section>
+
+      {/* Eval chart — live populating */}
+      <EvalGraph points={graphPoints} currentIndex={graphPoints.length - 1} compact />
+
+      {/* Move list — live appending */}
+      <AnalysisMoveTable
+        moves={userMoves}
+        compact
+        showEvaluations={false}
+      />
     </div>
   );
 }
@@ -2472,6 +2553,19 @@ function LinearProgress({ completedSteps }: { completedSteps: number }) {
         style={{ width: `${progressPercent}%` }}
       />
     </div>
+  );
+}
+
+function LoadingPositionText() {
+  return (
+    <span aria-label="Loading position">
+      Loading position
+      <span className="train-loading-dots" aria-hidden="true">
+        <span className="train-loading-dot" />
+        <span className="train-loading-dot" />
+        <span className="train-loading-dot" />
+      </span>
+    </span>
   );
 }
 
@@ -2889,8 +2983,8 @@ function EloResultCard({ result, isLoading }: { result: EloResult | null; isLoad
     <div className="rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-5">
       <div className="flex items-center">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="text-3xl font-bold text-[var(--app-text)]">{result.eloBefore}</span>
-          <span className="text-xl font-bold text-[var(--app-muted)]">→</span>
+          <span className="text-xl font-bold text-[var(--app-muted)]">{result.eloBefore}</span>
+          <span className="text-lg font-bold text-[var(--app-muted)]">→</span>
           <span className="text-3xl font-bold text-[var(--app-text)]">{result.eloAfter}</span>
           <span className={`text-xl font-bold ${deltaTone}`}>{signedDelta}</span>
         </div>
@@ -2946,6 +3040,7 @@ function EngineLinesSection({
   hoveredDestinationSquare,
   hoveredIndex,
   onHoverLine,
+  onSelectLine,
   selectedMoveUci,
 }: {
   lines: EngineLineResult[];
@@ -2955,6 +3050,7 @@ function EngineLinesSection({
   hoveredDestinationSquare?: string | null;
   hoveredIndex?: number | null;
   onHoverLine?: (index: number | null) => void;
+  onSelectLine?: (move: BoardMove) => void;
   selectedMoveUci?: string | null;
 }) {
   const emptyMessage = isLoading
@@ -2962,6 +3058,7 @@ function EngineLinesSection({
     : hasError
       ? "No engine lines yet."
       : "Engine lines unavailable";
+  const displayRows: Array<EngineLineResult | null> = Array.from({ length: 5 }, (_, index) => lines[index] ?? null);
   return (
     <section className="grid gap-2" aria-live="polite">
       <div className="flex items-center gap-3">
@@ -2970,14 +3067,27 @@ function EngineLinesSection({
         </h2>
       </div>
       <div className={["grid gap-2", isLoading ? "opacity-60" : ""].join(" ")}>
-        {lines.length === 0 ? (
-          <div className="rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] px-3 py-4 text-xs font-bold text-[var(--app-muted)]">
-            {emptyMessage}
-          </div>
-        ) : null}
-        {lines.map((line, index) => {
+        {displayRows.map((line, index) => {
+          if (!line) {
+            const shouldShowEmptyMessage = index === 0 && lines.length === 0 && !isLoading;
+            return (
+              <div
+                key={`engine-placeholder-${index}`}
+                aria-hidden="true"
+                className={[
+                  "min-h-[38px] rounded-none border border-dashed border-[var(--app-border-soft)] bg-transparent",
+                  shouldShowEmptyMessage
+                    ? "flex items-center px-3 text-xs font-bold text-[var(--app-muted)] opacity-100"
+                    : "opacity-45",
+                ].join(" ")}
+              >
+                {shouldShowEmptyMessage ? emptyMessage : null}
+              </div>
+            );
+          }
+
           const lead = line.bestSan || line.bestMove;
-          const pv = line.pvSan.slice(1).join(" ");
+          const pv = line.pvSan.slice(1, 13).join(" ");
           const cls = line.classification;
           const lineColor = engineLineColor(cls);
           const isBlurred = !revealBadLines && !isRecommendableClassification(cls);
@@ -2988,7 +3098,7 @@ function EngineLinesSection({
           return (
             <div
               key={`${line.rank}-${line.bestMove}-${index}`}
-              className="relative cursor-default overflow-hidden rounded-none border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] py-2 pl-4 pr-3 transition-colors duration-100"
+              className="relative cursor-pointer overflow-hidden rounded-none border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] py-2 pl-2.5 pr-3 transition-colors duration-100"
               style={{
                 borderLeftColor: lineColor,
                 borderLeftWidth: 3,
@@ -2998,17 +3108,24 @@ function EngineLinesSection({
               }}
               onPointerEnter={() => onHoverLine?.(index)}
               onPointerLeave={() => onHoverLine?.(null)}
+              onClick={() => onSelectLine?.({ from: line.bestMove.slice(0, 2), to: line.bestMove.slice(2, 4) })}
             >
-              <div className="grid grid-cols-[26px_auto_minmax(0,1fr)_auto_auto_72px] items-center gap-2">
-                <span className="text-right text-[10px] font-bold text-[var(--app-muted-soft)]">
+              <div className="grid grid-cols-[22px_auto_auto_auto_minmax(0,1fr)_auto_auto] items-center gap-2">
+                <span className="text-right text-xs font-black leading-none text-[var(--app-text)]">
                   #{index + 1}
                 </span>
                 {cls && !isSelectedUserMove ? (
                   <ClassificationBadge classification={cls} />
                 ) : <span />}
-                <strong className="min-w-0 truncate text-sm font-bold" style={{ color: lineColor }}>
-                  {formatClassifiedMoveLead(lead, cls)}
+                <span className="text-xs font-black tabular-nums text-[var(--app-text)]">
+                  {formatEval(line.cp)}
+                </span>
+                <strong className="min-w-0 truncate text-base font-black leading-none text-[var(--app-text)]">
+                  {lead}
                 </strong>
+                <span className="min-w-0 truncate text-xs font-bold text-[var(--app-muted)]">
+                  {pv || lead}
+                </span>
                 {isSelectedUserMove ? (
                   <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--app-accent)]">
                     Your move
@@ -3019,11 +3136,8 @@ function EngineLinesSection({
                   </span>
                 ) : null}
                 <span className="justify-self-end text-[10px] font-bold tabular-nums text-[var(--app-muted-soft)]">
-                  {formatEval(line.cp)} d{line.depth || 18}
+                  {line.depth || 18}
                 </span>
-              </div>
-              <div className="mt-1 truncate pl-[34px] text-[11px] text-[var(--app-muted-soft)]">
-                {pv || lead}
               </div>
             </div>
           );
@@ -3063,8 +3177,8 @@ function BoardWithEvalBar({
   const bottomPct = bottomSide === "white" ? whitePct : blackPct;
 
   return (
-    <div className="relative w-full overflow-visible">
-      <div className="pointer-events-none absolute right-full top-0 mr-3 h-full w-6 shrink-0">
+    <div className="relative w-full overflow-visible pl-9">
+      <div className="pointer-events-none absolute left-0 top-0 h-full w-6 shrink-0">
         <div className="relative h-full overflow-hidden rounded-[4px] border border-[var(--app-border-soft)] bg-black">
           <div
             className={[
@@ -3114,6 +3228,7 @@ function ResultsPanel({
   hoveredAnnotationSquare,
   hoveredEngineLineIndex,
   onEngineLineHover,
+  onEngineLineSelect,
   onMoveHover,
   onNavigate,
   onNextPosition,
@@ -3138,6 +3253,7 @@ function ResultsPanel({
   hoveredAnnotationSquare: string | null;
   hoveredEngineLineIndex: number | null;
   onEngineLineHover: (index: number | null) => void;
+  onEngineLineSelect: (move: BoardMove) => void;
   onMoveHover: (move: MoveHighlightTarget | null) => void;
   onNavigate: (index: number) => void;
   onNextPosition: () => void;
@@ -3169,6 +3285,7 @@ function ResultsPanel({
             hoveredDestinationSquare={hoveredAnnotationSquare}
             hoveredIndex={hoveredEngineLineIndex}
             onHoverLine={onEngineLineHover}
+            onSelectLine={onEngineLineSelect}
             selectedMoveUci={selectedMoveUci}
           />
         </EvalGraph>
@@ -3237,112 +3354,111 @@ function EvalGraph({
   engineCp?: number;
   children?: ReactNode;
 }) {
-  const clampedValues = graphPoints.map((point) => Math.max(-10, Math.min(10, point.value)));
+  const clampedValues = graphPoints.map((point) => Math.max(-EVAL_GRAPH_RANGE, Math.min(EVAL_GRAPH_RANGE, point.value)));
+  const rawMinValue = clampedValues.length > 0 ? Math.min(...clampedValues) : -1;
+  const rawMaxValue = clampedValues.length > 0 ? Math.max(...clampedValues) : 1;
+  const rawSpan = rawMaxValue - rawMinValue;
+  const graphSpan = Math.max(rawSpan, MIN_EVAL_GRAPH_SPAN);
+  const graphMidpoint = (rawMinValue + rawMaxValue) / 2;
+  const graphMinValue = graphMidpoint - graphSpan / 2;
+  const graphMaxValue = graphMidpoint + graphSpan / 2;
   const width = 520;
-  const height = compact ? 108 : 128;
-  const padding = 18;
+  const height = compact ? 140 : 160;
+  const padding = 28;
   const usableWidth = width - padding * 2;
   const usableHeight = height - padding * 2;
   const points = clampedValues.map((value, index) => {
     const x = padding + (clampedValues.length <= 1 ? 0 : (index / (clampedValues.length - 1)) * usableWidth);
-    const y = padding + ((10 - value) / 20) * usableHeight;
+    const y = padding + ((graphMaxValue - value) / graphSpan) * usableHeight;
     return { ...graphPoints[index]!, x, y, value: graphPoints[index]!.value };
   });
 
-  // Engine reference line (horizontal, monochrome)
-  const hasEngineRef = typeof engineCp === "number" && graphPoints.length >= 2;
-  const engineRefY = hasEngineRef
-    ? padding + ((10 - Math.max(-10, Math.min(10, engineCp / 100))) / 20) * usableHeight
-    : 0;
-
   return (
     <div className="grid gap-2">
-      <div className={[compact ? "h-28" : "h-36", "overflow-hidden rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)]"].join(" ")}>
-        {points.length >= 2 ? (
-          <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" role="img" aria-label="Sequence eval graph">
-            <line
-              x1={padding}
-              x2={width - padding}
-              y1={height / 2}
-              y2={height / 2}
-              stroke="color-mix(in srgb, var(--app-border-strong) 16%, transparent)"
-              strokeDasharray="5 6"
-            />
-            {hasEngineRef ? (
-              <line
-                x1={padding}
-                x2={width - padding}
-                y1={engineRefY}
-                y2={engineRefY}
-                stroke="color-mix(in srgb, var(--app-muted) 40%, transparent)"
-                strokeWidth={1.5}
-                strokeDasharray="4 3"
-              />
-            ) : null}
-            {points.slice(1).map((point, index) => {
-              const previous = points[index]!;
-              const color = classificationColor(point.classification);
-              return (
+      {children ? (
+        <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-3">
+          {children}
+        </div>
+      ) : null}
+      <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)]">
+        <div className={compact ? "h-36" : "h-40"}>
+          {points.length >= 2 ? (
+            <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" role="img" aria-label="Sequence eval graph">
+              {[padding, height / 2, height - padding].map((lineY) => (
                 <line
-                  key={`${point.x}-${point.y}-${index}`}
-                  x1={previous.x}
-                  y1={previous.y}
-                  x2={point.x}
-                  y2={point.y}
-                  stroke={color}
-                  strokeWidth={3}
-                  strokeLinecap="round"
+                  key={`guide-${lineY}`}
+                  x1={padding}
+                  x2={width - padding}
+                  y1={lineY}
+                  y2={lineY}
+                  stroke="color-mix(in srgb, var(--app-border-strong) 16%, transparent)"
+                  strokeDasharray="5 6"
                 />
-              );
-            })}
-            {points.map((point, index) => (
-              <g
-                key={`${point.x}-${point.y}-node`}
-                role={onSelectPosition ? "button" : undefined}
-                tabIndex={onSelectPosition ? 0 : undefined}
-                className={onSelectPosition ? "cursor-pointer outline-none" : ""}
-                onClick={() => onSelectPosition?.(point.positionIndex)}
-                onKeyDown={(event) => {
-                  if (!onSelectPosition) return;
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    onSelectPosition(point.positionIndex);
-                  }
-                }}
-              >
-                <circle
-                  cx={point.x}
-                  cy={point.y}
-                  r={12}
-                  fill="transparent"
-                  className={onSelectPosition ? "cursor-pointer" : ""}
-                />
-                <circle
-                  cx={point.x}
-                  cy={point.y}
-                  r={point.positionIndex === currentIndex ? 6 : 4}
-                  fill={index === 0 ? "var(--app-muted)" : classificationColor(point.classification)}
-                  stroke={point.positionIndex === currentIndex ? "var(--app-text)" : "var(--app-panel-solid)"}
-                  strokeWidth={point.positionIndex === currentIndex ? 2.5 : 2}
-                  className="pointer-events-none"
-                />
-                <text
-                  x={point.x}
-                  y={point.y - 9}
-                  textAnchor="middle"
-                  className="pointer-events-none fill-[var(--app-muted)] text-[9px] font-bold"
+              ))}
+              {points.slice(1).map((point, index) => {
+                const previous = points[index]!;
+                const color = classificationColor(point.classification);
+                return (
+                  <line
+                    key={`${point.x}-${point.y}-${index}`}
+                    x1={previous.x}
+                    y1={previous.y}
+                    x2={point.x}
+                    y2={point.y}
+                    stroke={color}
+                    strokeWidth={3}
+                    strokeLinecap="round"
+                  />
+                );
+              })}
+              {points.map((point, index) => (
+                <g
+                  key={`${point.x}-${point.y}-node`}
+                  role={onSelectPosition ? "button" : undefined}
+                  tabIndex={onSelectPosition ? 0 : undefined}
+                  className={onSelectPosition ? "cursor-pointer outline-none" : ""}
+                  onClick={() => onSelectPosition?.(point.positionIndex)}
+                  onKeyDown={(event) => {
+                    if (!onSelectPosition) return;
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onSelectPosition(point.positionIndex);
+                    }
+                  }}
                 >
-                {formatEvalLabel(point.value, point.mate)}
-                </text>
-              </g>
-            ))}
-          </svg>
-        ) : (
-          <div className="grid h-full place-items-center text-xs text-[var(--app-muted)]">
-            No eval data here yet
-          </div>
-        )}
-        {children ? <div className="border-t border-[var(--app-border-soft)]">{children}</div> : null}
+                  <circle
+                    cx={point.x}
+                    cy={point.y}
+                    r={12}
+                    fill="transparent"
+                    className={onSelectPosition ? "cursor-pointer" : ""}
+                  />
+                  <circle
+                    cx={point.x}
+                    cy={point.y}
+                    r={point.positionIndex === currentIndex ? 6 : 4}
+                    fill={index === 0 ? "var(--app-muted)" : classificationColor(point.classification)}
+                    stroke={point.positionIndex === currentIndex ? "var(--app-text)" : "var(--app-panel-solid)"}
+                    strokeWidth={point.positionIndex === currentIndex ? 2.5 : 2}
+                    className="pointer-events-none"
+                  />
+                  <text
+                    x={point.x}
+                    y={point.y - 9}
+                    textAnchor="middle"
+                    className="pointer-events-none fill-[var(--app-muted)] text-[9px] font-bold"
+                  >
+                    {formatEvalLabel(point.value, point.mate)}
+                  </text>
+                </g>
+              ))}
+            </svg>
+          ) : (
+            <div className="grid h-full place-items-center text-xs text-[var(--app-muted)]">
+              No eval data here yet
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

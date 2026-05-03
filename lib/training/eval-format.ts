@@ -1,3 +1,5 @@
+const GRAPH_EVAL_RANGE = 14;
+
 export function formatEvalLabel(cp?: number | null, mate?: number | null): string {
   if (typeof mate === "number") {
     if (mate === 0) return "M0";
@@ -19,8 +21,8 @@ export function formatLossLabel(cpLoss?: number | null, mateAfter?: number | nul
 
 export function graphValueFromEval(cp?: number | null, mate?: number | null): number {
   if (typeof mate === "number") {
-    return mate > 0 ? 10 : -10;
+    return mate > 0 ? GRAPH_EVAL_RANGE : -GRAPH_EVAL_RANGE;
   }
   if (typeof cp !== "number" || !Number.isFinite(cp)) return 0;
-  return Math.max(-10, Math.min(10, cp / 100));
+  return Math.max(-GRAPH_EVAL_RANGE, Math.min(GRAPH_EVAL_RANGE, cp / 100));
 }

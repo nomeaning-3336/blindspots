@@ -1,12 +1,13 @@
 import type { Json } from "@/lib/supabase/database";
 
 export type DashboardClassifications = {
+  brilliant: number;
+  critical: number;
   best: number;
+  excellent: number;
   good: number;
   okay: number;
-  interesting: number;
-  brilliant: number;
-  dubious: number;
+  inaccuracy: number;
   mistake: number;
   blunder: number;
 };
@@ -29,11 +30,11 @@ export type DashboardSummary = {
     id: string;
     label?: string;
     attempts: number;
-    interesting: number;
-    dubious: number;
+    brilliant: number;
+    critical: number;
+    inaccuracy: number;
     mistake: number;
     blunder: number;
-    brilliant: number;
     phase?: string;
     bucket?: string;
     tag?: string;
@@ -75,12 +76,13 @@ type BuildDashboardSummaryInput = {
 };
 
 const CLASSIFICATION_KEYS = [
+  "brilliant",
+  "critical",
   "best",
+  "excellent",
   "good",
   "okay",
-  "interesting",
-  "brilliant",
-  "dubious",
+  "inaccuracy",
   "mistake",
   "blunder",
 ] as const;
@@ -90,12 +92,13 @@ type DashboardClassification = (typeof CLASSIFICATION_KEYS)[number];
 const MIN_CLUSTER_ATTEMPTS = 5;
 
 const CLASSIFICATION_SEVERITY: Record<DashboardClassification, number> = {
-  best: 0,
-  good: 1,
-  okay: 2,
-  interesting: 3,
-  brilliant: 4,
-  dubious: 5,
+  brilliant: 0,
+  critical: 1,
+  best: 2,
+  excellent: 3,
+  good: 4,
+  okay: 4,
+  inaccuracy: 5,
   mistake: 6,
   blunder: 7,
 };
@@ -111,11 +114,11 @@ type PositionEvaluationInput = {
 type ClusterAccumulator = {
   id: string;
   attempts: number;
-  interesting: number;
-  dubious: number;
+  brilliant: number;
+  critical: number;
+  inaccuracy: number;
   mistake: number;
   blunder: number;
-  brilliant: number;
   phase?: string;
   bucket?: string;
   tag?: string;
@@ -158,12 +161,13 @@ export function buildDashboardSummary({
 
 function emptyClassificationCounts(): DashboardClassifications {
   return {
+    brilliant: 0,
+    critical: 0,
     best: 0,
+    excellent: 0,
     good: 0,
     okay: 0,
-    interesting: 0,
-    brilliant: 0,
-    dubious: 0,
+    inaccuracy: 0,
     mistake: 0,
     blunder: 0,
   };
@@ -189,19 +193,19 @@ function buildClusterSummaries(
     const cluster = clusters.get(evaluation.clusterId) ?? {
       id: evaluation.clusterId,
       attempts: 0,
-      interesting: 0,
-      dubious: 0,
+      brilliant: 0,
+      critical: 0,
+      inaccuracy: 0,
       mistake: 0,
       blunder: 0,
-      brilliant: 0,
     };
 
     cluster.attempts += 1;
-    if (evaluation.classification === "dubious") cluster.dubious += 1;
+    if (evaluation.classification === "brilliant") cluster.brilliant += 1;
+    if (evaluation.classification === "critical") cluster.critical += 1;
+    if (evaluation.classification === "inaccuracy") cluster.inaccuracy += 1;
     if (evaluation.classification === "mistake") cluster.mistake += 1;
     if (evaluation.classification === "blunder") cluster.blunder += 1;
-    if (evaluation.classification === "brilliant") cluster.brilliant += 1;
-    if (evaluation.classification === "interesting") cluster.interesting += 1;
     cluster.phase ??= evaluation.phase ?? parseClusterId(evaluation.clusterId).phase;
     cluster.bucket ??= evaluation.bucket ?? parseClusterId(evaluation.clusterId).bucket;
     cluster.tag ??= evaluation.tags[0];
@@ -222,7 +226,7 @@ function buildClusterSummaries(
         phase,
         bucket,
         tag: tag ?? bucket,
-        severity: cluster.brilliant * 5 + cluster.blunder * 4 + cluster.mistake * 3 + cluster.dubious + cluster.interesting,
+        severity: cluster.brilliant * 6 + cluster.critical * 5 + cluster.blunder * 4 + cluster.mistake * 3 + cluster.inaccuracy,
       };
     })
     .filter((cluster) => cluster.severity > 0)
@@ -280,11 +284,24 @@ function normalizePositionEvaluations(raw: Json): PositionEvaluationInput[] {
 }
 
 function normalizeClassification(value: Json | undefined): DashboardClassification | null {
-  return typeof value === "string" && isDashboardClassification(value) ? value : null;
+  if (typeof value !== "string") return null;
+  if (isDashboardClassification(value)) return value;
+  return normalizeLegacyEnCroissantClassification(value);
 }
 
 function isDashboardClassification(value: string): value is DashboardClassification {
   return CLASSIFICATION_KEYS.includes(value as DashboardClassification);
+}
+
+function normalizeLegacyEnCroissantClassification(value: string): DashboardClassification | null {
+  switch (value) {
+    case "interesting":
+      return "excellent";
+    case "dubious":
+      return "inaccuracy";
+    default:
+      return null;
+  }
 }
 
 function normalizeClusterAttemptCounts(raw: Json | undefined): Record<string, number> {

@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 
 const TRAIN_ENGINE_TIME_LIMIT_MS = 1000;
 const TRAIN_ENGINE_LINES_SHOWN = 5;
+const TRAIN_ENGINE_PV_MOVES_SHOWN = 13;
 
 type EngineLinesPayload = {
   fen?: unknown;
@@ -131,7 +132,7 @@ function uciToSan(fen: string, uci: string) {
 function pvToSan(fen: string, pv: string[]) {
   const chess = new Chess(fen);
   const san: string[] = [];
-  for (const uci of pv.slice(0, 8)) {
+  for (const uci of pv.slice(0, TRAIN_ENGINE_PV_MOVES_SHOWN)) {
     const move = chess.move({
       from: uci.slice(0, 2),
       to: uci.slice(2, 4),

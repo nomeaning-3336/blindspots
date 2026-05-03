@@ -1,9 +1,11 @@
 export type MoveClassification =
   | "brilliant"
+  | "critical"
   | "best"
+  | "excellent"
   | "good"
-  | "interesting"
-  | "dubious"
+  | "okay"
+  | "inaccuracy"
   | "mistake"
   | "blunder";
 
@@ -46,7 +48,7 @@ export function classifyRankedMove(
   const candidateLine = lines[index];
   if (!bestLine || !candidateLine) return undefined;
   if (index === 0) {
-    return hasForcedBestMoveGap(lines, sideToMove(fen)) ? "best" : "good";
+    return hasForcedBestMoveGap(lines, sideToMove(fen)) ? "critical" : "best";
   }
 
   return classifyMoveAgainstBest(bestLine, candidateLine, fen);
@@ -83,7 +85,7 @@ export function classifyEvaluatedMove({
 }
 
 export function isRecommendableClassification(classification: MoveClassification | undefined) {
-  return classification !== "dubious" && classification !== "mistake" && classification !== "blunder";
+  return classification !== "inaccuracy" && classification !== "mistake" && classification !== "blunder";
 }
 
 function getAnnotation({
@@ -108,7 +110,7 @@ function getAnnotation({
 
   if (winChanceDiff > WIN_CHANCE_BLUNDER_LOSS) return "blunder";
   if (winChanceDiff > WIN_CHANCE_MISTAKE_LOSS) return "mistake";
-  if (winChanceDiff > WIN_CHANCE_DUBIOUS_LOSS) return "dubious";
+  if (winChanceDiff > WIN_CHANCE_DUBIOUS_LOSS) return "inaccuracy";
 
   if (prevMoves.length > 1) {
     const bestGap = normalizeScores(prevMoves[0]!, prevMoves[1]!, color);
@@ -128,11 +130,11 @@ function getAnnotation({
     }
 
     if (isSacrifice && nextCP > INTERESTING_SACRIFICE_MIN_CP) {
-      return "interesting";
+      return "excellent";
     }
   }
 
-  return undefined;
+  return "okay";
 }
 
 function hasForcedBestMoveGap(lines: MoveEvaluationLine[], color: "w" | "b") {
