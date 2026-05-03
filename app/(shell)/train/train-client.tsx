@@ -1021,11 +1021,14 @@ export default function TrainPage() {
       setMoves(movesAfterUserMove);
       warmEngineLinesForSequence(movesAfterUserMove);
 
+      const isFinalUserMoveInSequence = userMoveCountAfterMove >= sequenceLength;
+
       void evaluateUserMoveAsync({
         userMoveIndex: userMoveCountAfterMove - 1,
         decisionFen: boardFen!,
         uci: userTrainingMove.uci,
         san: userTrainingMove.san,
+        timeLimitMs: isFinalUserMoveInSequence ? 500 : 1000,
       });
 
       if (chess.isGameOver()) {
@@ -1144,6 +1147,7 @@ export default function TrainPage() {
     decisionFen: string;
     uci: string;
     san: string;
+    timeLimitMs?: number;
   }) {
     setAsyncMoveEvaluations((current) => ({
       ...current,
@@ -1161,6 +1165,7 @@ export default function TrainPage() {
           selectedBucket: selectedBucketRef.current,
           selectedPhase: selectedPhaseRef.current,
           selectedTags: selectedTagsRef.current,
+          timeLimitMs: input.timeLimitMs,
         }),
       });
 
