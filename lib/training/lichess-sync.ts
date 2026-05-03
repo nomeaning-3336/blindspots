@@ -1,6 +1,7 @@
 import { Chess } from "chess.js";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import { getPositionEval, getPositionLines } from "@/lib/engines/dispatcher";
+import { parseLichessMoveText, type ParsedGameMove } from "./lichess-move-parser";
 
 export interface LichessSyncResult {
   profileId: string | null;
@@ -21,10 +22,12 @@ interface LichessGameJson {
   opening?: { name?: string; eco?: string; ply?: number };
   variant?: string;
   players?: {
-    white?: { user?: { name?: string }; rating?: number };
-    black?: { user?: { name?: string }; rating?: number };
+    white?: { user?: { name?: string; id?: string }; rating?: number };
+    black?: { user?: { name?: string; id?: string }; rating?: number };
   };
 }
+
+const UCI_MOVE_RE = /^[a-h][1-8][a-h][1-8][qrbn]?$/;
 
 interface MistakeCandidate {
   user_id: string;
@@ -256,22 +259,36 @@ export async function buildMistakeCandidatesFromGame(input: {
   const moves = (game.moves ?? "").trim();
   if (!moves) return { candidates: [], movesAnalyzed: 0 };
 
-  const uciMoves = moves.split(/\s+/).filter((m) => /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(m));
-  if (uciMoves.length === 0) return { candidates: [], movesAnalyzed: 0 };
+  const parsedMoves = parseLichessMoveText(moves);
+  if (parsedMoves.length === 0) return { candidates: [], movesAnalyzed: 0 };
 
+  // Match username case-insensitively against both name and id
   const normalizedUser = username.toLowerCase();
-  const whiteName = (game.players?.white?.user?.name ?? "").trim().toLowerCase();
-  const blackName = (game.players?.black?.user?.name ?? "").trim().toLowerCase();
+  const whitePlayer = game.players?.white?.user;
+  const blackPlayer = game.players?.black?.user;
+  const whiteName = (whitePlayer?.name ?? whitePlayer?.id ?? "").trim().toLowerCase();
+  const blackName = (blackPlayer?.name ?? blackPlayer?.id ?? "").trim().toLowerCase();
 
   let userColor: "white" | "black" | null = null;
   if (normalizedUser && whiteName === normalizedUser) userColor = "white";
   else if (normalizedUser && blackName === normalizedUser) userColor = "black";
 
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[lichess-sync] game parse", {
+      gameId: game.id,
+      username,
+      whiteName,
+      blackName,
+      userColor,
+      rawMoveTokenCount: moves.split(/\s+/).filter(Boolean).length,
+      parsedMoveCount: parsedMoves.length,
+    });
+  }
+
   if (!userColor) return { candidates: [], movesAnalyzed: 0 };
 
   const candidates: MistakeCandidate[] = [];
   let movesAnalyzed = 0;
-  let previousFen: string | null = null;
 
   const gameId = game.id ?? `lichess-${Date.now()}`;
   const gameUrl = game.id ? `https://lichess.org/${game.id}` : "";
@@ -279,109 +296,92 @@ export async function buildMistakeCandidatesFromGame(input: {
   const openingName = game.opening?.name ?? null;
   const eco = game.opening?.eco ?? null;
 
-  // Replay game from start
-  const chess = new Chess();
-  for (let plyIndex = 0; plyIndex < uciMoves.length && movesAnalyzed < moveCap; plyIndex++) {
-    const uci = uciMoves[plyIndex];
-    const fenBefore = chess.fen();
-
-    try {
-      chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] as never });
-    } catch {
-      break;
-    }
-
-    const fenAfter = chess.fen();
+  for (const parsed of parsedMoves) {
+    const plyIndex = parsed.ply;
     const isUserMove = userColor === "white"
       ? plyIndex % 2 === 0
       : plyIndex % 2 === 1;
 
-    if (isUserMove) {
-      movesAnalyzed++;
+    if (!isUserMove) continue;
+    if (movesAnalyzed >= moveCap) break;
 
-      try {
-        const evalBefore = await getPositionEval(fenBefore, {
+    movesAnalyzed++;
+
+    try {
+      const evalBefore = await getPositionEval(parsed.fenBefore, {
+        depthLimit: EVAL_DEPTH,
+        timeLimitMs: EVAL_TIME_MS,
+      });
+      const evalAfter = await getPositionEval(parsed.fenAfter, {
+        depthLimit: EVAL_DEPTH,
+        timeLimitMs: EVAL_TIME_MS,
+      });
+
+      const beforeCp = userColor === "white" ? evalBefore.cp : -evalBefore.cp;
+      const afterCp = userColor === "white" ? evalAfter.cp : -evalAfter.cp;
+      const cpLoss = Math.max(0, Math.round(beforeCp - afterCp));
+
+      if (cpLoss >= CP_LOSS_THRESHOLD) {
+        const lines = await getPositionLines(parsed.fenBefore, {
           depthLimit: EVAL_DEPTH,
+          multiPv: 1,
           timeLimitMs: EVAL_TIME_MS,
         });
-        const evalAfter = await getPositionEval(fenAfter, {
-          depthLimit: EVAL_DEPTH,
-          timeLimitMs: EVAL_TIME_MS,
-        });
+        const bestLine = lines[0] as { bestMove?: string; san?: string } | undefined;
+        const bestMoveUci = bestLine?.bestMove ?? null;
 
-        const beforeCp = userColor === "white" ? evalBefore.cp : -evalBefore.cp;
-        const afterCp = userColor === "white" ? evalAfter.cp : -evalAfter.cp;
-        const cpLoss = Math.max(0, Math.round(beforeCp - afterCp));
-
-        if (cpLoss >= CP_LOSS_THRESHOLD) {
-          const lines = await getPositionLines(fenBefore, {
-            depthLimit: EVAL_DEPTH,
-            multiPv: 1,
-            timeLimitMs: EVAL_TIME_MS,
-          });
-          const bestLine = lines[0] as { bestMove?: string; san?: string } | undefined;
-          const bestMoveUci = bestLine?.bestMove ?? null;
-
-          let bestMoveSan: string | null = null;
-          if (bestMoveUci) {
-            try {
-              const clone = new Chess(fenBefore);
+        let bestMoveSan: string | null = null;
+        if (bestMoveUci) {
+          try {
+            const clone = new Chess(parsed.fenBefore);
+            if (UCI_MOVE_RE.test(bestMoveUci)) {
               clone.move({
                 from: bestMoveUci.slice(0, 2),
                 to: bestMoveUci.slice(2, 4),
                 promotion: bestMoveUci[4] as never,
               });
-              bestMoveSan = clone.history({ verbose: true }).pop()?.san ?? null;
-            } catch {
-              bestMoveSan = null;
+            } else {
+              clone.move(bestMoveUci);
             }
-          }
-
-          let actualMoveSan: string | null = null;
-          try {
-            const clone = new Chess(fenBefore);
-            clone.move({
-              from: uci.slice(0, 2),
-              to: uci.slice(2, 4),
-              promotion: uci[4] as never,
-            });
-            actualMoveSan = clone.history({ verbose: true }).pop()?.san ?? uci;
+            bestMoveSan = clone.history({ verbose: true }).pop()?.san ?? null;
           } catch {
-            actualMoveSan = uci;
+            bestMoveSan = null;
           }
-
-          candidates.push({
-            user_id: userId,
-            linked_profile_id: profileId,
-            source_type: "own_game",
-            source_provider: "lichess",
-            source_game_id: gameId,
-            source_game_url: gameUrl,
-            game_played_at: playedAt,
-            ply: plyIndex,
-            user_color: userColor,
-            starting_fen: previousFen ?? fenBefore,
-            decision_fen: fenBefore,
-            actual_move_uci: uci,
-            actual_move_san: actualMoveSan,
-            best_move_uci: bestMoveUci,
-            best_move_san: bestMoveSan,
-            eval_before_cp: Math.round(beforeCp),
-            eval_after_cp: Math.round(afterCp),
-            cp_loss: cpLoss,
-            opening_name: openingName,
-            eco,
-            theme_tags: [],
-            status: "active",
-            interval_days: 1,
-          });
         }
-      } catch {
-        // Engine eval failed for this move — skip
-      }
-    }
 
-    previousFen = fenBefore;
+        // starting_fen = one ply before user's move (previous move's fenBefore or same as decision)
+        const previousMove = parsedMoves[parsed.ply - 1];
+        const startingFen = previousMove?.fenBefore ?? parsed.fenBefore;
+
+        candidates.push({
+          user_id: userId,
+          linked_profile_id: profileId,
+          source_type: "own_game",
+          source_provider: "lichess",
+          source_game_id: gameId,
+          source_game_url: gameUrl,
+          game_played_at: playedAt,
+          ply: plyIndex,
+          user_color: userColor,
+          starting_fen: startingFen,
+          decision_fen: parsed.fenBefore,
+          actual_move_uci: parsed.uci,
+          actual_move_san: parsed.san,
+          best_move_uci: bestMoveUci,
+          best_move_san: bestMoveSan,
+          eval_before_cp: Math.round(beforeCp),
+          eval_after_cp: Math.round(afterCp),
+          cp_loss: cpLoss,
+          opening_name: openingName,
+          eco,
+          theme_tags: [],
+          status: "active",
+          interval_days: 1,
+        });
+      }
+    } catch {
+      // Engine eval failed for this move — skip
+    }
   }
 
   return { candidates, movesAnalyzed };
