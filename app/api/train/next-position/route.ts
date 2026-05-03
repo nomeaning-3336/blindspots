@@ -34,6 +34,11 @@ type NextPositionResponse = {
   fen?: string;
   previousFen?: string;
   playedMove?: string;
+  decisionFen?: string;
+  actualMoveUci?: string;
+  actualMoveSan?: string;
+  bestMoveUci?: string;
+  bestMoveSan?: string;
   sequenceLength?: number;
   source?: string;
   selectedServeMode?: string;
@@ -138,8 +143,13 @@ if (!optionalError && optionalData) {
       const response: NextPositionResponse = {
         mistakeId: normalized.id,
         fen: normalized.fen,
+        decisionFen: normalized.decisionFen ?? undefined,
         previousFen: normalized.previousFen ?? undefined,
         playedMove: normalized.playedMove ?? undefined,
+        actualMoveUci: normalized.actualMoveUci ?? undefined,
+        actualMoveSan: normalized.actualMoveSan ?? undefined,
+        bestMoveUci: normalized.bestMoveUci ?? undefined,
+        bestMoveSan: normalized.bestMoveSan ?? undefined,
         source: normalized.source,
         queueSource: mistakeResult.queueSource ?? undefined,
         selectedServeMode: mistakeResult.queueSource ?? undefined,
@@ -201,8 +211,13 @@ if (!optionalError && optionalData) {
           const response: NextPositionResponse = {
             mistakeId: normalized.id,
             fen: normalized.fen,
+            decisionFen: normalized.decisionFen ?? undefined,
             previousFen: normalized.previousFen ?? undefined,
             playedMove: normalized.playedMove ?? undefined,
+            actualMoveUci: normalized.actualMoveUci ?? undefined,
+            actualMoveSan: normalized.actualMoveSan ?? undefined,
+            bestMoveUci: normalized.bestMoveUci ?? undefined,
+            bestMoveSan: normalized.bestMoveSan ?? undefined,
             source: normalized.source,
             queueSource: retryResult.queueSource ?? undefined,
             selectedServeMode: retryResult.queueSource ?? undefined,

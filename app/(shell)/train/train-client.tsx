@@ -135,6 +135,11 @@ type NextPositionResponse = {
   fen?: string;
   previousFen?: string;
   playedMove?: string;
+  decisionFen?: string;
+  actualMoveUci?: string;
+  actualMoveSan?: string;
+  bestMoveUci?: string;
+  bestMoveSan?: string;
   sequenceLength?: number;
   source?: string;
   selectedServeMode?: string;
