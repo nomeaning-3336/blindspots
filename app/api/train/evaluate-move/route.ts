@@ -252,8 +252,8 @@ function normalizeTags(value: unknown): string[] | null {
 
 function classifyCpLoss(cpLoss: number): MoveClassification {
   if (cpLoss <= 30) return "good";
-  if (cpLoss <= 90) return "good";
-  if (cpLoss <= 180) return "inaccuracy";
-  if (cpLoss <= 320) return "mistake";
+  if (cpLoss <= 70) return "okay";
+  if (cpLoss <= 150) return "inaccuracy";
+  if (cpLoss <= 300) return "mistake";
   return "blunder";
 }
