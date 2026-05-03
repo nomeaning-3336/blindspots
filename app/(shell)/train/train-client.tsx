@@ -1777,11 +1777,16 @@ export default function TrainPage() {
         data-train-layout-state={isPostMortemVisible ? "results" : "playing"}
         className={[
           "mx-auto grid h-full min-h-0 w-full max-w-[100rem] min-w-0 gap-4 transition-opacity duration-200",
-          "lg:grid-cols-[minmax(0,1.22fr)_minmax(28rem,0.92fr)] lg:items-stretch",
+          isPostMortemVisible
+            ? "lg:grid-cols-[minmax(0,1.22fr)_minmax(28rem,0.92fr)] lg:items-stretch"
+            : "lg:grid-cols-1 lg:items-center lg:justify-items-center",
         ].join(" ")}
       >
         <section
-          className="app-brutal-section flex min-h-0 min-w-0 items-center justify-center overflow-hidden p-3 sm:p-4 lg:p-4"
+          className={[
+            "app-brutal-section flex min-h-0 min-w-0 items-center justify-center overflow-hidden p-3 sm:p-4 lg:p-4",
+            isPostMortemVisible ? "" : "lg:w-fit lg:justify-self-center",
+          ].join(" ")}
         >
           <div className="flex min-h-0 min-w-0 items-center justify-center">
             <div className={boardFrameClassName}>
