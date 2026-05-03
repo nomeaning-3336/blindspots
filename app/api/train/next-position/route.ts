@@ -187,9 +187,9 @@ if (!optionalError && optionalData) {
     try {
       await syncLichessMistakesForUser({
         userId,
-        maxGames: 3,
-        maxUserMoves: 50,
-        maxMistakes: 15,
+        maxGames: 1,
+        maxUserMoves: 12,
+        maxMistakes: 5,
         sinceDays: 30,
       });
       const retryResult = await getNextMistakeForTraining(userId);
