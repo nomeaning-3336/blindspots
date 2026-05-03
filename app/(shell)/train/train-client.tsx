@@ -3397,9 +3397,9 @@ function AnalysisMoveTable({
     <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)]">
       <div className="grid min-h-8 grid-cols-[minmax(0,1.1fr)_68px_68px_76px] items-center border-b border-[var(--app-border-soft)] px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
         <span>Move</span>
-        <span className="text-right">Before</span>
-        <span className="text-right">After</span>
-        <span className="text-right">Loss</span>
+        <span className="text-left">Before</span>
+        <span className="text-left">After</span>
+        <span className="text-left">Loss</span>
       </div>
       {moves.length === 0 ? (
         <div className="px-3 py-4 text-sm text-[var(--app-muted)]">No move grades yet.</div>
@@ -3433,13 +3433,13 @@ function AnalysisMoveTable({
               {move.san}
             </span>
           </span>
-          <span className="overflow-hidden whitespace-nowrap text-right tabular-nums text-[var(--app-muted)]">
+          <span className="overflow-hidden whitespace-nowrap text-left tabular-nums text-[var(--app-muted)]">
             {typeof move.evalBefore === "number" ? formatEvalLabel(move.evalBefore, move.mateBefore) : pendingValue}
           </span>
-          <span className="overflow-hidden whitespace-nowrap text-right tabular-nums text-[var(--app-muted)]">
+          <span className="overflow-hidden whitespace-nowrap text-left tabular-nums text-[var(--app-muted)]">
             {typeof move.evalAfter === "number" ? formatEvalLabel(move.evalAfter, move.mateAfter) : pendingValue}
           </span>
-          <span className="overflow-hidden whitespace-nowrap text-right tabular-nums text-[var(--app-muted)]">
+          <span className="overflow-hidden whitespace-nowrap text-left tabular-nums text-[var(--app-muted)]">
             {showEvaluations ? formatLossLabel(move.cpLoss, move.mateAfter) : pendingValue}
           </span>
         </button>
