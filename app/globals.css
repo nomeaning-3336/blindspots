@@ -340,6 +340,17 @@ textarea {
   font: inherit;
 }
 
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+button:disabled,
+button[aria-disabled="true"],
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 .app-shell-nav a:hover,
 .app-shell-nav a:focus-visible,
 .app-shell-nav button:hover,
