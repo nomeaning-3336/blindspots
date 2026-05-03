@@ -1558,6 +1558,7 @@ export default function TrainPage() {
       });
 
       if (action.type === "enter-explore") {
+        setSelectedMoveIndex(null);
         setExploreIndex(Math.max(0, visibleSequencePositions.length - 1));
         resetExploratoryLine();
         setExploreSelectedSquare(null);
@@ -1695,6 +1696,7 @@ export default function TrainPage() {
     const currentIndex = exploratoryHistoryIndex;
     const movingForward = nextIndex > currentIndex;
 
+    setSelectedMoveIndex(null);
     setHoveredEngineLineIndex(null);
     setHoveredMoveSquares(null);
     setExploratoryHistoryIndex(nextIndex);
@@ -1726,6 +1728,7 @@ export default function TrainPage() {
       return;
     }
     const previousIndex = activeExploreIndex;
+    setSelectedMoveIndex(boundedIndex);
     resetExploratoryLine();
     setExploreSelectedSquare(null);
     setHoveredEngineLineIndex(null);
@@ -1916,7 +1919,6 @@ export default function TrainPage() {
               selectedMoveIndex={selectedMoveIndex}
               selectedMoveUci={selectedMoveUci}
               onSelectMove={(positionIndex) => {
-                setSelectedMoveIndex(positionIndex);
                 navigateExploreTo(positionIndex);
               }}
             />
