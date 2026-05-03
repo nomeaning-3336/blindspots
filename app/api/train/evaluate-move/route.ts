@@ -21,6 +21,7 @@ type EvaluateMovePayload = {
   selectedBucket?: unknown;
   selectedPhase?: unknown;
   selectedTags?: unknown;
+  timeLimitMs?: unknown;
 };
 
 function comparableEval(line: { cp: number }, fen: string) {
@@ -80,6 +81,7 @@ export async function POST(request: Request) {
   const decisionFen = typeof payload?.decisionFen === "string" ? payload.decisionFen : "";
   const uci = typeof payload?.uci === "string" ? payload.uci : "";
   const san = typeof payload?.san === "string" ? payload.san : "";
+  const evaluationTimeLimitMs = normalizeEvalTimeLimitMs(payload?.timeLimitMs);
 
   if (!isValidFen(decisionFen) || !uci || !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(uci)) {
     return NextResponse.json({ error: "Invalid move data." }, { status: 400 });
@@ -116,7 +118,7 @@ export async function POST(request: Request) {
 
   if (isCheckmateFen(fenAfterUserMove)) {
     const classification: MoveClassification = "good";
-    const evalBefore = await getPositionEval(decisionFen, { timeLimitMs: EVAL_TIME_LIMIT_MS });
+    const evalBefore = await getPositionEval(decisionFen, { timeLimitMs: evaluationTimeLimitMs });
     const evalBeforeSigned = userColor === "w" ? evalBefore.cp : -(evalBefore.cp);
     const phase = selectedPhase ?? classifyTrainingPhase(fenAfterUserMove);
 
@@ -151,7 +153,7 @@ export async function POST(request: Request) {
   let legalLines: Awaited<ReturnType<typeof getLegalMoveLines>> = [];
   try {
     legalLines = await getLegalMoveLines(decisionFen, {
-      timeLimitMs: EVAL_TIME_LIMIT_MS,
+      timeLimitMs: evaluationTimeLimitMs,
     });
   } catch {
     legalLines = [];
@@ -207,8 +209,8 @@ export async function POST(request: Request) {
 
   // Fallback: independent before/after eval (only when legal-lines scan is unavailable).
   const [evalBefore, evalAfter] = await Promise.all([
-    getPositionEval(decisionFen, { timeLimitMs: EVAL_TIME_LIMIT_MS }),
-    getPositionEval(fenAfterUserMove, { timeLimitMs: EVAL_TIME_LIMIT_MS }),
+    getPositionEval(decisionFen, { timeLimitMs: evaluationTimeLimitMs }),
+    getPositionEval(fenAfterUserMove, { timeLimitMs: evaluationTimeLimitMs }),
   ]);
 
   const evalBeforeSigned = userColor === "w" ? evalBefore.cp : -(evalBefore.cp);
@@ -256,4 +258,10 @@ function classifyCpLoss(cpLoss: number): MoveClassification {
   if (cpLoss <= 150) return "inaccuracy";
   if (cpLoss <= 300) return "mistake";
   return "blunder";
+}
+
+function normalizeEvalTimeLimitMs(value: unknown) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return EVAL_TIME_LIMIT_MS;
+  return Math.max(250, Math.min(1000, Math.round(parsed)));
 }
