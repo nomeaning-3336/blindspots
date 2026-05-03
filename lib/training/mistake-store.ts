@@ -238,18 +238,23 @@ export function normalizeUserMistakeForTraining(row: UserMistakeRow): {
   queueSource: string;
 } {
   let playedMove: string | null = null;
-  if (row.decision_fen && row.decision_fen !== row.starting_fen) {
+  const decisionFen =
+    row.decision_fen && row.decision_fen !== row.starting_fen
+      ? row.decision_fen
+      : null;
+
+  if (decisionFen) {
     playedMove = inferLegalMoveBetweenFens({
       fromFen: row.starting_fen,
-      toFen: row.decision_fen,
+      toFen: decisionFen,
     });
   }
 
   return {
     id: row.id,
-    fen: row.starting_fen,
+    fen: decisionFen ?? row.starting_fen,
     decisionFen: row.decision_fen ?? null,
-    previousFen: row.decision_fen ? row.starting_fen : null,
+    previousFen: decisionFen ? row.starting_fen : null,
     playedMove,
     actualMoveUci: row.actual_move_uci ?? null,
     actualMoveSan: row.actual_move_san ?? null,
