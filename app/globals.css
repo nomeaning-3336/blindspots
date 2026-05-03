@@ -846,13 +846,9 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   height: 100%;
   opacity: 0;
   transform: translateX(24px);
-  pointer-events: none;
+  pointer-events: auto;
   will-change: opacity, transform;
   animation: train-postmortem-reveal 280ms cubic-bezier(0.16, 1, 0.3, 1) 200ms both;
-}
-
-.train-postmortem-panel[data-testid="train-move-panel"] {
-  pointer-events: auto;
 }
 
 @media (min-width: 1024px) {
