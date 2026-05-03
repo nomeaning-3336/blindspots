@@ -11,7 +11,7 @@ export function formatEvalLabel(cp?: number | null, mate?: number | null): strin
 
 export function formatLossLabel(cpLoss?: number | null, mateAfter?: number | null): string {
   if (typeof mateAfter === "number") {
-    return mateAfter < 0 ? "Mate" : "Mating";
+    return mateAfter < 0 ? "Mate" : "—";
   }
   if (typeof cpLoss !== "number" || !Number.isFinite(cpLoss)) return "—";
   return `${Math.round(cpLoss)}cp`;
