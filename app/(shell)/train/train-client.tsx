@@ -374,10 +374,51 @@ export default function TrainPage() {
   const engineLineCacheRef = useRef<Record<string, EngineLineResult[]>>({});
   const engineLinePrefetchRef = useRef<Map<string, Promise<void>>>(new Map());
   const pieceLineCacheRef = useRef<Record<string, EngineLineResult[]>>({});
+  const trainLayoutGridRef = useRef<HTMLDivElement | null>(null);
+  const isPostMortemVisible = state === "complete" || state === "drift";
 
   useEffect(() => {
     engineLineCacheRef.current = engineLineCache;
   }, [engineLineCache]);
+
+  useLayoutEffect(() => {
+    const grid = trainLayoutGridRef.current;
+    if (!grid) return;
+
+    function syncBoardCenterOffset() {
+      if (!grid) return;
+      const computed = window.getComputedStyle(grid);
+      const columnGap = parseFloat(computed.columnGap) || 0;
+      const columnWidths = computed.gridTemplateColumns
+        .split(" ")
+        .map((value) => parseFloat(value))
+        .filter((value) => Number.isFinite(value));
+
+      const boardColumnWidth = columnWidths[0] ?? 0;
+      const postMortemColumnWidth = columnWidths[1] ?? 0;
+      const hasDesktopTwoColumnLayout =
+        window.matchMedia("(min-width: 1024px)").matches &&
+        boardColumnWidth > 0 &&
+        postMortemColumnWidth > 0;
+
+      const offset = hasDesktopTwoColumnLayout
+        ? (postMortemColumnWidth + columnGap) / 2
+        : 0;
+
+      grid.style.setProperty("--train-board-center-offset", `${offset}px`);
+    }
+
+    syncBoardCenterOffset();
+
+    const observer = new ResizeObserver(syncBoardCenterOffset);
+    observer.observe(grid);
+    window.addEventListener("resize", syncBoardCenterOffset);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", syncBoardCenterOffset);
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -1732,6 +1773,8 @@ export default function TrainPage() {
   return (
     <div className="-mx-4 -mb-4 flex h-full min-h-0 w-[calc(100%+2rem)] flex-1 overflow-hidden px-3 py-3 md:-mx-6 md:w-[calc(100%+3rem)]">
       <div
+        ref={trainLayoutGridRef}
+        data-train-layout-state={isPostMortemVisible ? "results" : "playing"}
         className={[
           "mx-auto grid h-full min-h-0 w-full max-w-[100rem] min-w-0 gap-4 transition-opacity duration-200",
           "lg:grid-cols-[minmax(0,1.22fr)_minmax(28rem,0.92fr)] lg:items-stretch",
@@ -1844,7 +1887,8 @@ export default function TrainPage() {
           ].join(" ")}
         >
           <div key={state === "complete" ? "results" : "active"} className="train-panel-enter flex flex-1 flex-col gap-4">
-          {state === "complete" ? (
+          {isPostMortemVisible ? (
+            <div className="train-postmortem-panel" data-testid="train-move-panel">
             <ResultsPanel
               eloResult={eloResult}
               isSaving={isCompletingSequence}
@@ -1874,6 +1918,7 @@ export default function TrainPage() {
                 navigateExploreTo(positionIndex);
               }}
             />
+            </div>
           ) : (
             <ActivePlayPanel
               rating={rating}
