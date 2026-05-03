@@ -109,6 +109,7 @@ function classifyUserDeliveredCheckmate(): MoveClassification {
 }
 
 export async function POST(request: Request) {
+  const requestStartedAt = Date.now();
   const userId = await getOptionalAppUserId();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -140,13 +141,24 @@ export async function POST(request: Request) {
   const sequenceLength = 4;
   const reflectionNote = typeof payload?.reflectionNote === "string" ? payload.reflectionNote : null;
   const challengeElo = normalizeOptionalNumber(payload?.challengeElo);
+
+  const precomputedInputCount = Array.isArray(payload?.precomputedEvaluations)
+    ? payload.precomputedEvaluations.length
+    : 0;
+
+  const profileStartedAt = Date.now();
   const profile = await getOrCreateProfile(userId);
+  const profileMs = Date.now() - profileStartedAt;
+
+  const evaluationStartedAt = Date.now();
+  const precomputedSequenceEvaluation = buildPrecomputedSequenceEvaluation({
+    rawEvaluations: payload?.precomputedEvaluations,
+    startingFen,
+    moves,
+  });
+  const usedPrecomputedEvaluations = Boolean(precomputedSequenceEvaluation);
   const sequenceEvaluation =
-    buildPrecomputedSequenceEvaluation({
-      rawEvaluations: payload?.precomputedEvaluations,
-      startingFen,
-      moves,
-    }) ??
+    precomputedSequenceEvaluation ??
     await calculateSequenceEvaluation({
       startingFen,
       moves,
@@ -157,6 +169,18 @@ export async function POST(request: Request) {
       selectedOpeningName,
       selectedEco,
     });
+  const evaluationMs = Date.now() - evaluationStartedAt;
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[complete-sequence:timing]", {
+      precomputedInputCount,
+      usedPrecomputedEvaluations,
+      moveCount: moves.length,
+      moveScoreCount: sequenceEvaluation.moveScores.length,
+      profileMs,
+      evaluationMs,
+    });
+  }
   const evalPreservationScore = sequenceEvaluation.evalPreservationScore;
   const profileRatingDeviation = normalizeRatingDeviation(profile.rating_deviation);
 
@@ -192,6 +216,7 @@ export async function POST(request: Request) {
   const actualScore = eloUpdate?.actualScore ?? 0;
 
   const supabase = getSupabaseAdminClient();
+  const sessionInsertStartedAt = Date.now();
   const { data: session, error: sessionError } = await supabase
     .from("training_sessions")
     .insert({
@@ -224,10 +249,12 @@ export async function POST(request: Request) {
   if (sessionError) {
     throw new Error(`Failed to save training session: ${sessionError.message}`);
   }
+  const sessionInsertMs = Date.now() - sessionInsertStartedAt;
 
   if (selectedMistakeId) {
     // Row-based mistake path: update SRS state first (session insert succeeded), then Elo
     try {
+      const srsUpdateStartedAt = Date.now();
       await updateMistakeAfterTraining({
         userId,
         mistakeId: selectedMistakeId,
@@ -235,6 +262,11 @@ export async function POST(request: Request) {
         averageCpLoss,
         maxSingleCpLoss,
       });
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[complete-sequence:srs]", {
+          srsUpdateMs: Date.now() - srsUpdateStartedAt,
+        });
+      }
     } catch (mistakeUpdateError) {
       console.error("[complete-sequence] SRS update failed", mistakeUpdateError);
       return NextResponse.json(
@@ -244,6 +276,7 @@ export async function POST(request: Request) {
     }
 
     // Update Elo only, skip legacy queue/bucket/cluster stats
+    const profileUpdateStartedAt = Date.now();
     const { error: profileError } = await supabase
       .from("user_blindspot_profile")
       .update({
@@ -283,9 +316,22 @@ export async function POST(request: Request) {
       maxSingleCpLoss,
       selectedMistakeId: selectedMistakeId,
     });
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[complete-sequence:done]", {
+        path: "row-based",
+        usedPrecomputedEvaluations,
+        precomputedInputCount,
+        profileMs,
+        evaluationMs,
+        sessionInsertMs,
+        profileUpdateMs: Date.now() - profileUpdateStartedAt,
+        totalMs: Date.now() - requestStartedAt,
+      });
+    }
   }
 
   // Legacy JSON-queue path
+  const legacyQueueStartedAt = Date.now();
   const queues = await updateQueuesAfterSequence({
     currentQueues: {
       exploitQueue: normalizeQueue(profile.exploit_queue),
@@ -318,6 +364,7 @@ export async function POST(request: Request) {
   const updatedClusterStats = recordClusterResults(currentClusterStats, sequenceEvaluation.positionEvaluations, completedAt);
   const updatedRecentClusters = updateRecentClusters(profile.recent_clusters, sequenceEvaluation.positionEvaluations);
 
+  const profileUpdateStartedAt = Date.now();
   const { error: profileError } = await supabase
     .from("user_blindspot_profile")
     .update({
@@ -337,6 +384,20 @@ export async function POST(request: Request) {
 
   if (profileError) {
     throw new Error(`Failed to update Blindspots Elo: ${profileError.message}`);
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[complete-sequence:done]", {
+      path: "legacy-json-queue",
+      usedPrecomputedEvaluations,
+      precomputedInputCount,
+      profileMs,
+      evaluationMs,
+      sessionInsertMs,
+      legacyQueueMs: Date.now() - legacyQueueStartedAt,
+      profileUpdateMs: Date.now() - profileUpdateStartedAt,
+      totalMs: Date.now() - requestStartedAt,
+    });
   }
 
   return NextResponse.json({
