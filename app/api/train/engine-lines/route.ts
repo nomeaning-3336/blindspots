@@ -3,14 +3,13 @@ import { Chess } from "chess.js";
 import { getOptionalAppUserId } from "@/lib/app-auth";
 import { getPositionLines, getLegalMoveLines, classifyEngineError, type EngineErrorCode } from "@/lib/engines/dispatcher";
 import { type EngineLine } from "@/lib/engines/types";
-import { getAnalyzePreferencesForUser } from "@/lib/analyze-preferences-store";
-import { normalizeAnalyzePreferences } from "@/lib/analyze-preferences";
 import { classifyRankedMove, classifyMoveAgainstBest, type MoveEvaluationLine } from "@/lib/move-classification";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const TRAIN_ENGINE_TIME_LIMIT_MS = 1000;
+const TRAIN_ENGINE_LINES_SHOWN = 5;
 
 type EngineLinesPayload = {
   fen?: unknown;
@@ -28,17 +27,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid position." }, { status: 400 });
   }
 
-  const rawPrefs = await getAnalyzePreferencesForUser(userId);
-  const { linesShown, limitKind, timeLimitValue, depthLimitValue } = normalizeAnalyzePreferences(rawPrefs);
-
   let pvLines: Awaited<ReturnType<typeof getPositionLines>> = [];
   let engineError: EngineErrorCode | null = null;
 
   try {
     pvLines = await getPositionLines(fen, {
-      depthLimit: limitKind === "depth" ? depthLimitValue : undefined,
-      timeLimitMs: limitKind === "time" ? timeLimitValue : TRAIN_ENGINE_TIME_LIMIT_MS,
-      multiPv: linesShown,
+      timeLimitMs: TRAIN_ENGINE_TIME_LIMIT_MS,
+      multiPv: TRAIN_ENGINE_LINES_SHOWN,
     });
   } catch (error: unknown) {
     engineError = classifyEngineError(error);
@@ -49,15 +44,14 @@ export async function POST(request: Request) {
   let candidateLines: Awaited<ReturnType<typeof getLegalMoveLines>> = [];
   try {
     candidateLines = await getLegalMoveLines(fen, {
-      depthLimit: limitKind === "depth" ? depthLimitValue : undefined,
-      timeLimitMs: limitKind === "time" ? timeLimitValue : TRAIN_ENGINE_TIME_LIMIT_MS,
+      timeLimitMs: TRAIN_ENGINE_TIME_LIMIT_MS,
     });
   } catch {
     // Best-effort candidate scan — silently skip if it fails.
   }
 
   const SAME_TIER_CP_THRESHOLD = 35;
-  const MAX_TOTAL_LINES = Math.max(linesShown + 3, 6);
+  const MAX_TOTAL_LINES = TRAIN_ENGINE_LINES_SHOWN;
 
   function sameTierAsBest(best: MoveEvaluationLine | null | undefined, line: MoveEvaluationLine) {
     if (!best) return false;
