@@ -1877,19 +1877,16 @@ export default function TrainPage() {
           </div>
         </section>
 
-        <aside
-          data-testid="train-move-panel"
-          className={[
-            "app-brutal-section flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden",
-            state === "complete" && resultMode === "results"
-              ? "p-3 sm:p-4"
-              : "p-3 sm:p-4",
-          ].join(" ")}
-        >
-          <div key={state === "complete" ? "results" : "active"} className="train-panel-enter flex flex-1 flex-col gap-4">
-          {isPostMortemVisible ? (
-            <div className="train-postmortem-panel" data-testid="train-move-panel">
-            <ResultsPanel
+        {isPostMortemVisible ? (
+          <aside
+            data-testid="train-move-panel"
+            className={[
+              "app-brutal-section flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden",
+              resultMode === "results" ? "p-3 sm:p-4" : "p-3 sm:p-4",
+            ].join(" ")}
+          >
+            <div className="train-postmortem-panel flex flex-1 flex-col gap-4">
+              <ResultsPanel
               eloResult={eloResult}
               isSaving={isCompletingSequence}
               moves={moves}
@@ -1919,26 +1916,8 @@ export default function TrainPage() {
               }}
             />
             </div>
-          ) : (
-            <ActivePlayPanel
-              rating={rating}
-              moveProgress={moveProgress}
-              sequenceLength={sequenceLength}
-              moves={moves}
-              userSide={userMoveSide}
-              startingFen={startingFen}
-              state={state}
-              isActiveSetupReplay={isActiveSetupReplay}
-              activeSetupReplayIndex={activeSetupReplayIndex}
-              isOpponentThinking={isOpponentThinking}
-              isPositionLoading={isPositionLoading}
-              positionLoadError={positionLoadError}
-              onLoadNextPosition={() => { setPositionLoadError(null); void loadNextPosition(); }}
-              onResumeTraining={() => switchState("active")}
-            />
-          )}
-          </div>
-        </aside>
+          </aside>
+        ) : null}
       </div>
     </div>
   );
