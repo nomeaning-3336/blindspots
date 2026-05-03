@@ -47,6 +47,7 @@ type CompleteSequencePayload = {
   challengeElo?: unknown;
   selectedMistakeId?: unknown;
   queueSource?: unknown;
+  precomputedEvaluations?: unknown;
 };
 
 type MoveClassification = "brilliant" | "critical" | "best" | "excellent" | "good" | "okay" | "inaccuracy" | "mistake" | "blunder";
@@ -140,16 +141,22 @@ export async function POST(request: Request) {
   const reflectionNote = typeof payload?.reflectionNote === "string" ? payload.reflectionNote : null;
   const challengeElo = normalizeOptionalNumber(payload?.challengeElo);
   const profile = await getOrCreateProfile(userId);
-  const sequenceEvaluation = await calculateSequenceEvaluation({
-    startingFen,
-    moves,
-    selectedBucket,
-    selectedPhase,
-    selectedTags,
-    selectedIsTactic,
-    selectedOpeningName,
-    selectedEco,
-  });
+  const sequenceEvaluation =
+    buildPrecomputedSequenceEvaluation({
+      rawEvaluations: payload?.precomputedEvaluations,
+      startingFen,
+      moves,
+    }) ??
+    await calculateSequenceEvaluation({
+      startingFen,
+      moves,
+      selectedBucket,
+      selectedPhase,
+      selectedTags,
+      selectedIsTactic,
+      selectedOpeningName,
+      selectedEco,
+    });
   const evalPreservationScore = sequenceEvaluation.evalPreservationScore;
   const profileRatingDeviation = normalizeRatingDeviation(profile.rating_deviation);
 
@@ -516,6 +523,228 @@ async function calculateSequenceEvaluation({
     totalCpLoss,
     positionEvaluations,
   };
+}
+
+type PrecomputedEvaluationPayload = {
+  userMoveIndex?: unknown;
+  moveScore?: unknown;
+  positionEvaluation?: unknown;
+};
+
+function buildPrecomputedSequenceEvaluation({
+  rawEvaluations,
+  startingFen,
+  moves,
+}: {
+  rawEvaluations: unknown;
+  startingFen: string;
+  moves: Array<{ san: string; uci: string; side: string }>;
+}): SequenceEvaluationResult | null {
+  if (!Array.isArray(rawEvaluations)) return null;
+
+  const expectedUserMoveCount = countUserMovesInSequence(startingFen, moves);
+  if (expectedUserMoveCount <= 0) return null;
+
+  const byIndex = new Map<number, {
+    moveScore: SequenceEvaluationResult["moveScores"][number];
+    positionEvaluation: PositionEvaluation;
+  }>();
+
+  for (const raw of rawEvaluations as PrecomputedEvaluationPayload[]) {
+    if (!isRecord(raw)) continue;
+
+    const rawIndex = raw.userMoveIndex;
+    const userMoveIndex =
+      typeof rawIndex === "number" && Number.isInteger(rawIndex)
+        ? rawIndex
+        : null;
+    if (userMoveIndex === null) continue;
+    if (userMoveIndex < 0 || userMoveIndex >= expectedUserMoveCount) continue;
+
+    const moveScore = normalizePrecomputedMoveScore(raw.moveScore, userMoveIndex);
+    const positionEvaluation = normalizePrecomputedPositionEvaluation(
+      raw.positionEvaluation,
+      userMoveIndex,
+    );
+
+    if (!moveScore || !positionEvaluation) continue;
+
+    byIndex.set(userMoveIndex, { moveScore, positionEvaluation });
+  }
+
+  const moveScores: SequenceEvaluationResult["moveScores"] = [];
+  const positionEvaluations: PositionEvaluation[] = [];
+
+  for (let index = 0; index < expectedUserMoveCount; index += 1) {
+    const entry = byIndex.get(index);
+    if (!entry) return null;
+    moveScores.push(entry.moveScore);
+    positionEvaluations.push(entry.positionEvaluation);
+  }
+
+  const totalCpLoss = moveScores.reduce((sum, score) => sum + score.cpLoss, 0);
+
+  return {
+    evalPreservationScore:
+      expectedUserMoveCount < 2
+        ? null
+        : Math.max(0, Math.min(1, 1 - totalCpLoss / (expectedUserMoveCount * 100))),
+    moveScores,
+    totalCpLoss,
+    positionEvaluations,
+  };
+}
+
+function countUserMovesInSequence(
+  startingFen: string,
+  moves: Array<{ san: string; uci: string; side: string }>,
+) {
+  try {
+    const chess = new Chess(startingFen);
+    const userColor = chess.turn();
+    let userMoveCount = 0;
+
+    for (const move of moves) {
+      const isUserMove = chess.turn() === userColor;
+      const played = chess.move({
+        from: move.uci.slice(0, 2),
+        to: move.uci.slice(2, 4),
+        promotion: move.uci[4],
+      });
+      if (!played) break;
+      if (isUserMove) userMoveCount += 1;
+    }
+
+    return userMoveCount;
+  } catch {
+    return 0;
+  }
+}
+
+function normalizePrecomputedMoveScore(
+  raw: unknown,
+  expectedIndex: number,
+): SequenceEvaluationResult["moveScores"][number] | null {
+  if (!isRecord(raw)) return null;
+
+  const cpLoss = normalizeNonNegativeNumber(raw.cpLoss);
+  const evalBefore = normalizeFiniteNumber(raw.evalBefore);
+  const evalAfter = normalizeFiniteNumber(raw.evalAfter);
+  const classification = normalizeMoveClassification(raw.classification);
+
+  if (cpLoss === null) return null;
+  if (evalBefore === null) return null;
+  if (evalAfter === null) return null;
+  if (!classification) return null;
+
+  return {
+    userMoveIndex: expectedIndex,
+    cpLoss: Math.round(cpLoss),
+    evalBefore: Math.round(evalBefore),
+    evalAfter: Math.round(evalAfter),
+    mateBefore: normalizeOptionalMate(raw.mateBefore),
+    mateAfter: normalizeOptionalMate(raw.mateAfter),
+    classification,
+  };
+}
+
+function normalizePrecomputedPositionEvaluation(
+  raw: unknown,
+  expectedIndex: number,
+): PositionEvaluation | null {
+  if (!isRecord(raw)) return null;
+
+  const decisionFen = typeof raw.decisionFen === "string" ? raw.decisionFen : "";
+  const userMove = isRecord(raw.userMove) ? raw.userMove : null;
+  const userMoveSan = typeof userMove?.san === "string" ? userMove.san : "";
+  const userMoveUci = typeof userMove?.uci === "string" ? userMove.uci : "";
+  const evalBefore = normalizeFiniteNumber(raw.evalBefore);
+  const evalAfter = normalizeFiniteNumber(raw.evalAfter);
+  const cpLoss = normalizeNonNegativeNumber(raw.cpLoss);
+  const classification = normalizeMoveClassification(raw.classification);
+  const fenAfterUserMove =
+    typeof raw.fenAfterUserMove === "string" ? raw.fenAfterUserMove : "";
+  const fenAfterEngineMove =
+    typeof raw.fenAfterEngineMove === "string" ? raw.fenAfterEngineMove : null;
+  const phase = typeof raw.phase === "string" && raw.phase.length > 0 ? raw.phase : "unknown";
+  const bucket = typeof raw.bucket === "string" && raw.bucket.length > 0 ? raw.bucket : "wildcard";
+  const clusterId =
+    typeof raw.clusterId === "string" && raw.clusterId.length > 0
+      ? raw.clusterId
+      : `app:v1:${normalizeClusterPart(phase)}:${normalizeClusterPart(bucket)}`;
+  const tags = Array.isArray(raw.tags)
+    ? raw.tags.filter((tag): tag is string => typeof tag === "string")
+    : [];
+
+  if (!decisionFen) return null;
+  if (!userMoveSan || !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(userMoveUci)) return null;
+  if (evalBefore === null) return null;
+  if (evalAfter === null) return null;
+  if (cpLoss === null) return null;
+  if (!classification) return null;
+  if (!fenAfterUserMove) return null;
+
+  return {
+    index: expectedIndex,
+    decisionFen,
+    userMove: {
+      san: userMoveSan,
+      uci: userMoveUci,
+    },
+    evalBefore: Math.round(evalBefore),
+    evalAfter: Math.round(evalAfter),
+    mateBefore: normalizeOptionalMate(raw.mateBefore),
+    mateAfter: normalizeOptionalMate(raw.mateAfter),
+    cpLoss: Math.round(cpLoss),
+    classification,
+    banditResult: normalizeBanditResult(raw.banditResult) ?? getBanditResult(classification),
+    fenAfterUserMove,
+    fenAfterEngineMove,
+    phase,
+    bucket,
+    clusterId,
+    tags,
+  };
+}
+
+function normalizeMoveClassification(value: unknown): MoveClassification | null {
+  if (
+    value === "brilliant" ||
+    value === "critical" ||
+    value === "best" ||
+    value === "excellent" ||
+    value === "good" ||
+    value === "okay" ||
+    value === "inaccuracy" ||
+    value === "mistake" ||
+    value === "blunder"
+  ) {
+    return value;
+  }
+  return null;
+}
+
+function normalizeBanditResult(value: unknown): "success" | "neutral" | "failure" | null {
+  if (value === "success" || value === "neutral" || value === "failure") return value;
+  return null;
+}
+
+function normalizeOptionalMate(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function normalizeFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function normalizeNonNegativeNumber(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.max(0, value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function classifyCpLoss(cpLoss: number): MoveClassification {
