@@ -1545,7 +1545,7 @@ export default function TrainPage() {
     if (!(target instanceof HTMLElement)) return false;
     return Boolean(
       target.closest(
-        "input, textarea, select, button, [contenteditable='true'], [data-ignore-train-shortcuts='true']",
+        "input, textarea, select, [contenteditable='true'], [data-ignore-train-shortcuts='true']",
       ),
     );
   }
@@ -3552,7 +3552,10 @@ function AnalysisMoveTable({
             currentIndex === positionIndex || isSelected ? "bg-[var(--app-highlight-soft)]" : "",
           ].join(" ")}
           disabled={!onSelectPosition}
-          onClick={() => onSelectPosition?.(positionIndex)}
+          onClick={(event) => {
+            event.currentTarget.blur();
+            onSelectPosition?.(positionIndex);
+          }}
           onPointerEnter={() => {
             const squares = moveFromUci(move.uci);
             onHoverMove?.(squares ? { ...squares, classification: move.classification } : null);
