@@ -861,7 +861,7 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   }
 
   .train-layout-grid[data-train-layout-state="playing"] > :first-child {
-    transform: translateX(var(--train-board-center-offset, 0px));
+    transform: none;
     filter: brightness(1);
   }
 
@@ -902,7 +902,7 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   }
 
   .train-layout-grid[data-train-layout-state="playing"] > :first-child {
-    transform: translateX(var(--train-board-center-offset, 0px));
+    transform: none;
     filter: none;
   }
 
