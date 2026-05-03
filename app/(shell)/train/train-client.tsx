@@ -295,6 +295,59 @@ function collectCompletedMoveEvaluations(
   });
 }
 
+function countUserMovesForCompletion(startingFen: string, moves: TrainingMove[]) {
+  try {
+    const chess = new Chess(startingFen);
+    const userColor = chess.turn() === "w" ? "white" : "black";
+    return moves.filter((move) => move.side === userColor).length;
+  } catch {
+    return 0;
+  }
+}
+
+function delayMs(ms: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+async function waitForCompletedMoveEvaluations({
+  getEvaluations,
+  expectedCount,
+  timeoutMs = 2500,
+}: {
+  getEvaluations: () => Record<
+    number,
+    {
+      status: "pending" | "done" | "error";
+      moveScore?: MoveScore;
+      positionEvaluation?: unknown;
+    }
+  >;
+  expectedCount: number;
+  timeoutMs?: number;
+}): Promise<CompletedMoveEvaluation[]> {
+  const startedAt = performance.now();
+
+  while (performance.now() - startedAt < timeoutMs) {
+    const evaluations = getEvaluations();
+    const completed = collectCompletedMoveEvaluations(evaluations);
+
+    if (expectedCount <= 0 || completed.length >= expectedCount) {
+      return completed;
+    }
+
+    const hasPending = Object.values(evaluations).some((entry) => entry.status === "pending");
+    if (!hasPending) {
+      return completed;
+    }
+
+    await delayMs(50);
+  }
+
+  return collectCompletedMoveEvaluations(getEvaluations());
+}
+
 async function readServerVisualPreferences() {
   const response = await fetch("/api/analyze/preferences", { cache: "no-store" });
   if (!response.ok) return null;
@@ -369,6 +422,7 @@ export default function TrainPage() {
   const [analysisStep, setAnalysisStep] = useState(0);
   const [analysisError, setAnalysisError] = useState("");
   const [asyncMoveEvaluations, setAsyncMoveEvaluations] = useState<Record<number, { status: "pending" | "done" | "error"; moveScore?: MoveScore; positionEvaluation?: unknown }>>({});
+  const asyncMoveEvaluationsRef = useRef<Record<number, { status: "pending" | "done" | "error"; moveScore?: MoveScore; positionEvaluation?: unknown }>>({});
   const [analysisElapsedMs, setAnalysisElapsedMs] = useState(0);
   const [initializationSummary, setInitializationSummary] =
     useState<InitializationSummary | null>(null);
@@ -413,6 +467,10 @@ export default function TrainPage() {
   useEffect(() => {
     engineLineCacheRef.current = engineLineCache;
   }, [engineLineCache]);
+
+  useEffect(() => {
+    asyncMoveEvaluationsRef.current = asyncMoveEvaluations;
+  }, [asyncMoveEvaluations]);
 
   useLayoutEffect(() => {
     const grid = trainLayoutGridRef.current;
@@ -1155,10 +1213,21 @@ export default function TrainPage() {
     completionRequestRef.current = requestId;
     setIsCompletingSequence(true);
 
-    // Wait for pending async move evaluations (up to 1200ms)
-    await new Promise<void>((resolve) => setTimeout(resolve, 1200));
-
     try {
+      const expectedPrecomputedCount = countUserMovesForCompletion(startingFen, finalMoves);
+      const completedEvaluations = await waitForCompletedMoveEvaluations({
+        getEvaluations: () => asyncMoveEvaluationsRef.current,
+        expectedCount: expectedPrecomputedCount,
+        timeoutMs: 2500,
+      });
+
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[complete-sequence:client-precomputed]", {
+          expectedPrecomputedCount,
+          sentPrecomputedCount: completedEvaluations.length,
+        });
+      }
+
       const response = await fetch("/api/train/complete-sequence", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1177,7 +1246,7 @@ export default function TrainPage() {
           selectedMistakeId: currentMistakeIdRef.current,
           queueSource: currentQueueSourceRef.current,
           challengeElo: currentChallengeElo,
-          precomputedEvaluations: collectCompletedMoveEvaluations(asyncMoveEvaluations),
+          precomputedEvaluations: completedEvaluations,
         }),
       });
       const payload = (await response.json().catch(() => null)) as
