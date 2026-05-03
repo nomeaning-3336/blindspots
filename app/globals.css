@@ -76,6 +76,8 @@
   --app-class-blunder: #ef4444;
   --app-class-blunder-soft: rgba(239, 68, 68, 0.16);
   --app-class-blunder-border: rgba(239, 68, 68, 0.28);
+  --train-motion-premium: cubic-bezier(0.16, 1, 0.3, 1);
+  --train-motion-soft: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 html[data-theme="midnight"] {
@@ -856,8 +858,8 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   opacity: 0.58;
   filter: brightness(0.68) blur(1px);
   transition:
-    opacity 420ms cubic-bezier(0.16, 1, 0.3, 1),
-    filter 420ms cubic-bezier(0.16, 1, 0.3, 1);
+    opacity 1000ms var(--train-motion-soft),
+    filter 1000ms var(--train-motion-soft);
 }
 
 .train-postmortem-panel {
@@ -867,7 +869,7 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   transform: translateX(24px);
   pointer-events: auto;
   will-change: opacity, transform;
-  animation: train-postmortem-reveal 280ms cubic-bezier(0.16, 1, 0.3, 1) 200ms both;
+  animation: train-postmortem-reveal 320ms var(--train-motion-premium) 200ms both;
 }
 
 @media (min-width: 1024px) {
@@ -881,7 +883,7 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   }
 
   .train-layout-grid[data-train-layout-state="results"] > :first-child {
-    animation: train-board-slide-left 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: train-board-slide-left 360ms var(--train-motion-premium) both;
   }
 }
 
@@ -948,7 +950,7 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   box-shadow: 0 18px 50px color-mix(in srgb, var(--app-bg) 65%, transparent);
   padding: 14px 16px;
   border-radius: 12px;
-  animation: train-resolution-card-in 260ms cubic-bezier(0.16, 1, 0.3, 1) 320ms both;
+  animation: train-resolution-card-in 320ms var(--train-motion-premium) 360ms both;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -974,7 +976,7 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   fill: none;
   stroke-dasharray: 24;
   stroke-dashoffset: 24;
-  animation: train-resolution-check-draw 300ms cubic-bezier(0.16, 1, 0.3, 1) 460ms forwards;
+  animation: train-resolution-check-draw 360ms var(--train-motion-premium) 520ms forwards;
 }
 
 .train-resolution-text {
