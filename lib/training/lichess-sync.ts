@@ -3,6 +3,17 @@ import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import { getPositionEval, getPositionLines } from "@/lib/engines/dispatcher";
 import { parseLichessMoveText, type ParsedGameMove } from "./lichess-move-parser";
 
+export interface TopCpLoss {
+  gameId: string;
+  ply: number;
+  userColor: "white" | "black";
+  actualMoveUci: string;
+  actualMoveSan: string;
+  beforeCp: number;
+  afterCp: number;
+  cpLoss: number;
+}
+
 export interface LichessSyncResult {
   profileId: string | null;
   provider: "lichess";
@@ -19,6 +30,7 @@ export interface LichessSyncResult {
   evalsAttempted: number;
   evalsSucceeded: number;
   candidateMistakesFound: number;
+  topCpLosses: TopCpLoss[];
   errors: string[];
 }
 
@@ -126,6 +138,7 @@ export async function syncLichessMistakesForUser(input: {
       evalsAttempted: 0,
       evalsSucceeded: 0,
       candidateMistakesFound: 0,
+      topCpLosses: [],
       errors: [],
     };
 
@@ -161,6 +174,7 @@ export async function syncLichessMistakesForUser(input: {
           result.evalsAttempted += gameAnalysis.evalsAttempted;
           result.evalsSucceeded += gameAnalysis.evalsSucceeded;
           result.candidateMistakesFound += gameAnalysis.candidates.length;
+          result.topCpLosses.push(...gameAnalysis.allCpLosses);
           totalMovesAnalyzed += gameAnalysis.movesAnalyzed;
 
           if (gameAnalysis.candidates.length > 0) {
@@ -190,6 +204,10 @@ export async function syncLichessMistakesForUser(input: {
 
       result.mistakesInserted = mistakesInserted;
       result.movesAnalyzed = totalMovesAnalyzed;
+      result.topCpLosses.sort((a, b) => b.cpLoss - a.cpLoss);
+      if (result.topCpLosses.length > 10) {
+        result.topCpLosses = result.topCpLosses.slice(0, 10);
+      }
 
       const lastGameId = games.length > 0 ? (games[0].id ?? null) : null;
       await supabase
@@ -284,13 +302,14 @@ export async function buildMistakeCandidatesFromGame(input: {
   emptyParsedMoves: boolean;
   evalsAttempted: number;
   evalsSucceeded: number;
+  allCpLosses: TopCpLoss[];
 }> {
   const { game, profileId, userId, username, moveCap } = input;
   const moves = (game.moves ?? "").trim();
   const rawTokens = moves.split(/\s+/).filter(Boolean);
 
   if (!moves) {
-    return { candidates: [], movesAnalyzed: 0, parsedMoveCount: 0, rawMoveTokensSeen: 0, userColorMissing: false, emptyParsedMoves: true, evalsAttempted: 0, evalsSucceeded: 0 };
+    return { candidates: [], movesAnalyzed: 0, parsedMoveCount: 0, rawMoveTokensSeen: 0, userColorMissing: false, emptyParsedMoves: true, evalsAttempted: 0, evalsSucceeded: 0, allCpLosses: [] };
   }
 
   const parsedMoves = parseLichessMoveText(moves);
@@ -326,10 +345,11 @@ export async function buildMistakeCandidatesFromGame(input: {
   };
 
   if (!userColor || parsedMoves.length === 0) {
-    return { candidates: [], movesAnalyzed: 0, evalsAttempted: 0, evalsSucceeded: 0, ...base };
+    return { candidates: [], movesAnalyzed: 0, evalsAttempted: 0, evalsSucceeded: 0, allCpLosses: [], ...base };
   }
 
   const candidates: MistakeCandidate[] = [];
+  const allCpLosses: TopCpLoss[] = [];
   let movesAnalyzed = 0;
   let evalsAttempted = 0;
   let evalsSucceeded = 0;
@@ -367,6 +387,17 @@ export async function buildMistakeCandidatesFromGame(input: {
       const beforeCp = userColor === "white" ? evalBefore.cp : -evalBefore.cp;
       const afterCp = userColor === "white" ? evalAfter.cp : -evalAfter.cp;
       const cpLoss = Math.max(0, Math.round(beforeCp - afterCp));
+
+      allCpLosses.push({
+        gameId: gameId,
+        ply: plyIndex,
+        userColor,
+        actualMoveUci: parsed.uci,
+        actualMoveSan: parsed.san,
+        beforeCp: Math.round(beforeCp),
+        afterCp: Math.round(afterCp),
+        cpLoss,
+      });
 
       if (cpLoss >= CP_LOSS_THRESHOLD) {
         const lines = await getPositionLines(parsed.fenBefore, {
@@ -430,7 +461,7 @@ export async function buildMistakeCandidatesFromGame(input: {
     }
   }
 
-  return { candidates, movesAnalyzed, evalsAttempted, evalsSucceeded, ...base };
+  return { candidates, movesAnalyzed, evalsAttempted, evalsSucceeded, allCpLosses, ...base };
 }
 
 // ---------------------------------------------------------------------------
