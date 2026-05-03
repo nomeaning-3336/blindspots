@@ -12,6 +12,13 @@ export interface LichessSyncResult {
   mistakesInserted: number;
   mistakesSkippedExisting: number;
   movesAnalyzed: number;
+  rawMoveTokensSeen: number;
+  parsedMoveCount: number;
+  userColorMissingGames: number;
+  emptyParsedMoveGames: number;
+  evalsAttempted: number;
+  evalsSucceeded: number;
+  candidateMistakesFound: number;
   errors: string[];
 }
 
@@ -112,6 +119,13 @@ export async function syncLichessMistakesForUser(input: {
       mistakesInserted: 0,
       mistakesSkippedExisting: 0,
       movesAnalyzed: 0,
+      rawMoveTokensSeen: 0,
+      parsedMoveCount: 0,
+      userColorMissingGames: 0,
+      emptyParsedMoveGames: 0,
+      evalsAttempted: 0,
+      evalsSucceeded: 0,
+      candidateMistakesFound: 0,
       errors: [],
     };
 
@@ -132,7 +146,7 @@ export async function syncLichessMistakesForUser(input: {
         if (totalMovesAnalyzed >= maxUserMoves) break;
 
         try {
-          const { candidates, movesAnalyzed } = await buildMistakeCandidatesFromGame({
+          const gameAnalysis = await buildMistakeCandidatesFromGame({
             game,
             profileId: profile.id,
             userId: input.userId,
@@ -140,11 +154,18 @@ export async function syncLichessMistakesForUser(input: {
             moveCap: maxUserMoves - totalMovesAnalyzed,
           });
           result.gamesAnalyzed++;
-          totalMovesAnalyzed += movesAnalyzed;
+          result.parsedMoveCount += gameAnalysis.parsedMoveCount;
+          result.rawMoveTokensSeen += gameAnalysis.rawMoveTokensSeen;
+          if (gameAnalysis.userColorMissing) result.userColorMissingGames++;
+          if (gameAnalysis.emptyParsedMoves) result.emptyParsedMoveGames++;
+          result.evalsAttempted += gameAnalysis.evalsAttempted;
+          result.evalsSucceeded += gameAnalysis.evalsSucceeded;
+          result.candidateMistakesFound += gameAnalysis.candidates.length;
+          totalMovesAnalyzed += gameAnalysis.movesAnalyzed;
 
-          if (candidates.length > 0) {
+          if (gameAnalysis.candidates.length > 0) {
             const remaining = maxMistakes - mistakesInserted;
-            const toInsert = candidates.slice(0, remaining);
+            const toInsert = gameAnalysis.candidates.slice(0, remaining);
             const deduplicated = await filterExistingMistakes(input.userId, toInsert);
             result.mistakesSkippedExisting += toInsert.length - deduplicated.length;
 
@@ -254,13 +275,25 @@ export async function buildMistakeCandidatesFromGame(input: {
   userId: string;
   username: string;
   moveCap: number;
-}): Promise<{ candidates: MistakeCandidate[]; movesAnalyzed: number }> {
+}): Promise<{
+  candidates: MistakeCandidate[];
+  movesAnalyzed: number;
+  parsedMoveCount: number;
+  rawMoveTokensSeen: number;
+  userColorMissing: boolean;
+  emptyParsedMoves: boolean;
+  evalsAttempted: number;
+  evalsSucceeded: number;
+}> {
   const { game, profileId, userId, username, moveCap } = input;
   const moves = (game.moves ?? "").trim();
-  if (!moves) return { candidates: [], movesAnalyzed: 0 };
+  const rawTokens = moves.split(/\s+/).filter(Boolean);
+
+  if (!moves) {
+    return { candidates: [], movesAnalyzed: 0, parsedMoveCount: 0, rawMoveTokensSeen: 0, userColorMissing: false, emptyParsedMoves: true, evalsAttempted: 0, evalsSucceeded: 0 };
+  }
 
   const parsedMoves = parseLichessMoveText(moves);
-  if (parsedMoves.length === 0) return { candidates: [], movesAnalyzed: 0 };
 
   // Match username case-insensitively against both name and id
   const normalizedUser = username.toLowerCase();
@@ -280,15 +313,26 @@ export async function buildMistakeCandidatesFromGame(input: {
       whiteName,
       blackName,
       userColor,
-      rawMoveTokenCount: moves.split(/\s+/).filter(Boolean).length,
+      rawMoveTokenCount: rawTokens.length,
       parsedMoveCount: parsedMoves.length,
     });
   }
 
-  if (!userColor) return { candidates: [], movesAnalyzed: 0 };
+  const base = {
+    parsedMoveCount: parsedMoves.length,
+    rawMoveTokensSeen: rawTokens.length,
+    userColorMissing: !userColor,
+    emptyParsedMoves: parsedMoves.length === 0,
+  };
+
+  if (!userColor || parsedMoves.length === 0) {
+    return { candidates: [], movesAnalyzed: 0, evalsAttempted: 0, evalsSucceeded: 0, ...base };
+  }
 
   const candidates: MistakeCandidate[] = [];
   let movesAnalyzed = 0;
+  let evalsAttempted = 0;
+  let evalsSucceeded = 0;
 
   const gameId = game.id ?? `lichess-${Date.now()}`;
   const gameUrl = game.id ? `https://lichess.org/${game.id}` : "";
@@ -306,6 +350,7 @@ export async function buildMistakeCandidatesFromGame(input: {
     if (movesAnalyzed >= moveCap) break;
 
     movesAnalyzed++;
+    evalsAttempted += 2; // evalBefore + evalAfter
 
     try {
       const evalBefore = await getPositionEval(parsed.fenBefore, {
@@ -316,6 +361,8 @@ export async function buildMistakeCandidatesFromGame(input: {
         depthLimit: EVAL_DEPTH,
         timeLimitMs: EVAL_TIME_MS,
       });
+
+      evalsSucceeded += 2;
 
       const beforeCp = userColor === "white" ? evalBefore.cp : -evalBefore.cp;
       const afterCp = userColor === "white" ? evalAfter.cp : -evalAfter.cp;
@@ -349,7 +396,6 @@ export async function buildMistakeCandidatesFromGame(input: {
           }
         }
 
-        // starting_fen = one ply before user's move (previous move's fenBefore or same as decision)
         const previousMove = parsedMoves[parsed.ply - 1];
         const startingFen = previousMove?.fenBefore ?? parsed.fenBefore;
 
@@ -384,7 +430,7 @@ export async function buildMistakeCandidatesFromGame(input: {
     }
   }
 
-  return { candidates, movesAnalyzed };
+  return { candidates, movesAnalyzed, evalsAttempted, evalsSucceeded, ...base };
 }
 
 // ---------------------------------------------------------------------------
