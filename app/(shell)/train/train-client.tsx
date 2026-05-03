@@ -2456,7 +2456,6 @@ function ActivePlayPanel({
   const userMoves = moves
     .map((move, index) => ({ ...move, absoluteIndex: index }))
     .filter((move) => move.side === userSide);
-  const graphPoints = buildEvalGraphPoints(moves, userSide, startingFen);
 
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -2514,18 +2513,15 @@ function ActivePlayPanel({
         ) : null
       ) : null}
 
-      {/* Engine lines — locked placeholder */}
-      <section className="opacity-40">
-        <h2 className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">Engine lines</h2>
-        <div className="mt-2 min-h-[38px] rounded-none border border-dashed border-[var(--app-border-soft)] px-3 py-2.5 text-xs font-bold text-[var(--app-muted)]">
-          Locked. Play the position first.
-        </div>
-      </section>
+      {/* Engine lines — 5 empty rows, populate when sequence ends */}
+      <div className="opacity-40">
+        <EngineLinesSection lines={[]} isLoading={false} />
+      </div>
 
-      {/* Eval chart — live populating */}
-      <EvalGraph points={graphPoints} currentIndex={graphPoints.length - 1} compact />
+      {/* Eval chart — empty frame, populate when sequence ends */}
+      <EvalGraph points={[]} currentIndex={-1} compact />
 
-      {/* Move list — live appending */}
+      {/* Move list — rows append as moves are played */}
       <AnalysisMoveTable
         moves={userMoves}
         compact
