@@ -1884,11 +1884,6 @@ export default function TrainPage() {
                         <span className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
                           {state === "resolving" ? "Sequence complete" : <LoadingPositionText />}
                         </span>
-                        {state === "resolving" ? (
-                          <span className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
-                            Preparing analysis
-                          </span>
-                        ) : null}
                         <div className="flex gap-1.5" aria-hidden="true">
                           <span className="train-loading-dot" />
                           <span className="train-loading-dot [animation-delay:120ms]" />
