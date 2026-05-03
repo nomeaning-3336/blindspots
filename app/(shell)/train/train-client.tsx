@@ -100,6 +100,12 @@ type MoveScore = {
   classification?: MoveClassification;
 };
 
+type CompletedMoveEvaluation = {
+  userMoveIndex: number;
+  moveScore: MoveScore;
+  positionEvaluation: unknown;
+};
+
 type ResultMode = "results" | "explore";
 
 type SequencePosition = {
@@ -260,6 +266,33 @@ function moveForExploreSound(
   if (nextIndex < currentIndex) return positions[currentIndex]?.move ?? null;
   if (nextIndex > currentIndex) return positions[nextIndex]?.move ?? null;
   return null;
+}
+
+function collectCompletedMoveEvaluations(
+  evaluations: Record<
+    number,
+    {
+      status: "pending" | "done" | "error";
+      moveScore?: MoveScore;
+      positionEvaluation?: unknown;
+    }
+  >,
+): CompletedMoveEvaluation[] {
+  return Object.entries(evaluations).flatMap(([rawIndex, entry]) => {
+    const userMoveIndex = Number(rawIndex);
+    if (!Number.isInteger(userMoveIndex)) return [];
+    if (entry.status !== "done") return [];
+    if (!entry.moveScore || !entry.positionEvaluation) return [];
+
+    return [{
+      userMoveIndex,
+      moveScore: {
+        ...entry.moveScore,
+        userMoveIndex,
+      },
+      positionEvaluation: entry.positionEvaluation,
+    }];
+  });
 }
 
 async function readServerVisualPreferences() {
@@ -1144,6 +1177,7 @@ export default function TrainPage() {
           selectedMistakeId: currentMistakeIdRef.current,
           queueSource: currentQueueSourceRef.current,
           challengeElo: currentChallengeElo,
+          precomputedEvaluations: collectCompletedMoveEvaluations(asyncMoveEvaluations),
         }),
       });
       const payload = (await response.json().catch(() => null)) as
