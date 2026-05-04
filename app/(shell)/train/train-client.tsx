@@ -2357,7 +2357,7 @@ function TrainOnboarding({
               disabled={isStartingTraining}
               onClick={onStartTraining}
               className={[
-                "mx-auto min-h-12 cursor-pointer rounded-[8px] border border-[var(--app-accent)] bg-[var(--app-accent)] px-6 text-sm font-bold uppercase tracking-[0.12em] text-black transition",
+                "mx-auto min-h-12 cursor-pointer rounded-[8px] border border-[var(--app-accent)] bg-[var(--app-accent)] px-6 text-sm font-bold uppercase tracking-[0.12em] !text-black transition",
                 "hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]",
                 isStartingTraining
                   ? "cursor-wait opacity-70"
@@ -2492,7 +2492,7 @@ function OnboardingButton({
         "inline-flex min-h-12 items-center justify-center rounded-[6px] border px-5 text-xs font-bold uppercase tracking-[0.14em] transition",
         "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)]",
         variant === "primary"
-          ? "border-[var(--app-accent)] bg-[var(--app-accent)] text-black hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
+          ? "border-[var(--app-accent)] bg-[var(--app-accent)] !text-black hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
           : "border-[var(--app-border)] bg-transparent text-[var(--app-text)] hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]",
         disabled
           ? "cursor-not-allowed opacity-55 hover:border-[var(--app-border)] hover:bg-transparent hover:text-[var(--app-muted)]"
@@ -2760,7 +2760,7 @@ function AnalysisLine({
           failed
             ? "border-[var(--app-class-blunder)] bg-[var(--app-class-blunder-soft)] text-[var(--app-class-blunder)]"
             : done
-            ? "border-[var(--app-accent)] bg-[var(--app-accent)] text-black"
+            ? "border-[var(--app-accent)] bg-[var(--app-accent)] !text-black"
             : active
               ? "train-onboarding-step-active border-[var(--app-accent)] text-[var(--app-accent)]"
               : "border-[var(--app-border)] text-[var(--app-muted)]",
