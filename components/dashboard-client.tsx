@@ -2,10 +2,12 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import type { DashboardClassifications, DashboardSummary } from "@/lib/dashboard";
+import type { DashboardClassifications, DashboardPosition, DashboardSummary, EloHistoryPoint } from "@/lib/dashboard";
 import { classificationColor } from "@/lib/training-board-ui";
+import { PositionThumbnail } from "@/components/position-thumbnail";
 
-type DashboardView = "summary" | "clusters";
+type DashboardView = "summary" | "positions";
+type PositionFilter = "all" | "review" | "new" | "learning" | "mastered" | "failed";
 
 const CLASS_ROWS: Array<{
   id: keyof DashboardClassifications;
@@ -36,82 +38,533 @@ const CLASS_COLORS: Record<string, string> = {
   blunder: classificationColor("blunder"),
 };
 
+const FILTER_OPTIONS: Array<{ value: PositionFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "review", label: "Review due" },
+  { value: "new", label: "New" },
+  { value: "learning", label: "Learning" },
+  { value: "mastered", label: "Mastered" },
+  { value: "failed", label: "Failed recently" },
+];
+
 export function DashboardClient({ summary }: { summary: DashboardSummary }) {
   const [view, setView] = useState<DashboardView>("summary");
   const hasData = summary.totalSequences > 0 || summary.recentSessions.length > 0;
 
   return (
-    <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-6">
-      <Hero summary={summary} hasData={hasData} />
-      <div className="flex justify-center">
-        <ViewToggle view={view} setView={setView} />
-      </div>
-      {view === "summary" ? (
-        <>
-          <ProgressSnapshot summary={summary} hasData={hasData} />
-          <TrainingQueues summary={summary} hasData={hasData} />
-          <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
-            <MoveClassifications classifications={summary.classifications} />
-            <RecentSessions sessions={summary.recentSessions} />
+    <main className="app-paper-shell min-h-[calc(100dvh-64px)] overflow-x-hidden px-4 py-5 md:px-8">
+      <div className="mx-auto grid w-full max-w-[96rem] gap-5">
+        <section className="app-brutal-section p-5 md:p-6">
+          <Hero summary={summary} hasData={hasData} />
+          <div className="mt-5 flex justify-center">
+            <ViewToggle view={view} setView={setView} />
           </div>
-        </>
-      ) : (
-        <Clusters clusters={summary.clusters} />
+        </section>
+
+        <section className="app-brutal-section p-5 md:p-6">
+          {view === "summary" ? (
+            <SummaryTab summary={summary} hasData={hasData} />
+          ) : (
+            <PositionsTab positions={summary.positions} />
+          )}
+        </section>
+
+        {view === "summary" && (
+          <RecentActivitySection
+            sessions={summary.recentSessions}
+            positions={summary.recentPositions}
+          />
+        )}
+      </div>
+    </main>
+  );
+}
+
+/* ─── Summary Tab ─── */
+
+function SummaryTab({ summary, hasData }: { summary: DashboardSummary; hasData: boolean }) {
+  return (
+    <div className="grid gap-5">
+      <QueueSummaryCards summary={summary} />
+      <EloSection
+        elo={summary.blindspotsElo}
+        delta={summary.eloDeltaSession}
+        history={summary.eloHistory}
+      />
+      <ProgressSnapshot summary={summary} hasData={hasData} />
+      <MoveClassifications classifications={summary.classifications} />
+    </div>
+  );
+}
+
+function QueueSummaryCards({ summary }: { summary: DashboardSummary }) {
+  const q = summary.queueOverview;
+  return (
+    <div>
+      <SectionLabel>Queue overview</SectionLabel>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        <QueueTile label="Review due" value={q.reviewDue} accent />
+        <QueueTile label="Active" value={q.active} />
+        <QueueTile label="Random" value={q.filler} />
+        <QueueTile label="Mastered" value={q.mastered} />
+        <QueueTile label="Retired" value={q.retired} />
+      </div>
+    </div>
+  );
+}
+
+function EloSection({ elo, delta, history }: { elo: number | null; delta: number | null; history: EloHistoryPoint[] }) {
+  return (
+    <div className="app-brutal-section-soft p-4 md:p-5">
+      <SectionLabel>Blindspots Elo</SectionLabel>
+      <div className="flex items-center gap-4">
+        <div className="shrink-0">
+          <div className="text-[40px] font-bold leading-none text-[var(--app-text)]">
+            {elo == null ? "-" : formatNumber(elo)}
+          </div>
+          {delta != null && (
+            <div className={["mt-1 text-xs font-bold", deltaClass(delta)].join(" ")}>
+              {signed(delta)} from last session
+            </div>
+          )}
+        </div>
+        {history.length >= 2 && <EloChart points={history} />}
+      </div>
+      {history.length < 2 && (
+        <p className="mt-3 text-[10px] uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
+          {history.length === 0
+            ? "Complete a session to start tracking Elo."
+            : "One session recorded. Keep going to see a trend."}
+        </p>
       )}
     </div>
   );
 }
 
+function EloChart({ points }: { points: EloHistoryPoint[] }) {
+  const width = 920;
+  const height = 120;
+  const px = 8;
+  const py = 12;
+  const hSpace = width - px * 2;
+  const vSpace = height - py * 2;
+
+  const elos = points.map((p) => p.elo);
+  const minElo = Math.min(...elos);
+  const maxElo = Math.max(...elos);
+  const range = Math.max(1, maxElo - minElo);
+
+  const svgPoints = points.map((point, i) => {
+    const x = points.length === 1 ? width / 2 : px + (hSpace * i) / (points.length - 1);
+    const y = py + ((maxElo - point.elo) / range) * vSpace;
+    return { ...point, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
+  });
+
+  const line = svgPoints.map((p) => `${p.x},${p.y}`).join(" ");
+  const area = [`${px},${height - py}`, line, `${svgPoints[svgPoints.length - 1].x},${height - py}`].join(" ");
+
+  const guideCount = 3;
+  const guides = Array.from({ length: guideCount }, (_, i) =>
+    Math.round(maxElo - (range * i) / (guideCount - 1)),
+  );
+
+  const startLabel = formatShortDate(points[0].ts);
+  const endLabel = formatShortDate(points[points.length - 1].ts);
+
+  return (
+    <div className="min-w-0 flex-1">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="block h-[80px] w-full md:h-[100px]"
+        role="img"
+        aria-label="Elo progression over time"
+        preserveAspectRatio="none"
+      >
+        {guides.map((g) => {
+          const gy = py + ((maxElo - g) / range) * vSpace;
+          return (
+            <line key={g} x1={px} y1={gy} x2={width - px} y2={gy} stroke="var(--app-border-soft)" strokeWidth="1" />
+          );
+        })}
+        <polyline points={area} fill="var(--app-accent-soft)" stroke="none" />
+        <polyline points={line} fill="none" stroke="var(--app-accent)" strokeWidth="3" strokeLinejoin="round" />
+        {svgPoints.map((p, i) => (
+          <circle
+            key={`${p.ts}-${i}`}
+            cx={p.x}
+            cy={p.y}
+            r={i === svgPoints.length - 1 ? 4 : 3}
+            fill={i === svgPoints.length - 1 ? "var(--app-accent)" : "var(--app-panel-solid)"}
+            stroke="var(--app-text)"
+            strokeWidth="1.5"
+          />
+        ))}
+      </svg>
+      <div className="mt-1 flex items-center justify-between text-[9px] uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
+        <span>{startLabel}</span>
+        <span>{endLabel}</span>
+      </div>
+    </div>
+  );
+}
+
+function RecentActivitySection({
+  sessions,
+  positions,
+}: {
+  sessions: DashboardSummary["recentSessions"];
+  positions: DashboardPosition[];
+}) {
+  const hasAnything = sessions.length > 0 || positions.length > 0;
+
+  if (!hasAnything) {
+    return (
+      <section className="app-brutal-section p-5 md:p-6">
+        <SectionLabel>Recent training</SectionLabel>
+        <div className="flex flex-col items-center gap-3 p-6 text-center">
+          <div className="text-sm font-bold text-[var(--app-text)]">No training history yet.</div>
+          <p className="max-w-sm text-xs leading-6 text-[var(--app-muted)]">
+            Connect a chess profile or start training. The database cannot judge what it has not seen.
+          </p>
+          <div className="flex gap-2">
+            <Link href="/train" className="app-brutal-button inline-flex items-center px-4 py-2 text-xs">
+              Start training
+            </Link>
+            <Link href="/account" className="app-brutal-button inline-flex items-center px-4 py-2 text-xs">
+              Connect account
+            </Link>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  type ActivityRow = {
+    key: string;
+    ts: string;
+    fen: string;
+    title: string;
+    subtitle: string;
+    outcome: "pass" | "acceptable" | "fail" | null;
+    worst: string | null;
+    delta: number | null;
+    avgCpLoss: number | null;
+    moves: number | null;
+    statusLabel?: string;
+    attempts?: number;
+    nextReviewAt?: string | null;
+  };
+
+  const rows: ActivityRow[] = sessions.map((s) => ({
+    key: s.id,
+    ts: s.ts,
+    fen: s.startingFen,
+    title: s.worst
+      ? `Session — worst: ${s.worst}`
+      : "Training session",
+    subtitle: `${s.moves} move${s.moves !== 1 ? "s" : ""}`,
+    outcome: s.outcome,
+    worst: s.worst,
+    delta: s.delta,
+    avgCpLoss: s.avgCpLoss,
+    moves: s.moves,
+  }));
+
+  const positionRows: ActivityRow[] = positions
+    .filter((p) => !sessions.some((s) => s.startingFen === p.startingFen && s.ts === p.lastAttemptAt))
+    .map((p) => ({
+      key: p.id,
+      ts: p.lastAttemptAt ?? p.nextReviewAt ?? "",
+      fen: p.startingFen,
+      title: p.openingName ?? p.sourceLabel,
+      subtitle: p.queueLabel ?? p.statusLabel,
+      outcome: p.lastResult,
+      worst: null,
+      delta: null,
+      avgCpLoss: p.cpLoss,
+      moves: null,
+      statusLabel: p.statusLabel,
+      attempts: p.attempts,
+      nextReviewAt: p.nextReviewAt,
+    }));
+
+  const allRows = [...rows, ...positionRows]
+    .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
+    .slice(0, 10);
+
+  return (
+    <section className="app-brutal-section p-5 md:p-6">
+      <SectionLabel right={`${allRows.length} shown`}>Recent training</SectionLabel>
+      <div className="grid gap-2">
+        {allRows.map((row) => (
+          <ActivityCard key={row.key} row={row} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ActivityCard({ row }: {
+  row: {
+    fen: string;
+    title: string;
+    subtitle: string;
+    outcome: "pass" | "acceptable" | "fail" | null;
+    worst: string | null;
+    delta: number | null;
+    avgCpLoss: number | null;
+    moves: number | null;
+    statusLabel?: string;
+    attempts?: number;
+    nextReviewAt?: string | null;
+  };
+}) {
+  return (
+    <div className="app-brutal-row flex flex-col gap-3 rounded-lg p-3 sm:flex-row sm:items-center sm:gap-4 sm:p-4">
+      <div className="shrink-0 self-center sm:self-auto" aria-label={row.title}>
+        <PositionThumbnail fen={row.fen} size={120} />
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="truncate text-xs font-bold text-[var(--app-text)]">{row.title}</span>
+          <ResultTag result={row.outcome} />
+          {row.statusLabel && <StatusTag status={row.statusLabel === "New" ? "active" : row.statusLabel === "Review due" ? "review" : row.statusLabel === "Mastered" ? "mastered" : "retired"} label={row.statusLabel} />}
+        </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-[var(--app-muted)]">
+          <span>{row.subtitle}</span>
+          {row.moves != null && <span>{row.moves} moves</span>}
+          {row.worst && (
+            <span className="inline-flex items-center gap-1">
+              <span className="h-1.5 w-1.5" style={{ background: CLASS_COLORS[row.worst] ?? "var(--app-muted)" }} />
+              {row.worst}
+            </span>
+          )}
+          {row.delta != null && (
+            <span className={["font-bold", deltaClass(row.delta)].join(" ")}>{signed(row.delta)} Elo</span>
+          )}
+          {row.avgCpLoss != null && <span>{Math.round(row.avgCpLoss)}cp avg loss</span>}
+          {row.attempts != null && row.attempts > 0 && <span>{row.attempts} attempt{row.attempts !== 1 ? "s" : ""}</span>}
+          {row.nextReviewAt && <span>Review {formatDate(row.nextReviewAt).text}</span>}
+        </div>
+        <div className="mt-1 flex gap-1">
+          <Link
+            href="/train"
+            className="inline-flex items-center border border-[var(--app-border)] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]"
+            title="Retry route not wired yet"
+          >
+            Retry
+          </Link>
+          <Link
+            href={`/analyze?fen=${encodeURIComponent(row.fen)}`}
+            className="inline-flex items-center border border-[var(--app-border)] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]"
+          >
+            Analyze
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Positions Tab ─── */
+
+function PositionsTab({ positions }: { positions: DashboardPosition[] }) {
+  const [filter, setFilter] = useState<PositionFilter>("all");
+
+  const filtered = useMemo(() => {
+    if (filter === "all") return positions;
+    return positions.filter((p) => {
+      switch (filter) {
+        case "review": return p.status === "review";
+        case "new": return p.status === "active";
+        case "learning": return p.status === "review" && p.attempts > 0 && p.attempts < 5;
+        case "mastered": return p.status === "mastered";
+        case "failed": return p.lastResult === "fail";
+        default: return true;
+      }
+    });
+  }, [positions, filter]);
+
+  if (!positions.length) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-8 text-center">
+        <div className="text-sm font-bold text-[var(--app-text)]">No archived positions.</div>
+        <p className="max-w-sm text-xs leading-6 text-[var(--app-muted)]">
+          Complete a training sequence and positions will show up here with their eval trace, result, and review schedule.
+        </p>
+        <Link href="/train" className="app-brutal-button inline-flex items-center px-4 py-2 text-xs">
+          Start training
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-4">
+      <FilterBar filter={filter} setFilter={setFilter} />
+      <PositionList positions={filtered} />
+    </div>
+  );
+}
+
+function FilterBar({ filter, setFilter }: { filter: PositionFilter; setFilter: (f: PositionFilter) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {FILTER_OPTIONS.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => setFilter(opt.value)}
+          className={[
+            "border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] transition",
+            filter === opt.value
+              ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
+              : "cursor-pointer border-[var(--app-border)] text-[var(--app-muted)] hover:border-[var(--app-accent)] hover:text-[var(--app-text)]",
+          ].join(" ")}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PositionList({ positions }: { positions: DashboardPosition[] }) {
+  if (!positions.length) {
+    return (
+      <div className="py-6 text-center text-xs text-[var(--app-muted)]">
+        No positions match this filter.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-2">
+      {/* Desktop header */}
+      <div className="hidden grid-cols-[6.5rem_minmax(0,1.5fr)_auto_auto_auto_auto_auto] items-center gap-3 border-b border-[var(--app-border-soft)] px-3 pb-2 text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)] lg:grid">
+        <span>Board</span>
+        <span>Source</span>
+        <span>Status</span>
+        <span>Result</span>
+        <span>Attempts</span>
+        <span className="text-right">Eval loss</span>
+        <span className="text-right">Actions</span>
+      </div>
+      {positions.map((pos) => (
+        <PositionRow key={pos.id} position={pos} />
+      ))}
+    </div>
+  );
+}
+
+function PositionRow({ position }: { position: DashboardPosition }) {
+  return (
+    <div className="app-brutal-row grid grid-cols-[1fr_auto] items-center gap-2 rounded-lg px-3 py-3 sm:grid-cols-[5rem_1fr_auto_auto_auto_auto] sm:gap-3 lg:grid-cols-[6.5rem_minmax(0,1.5fr)_auto_auto_auto_auto_auto]">
+      {/* Thumbnail */}
+      <div className="hidden sm:block" aria-label={`Position: ${position.sourceLabel}, ${position.statusLabel}`}>
+        <PositionThumbnail fen={position.startingFen} size={72} />
+      </div>
+
+      {/* Source info */}
+      <div className="min-w-0">
+        <div className="truncate text-xs font-bold text-[var(--app-text)]">
+          {position.openingName ?? position.sourceLabel}
+        </div>
+        <div className="mt-0.5 text-[10px] text-[var(--app-muted-soft)]">
+          {position.sourceLabel}
+          {position.queueLabel && (
+            <span className="ml-1.5 border-l border-[var(--app-border-soft)] pl-1.5">{position.queueLabel}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Status */}
+      <div className="hidden sm:block">
+        <StatusTag status={position.status} label={position.statusLabel} />
+      </div>
+
+      {/* Result */}
+      <div className="hidden sm:block">
+        <ResultTag result={position.lastResult} />
+      </div>
+
+      {/* Attempts */}
+      <div className="hidden text-right text-xs font-bold text-[var(--app-text)] sm:block">
+        {position.attempts > 0 ? position.attempts : "-"}
+      </div>
+
+      {/* Eval loss */}
+      <div className="hidden text-right text-xs sm:block">
+        {position.cpLoss != null ? (
+          <span className={position.cpLoss > 100 ? "font-bold text-[var(--app-class-blunder)]" : "font-bold text-[var(--app-text)]"}>
+            {position.cpLoss}cp
+          </span>
+        ) : (
+          <span className="text-[var(--app-muted-soft)]">-</span>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="flex shrink-0 items-center gap-1">
+        <Link
+          href="/train"
+          className="inline-flex items-center border border-[var(--app-border)] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]"
+          title="Retry route not wired yet"
+          aria-label={`Retry position ${position.id}`}
+        >
+          Retry
+        </Link>
+        <Link
+          href={`/analyze?fen=${encodeURIComponent(position.startingFen)}`}
+          className="inline-flex items-center border border-[var(--app-border)] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]"
+          aria-label={`Analyze position ${position.id}`}
+        >
+          Analyze
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Shared sections from original dashboard ─── */
+
 function Hero({ summary, hasData }: { summary: DashboardSummary; hasData: boolean }) {
   const parts = [
     summary.totalSequences > 0 ? `${formatNumber(summary.totalSequences)} sequences completed` : null,
-    summary.queueCounts.revisit > 0 ? `${formatNumber(summary.queueCounts.revisit)} due for revisit` : null,
+    summary.queueOverview.reviewDue > 0 ? `${formatNumber(summary.queueOverview.reviewDue)} due for review` : null,
     summary.queueCounts.inProgress > 0 ? `${formatNumber(summary.queueCounts.inProgress)} in progress` : null,
   ].filter(Boolean);
 
   return (
-    <Panel className="p-5 sm:p-7">
-      <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <div className="app-eyebrow mb-3">Dashboard</div>
-          <h1 className="max-w-[620px] text-[22px] font-bold leading-tight text-[var(--app-text)] sm:text-[30px]">
-            Your blindspots are not going to fix themselves.
-          </h1>
-          <p className="mt-3 max-w-[560px] text-xs leading-6 text-[var(--app-muted)]">
-            {hasData
-              ? "Pick up where the recommender left off."
-              : "No completed sessions yet. Go train. The dashboard is not psychic."}
-          </p>
-        </div>
-        <Link
-          href="/train"
-          className="inline-flex min-h-11 items-center justify-center border border-[var(--app-accent)] bg-[var(--app-accent)] px-5 py-3 text-xs font-bold uppercase tracking-[0.18em] !text-[var(--app-accent-contrast)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
-        >
-          Continue training
-        </Link>
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0">
+        <div className="app-eyebrow mb-3">Dashboard</div>
+        <h1 className="max-w-[620px] text-[22px] font-bold leading-tight text-[var(--app-text)] sm:text-[30px]">
+          Positions you missed. Positions you reviewed. Positions that still refuse to die.
+        </h1>
+        <p className="mt-3 max-w-[560px] text-xs leading-6 text-[var(--app-muted)]">
+          {hasData
+            ? "Review queue, active mistakes, and random positions — all in one place."
+            : "No completed sessions yet. Go train. The dashboard is not psychic."}
+        </p>
       </div>
-      {parts.length > 0 ? (
-        <div className="mt-5 border-t border-[var(--app-border-soft)] pt-3 text-[11px] text-[var(--app-muted-soft)]">
-          {parts.join(" / ")}
-        </div>
-      ) : null}
-    </Panel>
+      <Link
+        href="/train"
+        className="app-brutal-button inline-flex min-h-11 items-center justify-center px-5 py-3 text-xs"
+      >
+        Continue training
+      </Link>
+    </div>
   );
 }
 
 function ProgressSnapshot({ summary, hasData }: { summary: DashboardSummary; hasData: boolean }) {
   return (
-    <section>
+    <div>
       <SectionLabel>Progress snapshot</SectionLabel>
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
         <StatTile label="Sequences" value={hasData ? formatNumber(summary.totalSequences) : "-"} sub={hasData ? "completed" : "no data"} />
         <StatTile label="Moves evaluated" value={hasData ? formatNumber(summary.movesEvaluated) : "-"} sub={hasData ? "Stockfish" : "go train"} />
-        <StatTile
-          label="Blindspots Elo"
-          value={summary.blindspotsElo == null ? "-" : formatNumber(summary.blindspotsElo)}
-          sub={summary.eloDeltaSession == null ? undefined : signed(summary.eloDeltaSession)}
-          tone={summary.eloDeltaSession == null ? undefined : summary.eloDeltaSession < 0 ? "down" : "up"}
-        />
         <StatTile
           label="Last session"
           value={formatDate(summary.lastSessionAt).text}
@@ -122,21 +575,7 @@ function ProgressSnapshot({ summary, hasData }: { summary: DashboardSummary; has
           })()}
         />
       </div>
-    </section>
-  );
-}
-
-function TrainingQueues({ summary, hasData }: { summary: DashboardSummary; hasData: boolean }) {
-  return (
-    <section>
-      <SectionLabel>Training queue</SectionLabel>
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <QueueTile label="Mastered" value={summary.queueCounts.mastered} hasData={hasData} />
-        <QueueTile label="Due for revisit" value={summary.queueCounts.revisit} hasData={hasData} />
-        <QueueTile label="Targeted" value={summary.queueCounts.targeted} hasData={hasData} />
-        <QueueTile label="In progress" value={summary.queueCounts.inProgress} hasData={hasData} />
-      </div>
-    </section>
+    </div>
   );
 }
 
@@ -148,12 +587,12 @@ function MoveClassifications({ classifications }: { classifications: DashboardCl
 
   if (!classifications) {
     return (
-      <section className="min-w-0">
-        <SectionLabel>03 / Move classifications</SectionLabel>
+      <div className="min-w-0">
+        <SectionLabel>Move classifications</SectionLabel>
         <Panel className="p-4 text-xs leading-6 text-[var(--app-muted)]">
           No classified moves yet. Train a sequence. Stockfish does the rest.
         </Panel>
-      </section>
+      </div>
     );
   }
 
@@ -162,7 +601,7 @@ function MoveClassifications({ classifications }: { classifications: DashboardCl
   const rowCount = Math.max(1, Math.ceil(rows.length / 2));
 
   return (
-    <section className="min-w-0">
+    <div className="min-w-0">
       <SectionLabel right={`${formatNumber(total)} moves`}>Move classifications</SectionLabel>
       <Panel className="p-4">
         <div className="mb-4 flex h-2 overflow-hidden border border-[var(--app-border-soft)] bg-[var(--app-bg)]">
@@ -196,107 +635,11 @@ function MoveClassifications({ classifications }: { classifications: DashboardCl
           })}
         </div>
       </Panel>
-    </section>
+    </div>
   );
 }
 
-function RecentSessions({ sessions }: { sessions: DashboardSummary["recentSessions"] }) {
-  if (!sessions.length) {
-    return (
-      <section className="min-w-0">
-        <SectionLabel>Recent sessions</SectionLabel>
-        <Panel className="p-4 text-xs leading-6 text-[var(--app-muted)]">
-          No completed sessions yet. Go train.
-        </Panel>
-      </section>
-    );
-  }
-
-  return (
-    <section className="min-w-0">
-      <SectionLabel>04 / Recent sessions</SectionLabel>
-      <Panel>
-        {sessions.slice(0, 5).map((session, index) => (
-          <div
-            key={session.id}
-            className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 border-b border-[var(--app-border-soft)] px-4 py-3 text-[11px] last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]"
-          >
-            <span className="min-w-0 truncate text-[var(--app-text)]">{formatDateTime(session.ts)}</span>
-            <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--app-muted)]">{session.moves} moves</span>
-            <span className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.14em] text-[var(--app-muted)]">
-              {session.worst ? (
-                <>
-                  <span className="h-1.5 w-1.5" style={{ background: CLASS_COLORS[session.worst] ?? "var(--app-muted)" }} />
-                  {session.worst}
-                </>
-              ) : (
-                "unclassified"
-              )}
-            </span>
-            <span className={["text-right text-xs font-bold", deltaClass(session.delta)].join(" ")}>
-              {signed(session.delta)} Elo
-            </span>
-          </div>
-        ))}
-      </Panel>
-    </section>
-  );
-}
-
-function Clusters({ clusters }: { clusters: DashboardSummary["clusters"] }) {
-  if (!clusters.length) {
-    return (
-      <section>
-        <SectionLabel right="Sorted by severity">Where you keep losing evaluation</SectionLabel>
-        <Panel className="p-4">
-          <div className="text-sm text-[var(--app-text)]">No cluster history yet.</div>
-          <div className="mt-1 text-xs leading-6 text-[var(--app-muted)]">
-            Train more positions and your recurring disasters will organize themselves.
-          </div>
-        </Panel>
-      </section>
-    );
-  }
-
-  return (
-    <section>
-      <SectionLabel right="Sorted by severity">Where you keep losing evaluation</SectionLabel>
-      <Panel>
-        <div className="hidden grid-cols-[minmax(180px,1.3fr)_minmax(120px,1fr)_repeat(6,minmax(58px,0.5fr))] border-b border-[var(--app-border-soft)] px-4 py-3 text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)] md:grid">
-          <span>Cluster</span>
-          <span>Phase / bucket</span>
-          <span className="text-right">Tries</span>
-          <span className="text-right text-[var(--app-class-brilliant)]">Bril.</span>
-          <span className="text-right text-[var(--app-class-critical)]">Crit.</span>
-          <span className="text-right text-[var(--app-class-inaccuracy)]">Inacc.</span>
-          <span className="text-right text-[var(--app-class-mistake)]">Mist.</span>
-          <span className="text-right text-[var(--app-class-blunder)]">Blun.</span>
-        </div>
-        {clusters.map((cluster) => (
-          <div
-            key={cluster.id}
-            className="grid grid-cols-2 gap-3 border-b border-[var(--app-border-soft)] px-4 py-4 text-xs last:border-b-0 md:grid-cols-[minmax(180px,1.3fr)_minmax(120px,1fr)_repeat(6,minmax(58px,0.5fr))] md:items-center"
-          >
-            <div className="col-span-2 min-w-0 md:col-span-1">
-              <div className="truncate font-bold text-[var(--app-text)]">{cluster.label ?? "General"}</div>
-              <div className="mt-1 text-[10px] text-[var(--app-muted-soft)]">{cluster.attempts} attempts</div>
-            </div>
-            <div className="col-span-2 flex min-w-0 flex-wrap gap-1.5 md:col-span-1">
-              <Tag>{cluster.phase ?? "unknown"}</Tag>
-              <Tag>{cluster.tag ?? cluster.bucket ?? "unlabeled"}</Tag>
-            </div>
-            <ClusterNumber label="Tries" value={cluster.attempts} />
-            <ClusterNumber label="Bril." value={cluster.brilliant} color="var(--app-class-brilliant)" />
-            <ClusterNumber label="Crit." value={cluster.critical} color="var(--app-class-critical)" />
-            <ClusterNumber label="Inacc." value={cluster.inaccuracy} color="var(--app-class-inaccuracy)" />
-            <ClusterNumber label="Mist." value={cluster.mistake} color="var(--app-class-mistake)" />
-            <ClusterNumber label="Blun." value={cluster.blunder} color="var(--app-class-blunder)" />
-          </div>
-        ))}
-      </Panel>
-    </section>
-  );
-}
+/* ─── Primitives ─── */
 
 function ViewToggle({
   view,
@@ -307,7 +650,7 @@ function ViewToggle({
 }) {
   return (
     <div className="inline-flex">
-      {(["summary", "clusters"] as const).map((item) => {
+      {(["summary", "positions"] as const).map((item) => {
         const active = view === item;
         return (
           <button
@@ -315,10 +658,11 @@ function ViewToggle({
             type="button"
             onClick={() => setView(item)}
             className={[
-              "-ml-px first:ml-0 border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] transition",
+              "-ml-px first:ml-0 border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] transition",
               active
                 ? "relative z-10 border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
                 : "cursor-pointer border-[var(--app-border)] bg-transparent text-[var(--app-muted)] hover:border-[var(--app-accent)] hover:text-[var(--app-text)]",
+              "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]",
             ].join(" ")}
           >
             {item}
@@ -326,6 +670,34 @@ function ViewToggle({
         );
       })}
     </div>
+  );
+}
+
+function StatusTag({ status, label }: { status: string; label: string }) {
+  const colorMap: Record<string, string> = {
+    active: "border-[var(--app-class-good)] text-[var(--app-class-good)]",
+    review: "border-[var(--app-class-brilliant)] text-[var(--app-class-brilliant)]",
+    mastered: "border-[var(--app-muted)] text-[var(--app-muted)]",
+    retired: "border-[var(--app-border-soft)] text-[var(--app-muted-soft)]",
+  };
+  return (
+    <span className={["border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em]", colorMap[status] ?? "border-[var(--app-border)] text-[var(--app-muted)]"].join(" ")}>
+      {label}
+    </span>
+  );
+}
+
+function ResultTag({ result }: { result: "pass" | "acceptable" | "fail" | null }) {
+  if (!result) return <span className="text-[9px] uppercase tracking-[0.1em] text-[var(--app-muted-soft)]">-</span>;
+  const colorMap: Record<string, string> = {
+    pass: "text-[var(--app-class-good)]",
+    acceptable: "text-[var(--app-class-brilliant)]",
+    fail: "text-[var(--app-class-blunder)]",
+  };
+  return (
+    <span className={["text-[9px] font-bold uppercase tracking-[0.1em]", colorMap[result]].join(" ")}>
+      {result}
+    </span>
   );
 }
 
@@ -348,45 +720,35 @@ function SectionLabel({ children, right }: { children: React.ReactNode; right?: 
 
 function StatTile({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "up" | "down" }) {
   return (
-    <Panel className="flex min-h-24 flex-col justify-between p-4">
-      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--app-muted)]">{label}</div>
+    <div className="app-brutal-section-soft flex min-h-24 flex-col justify-between p-4">
+      <div className="app-brutal-label">{label}</div>
       <div className="min-w-0 pt-4">
         <div className="min-w-0 truncate text-[24px] font-bold leading-none text-[var(--app-text)]">{value}</div>
         {sub ? <div className={["mt-2 truncate text-[11px] leading-none", toneClass(tone)].join(" ")}>{sub}</div> : null}
       </div>
-    </Panel>
-  );
-}
-
-function QueueTile({ label, value, hasData }: { label: string; value: number; hasData: boolean }) {
-  return (
-    <Panel className="min-h-20 p-4">
-      <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--app-muted)]">{label}</div>
-      <div className={["text-[28px] font-bold leading-none", hasData && value > 0 ? "text-[var(--app-text)]" : "text-[var(--app-muted-soft)]"].join(" ")}>
-        {hasData ? formatNumber(value) : "-"}
-      </div>
-    </Panel>
-  );
-}
-
-function Tag({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="border border-[var(--app-border-soft)] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
-      {children}
-    </span>
-  );
-}
-
-function ClusterNumber({ label, value, color }: { label: string; value: number; color?: string }) {
-  return (
-    <div className="flex items-center justify-between gap-2 md:block md:text-right">
-      <span className="text-[9px] uppercase tracking-[0.14em] text-[var(--app-muted)] md:hidden">{label}</span>
-      <span className="font-bold" style={{ color: value > 0 ? color ?? "var(--app-text)" : "var(--app-muted-soft)" }}>
-        {formatNumber(value)}
-      </span>
     </div>
   );
 }
+
+function QueueTile({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
+  return (
+    <div className="app-brutal-section-soft min-h-20 p-4">
+      <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--app-muted)]">{label}</div>
+      <div className={[
+        "text-[28px] font-bold leading-none",
+        value > 0
+          ? accent
+            ? "text-[var(--app-accent)]"
+            : "text-[var(--app-text)]"
+          : "text-[var(--app-muted-soft)]",
+      ].join(" ")}>
+        {formatNumber(value)}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Formatters ─── */
 
 function formatNumber(value: number) {
   return value.toLocaleString("en-US");
@@ -414,15 +776,10 @@ function formatDaysAgo(daysAgo: number) {
   return `${daysAgo}d ago`;
 }
 
-function formatDateTime(value: string) {
+function formatShortDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function toneClass(tone?: "up" | "down") {

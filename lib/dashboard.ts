@@ -12,12 +12,36 @@ export type DashboardClassifications = {
   blunder: number;
 };
 
+export type DashboardPosition = {
+  id: string;
+  startingFen: string;
+  sourceType: string;
+  sourceLabel: string;
+  status: string;
+  statusLabel: string;
+  queueLabel?: string;
+  openingName: string | null;
+  lastResult: "pass" | "acceptable" | "fail" | null;
+  lastAttemptAt: string | null;
+  nextReviewAt: string | null;
+  attempts: number;
+  cpLoss: number | null;
+  worstMoveLossCp: number | null;
+  servedCount: number;
+};
+
+export type EloHistoryPoint = {
+  elo: number;
+  ts: string;
+};
+
 export type DashboardSummary = {
   totalSequences: number;
   movesEvaluated: number;
   blindspotsElo: number | null;
   eloDeltaSession: number | null;
   lastSessionAt: string | null;
+  eloHistory: EloHistoryPoint[];
   queueCounts: {
     mastered: number;
     revisit: number;
@@ -25,21 +49,18 @@ export type DashboardSummary = {
     explore: number;
     inProgress: number;
   };
+  queueOverview: {
+    reviewDue: number;
+    active: number;
+    filler: number;
+    mastered: number;
+    retired: number;
+  };
+  recentPassRate: number | null;
+  avgEvalLossCp: number | null;
   classifications: DashboardClassifications | null;
-  clusters: Array<{
-    id: string;
-    label?: string;
-    attempts: number;
-    brilliant: number;
-    critical: number;
-    inaccuracy: number;
-    mistake: number;
-    blunder: number;
-    phase?: string;
-    bucket?: string;
-    tag?: string;
-    severity: number;
-  }>;
+  recentPositions: DashboardPosition[];
+  positions: DashboardPosition[];
   recentSessions: Array<{
     id: string;
     ts: string;
@@ -47,6 +68,9 @@ export type DashboardSummary = {
     delta: number | null;
     worst: string | null;
     href: string | null;
+    startingFen: string;
+    outcome: "pass" | "acceptable" | "fail" | null;
+    avgCpLoss: number | null;
   }>;
 };
 
@@ -67,12 +91,34 @@ type DashboardSessionInput = {
   started_at: string;
   sequence_length: number;
   elo_delta: number | null;
+  elo_after: number | null;
+  starting_fen: string;
+  training_outcome: "pass" | "acceptable" | "fail" | null;
+  average_cp_loss: number | null;
   position_evaluations: Json;
+};
+
+type DashboardMistakeInput = {
+  id: string;
+  source_type: string;
+  starting_fen: string;
+  status: string;
+  opening_name: string | null;
+  review_count: number;
+  pass_count: number;
+  acceptable_count: number;
+  fail_count: number;
+  last_attempt_at: string | null;
+  next_review_at: string | null;
+  cp_loss: number | null;
+  served_count: number;
 };
 
 type BuildDashboardSummaryInput = {
   profile: DashboardProfileInput | null;
   sessions: DashboardSessionInput[];
+  mistakes: DashboardMistakeInput[];
+  avgCpLoss: number | null;
 };
 
 const CLASSIFICATION_KEYS = [
@@ -88,8 +134,6 @@ const CLASSIFICATION_KEYS = [
 ] as const;
 
 type DashboardClassification = (typeof CLASSIFICATION_KEYS)[number];
-
-const MIN_CLUSTER_ATTEMPTS = 5;
 
 const CLASSIFICATION_SEVERITY: Record<DashboardClassification, number> = {
   brilliant: 0,
@@ -111,32 +155,26 @@ type PositionEvaluationInput = {
   tags: string[];
 };
 
-type ClusterAccumulator = {
-  id: string;
-  attempts: number;
-  brilliant: number;
-  critical: number;
-  inaccuracy: number;
-  mistake: number;
-  blunder: number;
-  phase?: string;
-  bucket?: string;
-  tag?: string;
-};
-
 export function buildDashboardSummary({
   profile,
   sessions,
+  mistakes,
+  avgCpLoss,
 }: BuildDashboardSummaryInput): DashboardSummary {
   const evaluationsBySession = sessions.map((session) => normalizePositionEvaluations(session.position_evaluations));
   const evaluations = evaluationsBySession.flat();
   const classifications = buildClassificationCounts(evaluations);
-  const clusterAttemptCounts = normalizeClusterAttemptCounts(profile?.cluster_stats);
 
   const exploitCount = jsonArrayLength(profile?.exploit_queue);
   const exploreCount = jsonArrayLength(profile?.explore_queue);
   const revisitCount = jsonArrayLength(profile?.revisit_queue);
   const masteredCount = jsonArrayLength(profile?.mastered_queue);
+
+  const positions = buildPositionRows(mistakes);
+  const recentPositions = positions.slice(0, 8);
+
+  const queueOverview = buildQueueOverview(mistakes);
+  const recentPassRate = computePassRate(mistakes);
 
   return {
     totalSequences: profile?.total_sequences ?? 0,
@@ -151,12 +189,108 @@ export function buildDashboardSummary({
       explore: exploreCount,
       inProgress: exploitCount + exploreCount + revisitCount,
     },
+    queueOverview,
+    recentPassRate,
+    avgEvalLossCp: avgCpLoss,
     classifications,
-    clusters: buildClusterSummaries(evaluations, clusterAttemptCounts),
+    recentPositions,
+    positions,
+    eloHistory: buildEloHistory(sessions),
     recentSessions: sessions.map((session, index) =>
       buildRecentSession(session, evaluationsBySession[index] ?? []),
     ),
   };
+}
+
+function buildPositionRows(mistakes: DashboardMistakeInput[]): DashboardPosition[] {
+  return mistakes.map((m) => ({
+    id: m.id,
+    startingFen: m.starting_fen,
+    sourceType: m.source_type,
+    sourceLabel: sourceTypeLabel(m.source_type),
+    status: m.status,
+    statusLabel: statusLabel(m.status),
+    queueLabel: queueLabel(m.status, m.source_type),
+    openingName: m.opening_name,
+    lastResult: inferLastResult(m),
+    lastAttemptAt: m.last_attempt_at,
+    nextReviewAt: m.next_review_at,
+    attempts: m.review_count,
+    cpLoss: m.cp_loss,
+    worstMoveLossCp: m.cp_loss,
+    servedCount: m.served_count,
+  }));
+}
+
+function buildQueueOverview(mistakes: DashboardMistakeInput[]) {
+  let reviewDue = 0;
+  let active = 0;
+  let filler = 0;
+  let mastered = 0;
+  let retired = 0;
+  const now = new Date().toISOString();
+
+  for (const m of mistakes) {
+    if (m.status === "mastered") { mastered++; continue; }
+    if (m.status === "retired") { retired++; continue; }
+    if (m.status === "review") {
+      if (m.next_review_at && m.next_review_at <= now) reviewDue++;
+      continue;
+    }
+    if (m.source_type === "lichess_puzzle_filler") { filler++; continue; }
+    active++;
+  }
+
+  return { reviewDue, active, filler, mastered, retired };
+}
+
+function computePassRate(mistakes: DashboardMistakeInput[]): number | null {
+  const attempted = mistakes.filter((m) => m.review_count > 0);
+  if (attempted.length === 0) return null;
+  const totalPass = attempted.reduce((sum, m) => sum + (m.pass_count ?? 0), 0);
+  const totalAttempts = attempted.reduce((sum, m) => sum + (m.review_count ?? 0), 0);
+  return totalAttempts > 0 ? totalPass / totalAttempts : null;
+}
+
+function buildEloHistory(sessions: DashboardSessionInput[]): EloHistoryPoint[] {
+  return sessions
+    .filter((s) => typeof s.elo_after === "number" && s.completed_at)
+    .map((s) => ({ elo: s.elo_after!, ts: s.completed_at! }))
+    .reverse();
+}
+
+function sourceTypeLabel(sourceType: string): string {
+  switch (sourceType) {
+    case "own_game": return "User game mistake";
+    case "imported_pgn": return "Imported PGN";
+    case "lichess_puzzle_filler": return "Random puzzle";
+    case "legacy_fallback": return "Blindspots mistake";
+    default: return "Unknown";
+  }
+}
+
+function statusLabel(status: string): string {
+  switch (status) {
+    case "active": return "New";
+    case "review": return "Review due";
+    case "mastered": return "Mastered";
+    case "retired": return "Retired";
+    default: return "Unknown";
+  }
+}
+
+function queueLabel(status: string, sourceType: string): string | undefined {
+  if (status === "mastered" || status === "retired") return undefined;
+  if (status === "review") return "Review";
+  if (sourceType === "lichess_puzzle_filler") return "Random";
+  return "Active";
+}
+
+function inferLastResult(m: DashboardMistakeInput): "pass" | "acceptable" | "fail" | null {
+  if (m.review_count === 0) return null;
+  if (m.pass_count >= m.acceptable_count && m.pass_count >= m.fail_count) return "pass";
+  if (m.acceptable_count >= m.fail_count) return "acceptable";
+  return "fail";
 }
 
 function emptyClassificationCounts(): DashboardClassifications {
@@ -182,61 +316,6 @@ function buildClassificationCounts(evaluations: PositionEvaluationInput[]) {
   return counts;
 }
 
-function buildClusterSummaries(
-  evaluations: PositionEvaluationInput[],
-  clusterAttemptCounts: Record<string, number>,
-): DashboardSummary["clusters"] {
-  const clusters = new Map<string, ClusterAccumulator>();
-
-  for (const evaluation of evaluations) {
-    if (!evaluation.clusterId) continue;
-    const cluster = clusters.get(evaluation.clusterId) ?? {
-      id: evaluation.clusterId,
-      attempts: 0,
-      brilliant: 0,
-      critical: 0,
-      inaccuracy: 0,
-      mistake: 0,
-      blunder: 0,
-    };
-
-    cluster.attempts += 1;
-    if (evaluation.classification === "brilliant") cluster.brilliant += 1;
-    if (evaluation.classification === "critical") cluster.critical += 1;
-    if (evaluation.classification === "inaccuracy") cluster.inaccuracy += 1;
-    if (evaluation.classification === "mistake") cluster.mistake += 1;
-    if (evaluation.classification === "blunder") cluster.blunder += 1;
-    cluster.phase ??= evaluation.phase ?? parseClusterId(evaluation.clusterId).phase;
-    cluster.bucket ??= evaluation.bucket ?? parseClusterId(evaluation.clusterId).bucket;
-    cluster.tag ??= evaluation.tags[0];
-    clusters.set(evaluation.clusterId, cluster);
-  }
-
-  return Array.from(clusters.values())
-    .map((cluster) => {
-      const parsed = parseClusterId(cluster.id);
-      const attempts = Math.max(cluster.attempts, clusterAttemptCounts[cluster.id] ?? 0);
-      const phase = cluster.phase ?? parsed.phase;
-      const bucket = cluster.bucket ?? parsed.bucket;
-      const tag = cluster.tag ?? parsed.tag;
-      return {
-        ...cluster,
-        attempts,
-        label: buildClusterLabel({ phase, bucket, tag }),
-        phase,
-        bucket,
-        tag: tag ?? bucket,
-        severity: cluster.brilliant * 6 + cluster.critical * 5 + cluster.blunder * 4 + cluster.mistake * 3 + cluster.inaccuracy,
-      };
-    })
-    .filter((cluster) => cluster.severity > 0)
-    .filter((cluster) => cluster.attempts >= MIN_CLUSTER_ATTEMPTS)
-    .filter((cluster) => cluster.phase !== "unknown")
-    .filter((cluster) => cluster.bucket !== "wildcard")
-    .sort((left, right) => right.severity - left.severity || right.attempts - left.attempts)
-    .slice(0, 8);
-}
-
 function buildRecentSession(
   session: DashboardSessionInput,
   evaluations: PositionEvaluationInput[],
@@ -248,6 +327,9 @@ function buildRecentSession(
     delta: typeof session.elo_delta === "number" ? session.elo_delta : null,
     worst: getWorstClassification(evaluations),
     href: null,
+    startingFen: session.starting_fen,
+    outcome: session.training_outcome,
+    avgCpLoss: session.average_cp_loss,
   };
 }
 
@@ -302,110 +384,6 @@ function normalizeLegacyEnCroissantClassification(value: string): DashboardClass
     default:
       return null;
   }
-}
-
-function normalizeClusterAttemptCounts(raw: Json | undefined): Record<string, number> {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-  const result: Record<string, number> = {};
-  for (const [id, value] of Object.entries(raw)) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
-    const attempts = (value as Record<string, Json | undefined>).attempts;
-    if (typeof attempts === "number" && Number.isFinite(attempts) && attempts > 0) {
-      result[id] = attempts;
-    }
-  }
-  return result;
-}
-
-function parseClusterId(id: string) {
-  const parts = id.split(":");
-
-  if (parts[0] === "app" && parts[1] === "v1") {
-    return {
-      version: "v1",
-      phase: parts[2] || undefined,
-      bucket: parts[3] || undefined,
-      tag: parts.slice(4).join(":") || undefined,
-    };
-  }
-
-  if (parts[0] === "app" && parts[1] === "v0") {
-    return {
-      version: "v0",
-      phase: parts[2] || undefined,
-      bucket: parts.slice(3).join(":") || undefined,
-      tag: undefined,
-    };
-  }
-
-  return {
-    version: "unknown",
-    phase: undefined,
-    bucket: undefined,
-    tag: undefined,
-  };
-}
-
-function buildClusterLabel({
-  phase,
-  bucket,
-  tag,
-}: {
-  phase?: string;
-  bucket?: string;
-  tag?: string;
-}) {
-  const prettyPhase = humanizeClusterPart(phase);
-  const prettyBucket = humanizeBucket(bucket);
-  const prettyTag = humanizeClusterPart(tag);
-  if (bucket === "tactic") return "Tactical Positions";
-  const parts = [prettyPhase];
-
-  if (prettyBucket && prettyBucket !== prettyPhase) {
-    parts.push(prettyBucket);
-  }
-
-  if (
-    prettyTag &&
-    prettyTag !== "General" &&
-    prettyTag !== prettyPhase &&
-    prettyTag !== prettyBucket
-  ) {
-    parts.push(prettyTag);
-  }
-
-  return parts.filter(Boolean).join(" — ") || "General";
-}
-
-function humanizeBucket(bucket?: string) {
-  if (!bucket) return "";
-  const labels: Record<string, string> = {
-    opening: "Opening",
-    opening_gambit: "Gambit",
-    opening_development: "Development",
-    middlegame: "Middlegame",
-    middlegame_attack: "Attack",
-    middlegame_positional: "Positional",
-    endgame: "Endgame",
-    endgame_rook: "Rook Endgame",
-    endgame_pawn: "Pawn Endgame",
-    tactic: "Tactical Positions",
-    wildcard: "General",
-  };
-  return labels[bucket] ?? humanizeClusterPart(bucket);
-}
-
-function humanizeClusterPart(value?: string) {
-  if (!value) return "";
-  const upper = value.toUpperCase();
-  if (/^[A-E][0-9]{2}$/.test(upper)) return upper;
-
-  return value
-    .replace(/^app:v\d+:/, "")
-    .split("_")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 function jsonArrayLength(raw: Json | undefined) {
