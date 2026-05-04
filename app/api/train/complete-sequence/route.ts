@@ -24,6 +24,7 @@ export const dynamic = "force-dynamic";
 const DEFAULT_SEQUENCE_LENGTH = 4;
 const MIN_SEQUENCE_LENGTH = 1;
 const MAX_SEQUENCE_LENGTH = 9;
+const COMPLETE_SEQUENCE_MISSING_EVAL_TIME_LIMIT_MS = 500;
 
 type SequenceMove = {
   san?: unknown;
@@ -157,6 +158,8 @@ export async function POST(request: Request) {
     moves,
   });
   const usedPrecomputedEvaluations = Boolean(precomputedSequenceEvaluation);
+  const usedPartialPrecomputedEvaluations =
+    !usedPrecomputedEvaluations && precomputedInputCount > 0;
   const sequenceEvaluation =
     precomputedSequenceEvaluation ??
     await calculateSequenceEvaluation({
@@ -168,6 +171,7 @@ export async function POST(request: Request) {
       selectedIsTactic,
       selectedOpeningName,
       selectedEco,
+      rawPrecomputedEvaluations: payload?.precomputedEvaluations,
     });
   const evaluationMs = Date.now() - evaluationStartedAt;
 
@@ -175,6 +179,7 @@ export async function POST(request: Request) {
     console.log("[complete-sequence:timing]", {
       precomputedInputCount,
       usedPrecomputedEvaluations,
+      usedPartialPrecomputedEvaluations,
       moveCount: moves.length,
       moveScoreCount: sequenceEvaluation.moveScores.length,
       profileMs,
@@ -320,6 +325,7 @@ export async function POST(request: Request) {
       console.log("[complete-sequence:done]", {
         path: "row-based",
         usedPrecomputedEvaluations,
+        usedPartialPrecomputedEvaluations,
         precomputedInputCount,
         profileMs,
         evaluationMs,
@@ -390,6 +396,7 @@ export async function POST(request: Request) {
     console.log("[complete-sequence:done]", {
       path: "legacy-json-queue",
       usedPrecomputedEvaluations,
+      usedPartialPrecomputedEvaluations,
       precomputedInputCount,
       profileMs,
       evaluationMs,
@@ -442,6 +449,7 @@ async function calculateSequenceEvaluation({
   selectedIsTactic,
   selectedOpeningName,
   selectedEco,
+  rawPrecomputedEvaluations,
 }: {
   startingFen: string;
   moves: Array<{ san: string; uci: string; side: string }>;
@@ -451,6 +459,7 @@ async function calculateSequenceEvaluation({
   selectedIsTactic: boolean | null;
   selectedOpeningName: string | null;
   selectedEco: string | null;
+  rawPrecomputedEvaluations?: unknown;
 }) {
   const chess = new Chess(startingFen);
   const userColor = chess.turn();
@@ -466,11 +475,20 @@ async function calculateSequenceEvaluation({
     classification: MoveClassification;
   }> = [];
   const positionEvaluations: PositionEvaluation[] = [];
+  const precomputedByIndex = buildValidPrecomputedEvaluationMap({
+    rawEvaluations: rawPrecomputedEvaluations,
+    maxUserMoveCount: countUserMovesInSequence(startingFen, moves),
+  });
 
   for (const move of moves) {
     const isUserMove = chess.turn() === userColor;
     const decisionFen = chess.fen();
-    const evalBefore = isUserMove ? await getPositionEval(decisionFen) : null;
+    const precomputedEntry = isUserMove ? precomputedByIndex.get(userMoveCount) : null;
+    const evalBefore = isUserMove && !precomputedEntry
+      ? await getPositionEval(decisionFen, {
+          timeLimitMs: COMPLETE_SEQUENCE_MISSING_EVAL_TIME_LIMIT_MS,
+        })
+      : null;
     const played = chess.move({
       from: move.uci.slice(0, 2),
       to: move.uci.slice(2, 4),
@@ -480,6 +498,14 @@ async function calculateSequenceEvaluation({
 
     if (isUserMove) {
       const fenAfterMove = chess.fen();
+      if (precomputedEntry) {
+        totalCpLoss += precomputedEntry.moveScore.cpLoss;
+        moveScores.push(precomputedEntry.moveScore);
+        positionEvaluations.push(precomputedEntry.positionEvaluation);
+        userMoveCount += 1;
+        continue;
+      }
+
       const evalBeforeCp = userColor === "w" ? evalBefore!.cp : -evalBefore!.cp;
       const userDeliveredCheckmate = isCheckmateFen(fenAfterMove);
 
@@ -525,7 +551,9 @@ async function calculateSequenceEvaluation({
         continue;
       }
 
-      const evalAfter = await getPositionEval(fenAfterMove);
+      const evalAfter = await getPositionEval(fenAfterMove, {
+        timeLimitMs: COMPLETE_SEQUENCE_MISSING_EVAL_TIME_LIMIT_MS,
+      });
       const afterUserEval = userColor === "w" ? evalAfter.cp : -evalAfter.cp;
       const cpLoss = Math.max(0, Math.round(evalBeforeCp - afterUserEval));
       totalCpLoss += cpLoss;
@@ -802,6 +830,46 @@ function normalizeFiniteNumber(value: unknown): number | null {
 function normalizeNonNegativeNumber(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   return Math.max(0, value);
+}
+
+function buildValidPrecomputedEvaluationMap({
+  rawEvaluations,
+  maxUserMoveCount,
+}: {
+  rawEvaluations: unknown;
+  maxUserMoveCount: number;
+}) {
+  const byIndex = new Map<number, {
+    moveScore: SequenceEvaluationResult["moveScores"][number];
+    positionEvaluation: PositionEvaluation;
+  }>();
+
+  if (!Array.isArray(rawEvaluations)) return byIndex;
+
+  for (const raw of rawEvaluations as PrecomputedEvaluationPayload[]) {
+    if (!isRecord(raw)) continue;
+
+    const rawIndex = raw.userMoveIndex;
+    const userMoveIndex =
+      typeof rawIndex === "number" && Number.isInteger(rawIndex)
+        ? rawIndex
+        : null;
+
+    if (userMoveIndex === null) continue;
+    if (userMoveIndex < 0 || userMoveIndex >= maxUserMoveCount) continue;
+
+    const moveScore = normalizePrecomputedMoveScore(raw.moveScore, userMoveIndex);
+    const positionEvaluation = normalizePrecomputedPositionEvaluation(
+      raw.positionEvaluation,
+      userMoveIndex,
+    );
+
+    if (!moveScore || !positionEvaluation) continue;
+
+    byIndex.set(userMoveIndex, { moveScore, positionEvaluation });
+  }
+
+  return byIndex;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
