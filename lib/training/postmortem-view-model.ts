@@ -1,3 +1,5 @@
+import { buildLastMoveBadge } from "@/lib/training-board-ui";
+
 export type PostmortemMoveSide = "white" | "black";
 
 export type PostmortemMoveKind = "user" | "engine" | "setup" | "explore";

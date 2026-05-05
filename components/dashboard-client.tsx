@@ -53,7 +53,7 @@ export function DashboardClient({ summary }: { summary: DashboardSummary }) {
 
   return (
     <main className="app-paper-shell min-h-[calc(100dvh-64px)] overflow-x-hidden px-4 py-5 md:px-8">
-      <div className="mx-auto grid w-full max-w-[96rem] gap-5">
+      <div className="mx-auto grid w-full max-w-[1180px] gap-5">
         <section className="app-brutal-section p-5 md:p-6">
           <Hero summary={summary} hasData={hasData} />
           <div className="mt-5 flex justify-center">
@@ -85,12 +85,12 @@ export function DashboardClient({ summary }: { summary: DashboardSummary }) {
 function SummaryTab({ summary, hasData }: { summary: DashboardSummary; hasData: boolean }) {
   return (
     <div className="grid gap-5">
-      <QueueSummaryCards summary={summary} />
       <EloSection
         elo={summary.blindspotsElo}
         delta={summary.eloDeltaSession}
         history={summary.eloHistory}
       />
+      <QueueSummaryCards summary={summary} />
       <ProgressSnapshot summary={summary} hasData={hasData} />
       <MoveClassifications classifications={summary.classifications} />
     </div>
@@ -115,23 +115,18 @@ function QueueSummaryCards({ summary }: { summary: DashboardSummary }) {
 
 function EloSection({ elo, delta, history }: { elo: number | null; delta: number | null; history: EloHistoryPoint[] }) {
   return (
-    <div className="app-brutal-section-soft p-4 md:p-5">
-      <SectionLabel>Blindspots Elo</SectionLabel>
-      <div className="flex items-center gap-4">
+    <div className="app-brutal-section-soft flex flex-col items-center p-5 md:p-7">
+      <div className="w-full"><SectionLabel>Blindspots Elo</SectionLabel></div>
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:gap-8">
         <div className="shrink-0">
-          <div className="text-[40px] font-bold leading-none text-[var(--app-text)]">
+          <div className="text-[56px] font-bold leading-none text-[var(--app-text)] md:text-[68px]">
             {elo == null ? "-" : formatNumber(elo)}
           </div>
-          {delta != null && (
-            <div className={["mt-1 text-xs font-bold", deltaClass(delta)].join(" ")}>
-              {signed(delta)} from last session
-            </div>
-          )}
         </div>
         {history.length >= 2 && <EloChart points={history} />}
       </div>
       {history.length < 2 && (
-        <p className="mt-3 text-[10px] uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
+        <p className="mt-3 text-center text-[10px] uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
           {history.length === 0
             ? "Complete a session to start tracking Elo."
             : "One session recorded. Keep going to see a trend."}
@@ -143,9 +138,9 @@ function EloSection({ elo, delta, history }: { elo: number | null; delta: number
 
 function EloChart({ points }: { points: EloHistoryPoint[] }) {
   const width = 920;
-  const height = 120;
+  const height = 180;
   const px = 8;
-  const py = 12;
+  const py = 18;
   const hSpace = width - px * 2;
   const vSpace = height - py * 2;
 
@@ -175,7 +170,7 @@ function EloChart({ points }: { points: EloHistoryPoint[] }) {
     <div className="min-w-0 flex-1">
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="block h-[80px] w-full md:h-[100px]"
+        className="block h-[150px] w-full md:h-[190px]"
         role="img"
         aria-label="Elo progression over time"
         preserveAspectRatio="none"
@@ -289,7 +284,7 @@ function RecentActivitySection({
 
   const allRows = [...rows, ...positionRows]
     .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
-    .slice(0, 10);
+    .slice(0, 5);
 
   return (
     <section className="app-brutal-section p-5 md:p-6">
@@ -562,15 +557,15 @@ function ProgressSnapshot({ summary, hasData }: { summary: DashboardSummary; has
     <div>
       <SectionLabel>Progress snapshot</SectionLabel>
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
-        <StatTile label="Sequences" value={hasData ? formatNumber(summary.totalSequences) : "-"} sub={hasData ? "completed" : "no data"} />
-        <StatTile label="Moves evaluated" value={hasData ? formatNumber(summary.movesEvaluated) : "-"} sub={hasData ? "Stockfish" : "go train"} />
+        <StatTile label="Sequences Completed" value={hasData ? formatNumber(summary.totalSequences) : "-"} />
+        <StatTile label="Moves evaluated" value={hasData ? formatNumber(summary.movesEvaluated) : "-"} />
         <StatTile
           label="Last session"
           value={formatDate(summary.lastSessionAt).text}
           sub={(function() {
             const { daysAgo } = formatDate(summary.lastSessionAt, true);
             if (daysAgo == null) return summary.lastSessionAt ? undefined : "never";
-            return formatDaysAgo(daysAgo);
+            return undefined;
           })()}
         />
       </div>
@@ -750,7 +745,7 @@ function QueueTile({ label, value, accent }: { label: string; value: number; acc
 /* ─── Formatters ─── */
 
 function formatNumber(value: number) {
-  return value.toLocaleString("en-US");
+  return value.toString();
 }
 
 function signed(value: number | null) {
