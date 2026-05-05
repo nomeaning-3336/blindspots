@@ -479,6 +479,7 @@ export default function TrainPage() {
   const engineLinePrefetchRef = useRef<Map<string, Promise<void>>>(new Map());
   const pieceLineCacheRef = useRef<Record<string, EngineLineResult[]>>({});
   const trainLayoutGridRef = useRef<HTMLDivElement | null>(null);
+  const startTrainingGestureConsumedRef = useRef(false);
   const isPostMortemVisible = state === "complete" || state === "drift";
 
   useEffect(() => {
@@ -858,14 +859,22 @@ export default function TrainPage() {
 
     if (payload.previousFen && payload.playedMove) {
       setPendingInitialEngineMove(payload);
-      setIsAwaitingStartGesture(true);
+
+      if (startTrainingGestureConsumedRef.current) {
+        setIsAwaitingStartGesture(false);
+        void startPendingInitialEngineMove(payload);
+      } else {
+        setIsAwaitingStartGesture(true);
+      }
     } else {
+      startTrainingGestureConsumedRef.current = false;
       setPendingInitialEngineMove(null);
       setIsAwaitingStartGesture(false);
     }
   }
 
   async function startPendingInitialEngineMove(pending: NextPositionResponse) {
+    startTrainingGestureConsumedRef.current = false;
     setIsAwaitingStartGesture(false);
     setPendingInitialEngineMove(null);
 
@@ -1443,6 +1452,8 @@ export default function TrainPage() {
 
   async function startFirstSession(options: { persistOnboarding?: () => Promise<void> } = {}) {
     if (isStartingTraining) return;
+    startTrainingGestureConsumedRef.current = true;
+    void unlockTrainAudio();
     setIsStartingTraining(true);
 
     try {
@@ -2315,8 +2326,7 @@ function TrainOnboarding({
   return (
     <div
       className={[
-        "grid min-h-[calc(100dvh-92px)] w-full place-items-center overflow-hidden px-4 py-6",
-        screen === "analysis" ? "bg-[var(--app-bg)]" : "",
+        "app-paper-shell grid min-h-[calc(100dvh-64px)] w-full place-items-center overflow-x-hidden px-4 py-6",
       ].join(" ")}
     >
       <section className="w-full max-w-[640px] text-center">
@@ -2478,7 +2488,7 @@ function TrainOnboarding({
             <h1 className="text-3xl font-bold text-[var(--app-text)]">
               We found enough.
             </h1>
-            <div className="grid gap-3 border-y border-[var(--app-border-soft)] py-6 text-left sm:grid-cols-3">
+            <div className="grid gap-3 border-y border-[var(--app-border-soft)] py-6 text-center sm:grid-cols-3">
               <SummaryStat value={`${summary.mistakesFound}`} label="mistakes found" />
               <SummaryStat value={`${summary.gamesAnalyzed}`} label="games checked" />
               <SummaryStat value={`${summary.averageCpLossPerMove}cp`} label="average loss" />
