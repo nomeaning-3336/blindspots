@@ -57,9 +57,11 @@ export function DashboardClient({ summary }: { summary: DashboardSummary }) {
         <DashboardHero
           summary={summary}
           hasData={hasData}
-          view={view}
-          setView={setView}
         />
+
+        <div className="mt-2 flex justify-center">
+          <ViewToggle view={view} setView={setView} />
+        </div>
 
         {view === "summary" ? (
           <SummaryTab summary={summary} hasData={hasData} />
@@ -85,13 +87,9 @@ export function DashboardClient({ summary }: { summary: DashboardSummary }) {
 function DashboardHero({
   summary,
   hasData,
-  view,
-  setView,
 }: {
   summary: DashboardSummary;
   hasData: boolean;
-  view: DashboardView;
-  setView: (view: DashboardView) => void;
 }) {
   const elo = summary.blindspotsElo;
   const delta = summary.eloDeltaSession;
@@ -137,9 +135,8 @@ function DashboardHero({
               href="/train"
               className="app-brutal-button inline-flex min-h-11 items-center justify-center px-5 py-3 text-xs"
             >
-              Continue training
+              {hasData ? "Continue training" : "Start training"}
             </Link>
-            <ViewToggle view={view} setView={setView} />
           </div>
         </div>
 
@@ -166,8 +163,10 @@ function SummaryTab({ summary, hasData }: { summary: DashboardSummary; hasData: 
   return (
     <div className="grid gap-5">
       <QueueSummaryCards summary={summary} />
-      <ProgressSnapshot summary={summary} hasData={hasData} />
-      <MoveClassifications classifications={summary.classifications} />
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <ProgressSnapshot summary={summary} hasData={hasData} />
+        <MoveClassifications classifications={summary.classifications} />
+      </div>
     </div>
   );
 }
@@ -300,17 +299,6 @@ function RecentActivitySection({
         <SectionLabel>Recent training</SectionLabel>
         <div className="flex flex-col items-center gap-3 p-6 text-center">
           <div className="text-sm font-bold text-[var(--app-text)]">No training history yet.</div>
-          <p className="max-w-sm text-xs leading-6 text-[var(--app-muted)]">
-            Connect a chess profile or start training. The database cannot judge what it has not seen.
-          </p>
-          <div className="flex gap-2">
-            <Link href="/train" className="app-brutal-button inline-flex items-center px-4 py-2 text-xs">
-              Start training
-            </Link>
-            <Link href="/account" className="app-brutal-button inline-flex items-center px-4 py-2 text-xs">
-              Connect account
-            </Link>
-          </div>
         </div>
       </section>
     );
@@ -605,21 +593,23 @@ function PositionRow({ position }: { position: DashboardPosition }) {
 /* ─── Shared sections from original dashboard ─── */
 
 function ProgressSnapshot({ summary, hasData }: { summary: DashboardSummary; hasData: boolean }) {
+  const lastSession = formatDate(summary.lastSessionAt);
   return (
-    <section className="app-brutal-section p-5 md:p-6">
+    <section>
       <SectionLabel>Progress snapshot</SectionLabel>
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
-        <StatTile label="Sequences Completed" value={hasData ? formatNumber(summary.totalSequences) : "-"} />
-        <StatTile label="Moves evaluated" value={hasData ? formatNumber(summary.movesEvaluated) : "-"} />
-        <StatTile
-          label="Last session"
-          value={formatDate(summary.lastSessionAt).text}
-          sub={(function() {
-            const { daysAgo } = formatDate(summary.lastSessionAt, true);
-            if (daysAgo == null) return summary.lastSessionAt ? undefined : "never";
-            return undefined;
-          })()}
-        />
+      <div className="mt-3 flex flex-col gap-2 text-xs">
+        <div className="flex justify-between">
+          <span className="text-[var(--app-muted)]">Sequences Completed</span>
+          <span className="font-bold text-[var(--app-text)]">{hasData ? formatNumber(summary.totalSequences) : "-"}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-[var(--app-muted)]">Moves Evaluated</span>
+          <span className="font-bold text-[var(--app-text)]">{hasData ? formatNumber(summary.movesEvaluated) : "-"}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-[var(--app-muted)]">Last Session</span>
+          <span className="font-bold text-[var(--app-text)]">{summary.lastSessionAt ? lastSession.text : "never"}</span>
+        </div>
       </div>
     </section>
   );
@@ -633,7 +623,7 @@ function MoveClassifications({ classifications }: { classifications: DashboardCl
 
   if (!classifications || rows.length === 0) {
     return (
-      <section className="app-brutal-section min-w-0 p-5 md:p-6">
+      <section className="min-w-0">
         <SectionLabel>Move classifications</SectionLabel>
         <div className="text-xs leading-6 text-[var(--app-muted)]">
           No classified moves yet. Train a sequence. Stockfish does the rest.
@@ -647,7 +637,7 @@ function MoveClassifications({ classifications }: { classifications: DashboardCl
   const rowCount = Math.max(1, Math.ceil(rows.length / 2));
 
   return (
-    <section className="app-brutal-section min-w-0 p-5 md:p-6">
+    <section className="min-w-0">
       <SectionLabel right={`${formatNumber(total)} moves`}>Move classifications</SectionLabel>
       <div>
         <div className="mb-4 flex h-2 overflow-hidden border border-[var(--app-border-soft)] bg-[var(--app-bg)]">
