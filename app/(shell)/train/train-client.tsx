@@ -21,7 +21,6 @@ import {
 } from "@/lib/analyze-preferences";
 import {
   DEFAULT_BLINDSPOTS_ELO,
-  buildLastMoveBadge,
   classificationForPlayedMove,
   classificationColor,
   classificationIcon,
@@ -29,11 +28,19 @@ import {
   engineLineContinuationSan,
   formatClassifiedMoveLead,
   getTrainingBoardHighlights,
-  mergeEngineLineDetailsFrom,
-  moveClassification,
   moveHighlightsForClassifiedMove,
   type MoveClassification,
 } from "@/lib/training-board-ui";
+import {
+  buildCanonicalPostmortemMoves,
+  getAuthoritativeMoveClassification,
+  mergeMoveWithAuthoritativeScore,
+  type CanonicalPostmortemMove,
+} from "@/lib/training/postmortem-view-model";
+import {
+  buildDeepestEngineLineMap,
+  mergePieceLinesWithDeeperKnownLines,
+} from "@/lib/training/engine-line-cache";
 import {
   postMortemNavigationAction,
   type PostMortemNavigationKey,
@@ -141,112 +148,6 @@ type EngineLineResult = {
   classification?: MoveClassification;
   source?: "multipv" | "candidate";
 };
-
-function engineMoveLineKey(fen: string, bestMove: string) {
-  return `${fen}::${bestMove}`;
-}
-
-function chooseDeeperEngineLine(
-  current: EngineLineResult | undefined,
-  next: EngineLineResult,
-  classificationSource: "current" | "next" = "next",
-): EngineLineResult {
-  if (!current) return next;
-
-  const currentDepth = typeof current.depth === "number" ? current.depth : -1;
-  const nextDepth = typeof next.depth === "number" ? next.depth : -1;
-
-  if (nextDepth > currentDepth) return mergeEngineLineDetailsFrom(current, next, classificationSource);
-
-  if (
-    nextDepth === currentDepth &&
-    (!current.pv || current.pv.length === 0) &&
-    next.pv &&
-    next.pv.length > 0
-  ) {
-    return mergeEngineLineDetailsFrom(current, next, classificationSource);
-  }
-
-  if (
-    process.env.NODE_ENV !== "production" &&
-    current.bestMove &&
-    next.bestMove &&
-    current.bestMove === next.bestMove &&
-    currentDepth > nextDepth
-  ) {
-    console.debug("[train:piece-lines] kept deeper cached line", {
-      move: current.bestMove,
-      cachedDepth: currentDepth,
-      fetchedDepth: nextDepth,
-      cachedEval: current.cp,
-      fetchedEval: next.cp,
-    });
-  }
-
-  return current;
-}
-
-function buildDeepestEngineLineMap(
-  fen: string,
-  lineLists: Array<EngineLineResult[] | null | undefined>,
-  classificationSource: "first" | "last" = "last",
-): Map<string, EngineLineResult> {
-  const map = new Map<string, EngineLineResult>();
-
-  for (const lines of lineLists) {
-    for (const line of lines ?? []) {
-      if (!line.bestMove) continue;
-      const key = engineMoveLineKey(fen, line.bestMove);
-      const existing = map.get(key);
-      map.set(
-        key,
-        chooseDeeperEngineLine(
-          existing,
-          line,
-          classificationSource === "first" && existing ? "current" : "next",
-        ),
-      );
-    }
-  }
-
-  return map;
-}
-
-function mergePieceLinesWithDeeperKnownLines({
-  fen,
-  square,
-  pieceLines,
-  knownLineLists,
-}: {
-  fen: string;
-  square: string;
-  pieceLines: EngineLineResult[];
-  knownLineLists: Array<EngineLineResult[] | null | undefined>;
-}): EngineLineResult[] {
-  const deepestByMove = buildDeepestEngineLineMap(fen, [
-    pieceLines,
-    ...knownLineLists,
-  ], "first");
-
-  const seen = new Set<string>();
-  const merged: EngineLineResult[] = [];
-
-  for (const line of pieceLines) {
-    if (!line.bestMove) continue;
-    const deepest = deepestByMove.get(engineMoveLineKey(fen, line.bestMove)) ?? line;
-    merged.push(deepest);
-    seen.add(line.bestMove);
-  }
-
-  for (const line of deepestByMove.values()) {
-    if (!line.bestMove.startsWith(square)) continue;
-    if (seen.has(line.bestMove)) continue;
-    merged.push(line);
-    seen.add(line.bestMove);
-  }
-
-  return merged;
-}
 
 function trainPieceLineCacheKey(fen: string, square: string) {
   return `${fen}::${square}`;
@@ -1602,22 +1503,10 @@ export default function TrainPage() {
         }).map((position) => {
           if (position.userMoveIndex != null) {
             const moveScore = completedMoveScoreByUserMoveIndex.get(position.userMoveIndex);
-            const classification = getAuthoritativeMoveClassification({
-              move: position.move,
-              moveScore,
-            });
             return {
               ...position,
               move: position.move
-                ? {
-                    ...position.move,
-                    cpLoss: moveScore?.cpLoss ?? position.move.cpLoss,
-                    evalBefore: moveScore?.evalBefore ?? position.move.evalBefore,
-                    evalAfter: moveScore?.evalAfter ?? position.move.evalAfter,
-                    mateBefore: moveScore?.mateBefore ?? position.move.mateBefore,
-                    mateAfter: moveScore?.mateAfter ?? position.move.mateAfter,
-                    classification: classification ?? position.move.classification,
-                  }
+                ? mergeMoveWithAuthoritativeScore({ move: position.move, moveScore })
                 : position.move,
             };
           }
@@ -1625,6 +1514,30 @@ export default function TrainPage() {
         })
       : [],
     [startingFen, moves, initialOpponentMove, completedMoveScoreByUserMoveIndex],
+  );
+
+  const completedMoveScores = useMemo(
+    () => Array.from(completedMoveScoreByUserMoveIndex.values()),
+    [completedMoveScoreByUserMoveIndex],
+  );
+  const canonicalPostmortemMoves = useMemo(
+    () => buildCanonicalPostmortemMoves({
+      positions: visibleSequencePositions.map((position) => ({
+        ...position,
+        kind: position.userMoveIndex != null
+          ? "user"
+          : position.move
+            ? "engine"
+            : "setup",
+      })),
+      moveScores: completedMoveScores,
+      userMoveIndexByPositionIndex: new Map(
+        visibleSequencePositions.flatMap((position) =>
+          position.userMoveIndex != null ? [[position.index, position.userMoveIndex] as const] : [],
+        ),
+      ),
+    }),
+    [completedMoveScores, visibleSequencePositions],
   );
 
   const activeReplayLastIndex = Math.max(0, visibleSequencePositions.length - 1);
@@ -1662,6 +1575,7 @@ export default function TrainPage() {
 
   const activeExploreIndex = Math.min(exploreIndex, Math.max(0, visibleSequencePositions.length - 1));
   const activeSequencePosition = visibleSequencePositions[activeExploreIndex] ?? visibleSequencePositions[0];
+  const activeCanonicalMove = canonicalPostmortemMoves.find((move) => move.positionIndex === activeExploreIndex) ?? null;
 
   // Dev-only replay state instrumentation
   useEffect(() => {
@@ -1726,12 +1640,19 @@ export default function TrainPage() {
         : lastMove;
   const boardLastMoveBadge = (() => {
     if (!isExploringResults) return null;
+    if (!activeExploratoryPosition?.move) return activeCanonicalMove?.boardBadge ?? null;
     const move = activeExploratoryPosition?.move ?? activeSequencePosition?.move;
     const classification = classificationForPlayedMove(
       move,
       move?.fenBefore ? engineLineCache[move.fenBefore] ?? [] : [],
     );
-    return classification ? buildLastMoveBadge(classification) : null;
+    return classification
+      ? {
+          label: classificationLabel(classification),
+          icon: classificationIcon(classification),
+          color: classificationColor(classification),
+        }
+      : null;
   })();
   const selectedMove =
     selectedMoveIndex != null && selectedMoveIndex > 0 && selectedMoveIndex <= moves.length
@@ -1742,7 +1663,12 @@ export default function TrainPage() {
     selectedMove,
     selectedMove?.fenBefore ? engineLineCache[selectedMove.fenBefore] ?? [] : [],
   );
-  const selectedMoveHighlight = selectedMove && selectedMoveSquares
+  const selectedCanonicalMove = selectedMoveIndex != null
+    ? canonicalPostmortemMoves.find((move) => move.positionIndex === selectedMoveIndex) ?? null
+    : null;
+  const selectedMoveHighlight = selectedCanonicalMove?.boardHighlight
+    ? selectedCanonicalMove.boardHighlight
+    : selectedMove && selectedMoveSquares
     ? { ...selectedMoveSquares, classification: selectedMoveClassification }
     : null;
   const selectedMoveUci = selectedMove?.uci ?? null;
@@ -2230,6 +2156,7 @@ export default function TrainPage() {
               startingFen={startingFen}
               mode={resultMode}
               positions={visibleSequencePositions}
+              canonicalMoves={canonicalPostmortemMoves}
               currentIndex={activeExploreIndex}
               engineLines={classifiedDisplayLines}
               isEngineLinesLoading={isDisplayLoading}
@@ -3193,16 +3120,6 @@ function buildVisibleSequencePositions(params: {
   return positions;
 }
 
-function getAuthoritativeMoveClassification({
-  move,
-  moveScore,
-}: {
-  move?: { classification?: MoveClassification } | null;
-  moveScore?: { classification?: MoveClassification } | null;
-}) {
-  return moveClassification({ move, moveScore });
-}
-
 function lastMoveFromTrainingMove(move?: TrainingMove | null) {
   if (!move?.uci || move.uci.length < 4) return null;
   return {
@@ -3285,6 +3202,34 @@ function buildEvalGraphPoints(
       }
     }
   });
+
+  return points;
+}
+
+function buildEvalGraphPointsFromCanonical(canonicalMoves: CanonicalPostmortemMove[]): EvalGraphPoint[] {
+  const points: EvalGraphPoint[] = [];
+
+  for (const canonicalMove of canonicalMoves) {
+    if (!canonicalMove.move || canonicalMove.kind !== "user") continue;
+    if (points.length === 0 && typeof canonicalMove.evalBefore === "number") {
+      points.push({
+        value: graphValueFromEval(canonicalMove.evalBefore, canonicalMove.mateBefore),
+        positionIndex: Math.max(0, canonicalMove.positionIndex - 1),
+        engineCp: canonicalMove.evalBefore,
+        mate: canonicalMove.mateBefore ?? null,
+      });
+    }
+
+    if (typeof canonicalMove.evalAfter === "number") {
+      points.push({
+        value: graphValueFromEval(canonicalMove.evalAfter, canonicalMove.mateAfter),
+        positionIndex: canonicalMove.positionIndex,
+        classification: canonicalMove.chartPoint?.classification,
+        engineCp: canonicalMove.evalAfter,
+        mate: canonicalMove.mateAfter ?? null,
+      });
+    }
+  }
 
   return points;
 }
@@ -3590,6 +3535,7 @@ function ResultsPanel({
   startingFen,
   mode,
   positions,
+  canonicalMoves,
   currentIndex,
   engineLines,
   currentEngineEval,
@@ -3615,6 +3561,7 @@ function ResultsPanel({
   startingFen: string;
   mode: ResultMode;
   positions: SequencePosition[];
+  canonicalMoves: CanonicalPostmortemMove[];
   currentIndex: number;
   engineLines: EngineLineResult[];
   currentEngineEval?: number;
@@ -3635,7 +3582,7 @@ function ResultsPanel({
   const userMoves = moves
     .map((move, index) => ({ ...move, absoluteIndex: index }))
     .filter((move) => move.side === userSide);
-  const graphPoints = buildEvalGraphPoints(moves, userSide, startingFen);
+  const graphPoints = buildEvalGraphPointsFromCanonical(canonicalMoves);
 
   if (mode === "explore") {
     return (
@@ -3662,6 +3609,7 @@ function ResultsPanel({
         </EvalGraph>
         <AnalysisMoveTable
           moves={userMoves}
+          canonicalMoves={canonicalMoves}
           currentIndex={currentIndex}
           selectedMoveIndex={selectedMoveIndex}
           isAnalyzing={isSaving}
@@ -3694,7 +3642,7 @@ function ResultsPanel({
     <div className="flex flex-1 flex-col gap-4 opacity-80 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
       <EloResultCard result={eloResult} isLoading={isSaving} />
       <EvalGraph points={graphPoints} currentIndex={positions.length - 1} compact engineCp={currentEngineEval} />
-      <AnalysisMoveTable moves={userMoves} isAnalyzing={isSaving} compact showEvaluations={true} asyncMoveEvaluations={asyncMoveEvaluations} />
+      <AnalysisMoveTable moves={userMoves} canonicalMoves={canonicalMoves} isAnalyzing={isSaving} compact showEvaluations={true} asyncMoveEvaluations={asyncMoveEvaluations} />
       <div className="grid grid-cols-2 gap-2 pt-1">
         <button
           type="button"
@@ -3838,6 +3786,7 @@ function EvalGraph({
 
 function AnalysisMoveTable({
   moves,
+  canonicalMoves,
   currentIndex,
   selectedMoveIndex,
   isAnalyzing,
@@ -3848,6 +3797,7 @@ function AnalysisMoveTable({
   asyncMoveEvaluations,
 }: {
   moves: Array<TrainingMove & { absoluteIndex?: number }>;
+  canonicalMoves?: CanonicalPostmortemMove[];
   currentIndex?: number;
   selectedMoveIndex?: number | null;
   isAnalyzing?: boolean;
@@ -3870,12 +3820,19 @@ function AnalysisMoveTable({
       ) : null}
       {moves.map((move, index) => {
         const positionIndex = (move.absoluteIndex ?? index) + 1;
+        const canonicalMove = canonicalMoves?.find((entry) => entry.positionIndex === positionIndex) ?? null;
+        const canonicalRow = canonicalMove?.tableRow ?? null;
         const isSelected = selectedMoveIndex != null && selectedMoveIndex === positionIndex;
         const pendingValue = isAnalyzing ? "..." : "--";
         const moveScore = asyncMoveEvaluations?.[move.absoluteIndex ?? index]?.moveScore;
         const visibleClassification = showEvaluations
-          ? getAuthoritativeMoveClassification({ move, moveScore })
+          ? canonicalRow?.classification ?? getAuthoritativeMoveClassification({ move, moveScore })
           : undefined;
+        const evalBefore = canonicalRow?.evalBefore ?? move.evalBefore;
+        const evalAfter = canonicalRow?.evalAfter ?? move.evalAfter;
+        const mateBefore = canonicalRow?.mateBefore ?? move.mateBefore;
+        const mateAfter = canonicalRow?.mateAfter ?? move.mateAfter;
+        const cpLoss = canonicalRow?.cpLoss ?? move.cpLoss;
         return (
         <button
           type="button"
@@ -3893,7 +3850,7 @@ function AnalysisMoveTable({
           }}
           onPointerEnter={() => {
             const squares = moveFromUci(move.uci);
-            onHoverMove?.(squares ? { ...squares, classification: visibleClassification } : null);
+            onHoverMove?.(squares ? { ...squares, classification: canonicalMove?.boardHighlight?.classification ?? visibleClassification } : null);
           }}
           onPointerLeave={() => onHoverMove?.(null)}
         >
@@ -3904,13 +3861,13 @@ function AnalysisMoveTable({
             </span>
           </span>
           <span className="overflow-hidden whitespace-nowrap text-left tabular-nums text-[var(--app-muted)]">
-            {typeof move.evalBefore === "number" ? formatEvalLabel(move.evalBefore, move.mateBefore) : pendingValue}
+            {typeof evalBefore === "number" ? formatEvalLabel(evalBefore, mateBefore) : pendingValue}
           </span>
           <span className="overflow-hidden whitespace-nowrap text-left tabular-nums text-[var(--app-muted)]">
-            {typeof move.evalAfter === "number" ? formatEvalLabel(move.evalAfter, move.mateAfter) : pendingValue}
+            {typeof evalAfter === "number" ? formatEvalLabel(evalAfter, mateAfter) : pendingValue}
           </span>
           <span className="overflow-hidden whitespace-nowrap text-left tabular-nums text-[var(--app-muted)]">
-            {showEvaluations ? formatLossLabel(move.cpLoss, move.mateAfter) : pendingValue}
+            {showEvaluations ? formatLossLabel(cpLoss, mateAfter) : pendingValue}
           </span>
         </button>
         );

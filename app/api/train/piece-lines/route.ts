@@ -58,9 +58,15 @@ export async function POST(request: Request) {
       bestSan: uciToSan(fen, line.bestMove),
       pv: line.pv,
       pvSan: pvToSan(fen, line.pv),
+      continuationSan: continuationSan(fen, line.bestMove, line.pv),
       classification: classifyMoveAgainstBest(bestLine, line, fen),
     })),
   });
+}
+
+function continuationSan(fen: string, bestMove: string, pv: string[]) {
+  const continuation = Array.isArray(pv) && pv[0] === bestMove ? pv.slice(1) : pv;
+  return pvToSan(fen, continuation);
 }
 
 function isValidFen(fen: string) {

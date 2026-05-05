@@ -89,7 +89,7 @@ function PrimaryLink({ href, children }: { href: string; children: React.ReactNo
   return (
     <Link
       href={href}
-      className="app-brutal-button inline-flex min-h-12 items-center justify-center px-5 py-3 text-sm"
+      className="app-brutal-button inline-flex min-h-12 items-center justify-center px-5 py-3 text-sm !text-[#050505]"
     >
       {children}
     </Link>
@@ -153,7 +153,7 @@ function HeroVisual() {
           }}
         />
 
-        <div className="relative z-10 aspect-square w-full max-w-[min(92vw,38rem,68vh)]">
+        <div className="relative z-10 aspect-square w-full">
           <TrainingBoard />
         </div>
       </div>
@@ -220,7 +220,7 @@ export default async function LandingPage() {
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-transparent">
       <PublicHeaderClient isSignedIn={isSignedIn} />
       <main className="min-h-0 flex-1 overflow-y-auto overflow-x-clip">
-        <section className="mx-auto grid w-full min-w-0 max-w-full overflow-x-clip gap-12 px-5 py-14 md:max-w-4xl md:grid-cols-[1.02fr_0.98fr] md:items-center md:px-10 md:py-20">
+        <section className="mx-auto grid w-full min-w-0 max-w-full overflow-x-clip gap-12 px-5 py-14 md:max-w-[96rem] md:grid-cols-[1fr_1.3fr] md:items-center md:px-10 md:py-20">
           <div>
             <h1 className="max-w-3xl text-[clamp(2.75rem,4.8vw,4.25rem)] font-black leading-[0.98] tracking-[-0.06em] text-[var(--app-text)]">
               Chess training for the positions you{" "}
@@ -228,7 +228,7 @@ export default async function LandingPage() {
             </h1>
 
             <p className="mt-6 max-w-xl text-base leading-8 text-[var(--app-muted)]">
-              <span className="font-bold uppercase leading-none text-[var(--app-text)]">Blindspots</span><span className="font-bold uppercase leading-none text-[var(--app-accent)]">.gg</span> finds the chess positions you mishandle, then uses suspicious math to recommend other positions likely to hurt the same way.
+              <span className="font-bold uppercase leading-none text-[var(--app-text)]">Blindspots</span><span className="font-bold uppercase leading-none text-[var(--app-accent)]">.gg</span> finds the positions you blundered in your own games and serves them back to you until you stop failing them. We have plenty of time. Hopefully...
             </p>
 
             <div className="mt-9 flex flex-wrap gap-3">
