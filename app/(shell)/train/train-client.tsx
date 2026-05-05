@@ -1436,15 +1436,49 @@ export default function TrainPage() {
     () => initialOpponentMove ? [initialOpponentMove, ...moves] : moves,
     [initialOpponentMove, moves],
   );
+  const completedMoveScoreByUserMoveIndex = useMemo(() => {
+    const map = new Map<number, MoveScore>();
+    for (const key of Object.keys(asyncMoveEvaluations)) {
+      const eval_ = asyncMoveEvaluations[Number(key)];
+      if (eval_?.status === "done" && eval_.moveScore) {
+        map.set(eval_.moveScore.userMoveIndex, eval_.moveScore);
+      }
+    }
+    return map;
+  }, [asyncMoveEvaluations]);
+
   const visibleSequencePositions = useMemo(
     () => startingFen
       ? buildVisibleSequencePositions({
           startingFen,
           moves,
           initialOpponentMove,
+        }).map((position) => {
+          if (position.pitchIndex != null) {
+            const moveScore = completedMoveScoreByUserMoveIndex.get(position.pitchIndex);
+            const classification = getAuthoritativeMoveClassification({
+              move: position.move,
+              moveScore,
+            });
+            return {
+              ...position,
+              move: position.move
+                ? {
+                    ...position.move,
+                    cpLoss: moveScore?.cpLoss ?? position.move.cpLoss,
+                    evalBefore: moveScore?.evalBefore ?? position.move.evalBefore,
+                    evalAfter: moveScore?.evalAfter ?? position.move.evalAfter,
+                    mateBefore: moveScore?.mateBefore ?? position.move.mateBefore,
+                    mateAfter: moveScore?.mateAfter ?? position.move.mateAfter,
+                    classification: classification ?? position.move.classification,
+                  }
+                : position.move,
+            };
+          }
+          return position;
         })
       : [],
-    [startingFen, moves, initialOpponentMove],
+    [startingFen, moves, initialOpponentMove, completedMoveScoreByUserMoveIndex],
   );
 
   const activeReplayLastIndex = Math.max(0, visibleSequencePositions.length - 1);
@@ -1546,13 +1580,7 @@ export default function TrainPage() {
         : lastMove;
   const boardLastMoveBadge = (() => {
     if (isExploringResults && !activeExploratoryPosition && !exploratoryFen) {
-      const moveScore = activeSequencePosition?.pitchIndex != null
-        ? asyncMoveEvaluations[activeSequencePosition.pitchIndex]?.moveScore
-        : null;
-      const classification = getAuthoritativeMoveClassification({
-        move: activeSequencePosition?.move,
-        moveScore,
-      });
+      const classification = activeSequencePosition?.move?.classification;
       if (classification) return buildLastMoveBadge(classification);
       return null;
     }
