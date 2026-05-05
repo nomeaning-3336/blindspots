@@ -9,7 +9,11 @@ const {
   DEFAULT_BLINDSPOTS_ELO,
   buildLastMoveBadge,
   classificationIcon,
+  classificationForPlayedMove,
+  engineLineContinuationSan,
   formatClassifiedMoveLead,
+  mergeEngineLineDetailsFrom,
+  moveClassification,
   moveHighlightFill,
   moveHighlightsForClassifiedMove,
   getTrainingBoardHighlights,
@@ -96,6 +100,105 @@ test("classified move highlights use the move classification on both squares", (
       color: "color-mix(in srgb, var(--app-class-blunder) 52%, transparent)",
     },
   ]);
+});
+
+test("played move classification can be recovered from matching engine lines", () => {
+  assert.equal(
+    classificationForPlayedMove(
+      { uci: "f4e5", classification: undefined },
+      [
+        { bestMove: "g8f6", classification: "best" },
+        { bestMove: "f4e5", classification: "mistake" },
+      ],
+    ),
+    "mistake",
+  );
+  assert.equal(
+    classificationForPlayedMove(
+      { uci: "d7d5", classification: "excellent" },
+      [{ bestMove: "d7d5", classification: "blunder" }],
+    ),
+    "excellent",
+  );
+});
+
+test("completed move classification wins over stale async move score classification", () => {
+  assert.equal(
+    moveClassification({
+      move: { classification: "inaccuracy" },
+      moveScore: { classification: "okay" },
+    }),
+    "inaccuracy",
+  );
+  assert.equal(
+    moveClassification({
+      move: {},
+      moveScore: { classification: "inaccuracy" },
+    }),
+    "inaccuracy",
+  );
+});
+
+test("deeper engine line merge can keep the current classification for the same move", () => {
+  assert.deepEqual(
+    mergeEngineLineDetailsFrom(
+      { bestMove: "g8f6", depth: 18, classification: "okay", pvSan: ["Nf6", "Bc4"] },
+      { bestMove: "g8f6", depth: 22, classification: "best", pvSan: ["Nf6", "Bc4", "Be6"] },
+      "current",
+    ),
+    { bestMove: "g8f6", depth: 22, classification: "okay", pvSan: ["Nf6", "Bc4", "Be6"] },
+  );
+});
+
+test("deeper engine line merge can prefer a fresh next classification", () => {
+  assert.deepEqual(
+    mergeEngineLineDetailsFrom(
+      { bestMove: "g8f6", depth: 18, classification: "best", pvSan: ["Nf6"] },
+      { bestMove: "g8f6", depth: 22, classification: "okay", pvSan: ["Nf6", "Bc4", "Be6"] },
+      "next",
+    ),
+    { bestMove: "g8f6", depth: 22, classification: "okay", pvSan: ["Nf6", "Bc4", "Be6"] },
+  );
+});
+
+test("engine line continuation omits the lead move without repeating it", () => {
+  assert.equal(
+    engineLineContinuationSan({
+      bestMove: "g8e7",
+      bestSan: "Nge7",
+      continuationSan: ["Bc4", "Be6"],
+      pv: ["g8e7"],
+      pvSan: ["Nge7"],
+    }),
+    "Bc4 Be6",
+  );
+  assert.equal(
+    engineLineContinuationSan({
+      bestMove: "g8e7",
+      bestSan: "Nge7",
+      pv: ["g8e7"],
+      pvSan: ["Nge7"],
+    }),
+    "",
+  );
+  assert.equal(
+    engineLineContinuationSan({
+      bestMove: "g8f6",
+      bestSan: "Nf6",
+      pv: ["g8f6", "f1c4", "c8e6"],
+      pvSan: ["Nf6", "Bc4", "Be6"],
+    }),
+    "Bc4 Be6",
+  );
+  assert.equal(
+    engineLineContinuationSan({
+      bestMove: "g8e7",
+      bestSan: "Nge7",
+      pv: ["f1c4", "c8e6"],
+      pvSan: ["Bc4", "Be6"],
+    }),
+    "Bc4 Be6",
+  );
 });
 
 test("moveBadgeForPosition omits unclassified and starting positions", () => {

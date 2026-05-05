@@ -52,7 +52,7 @@ function HeaderLink({
     <Link
       href={href}
       className={[
-        "inline-flex min-h-9 items-center justify-center px-4 py-2 text-xs",
+        "inline-flex min-h-9 items-center justify-center px-4 py-2 text-xs !text-[#050505]",
         primary
           ? "app-brutal-button"
           : "app-brutal-button",

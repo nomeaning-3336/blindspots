@@ -2,7 +2,7 @@
 
 Blindspots.gg is a position-based chess training tool that drills the mistakes you actually made in your own games.
 
-It pulls your recent Lichess games, runs Stockfish over every move you played, and finds the positions where you lost evaluation. Those positions become your training material. You play them back from one move before the mistake, against a configurable opponent, and the system grades you on how well you preserve the position over a short sequence.
+It pulls your recent games from Lichess or Chess.com, runs Stockfish over every move you played, and finds the positions where you lost evaluation. Those positions become your training material. You play them back from one move before the mistake, against a configurable opponent, and the system grades you on how well you preserve the position over a short sequence. As you play more sequences, the mistakes you make during training are reincorporated into the mistakes queue — so the material evolves beyond your original games. If you leave the platform, play some games elsewhere, and come back, the system re-syncs your profile, analyzes the new games, and imports any fresh mistakes into the queue.
 
 The product does not generate streaks, achievements, or motivational notifications. It does not have an AI coach. It has a database, an engine, and a willingness to be honest about your chess.
 
@@ -14,9 +14,9 @@ Blindspots.gg is not a puzzle trainer. There are no forcing lines or one-move so
 
 The main loop is:
 
-1. Pull the user's recent Lichess games (incrementally on each visit).
+1. Pull the user's recent games from their linked Lichess or Chess.com profile (incrementally on each visit).
 2. Run Stockfish over the user's moves and identify mistakes.
-3. Each mistake becomes a training position, queued from one move before the blunder.
+3. Each mistake becomes a training position, queued from one move before the blunder. Mistakes made during training are also reincorporated into the queue.
 4. The user plays the position out against the configured opponent.
 5. Stockfish silently tracks evaluation across the sequence.
 6. The session ends with an eval graph and an optional reflection note.
@@ -30,9 +30,9 @@ Every training session pulls from three queues, in priority order:
 
 **Review queue.** Positions the user previously failed in training, scheduled by spaced repetition. If a position is due today, it goes in this session. This is the highest-priority queue — the whole product depends on users coming back and re-confronting positions they couldn't handle the first time.
 
-**Active queue.** New mistakes from games the user has played since their last sync. Pulled fresh from Lichess on each visit. Recent games (last 7 days) are prioritized over older ones, since fresh mistakes are easier to remember and more emotionally salient.
+**Active queue.** New mistakes from games the user has played since their last sync. Pulled fresh from their linked Lichess or Chess.com profile on each visit. Recent games (last 7 days) are prioritized over older ones, since fresh mistakes are easier to remember and more emotionally salient.
 
-**Filler queue.** Curated positions used only when the review queue and active queue are empty. Drawn from the Lichess puzzle database, biased toward themes the user has historically struggled with based on their mistake history. This is what keeps the product useful on quiet weeks when the user hasn't played new games and has no review-due positions.
+**Filler queue.** Curated positions sourced from the Lichess puzzle database (80%) and master game positions (20%), biased toward themes the user has historically struggled with based on their mistake history. Every time the system serves a position, there is a 20% chance it comes from the filler queue instead of the review or active queues — this ensures the player still works on tactical diversity rather than only positional patterns from their own games. On quiet weeks when the user hasn't played new games and has no review-due positions, the filler queue keeps the product useful.
 
 A typical session is 5-10 positions: review-due first, then active, then filler if needed. Anything beyond the cap goes into a backlog the user sees next session.
 
@@ -64,9 +64,9 @@ Compatibility aliases may exist during migration, but new product work targets t
 - Existing standalone analysis runtime for the `/analysis` surface.
 - Stockfish for both the silent evaluation tracking during training sequences and the offline mistake-detection pass over user games.
 - Configurable opponent move generation during training: Maia-2 by default for human-like play near the user's Elo, Stockfish at reduced strength for principled engine opposition, or Leela as a middle-ground opponent.
-- Lichess API for game ingestion. Lichess puzzle database for the filler queue.
+- Lichess API and Chess.com API for game ingestion. Lichess puzzle database and curated master game positions for the filler queue.
 
-There is no embedding pipeline in the product runtime. Position similarity is not used for recommendation. Theme tagging on filler positions uses the Lichess puzzle theme labels directly.
+There is no embedding pipeline in the product runtime. Position similarity is not used for recommendation. 
 
 ## What Gets Persisted
 
@@ -95,7 +95,7 @@ Per mistake (one row per identified mistake from a user's games):
 
 Per linked profile:
 
-- Lichess username, last sync timestamp, last game ID seen
+- Lichess username and/or Chess.com username, last sync timestamp, last game ID seen
 - opening preferences (e.g., "I play Caro-Kann as Black")
 - opponent strength preferences
 - session size preferences
@@ -104,9 +104,9 @@ Per linked profile:
 
 In order:
 
-1. **User's own games from linked Lichess.** Primary source once the user has any game data. Pulled incrementally on each session.
+1. **User's own games from linked Lichess or Chess.com profile.** Primary source once the user has any game data. Pulled incrementally on each session.
 2. **Imported PGNs.** Optional manual import for users with games elsewhere.
-3. **Lichess puzzle database, theme-biased.** Used as filler when the user's queues are empty. Filtered to a rating band slightly above the user's current Blindspots Elo. Themes are biased toward the user's historical mistake patterns (e.g., user has 12 back-rank failures → filler skews toward back-rank tactics).
+3. **Filler queue (Lichess puzzles 80% + master games 20%, theme-biased).** Injected with a 20% probability on each position serve. Filtered to a rating band slightly above the user's current Blindspots Elo. Themes are biased toward the user's historical mistake patterns (e.g., user has 12 back-rank failures → filler skews toward back-rank tactics). Master game positions provide tactical diversity beyond puzzle-like patterns.
 4. **Lichess puzzle database, generic.** Last-resort fallback for cold-start users with no game data and no theme history.
 
 Opening preferences (configured at the profile level, not per-session) further filter all of the above. If a user has told the system they play the Caro-Kann as Black, every Black-to-move position should pull preferentially from Caro-Kann structures across all four sourcing tiers.

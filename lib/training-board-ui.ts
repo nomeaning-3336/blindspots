@@ -14,6 +14,16 @@ export type ClassifiedSequencePosition = {
   } & Record<string, unknown>;
 } & Record<string, unknown>;
 
+export type ClassifiedMoveLine = {
+  bestMove?: string;
+  classification?: MoveClassification;
+  bestSan?: string;
+  depth?: number;
+  pv?: string[];
+  pvSan?: string[];
+  continuationSan?: string[];
+};
+
 export const DEFAULT_BLINDSPOTS_ELO = 1200;
 export const DRIFT_BOARD_HIGHLIGHTS = {
   b8: "color-mix(in srgb, var(--app-class-mistake) 42%, #7f8190 58%)",
@@ -30,6 +40,57 @@ export function buildLastMoveBadge(classification: MoveClassification): LastMove
 export function moveBadgeForPosition(position?: ClassifiedSequencePosition | null) {
   const classification = position?.move?.classification;
   return classification ? buildLastMoveBadge(classification) : null;
+}
+
+export function classificationForPlayedMove(
+  move: { uci?: string; classification?: MoveClassification } | null | undefined,
+  lines: ClassifiedMoveLine[] = [],
+) {
+  if (move?.classification) return move.classification;
+  const uci = move?.uci;
+  if (!uci) return undefined;
+  return lines.find((line) => line.bestMove === uci)?.classification;
+}
+
+export function moveClassification({
+  move,
+  moveScore,
+}: {
+  move?: { classification?: MoveClassification } | null;
+  moveScore?: { classification?: MoveClassification } | null;
+}) {
+  return move?.classification ?? moveScore?.classification;
+}
+
+export function mergeEngineLineDetailsFrom<T extends ClassifiedMoveLine>(
+  current: T,
+  next: T,
+  classificationSource: "current" | "next",
+): T {
+  return {
+    ...current,
+    ...next,
+    classification:
+      classificationSource === "current"
+        ? current.classification ?? next.classification
+        : next.classification ?? current.classification,
+  };
+}
+
+export function engineLineContinuationSan(line: ClassifiedMoveLine) {
+  if (Array.isArray(line.continuationSan)) {
+    return line.continuationSan.slice(0, 12).join(" ");
+  }
+
+  const san = Array.isArray(line.pvSan) ? line.pvSan : [];
+  if (san.length === 0) return "";
+
+  const startsWithLead =
+    san[0] === line.bestSan ||
+    (Array.isArray(line.pv) && line.pv[0] === line.bestMove);
+  const continuation = startsWithLead ? san.slice(1) : san;
+
+  return continuation.slice(0, 12).join(" ");
 }
 
 export function getTrainingBoardHighlights(state: "active" | "resolving" | "complete" | "drift") {
