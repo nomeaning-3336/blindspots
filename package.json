@@ -15,6 +15,7 @@
     "db:query": "node --env-file=.env.agent.local scripts/db-query.mjs",
     "test:performance-time-management": "node --test --experimental-strip-types tests/performance-time-management.test.ts",
     "test:performance-client-analysis": "node --test --experimental-strip-types tests/performance-client-analysis.test.ts",
+    "test:auth-magic-link": "node --test --experimental-strip-types tests/auth-magic-link.test.ts",
     "test:train-postmortem": "node --test --experimental-strip-types tests/train-postmortem-view-model.test.ts",
     "test:train-engine-line-cache": "node --test --experimental-strip-types tests/train-engine-line-cache.test.ts",
     "test:train": "npm run test:train-postmortem && npm run test:train-engine-line-cache",

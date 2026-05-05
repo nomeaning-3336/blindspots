@@ -108,8 +108,27 @@ export async function POST(request: Request) {
 }
 
 function continuationSan(fen: string, bestMove: string, pv: string[]) {
-  const continuation = Array.isArray(pv) && pv[0] === bestMove ? pv.slice(1) : pv;
-  return pvToSan(fen, continuation);
+  if (!Array.isArray(pv) || pv.length === 0) return [];
+
+  const startsWithBestMove = pv[0] === bestMove;
+  if (!startsWithBestMove) {
+    return pvToSan(fen, pv);
+  }
+
+  try {
+    const chess = new Chess(fen);
+    const firstMove = chess.move({
+      from: bestMove.slice(0, 2),
+      to: bestMove.slice(2, 4),
+      promotion: bestMove[4],
+    });
+
+    if (!firstMove) return [];
+
+    return pvToSan(chess.fen(), pv.slice(1));
+  } catch {
+    return [];
+  }
 }
 
 function isValidFen(fen: string) {
@@ -138,15 +157,24 @@ function uciToSan(fen: string, uci: string) {
 function pvToSan(fen: string, pv: string[]) {
   const chess = new Chess(fen);
   const san: string[] = [];
+
   for (const uci of pv.slice(0, TRAIN_ENGINE_PV_MOVES_SHOWN)) {
-    const move = chess.move({
-      from: uci.slice(0, 2),
-      to: uci.slice(2, 4),
-      promotion: uci[4],
-    });
-    if (!move) break;
-    san.push(move.san);
+    if (typeof uci !== "string" || uci.length < 4) break;
+
+    try {
+      const move = chess.move({
+        from: uci.slice(0, 2),
+        to: uci.slice(2, 4),
+        promotion: uci[4],
+      });
+
+      if (!move) break;
+      san.push(move.san);
+    } catch {
+      break;
+    }
   }
+
   return san;
 }
 

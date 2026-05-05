@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server";
 import { normalizeNextPath } from "@/lib/app-auth";
+import {
+  buildMagicLinkCallbackUrl,
+  buildMagicLinkSentUrl,
+} from "@/lib/auth-magic-link";
+import { publicUrl } from "@/lib/public-origin";
 
 function getFormValue(formData: FormData, name: string) {
   const value = formData.get(name);
@@ -13,7 +18,7 @@ function redirectWithQuery(
   nextPath: string,
   params: Record<string, string>,
 ) {
-  const url = new URL(pathname, request.url);
+  const url = publicUrl(request, pathname);
   url.searchParams.set("next", nextPath);
 
   Object.entries(params).forEach(([key, value]) => {
@@ -33,8 +38,6 @@ export async function POST(request: Request) {
       error: "missing-email",
     });
   }
-
-  const origin = new URL(request.url).origin;
   const { supabase, applyCookies } = await createSupabaseRouteHandlerClient();
 
   let error;
@@ -42,7 +45,7 @@ export async function POST(request: Request) {
     const result = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
+        emailRedirectTo: buildMagicLinkCallbackUrl(request, nextPath),
         shouldCreateUser: true,
       },
     });
@@ -63,7 +66,7 @@ export async function POST(request: Request) {
 
   return applyCookies(
     NextResponse.redirect(
-      new URL(`/auth/email?next=${encodeURIComponent(nextPath)}&sent=true&email=${encodeURIComponent(email)}`, request.url),
+      buildMagicLinkSentUrl(request, nextPath, email),
       303,
     ),
   );
