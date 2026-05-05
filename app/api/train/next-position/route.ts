@@ -25,7 +25,6 @@ import { normalizeBucketStats, thompsonSample, type BucketStats } from "@/lib/tr
 import { getPositionMateStatus } from "@/lib/engines/dispatcher";
 import { getOpponentElo } from "@/lib/training/elo";
 import { getNextMistakeForTraining, normalizeUserMistakeForTraining } from "@/lib/training/mistake-store";
-import { syncLichessMistakesForUser } from "@/lib/training/lichess-sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -179,71 +178,10 @@ if (!optionalError && optionalData) {
     }
   }
 
-  // No row-based mistake found — try a small Lichess sync if profile exists and hasn't synced recently
-  const { data: lichessProfiles } = await supabase
-    .from("linked_chess_profiles")
-    .select("id, last_sync_at")
-    .eq("user_id", userId)
-    .eq("provider", "lichess")
-    .limit(1);
-
-  const MIN_SYNC_INTERVAL_MS = 30 * 60 * 1000;
-  const shouldSync = lichessProfiles?.some((p) => {
-    if (!p.last_sync_at) return true;
-    return Date.parse(p.last_sync_at) + MIN_SYNC_INTERVAL_MS < Date.now();
-  });
-
-  if (shouldSync) {
-    try {
-      await syncLichessMistakesForUser({
-        userId,
-        maxGames: 1,
-        maxUserMoves: 12,
-        maxMistakes: 5,
-        sinceDays: 30,
-      });
-      const retryResult = await getNextMistakeForTraining(userId);
-      if (retryResult.mistake) {
-        const normalized = normalizeUserMistakeForTraining(retryResult.mistake);
-        const mistake = retryResult.mistake;
-        if (isValidFen(mistake.starting_fen)) {
-          const tags = normalizeThemeTags(mistake.theme_tags);
-          const response: NextPositionResponse = {
-            mistakeId: normalized.id,
-            fen: normalized.fen,
-            decisionFen: normalized.decisionFen ?? undefined,
-            previousFen: normalized.previousFen ?? undefined,
-            playedMove: normalized.playedMove ?? undefined,
-            actualMoveUci: normalized.actualMoveUci ?? undefined,
-            actualMoveSan: normalized.actualMoveSan ?? undefined,
-            bestMoveUci: normalized.bestMoveUci ?? undefined,
-            bestMoveSan: normalized.bestMoveSan ?? undefined,
-            source: normalized.source,
-            queueSource: retryResult.queueSource ?? undefined,
-            selectedServeMode: retryResult.queueSource ?? undefined,
-            tags,
-            openingName: mistake.opening_name ?? undefined,
-            eco: mistake.eco ?? undefined,
-            cpLoss: mistake.cp_loss ?? undefined,
-            sequenceLength,
-            challengeElo,
-          };
-          if (process.env.NODE_ENV !== "production") {
-            response.debug = {
-              queueSource: retryResult.queueSource,
-              mistakeId: normalized.id,
-              sourceType: mistake.source_type,
-              rowBased: true,
-              autoSynced: true,
-            };
-          }
-          return NextResponse.json(response);
-        }
-      }
-    } catch {
-      // Auto-sync failed silently — fall through to legacy
-    }
-  }
+  // Do not run Lichess sync inside /api/train/next-position.
+  // This endpoint must stay fast and only serve an already-available position.
+  // Profile/game syncing belongs in onboarding, explicit account sync, or a background job.
+  // If no row-based mistake is ready, fall through to seeded/legacy queue selection.
 
   const queues = await ensureTrainingQueuesHavePositions({
     ...queuesBeforeRefill,

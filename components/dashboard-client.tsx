@@ -188,7 +188,7 @@ function QueueSummaryCards({ summary }: { summary: DashboardSummary }) {
   return (
     <section className="app-brutal-section p-5 md:p-6">
       <SectionLabel>Queue overview</SectionLabel>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
         {visible.map((item) => (
           <div
             key={item.key}
