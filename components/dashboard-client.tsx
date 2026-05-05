@@ -54,20 +54,20 @@ export function DashboardClient({ summary }: { summary: DashboardSummary }) {
   return (
     <main className="app-paper-shell min-h-[calc(100dvh-64px)] overflow-x-hidden px-4 py-5 md:px-8">
       <div className="mx-auto grid w-full max-w-[1180px] gap-5">
-        <section className="app-brutal-section p-5 md:p-6">
-          <Hero summary={summary} hasData={hasData} />
-          <div className="mt-5 flex justify-center">
-            <ViewToggle view={view} setView={setView} />
-          </div>
-        </section>
+        <DashboardHero
+          summary={summary}
+          hasData={hasData}
+          view={view}
+          setView={setView}
+        />
 
-        <section className="app-brutal-section p-5 md:p-6">
-          {view === "summary" ? (
-            <SummaryTab summary={summary} hasData={hasData} />
-          ) : (
+        {view === "summary" ? (
+          <SummaryTab summary={summary} hasData={hasData} />
+        ) : (
+          <section className="app-brutal-section p-5 md:p-6">
             <PositionsTab positions={summary.positions} />
-          )}
-        </section>
+          </section>
+        )}
 
         {view === "summary" && (
           <RecentActivitySection
@@ -80,16 +80,93 @@ export function DashboardClient({ summary }: { summary: DashboardSummary }) {
   );
 }
 
+/* ─── Dashboard Hero ─── */
+
+function DashboardHero({
+  summary,
+  hasData,
+  view,
+  setView,
+}: {
+  summary: DashboardSummary;
+  hasData: boolean;
+  view: DashboardView;
+  setView: (view: DashboardView) => void;
+}) {
+  const elo = summary.blindspotsElo;
+  const delta = summary.eloDeltaSession;
+  const reviewDue = summary.queueOverview.reviewDue;
+  const lastSession = formatDate(summary.lastSessionAt).text;
+
+  const meta = [
+    reviewDue > 0 ? `${formatNumber(reviewDue)} due for review` : "No reviews due",
+    summary.lastSessionAt ? `Last trained ${lastSession}` : "No sessions yet",
+  ];
+
+  return (
+    <section className="app-brutal-section p-5 md:p-6">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,0.34fr)_minmax(0,0.66fr)] lg:items-center">
+        <div className="flex min-w-0 flex-col gap-5">
+          <div>
+            <div className="app-eyebrow mb-3">Dashboard</div>
+            <div className="text-[64px] font-bold leading-none text-[var(--app-text)] md:text-[76px]">
+              {elo == null ? "-" : formatNumber(elo)}
+            </div>
+
+            {delta != null && (
+              <div className={["mt-2 text-sm font-bold", deltaClass(delta)].join(" ")}>
+                {signed(delta)} from last session
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
+              {meta.map((item) => (
+                <span key={item}>{item}</span>
+              ))}
+            </div>
+
+            {!hasData && (
+              <p className="mt-3 max-w-sm text-xs leading-6 text-[var(--app-muted)]">
+                No completed sessions yet. Go train. The dashboard is not psychic.
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href="/train"
+              className="app-brutal-button inline-flex min-h-11 items-center justify-center px-5 py-3 text-xs"
+            >
+              Continue training
+            </Link>
+            <ViewToggle view={view} setView={setView} />
+          </div>
+        </div>
+
+        <div className="min-w-0 lg:border-l lg:border-[var(--app-border-soft)] lg:pl-6">
+          <SectionLabel right={summary.eloHistory.length >= 2 ? "trend" : undefined}>
+            Blindspots Elo
+          </SectionLabel>
+          {summary.eloHistory.length >= 2 ? (
+            <EloChart points={summary.eloHistory} />
+          ) : (
+            <div className="flex min-h-[180px] items-center justify-center text-center text-[10px] uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
+              {summary.eloHistory.length === 0
+                ? "Complete a session to start tracking Elo."
+                : "One session recorded. Keep going to see a trend."}
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ─── Summary Tab ─── */
 
 function SummaryTab({ summary, hasData }: { summary: DashboardSummary; hasData: boolean }) {
   return (
     <div className="grid gap-5">
-      <EloSection
-        elo={summary.blindspotsElo}
-        delta={summary.eloDeltaSession}
-        history={summary.eloHistory}
-      />
       <QueueSummaryCards summary={summary} />
       <ProgressSnapshot summary={summary} hasData={hasData} />
       <MoveClassifications classifications={summary.classifications} />
@@ -99,42 +176,64 @@ function SummaryTab({ summary, hasData }: { summary: DashboardSummary; hasData: 
 
 function QueueSummaryCards({ summary }: { summary: DashboardSummary }) {
   const q = summary.queueOverview;
+  const items = [
+    { key: "reviewDue", label: "Review due", value: q.reviewDue, accent: true },
+    { key: "active", label: "Active", value: q.active },
+    { key: "filler", label: "Random", value: q.filler },
+    { key: "mastered", label: "Mastered", value: q.mastered },
+    { key: "retired", label: "Retired", value: q.retired },
+  ];
+
+  const prominent = items.filter((item) => item.value > 0);
+  const muted = items.filter((item) => item.value === 0);
+  const visible = prominent.length > 0 ? prominent : items;
+
   return (
-    <div>
+    <section className="app-brutal-section p-5 md:p-6">
       <SectionLabel>Queue overview</SectionLabel>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-        <QueueTile label="Review due" value={q.reviewDue} accent />
-        <QueueTile label="Active" value={q.active} />
-        <QueueTile label="Random" value={q.filler} />
-        <QueueTile label="Mastered" value={q.mastered} />
-        <QueueTile label="Retired" value={q.retired} />
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {visible.map((item) => (
+          <QueueTile
+            key={item.key}
+            label={item.label}
+            value={item.value}
+            accent={item.accent}
+            muted={item.value === 0}
+          />
+        ))}
+      </div>
+
+      {prominent.length > 0 && muted.length > 0 && (
+        <div className="mt-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
+          {muted.map((item) => `0 ${item.label.toLowerCase()}`).join(" · ")}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ─── Elo Chart ─── */
+
+function EloChart({ points }: { points: EloHistoryPoint[] }) {
+            key={`${p.ts}-${i}`}
+            cx={p.x}
+            cy={p.y}
+            r={i === svgPoints.length - 1 ? 4 : 3}
+            fill={i === svgPoints.length - 1 ? "var(--app-accent)" : "var(--app-panel-solid)"}
+            stroke="var(--app-text)"
+            strokeWidth="1.5"
+          />
+        ))}
+      </svg>
+      <div className="mt-1 flex items-center justify-between text-[9px] uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
+        <span>{startLabel}</span>
+        <span>{endLabel}</span>
       </div>
     </div>
   );
 }
 
-function EloSection({ elo, delta, history }: { elo: number | null; delta: number | null; history: EloHistoryPoint[] }) {
-  return (
-    <div className="app-brutal-section-soft flex flex-col items-center p-5 md:p-7">
-      <div className="w-full"><SectionLabel>Blindspots Elo</SectionLabel></div>
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:gap-8">
-        <div className="shrink-0">
-          <div className="text-[56px] font-bold leading-none text-[var(--app-text)] md:text-[68px]">
-            {elo == null ? "-" : formatNumber(elo)}
-          </div>
-        </div>
-        {history.length >= 2 && <EloChart points={history} />}
-      </div>
-      {history.length < 2 && (
-        <p className="mt-3 text-center text-[10px] uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
-          {history.length === 0
-            ? "Complete a session to start tracking Elo."
-            : "One session recorded. Keep going to see a trend."}
-        </p>
-      )}
-    </div>
-  );
-}
+/* ─── Elo Chart ─── */
 
 function EloChart({ points }: { points: EloHistoryPoint[] }) {
   const width = 920;
@@ -554,7 +653,7 @@ function Hero({ summary, hasData }: { summary: DashboardSummary; hasData: boolea
 
 function ProgressSnapshot({ summary, hasData }: { summary: DashboardSummary; hasData: boolean }) {
   return (
-    <div>
+    <section className="app-brutal-section p-5 md:p-6">
       <SectionLabel>Progress snapshot</SectionLabel>
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
         <StatTile label="Sequences Completed" value={hasData ? formatNumber(summary.totalSequences) : "-"} />
@@ -569,24 +668,24 @@ function ProgressSnapshot({ summary, hasData }: { summary: DashboardSummary; has
           })()}
         />
       </div>
-    </div>
+    </section>
   );
 }
 
 function MoveClassifications({ classifications }: { classifications: DashboardClassifications | null }) {
   const rows = useMemo(() => {
     if (!classifications) return [];
-    return CLASS_ROWS.filter((row) => row.canonical || classifications[row.id] > 0);
+    return CLASS_ROWS.filter((row) => classifications[row.id] > 0);
   }, [classifications]);
 
-  if (!classifications) {
+  if (!classifications || rows.length === 0) {
     return (
-      <div className="min-w-0">
+      <section className="app-brutal-section min-w-0 p-5 md:p-6">
         <SectionLabel>Move classifications</SectionLabel>
-        <Panel className="p-4 text-xs leading-6 text-[var(--app-muted)]">
+        <div className="text-xs leading-6 text-[var(--app-muted)]">
           No classified moves yet. Train a sequence. Stockfish does the rest.
-        </Panel>
-      </div>
+        </div>
+      </section>
     );
   }
 
@@ -595,41 +694,39 @@ function MoveClassifications({ classifications }: { classifications: DashboardCl
   const rowCount = Math.max(1, Math.ceil(rows.length / 2));
 
   return (
-    <div className="min-w-0">
+    <section className="app-brutal-section min-w-0 p-5 md:p-6">
       <SectionLabel right={`${formatNumber(total)} moves`}>Move classifications</SectionLabel>
-      <Panel className="p-4">
-        <div className="mb-4 flex h-2 overflow-hidden border border-[var(--app-border-soft)] bg-[var(--app-bg)]">
-          {rows.map((row) => {
-            const count = classifications[row.id];
-            if (count <= 0) return null;
-            return (
-              <div
-                key={row.id}
-                style={{ width: `${(count / displayTotal) * 100}%`, background: row.color }}
-                title={`${row.label}: ${count}`}
-              />
-            );
-          })}
-        </div>
-        <div
-          className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-flow-col sm:grid-cols-2"
-          style={{ gridTemplateRows: `repeat(${rowCount}, minmax(0, auto))` }}
-        >
-          {rows.map((row) => {
-            const count = classifications[row.id];
-            const pct = total > 0 ? `${((count / total) * 100).toFixed(1)}%` : "0.0%";
-            return (
-              <div key={row.id} className="grid grid-cols-[8px_minmax(0,1fr)_auto_44px] items-center gap-2 text-[11px]">
-                <span className="h-2 w-2" style={{ background: row.color }} />
-                <span className="min-w-0 truncate text-[var(--app-text)]">{row.label}</span>
-                <span className="font-bold text-[var(--app-text)]">{formatNumber(count)}</span>
-                <span className="text-right font-bold text-[var(--app-text)]">{pct}</span>
-              </div>
-            );
-          })}
-        </div>
-      </Panel>
-    </div>
+      <div className="mb-4 flex h-2 overflow-hidden border border-[var(--app-border-soft)] bg-[var(--app-bg)]">
+        {rows.map((row) => {
+          const count = classifications[row.id];
+          if (count <= 0) return null;
+          return (
+            <div
+              key={row.id}
+              style={{ width: `${(count / displayTotal) * 100}%`, background: row.color }}
+              title={`${row.label}: ${count}`}
+            />
+          );
+        })}
+      </div>
+      <div
+        className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-flow-col sm:grid-cols-2"
+        style={{ gridTemplateRows: `repeat(${rowCount}, minmax(0, auto))` }}
+      >
+        {rows.map((row) => {
+          const count = classifications[row.id];
+          const pct = total > 0 ? `${((count / total) * 100).toFixed(1)}%` : "0.0%";
+          return (
+            <div key={row.id} className="grid grid-cols-[8px_minmax(0,1fr)_auto_44px] items-center gap-2 text-[11px]">
+              <span className="h-2 w-2" style={{ background: row.color }} />
+              <span className="min-w-0 truncate text-[var(--app-text)]">{row.label}</span>
+              <span className="font-bold text-[var(--app-text)]">{formatNumber(count)}</span>
+              <span className="text-right font-bold text-[var(--app-text)]">{pct}</span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -724,18 +821,23 @@ function StatTile({ label, value, sub, tone }: { label: string; value: string; s
   );
 }
 
-function QueueTile({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
+function QueueTile({ label, value, accent, muted }: { label: string; value: number; accent?: boolean; muted?: boolean }) {
   return (
-    <div className="app-brutal-section-soft min-h-20 p-4">
-      <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--app-muted)]">{label}</div>
-      <div className={[
-        "text-[28px] font-bold leading-none",
-        value > 0
-          ? accent
-            ? "text-[var(--app-accent)]"
-            : "text-[var(--app-text)]"
-          : "text-[var(--app-muted-soft)]",
-      ].join(" ")}>
+    <div
+      className={[
+        "app-brutal-row rounded-lg p-4",
+        muted ? "opacity-55" : "",
+      ].join(" ")}
+    >
+      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
+        {label}
+      </div>
+      <div
+        className={[
+          "mt-2 text-2xl font-bold leading-none",
+          accent && value > 0 ? "text-[var(--app-accent)]" : "text-[var(--app-text)]",
+        ].join(" ")}
+      >
         {formatNumber(value)}
       </div>
     </div>
