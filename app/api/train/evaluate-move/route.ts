@@ -119,7 +119,6 @@ export async function POST(request: Request) {
   if (isCheckmateFen(fenAfterUserMove)) {
     const classification: MoveClassification = "good";
     const evalBefore = await getPositionEval(decisionFen, { timeLimitMs: evaluationTimeLimitMs });
-    const evalBeforeSigned = userColor === "w" ? evalBefore.cp : -(evalBefore.cp);
     const phase = selectedPhase ?? classifyTrainingPhase(fenAfterUserMove);
 
     return NextResponse.json({
@@ -127,14 +126,14 @@ export async function POST(request: Request) {
       moveScore: {
         userMoveIndex: 0,
         cpLoss: 0,
-        evalBefore: Math.round(evalBeforeSigned),
+        evalBefore: Math.round(evalBefore.cp),
         evalAfter: mateCpForWinningSide(userColor),
         classification,
       },
       positionEvaluation: {
         decisionFen,
         userMove: { san, uci },
-        evalBefore: Math.round(evalBeforeSigned),
+        evalBefore: Math.round(evalBefore.cp),
         evalAfter: mateCpForWinningSide(userColor),
         cpLoss: 0,
         classification,
@@ -170,9 +169,11 @@ export async function POST(request: Request) {
     const candidateLine = sortedLines.find((line) => line.bestMove === uci) ?? null;
 
     if (bestLine && candidateLine) {
-      const rawEvalBefore = comparableEval(bestLine, decisionFen);
-      const rawEvalAfter = comparableEval(candidateLine, decisionFen);
-      const cpLoss = Math.max(0, Math.round(rawEvalBefore - rawEvalAfter));
+      const comparableEvalBefore = comparableEval(bestLine, decisionFen);
+      const comparableEvalAfter = comparableEval(candidateLine, decisionFen);
+      const displayEvalBefore = Math.round(Number(bestLine.cp) || 0);
+      const displayEvalAfter = Math.round(Number(candidateLine.cp) || 0);
+      const cpLoss = Math.max(0, Math.round(comparableEvalBefore - comparableEvalAfter));
 
       const classification =
         candidateLine.bestMove === bestLine.bestMove
@@ -184,15 +185,15 @@ export async function POST(request: Request) {
         moveScore: {
           userMoveIndex: 0,
           cpLoss,
-          evalBefore: Math.round(rawEvalBefore),
-          evalAfter: Math.round(rawEvalAfter),
+          evalBefore: displayEvalBefore,
+          evalAfter: displayEvalAfter,
           classification,
         },
         positionEvaluation: {
           decisionFen,
           userMove: { san, uci },
-          evalBefore: Math.round(rawEvalBefore),
-          evalAfter: Math.round(rawEvalAfter),
+          evalBefore: displayEvalBefore,
+          evalAfter: displayEvalAfter,
           cpLoss,
           classification,
           banditResult: getBanditResult(classification),
@@ -213,9 +214,9 @@ export async function POST(request: Request) {
     getPositionEval(fenAfterUserMove, { timeLimitMs: evaluationTimeLimitMs }),
   ]);
 
-  const evalBeforeSigned = userColor === "w" ? evalBefore.cp : -(evalBefore.cp);
-  const evalAfterSigned = userColor === "w" ? evalAfter.cp : -(evalAfter.cp);
-  const rawCpLoss = evalBeforeSigned - evalAfterSigned;
+  const comparableEvalBefore = userColor === "w" ? evalBefore.cp : -(evalBefore.cp);
+  const comparableEvalAfter = userColor === "w" ? evalAfter.cp : -(evalAfter.cp);
+  const rawCpLoss = comparableEvalBefore - comparableEvalAfter;
   const cpLoss = Math.max(0, Math.min(10000, Math.round(rawCpLoss)));
   const classification = classifyCpLoss(cpLoss);
 
@@ -224,15 +225,15 @@ export async function POST(request: Request) {
     moveScore: {
       userMoveIndex: 0,
       cpLoss,
-      evalBefore: Math.round(evalBeforeSigned),
-      evalAfter: Math.round(evalAfterSigned),
+      evalBefore: Math.round(evalBefore.cp),
+      evalAfter: Math.round(evalAfter.cp),
       classification,
     },
     positionEvaluation: {
       decisionFen,
       userMove: { san, uci },
-      evalBefore: Math.round(evalBeforeSigned),
-      evalAfter: Math.round(evalAfterSigned),
+      evalBefore: Math.round(evalBefore.cp),
+      evalAfter: Math.round(evalAfter.cp),
       cpLoss,
       classification,
       banditResult: getBanditResult(classification),

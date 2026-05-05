@@ -6,7 +6,7 @@ import type { DashboardClassifications, DashboardPosition, DashboardSummary, Elo
 import { classificationColor } from "@/lib/training-board-ui";
 import { PositionThumbnail } from "@/components/position-thumbnail";
 
-type DashboardView = "summary" | "positions";
+type DashboardView = "summary" | "history";
 type PositionFilter = "all" | "review" | "new" | "learning" | "mastered" | "failed";
 
 const CLASS_ROWS: Array<{
@@ -259,9 +259,7 @@ function RecentActivitySection({
     key: s.id,
     ts: s.ts,
     fen: s.startingFen,
-    title: s.worst
-      ? `Session — worst: ${s.worst}`
-      : "Training session",
+    title: s.title,
     subtitle: `${s.moves} move${s.moves !== 1 ? "s" : ""}`,
     outcome: s.outcome,
     worst: s.worst,
@@ -271,6 +269,7 @@ function RecentActivitySection({
   }));
 
   const positionRows: ActivityRow[] = positions
+    .filter((p) => !p.id.startsWith("session:"))
     .filter((p) => !sessions.some((s) => s.startingFen === p.startingFen && s.ts === p.lastAttemptAt))
     .map((p) => ({
       key: p.id,
@@ -295,7 +294,7 @@ function RecentActivitySection({
   return (
     <section className="app-brutal-section p-5 md:p-6">
       <SectionLabel right={`${allRows.length} shown`}>Recent training</SectionLabel>
-      <div className="grid gap-2">
+      <div className="grid gap-3">
         {allRows.map((row) => (
           <ActivityCard key={row.key} row={row} />
         ))}
@@ -320,17 +319,17 @@ function ActivityCard({ row }: {
   };
 }) {
   return (
-    <div className="app-brutal-row flex flex-col gap-3 rounded-lg p-3 sm:flex-row sm:items-center sm:gap-4 sm:p-4">
+    <div className="app-brutal-row flex flex-col gap-4 rounded-lg p-4 sm:flex-row sm:items-center sm:gap-5 sm:p-5">
       <div className="shrink-0 self-center sm:self-auto" aria-label={row.title}>
-        <PositionThumbnail fen={row.fen} size={120} />
+        <PositionThumbnail fen={row.fen} size={144} />
       </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="truncate text-xs font-bold text-[var(--app-text)]">{row.title}</span>
+          <span className="min-w-0 truncate text-sm font-bold leading-6 text-[var(--app-text)]">{row.title}</span>
           <ResultTag result={row.outcome} />
           {row.statusLabel && <StatusTag status={row.statusLabel === "New" ? "active" : row.statusLabel === "Review due" ? "review" : row.statusLabel === "Mastered" ? "mastered" : "retired"} label={row.statusLabel} />}
         </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-[var(--app-muted)]">
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs leading-5 text-[var(--app-muted)]">
           <span>{row.subtitle}</span>
           {row.moves != null && <span>{row.moves} moves</span>}
           {row.worst && (
@@ -346,17 +345,17 @@ function ActivityCard({ row }: {
           {row.attempts != null && row.attempts > 0 && <span>{row.attempts} attempt{row.attempts !== 1 ? "s" : ""}</span>}
           {row.nextReviewAt && <span>Review {formatDate(row.nextReviewAt).text}</span>}
         </div>
-        <div className="mt-1 flex gap-1">
+        <div className="mt-2 flex flex-wrap gap-2">
           <Link
             href="/train"
-            className="inline-flex items-center border border-[var(--app-border)] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]"
+            className="inline-flex min-h-8 items-center border border-[var(--app-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]"
             title="Retry route not wired yet"
           >
             Retry
           </Link>
           <Link
-            href={`/analyze?fen=${encodeURIComponent(row.fen)}`}
-            className="inline-flex items-center border border-[var(--app-border)] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]"
+            href={`/analysis?fen=${encodeURIComponent(row.fen)}`}
+            className="inline-flex min-h-8 items-center border border-[var(--app-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]"
           >
             Analyze
           </Link>
@@ -409,14 +408,14 @@ function PositionsTab({ positions }: { positions: DashboardPosition[] }) {
 
 function FilterBar({ filter, setFilter }: { filter: PositionFilter; setFilter: (f: PositionFilter) => void }) {
   return (
-    <div className="flex flex-wrap gap-1">
+    <div className="flex flex-wrap gap-2">
       {FILTER_OPTIONS.map((opt) => (
         <button
           key={opt.value}
           type="button"
           onClick={() => setFilter(opt.value)}
           className={[
-            "border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] transition",
+            "min-h-9 border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition",
             filter === opt.value
               ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
               : "cursor-pointer border-[var(--app-border)] text-[var(--app-muted)] hover:border-[var(--app-accent)] hover:text-[var(--app-text)]",
@@ -439,9 +438,9 @@ function PositionList({ positions }: { positions: DashboardPosition[] }) {
   }
 
   return (
-    <div className="grid gap-2">
+    <div className="grid gap-3">
       {/* Desktop header */}
-      <div className="hidden grid-cols-[6.5rem_minmax(0,1.5fr)_auto_auto_auto_auto_auto] items-center gap-3 border-b border-[var(--app-border-soft)] px-3 pb-2 text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)] lg:grid">
+      <div className="hidden grid-cols-[8.5rem_minmax(0,1.5fr)_auto_auto_auto_auto_auto] items-center gap-4 border-b border-[var(--app-border-soft)] px-4 pb-3 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)] lg:grid">
         <span>Board</span>
         <span>Source</span>
         <span>Status</span>
@@ -459,18 +458,18 @@ function PositionList({ positions }: { positions: DashboardPosition[] }) {
 
 function PositionRow({ position }: { position: DashboardPosition }) {
   return (
-    <div className="app-brutal-row grid grid-cols-[1fr_auto] items-center gap-2 rounded-lg px-3 py-3 sm:grid-cols-[5rem_1fr_auto_auto_auto_auto] sm:gap-3 lg:grid-cols-[6.5rem_minmax(0,1.5fr)_auto_auto_auto_auto_auto]">
+    <div className="app-brutal-row grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg px-4 py-4 sm:grid-cols-[7.5rem_1fr_auto_auto_auto_auto] sm:gap-4 lg:grid-cols-[8.5rem_minmax(0,1.5fr)_auto_auto_auto_auto_auto]">
       {/* Thumbnail */}
       <div className="hidden sm:block" aria-label={`Position: ${position.sourceLabel}, ${position.statusLabel}`}>
-        <PositionThumbnail fen={position.startingFen} size={72} />
+        <PositionThumbnail fen={position.startingFen} size={108} />
       </div>
 
       {/* Source info */}
       <div className="min-w-0">
-        <div className="truncate text-xs font-bold text-[var(--app-text)]">
+        <div className="truncate text-sm font-bold leading-6 text-[var(--app-text)]">
           {position.openingName ?? position.sourceLabel}
         </div>
-        <div className="mt-0.5 text-[10px] text-[var(--app-muted-soft)]">
+        <div className="mt-1 text-xs leading-5 text-[var(--app-muted-soft)]">
           {position.sourceLabel}
           {position.queueLabel && (
             <span className="ml-1.5 border-l border-[var(--app-border-soft)] pl-1.5">{position.queueLabel}</span>
@@ -489,12 +488,12 @@ function PositionRow({ position }: { position: DashboardPosition }) {
       </div>
 
       {/* Attempts */}
-      <div className="hidden text-right text-xs font-bold text-[var(--app-text)] sm:block">
+      <div className="hidden text-right text-sm font-bold text-[var(--app-text)] sm:block">
         {position.attempts > 0 ? position.attempts : "-"}
       </div>
 
       {/* Eval loss */}
-      <div className="hidden text-right text-xs sm:block">
+      <div className="hidden text-right text-sm sm:block">
         {position.cpLoss != null ? (
           <span className={position.cpLoss > 100 ? "font-bold text-[var(--app-class-blunder)]" : "font-bold text-[var(--app-text)]"}>
             {position.cpLoss}cp
@@ -505,18 +504,18 @@ function PositionRow({ position }: { position: DashboardPosition }) {
       </div>
 
       {/* Actions */}
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
         <Link
           href="/train"
-          className="inline-flex items-center border border-[var(--app-border)] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]"
+          className="inline-flex min-h-8 items-center border border-[var(--app-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]"
           title="Retry route not wired yet"
           aria-label={`Retry position ${position.id}`}
         >
           Retry
         </Link>
         <Link
-          href={`/analyze?fen=${encodeURIComponent(position.startingFen)}`}
-          className="inline-flex items-center border border-[var(--app-border)] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]"
+          href={`/analysis?fen=${encodeURIComponent(position.startingFen)}`}
+          className="inline-flex min-h-8 items-center border border-[var(--app-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]"
           aria-label={`Analyze position ${position.id}`}
         >
           Analyze
@@ -650,7 +649,7 @@ function ViewToggle({
 }) {
   return (
     <div className="inline-flex">
-      {(["summary", "positions"] as const).map((item) => {
+      {(["summary", "history"] as const).map((item) => {
         const active = view === item;
         return (
           <button
@@ -681,21 +680,21 @@ function StatusTag({ status, label }: { status: string; label: string }) {
     retired: "border-[var(--app-border-soft)] text-[var(--app-muted-soft)]",
   };
   return (
-    <span className={["border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em]", colorMap[status] ?? "border-[var(--app-border)] text-[var(--app-muted)]"].join(" ")}>
+    <span className={["inline-flex min-h-6 items-center border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]", colorMap[status] ?? "border-[var(--app-border)] text-[var(--app-muted)]"].join(" ")}>
       {label}
     </span>
   );
 }
 
 function ResultTag({ result }: { result: "pass" | "acceptable" | "fail" | null }) {
-  if (!result) return <span className="text-[9px] uppercase tracking-[0.1em] text-[var(--app-muted-soft)]">-</span>;
+  if (!result) return <span className="text-[10px] uppercase tracking-[0.1em] text-[var(--app-muted-soft)]">-</span>;
   const colorMap: Record<string, string> = {
     pass: "text-[var(--app-class-good)]",
     acceptable: "text-[var(--app-class-brilliant)]",
     fail: "text-[var(--app-class-blunder)]",
   };
   return (
-    <span className={["text-[9px] font-bold uppercase tracking-[0.1em]", colorMap[result]].join(" ")}>
+    <span className={["text-[10px] font-bold uppercase tracking-[0.1em]", colorMap[result]].join(" ")}>
       {result}
     </span>
   );

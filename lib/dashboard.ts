@@ -64,6 +64,7 @@ export type DashboardSummary = {
   recentSessions: Array<{
     id: string;
     ts: string;
+    title: string;
     moves: number;
     delta: number | null;
     worst: string | null;
@@ -153,6 +154,8 @@ type PositionEvaluationInput = {
   phase: string | null;
   bucket: string | null;
   tags: string[];
+  openingName: string | null;
+  eco: string | null;
 };
 
 export function buildDashboardSummary({
@@ -170,7 +173,9 @@ export function buildDashboardSummary({
   const revisitCount = jsonArrayLength(profile?.revisit_queue);
   const masteredCount = jsonArrayLength(profile?.mastered_queue);
 
-  const positions = buildPositionRows(mistakes);
+  const mistakePositions = buildPositionRows(mistakes);
+  const sessionPositions = buildSessionPositionRows(sessions);
+  const positions = sortDashboardPositions([...mistakePositions, ...sessionPositions]);
   const recentPositions = positions.slice(0, 8);
 
   const queueOverview = buildQueueOverview(mistakes);
@@ -220,6 +225,36 @@ function buildPositionRows(mistakes: DashboardMistakeInput[]): DashboardPosition
     worstMoveLossCp: m.cp_loss,
     servedCount: m.served_count,
   }));
+}
+
+function buildSessionPositionRows(sessions: DashboardSessionInput[]): DashboardPosition[] {
+  return sessions.map((session) => ({
+    id: `session:${session.id}`,
+    startingFen: session.starting_fen,
+    sourceType: "training_session",
+    sourceLabel: "Training session",
+    status: "session",
+    statusLabel: "Completed",
+    queueLabel: undefined,
+    openingName: null,
+    lastResult: session.training_outcome,
+    lastAttemptAt: session.completed_at ?? session.started_at,
+    nextReviewAt: null,
+    attempts: 1,
+    cpLoss: session.average_cp_loss,
+    worstMoveLossCp: session.average_cp_loss,
+    servedCount: 1,
+  }));
+}
+
+function sortDashboardPositions(positions: DashboardPosition[]): DashboardPosition[] {
+  return [...positions].sort((left, right) => positionTimestamp(right) - positionTimestamp(left));
+}
+
+function positionTimestamp(position: DashboardPosition): number {
+  const value = position.lastAttemptAt ?? position.nextReviewAt ?? "";
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 function buildQueueOverview(mistakes: DashboardMistakeInput[]) {
@@ -323,6 +358,7 @@ function buildRecentSession(
   return {
     id: session.id,
     ts: session.completed_at ?? session.started_at,
+    title: buildSessionPositionTitle(evaluations),
     moves: evaluations.length || session.sequence_length,
     delta: typeof session.elo_delta === "number" ? session.elo_delta : null,
     worst: getWorstClassification(evaluations),
@@ -343,6 +379,79 @@ function getWorstClassification(evaluations: PositionEvaluationInput[]) {
   return worst;
 }
 
+function buildSessionPositionTitle(evaluations: PositionEvaluationInput[]): string {
+  const primary = evaluations[0] ?? null;
+  const phase = normalizePhase(primary?.phase);
+  const bucket = primary?.bucket ?? null;
+  const tags = primary?.tags ?? [];
+  const openingName = normalizeDisplayName(primary?.openingName);
+  const eco = normalizeDisplayName(primary?.eco);
+
+  if (phase === "opening") {
+    const detail =
+      openingName ??
+      eco ??
+      openingDetailFromBucket(bucket) ??
+      openingDetailFromTags(tags);
+
+    return detail ? `Opening - ${detail}` : "Opening";
+  }
+
+  if (phase === "middlegame") return "Middlegame";
+  if (phase === "endgame") return endgameTitleFromBucket(bucket);
+  if (phase === "tactic") return "Tactic";
+
+  return "Training position";
+}
+
+function normalizePhase(value: string | null | undefined) {
+  if (value === "opening") return "opening";
+  if (value === "middlegame") return "middlegame";
+  if (value === "endgame") return "endgame";
+  if (value === "tactic") return "tactic";
+  return "unknown";
+}
+
+function normalizeDisplayName(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function openingDetailFromBucket(bucket: string | null): string | null {
+  switch (bucket) {
+    case "opening_gambit":
+      return "Gambit";
+    case "opening_development":
+      return "Development";
+    case "opening":
+      return null;
+    default:
+      return null;
+  }
+}
+
+function openingDetailFromTags(tags: string[]): string | null {
+  if (tags.some((tag) => tag === "gambit" || tag === "opening_gambit")) {
+    return "Gambit";
+  }
+  if (tags.some((tag) => tag === "development" || tag === "opening_development")) {
+    return "Development";
+  }
+  return null;
+}
+
+function endgameTitleFromBucket(bucket: string | null): string {
+  switch (bucket) {
+    case "endgame_rook":
+      return "Endgame - Rook endgame";
+    case "endgame_pawn":
+      return "Endgame - Pawn endgame";
+    default:
+      return "Endgame";
+  }
+}
+
 function normalizePositionEvaluations(raw: Json): PositionEvaluationInput[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((item) => {
@@ -360,6 +469,8 @@ function normalizePositionEvaluations(raw: Json): PositionEvaluationInput[] {
         phase: typeof entry.phase === "string" ? entry.phase : null,
         bucket: typeof entry.bucket === "string" ? entry.bucket : null,
         tags,
+        openingName: typeof entry.openingName === "string" ? entry.openingName : null,
+        eco: typeof entry.eco === "string" ? entry.eco : null,
       },
     ];
   });

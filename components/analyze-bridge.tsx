@@ -13,6 +13,7 @@ declare global {
     };
     __CHESSVIEW_INITIAL_ANALYZE_PREFERENCES__?: AnalyzePreferences | null;
     __CHESSVIEW_ANALYZE_PREFERENCES_PERSIST_URL__?: string | null;
+    __CHESSVIEW_INITIAL_ANALYZE_FEN__?: string | null;
   }
 }
 
@@ -797,9 +798,11 @@ function resetAnalyzeBootAssets() {
 }
 
 export function AnalyzeBridge({
+  initialFen,
   initialPreferences,
   analyzePreferencesPersistUrl = null,
 }: {
+  initialFen?: string | null;
   initialPreferences: AnalyzePreferences | null;
   analyzePreferencesPersistUrl?: string | null;
 }) {
@@ -875,6 +878,14 @@ export function AnalyzeBridge({
     window.__CHESSVIEW_INITIAL_ANALYZE_PREFERENCES__ = initialPreferences;
     window.__CHESSVIEW_ANALYZE_PREFERENCES_PERSIST_URL__ =
       analyzePreferencesPersistUrl;
+    window.__CHESSVIEW_INITIAL_ANALYZE_FEN__ = initialFen ?? null;
+    if (initialFen) {
+      try {
+        localStorage.removeItem("chess-something:board-state:v1");
+      } catch {
+        // ignore localStorage failures
+      }
+    }
     window.__chessSomething?.applyUserAnalyzePreferences?.(initialPreferences);
     syncAppTheme();
     syncViewportRoom();
@@ -960,6 +971,7 @@ export function AnalyzeBridge({
       document.body.classList.remove("analyze-embedded");
     };
   }, [
+    initialFen,
     initialPreferences,
     analyzePreferencesPersistUrl,
   ]);
