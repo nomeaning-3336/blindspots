@@ -22,12 +22,15 @@ import {
 import {
   DEFAULT_BLINDSPOTS_ELO,
   buildLastMoveBadge,
+  classificationForPlayedMove,
   classificationColor,
   classificationIcon,
   classificationLabel,
+  engineLineContinuationSan,
   formatClassifiedMoveLead,
   getTrainingBoardHighlights,
-  moveBadgeForPosition,
+  mergeEngineLineDetailsFrom,
+  moveClassification,
   moveHighlightsForClassifiedMove,
   type MoveClassification,
 } from "@/lib/training-board-ui";
@@ -122,6 +125,7 @@ type VisibleSequencePosition = {
   label: string;
   move?: TrainingMove;
   pitchIndex?: number;
+  userMoveIndex?: number;
 };
 
 type EngineLineResult = {
@@ -133,9 +137,120 @@ type EngineLineResult = {
   bestSan: string;
   pv: string[];
   pvSan: string[];
+  continuationSan?: string[];
   classification?: MoveClassification;
   source?: "multipv" | "candidate";
 };
+
+function engineMoveLineKey(fen: string, bestMove: string) {
+  return `${fen}::${bestMove}`;
+}
+
+function chooseDeeperEngineLine(
+  current: EngineLineResult | undefined,
+  next: EngineLineResult,
+  classificationSource: "current" | "next" = "next",
+): EngineLineResult {
+  if (!current) return next;
+
+  const currentDepth = typeof current.depth === "number" ? current.depth : -1;
+  const nextDepth = typeof next.depth === "number" ? next.depth : -1;
+
+  if (nextDepth > currentDepth) return mergeEngineLineDetailsFrom(current, next, classificationSource);
+
+  if (
+    nextDepth === currentDepth &&
+    (!current.pv || current.pv.length === 0) &&
+    next.pv &&
+    next.pv.length > 0
+  ) {
+    return mergeEngineLineDetailsFrom(current, next, classificationSource);
+  }
+
+  if (
+    process.env.NODE_ENV !== "production" &&
+    current.bestMove &&
+    next.bestMove &&
+    current.bestMove === next.bestMove &&
+    currentDepth > nextDepth
+  ) {
+    console.debug("[train:piece-lines] kept deeper cached line", {
+      move: current.bestMove,
+      cachedDepth: currentDepth,
+      fetchedDepth: nextDepth,
+      cachedEval: current.cp,
+      fetchedEval: next.cp,
+    });
+  }
+
+  return current;
+}
+
+function buildDeepestEngineLineMap(
+  fen: string,
+  lineLists: Array<EngineLineResult[] | null | undefined>,
+  classificationSource: "first" | "last" = "last",
+): Map<string, EngineLineResult> {
+  const map = new Map<string, EngineLineResult>();
+
+  for (const lines of lineLists) {
+    for (const line of lines ?? []) {
+      if (!line.bestMove) continue;
+      const key = engineMoveLineKey(fen, line.bestMove);
+      const existing = map.get(key);
+      map.set(
+        key,
+        chooseDeeperEngineLine(
+          existing,
+          line,
+          classificationSource === "first" && existing ? "current" : "next",
+        ),
+      );
+    }
+  }
+
+  return map;
+}
+
+function mergePieceLinesWithDeeperKnownLines({
+  fen,
+  square,
+  pieceLines,
+  knownLineLists,
+}: {
+  fen: string;
+  square: string;
+  pieceLines: EngineLineResult[];
+  knownLineLists: Array<EngineLineResult[] | null | undefined>;
+}): EngineLineResult[] {
+  const deepestByMove = buildDeepestEngineLineMap(fen, [
+    pieceLines,
+    ...knownLineLists,
+  ], "first");
+
+  const seen = new Set<string>();
+  const merged: EngineLineResult[] = [];
+
+  for (const line of pieceLines) {
+    if (!line.bestMove) continue;
+    const deepest = deepestByMove.get(engineMoveLineKey(fen, line.bestMove)) ?? line;
+    merged.push(deepest);
+    seen.add(line.bestMove);
+  }
+
+  for (const line of deepestByMove.values()) {
+    if (!line.bestMove.startsWith(square)) continue;
+    if (seen.has(line.bestMove)) continue;
+    merged.push(line);
+    seen.add(line.bestMove);
+  }
+
+  return merged;
+}
+
+function trainPieceLineCacheKey(fen: string, square: string) {
+  return `${fen}::${square}`;
+}
 
 type EvalGraphPoint = {
   value: number;
@@ -468,6 +583,10 @@ export default function TrainPage() {
   useEffect(() => {
     engineLineCacheRef.current = engineLineCache;
   }, [engineLineCache]);
+
+  useEffect(() => {
+    pieceLineCacheRef.current = pieceLineCache;
+  }, [pieceLineCache]);
 
   useEffect(() => {
     asyncMoveEvaluationsRef.current = asyncMoveEvaluations;
@@ -916,9 +1035,16 @@ export default function TrainPage() {
       const payload = (await response.json().catch(() => null)) as { lines?: EngineLineResult[]; error?: string } | null;
       const lines = response.ok && Array.isArray(payload?.lines) ? payload.lines : [];
       const hadError = typeof payload?.error === "string" || !response.ok;
+      const existingTopLines =
+        engineLineCacheRef.current[fenToAnalyze] ??
+        engineLineCache[fenToAnalyze] ??
+        [];
+      const deepestTopLines = Array.from(
+        buildDeepestEngineLineMap(fenToAnalyze, [existingTopLines, lines]).values(),
+      );
       setEngineLineCache((current) => {
         if (current[fenToAnalyze]) return current;
-        const next = { ...current, [fenToAnalyze]: lines };
+        const next = { ...current, [fenToAnalyze]: deepestTopLines };
         engineLineCacheRef.current = next;
         return next;
       });
@@ -950,7 +1076,7 @@ export default function TrainPage() {
   }
 
   async function fetchPieceLinesForSquare(fen: string, square: string) {
-    const key = `${fen}::${square}`;
+    const key = trainPieceLineCacheKey(fen, square);
     if (pieceLineCacheRef.current[key]) return;
 
     const response = await fetch("/api/train/piece-lines", {
@@ -959,13 +1085,27 @@ export default function TrainPage() {
       body: JSON.stringify({ fen, square }),
     });
     const payload = (await response.json().catch(() => null)) as { lines?: EngineLineResult[]; error?: string } | null;
-    const lines = response.ok && Array.isArray(payload?.lines) ? payload.lines : [];
+    const fetchedPieceLines = response.ok && Array.isArray(payload?.lines) ? payload.lines : [];
     if (typeof payload?.error === "string" || !response.ok) {
       console.warn(`[piece-lines] fetch failed for ${fen}@${square}:`, payload?.error ?? "unknown error");
     }
+    const knownTopLines =
+      engineLineCacheRef.current[fen] ??
+      engineLineCache[fen] ??
+      [];
+    const existingPieceLines =
+      pieceLineCacheRef.current[key] ??
+      pieceLineCache[key] ??
+      [];
+    const mergedPieceLines = mergePieceLinesWithDeeperKnownLines({
+      fen,
+      square,
+      pieceLines: fetchedPieceLines,
+      knownLineLists: [knownTopLines, existingPieceLines],
+    });
     setPieceLineCache((current) => {
       if (current[key]) return current;
-      const next = { ...current, [key]: lines };
+      const next = { ...current, [key]: mergedPieceLines };
       pieceLineCacheRef.current = next;
       return next;
     });
@@ -1062,15 +1202,21 @@ export default function TrainPage() {
 
       playTrainMoveSound({ move: playedMove, plyRef: moveSoundPlyRef });
       const currentFen = boardFen;
+      const playedUci = `${playedMove.from}${playedMove.to}${playedMove.promotion ?? ""}`;
+      const classification = classificationForPlayedMove(
+        { uci: playedUci },
+        classifiedDisplayLines,
+      );
       const nextExploratoryPosition: ExploratoryPosition = {
         fen: chess.fen(),
         lastMove: { from: playedMove.from, to: playedMove.to },
         move: {
           san: playedMove.san,
-          uci: `${playedMove.from}${playedMove.to}${playedMove.promotion ?? ""}`,
+          uci: playedUci,
           side: (playedMove.color === "w" ? "white" : "black") as "white" | "black",
           fenBefore: currentFen,
           fenAfter: chess.fen(),
+          classification,
         },
       };
       const nextHistory = [
@@ -1454,8 +1600,8 @@ export default function TrainPage() {
           moves,
           initialOpponentMove,
         }).map((position) => {
-          if (position.pitchIndex != null) {
-            const moveScore = completedMoveScoreByUserMoveIndex.get(position.pitchIndex);
+          if (position.userMoveIndex != null) {
+            const moveScore = completedMoveScoreByUserMoveIndex.get(position.userMoveIndex);
             const classification = getAuthoritativeMoveClassification({
               move: position.move,
               moveScore,
@@ -1579,20 +1725,25 @@ export default function TrainPage() {
         ? lastMoveFromTrainingMove(activeReplayPosition.move)
         : lastMove;
   const boardLastMoveBadge = (() => {
-    if (isExploringResults && !activeExploratoryPosition && !exploratoryFen) {
-      const classification = activeSequencePosition?.move?.classification;
-      if (classification) return buildLastMoveBadge(classification);
-      return null;
-    }
-    return null;
+    if (!isExploringResults) return null;
+    const move = activeExploratoryPosition?.move ?? activeSequencePosition?.move;
+    const classification = classificationForPlayedMove(
+      move,
+      move?.fenBefore ? engineLineCache[move.fenBefore] ?? [] : [],
+    );
+    return classification ? buildLastMoveBadge(classification) : null;
   })();
   const selectedMove =
     selectedMoveIndex != null && selectedMoveIndex > 0 && selectedMoveIndex <= moves.length
       ? moves[selectedMoveIndex - 1]
       : null;
   const selectedMoveSquares = selectedMove ? moveFromUci(selectedMove.uci) : null;
+  const selectedMoveClassification = classificationForPlayedMove(
+    selectedMove,
+    selectedMove?.fenBefore ? engineLineCache[selectedMove.fenBefore] ?? [] : [],
+  );
   const selectedMoveHighlight = selectedMove && selectedMoveSquares
-    ? { ...selectedMoveSquares, classification: selectedMove.classification }
+    ? { ...selectedMoveSquares, classification: selectedMoveClassification }
     : null;
   const selectedMoveUci = selectedMove?.uci ?? null;
   const currentEngineLines = isExploringResults
@@ -1612,12 +1763,25 @@ export default function TrainPage() {
     ? exploreSelectedSquare
     : null;
   const pieceLinesKey = effectiveExploreSelectedSquare
-    ? `${boardFen}::${effectiveExploreSelectedSquare}`
+    ? trainPieceLineCacheKey(boardFen, effectiveExploreSelectedSquare)
     : null;
-  const currentPieceLines = pieceLinesKey ? (pieceLineCache[pieceLinesKey] ?? null) : null;
-  const displayLines = effectiveExploreSelectedSquare
-    ? (currentPieceLines ?? [])
-    : currentEngineLines;
+  const cachedPieceLines = pieceLinesKey
+    ? (pieceLineCache[pieceLinesKey] ?? pieceLineCacheRef.current[pieceLinesKey] ?? null)
+    : null;
+  const cachedTopLines =
+    engineLineCache[boardFen] ??
+    engineLineCacheRef.current[boardFen] ??
+    [];
+  const displayLines = effectiveExploreSelectedSquare && cachedPieceLines
+    ? mergePieceLinesWithDeeperKnownLines({
+        fen: boardFen,
+        square: effectiveExploreSelectedSquare,
+        pieceLines: cachedPieceLines,
+        knownLineLists: [cachedTopLines],
+      })
+    : effectiveExploreSelectedSquare
+      ? []
+      : currentEngineLines;
   const classifiedDisplayLines = useMemo(
     () => displayLines.map((line, index) => ({
       ...line,
@@ -1985,7 +2149,7 @@ export default function TrainPage() {
                                 : undefined
                           }
                           engineArrows={buildEngineArrows(boardEngineLines, hoveredEngineLineMove)}
-                          data-testid="train-board"
+                          dataTestId="train-board"
                           onMove={(move) => { setExploreSelectedSquare(null); setSelectedMoveIndex(null); handleExploreMove(move); }}
                           onSquareClick={(square) => {
                             try {
@@ -2012,7 +2176,7 @@ export default function TrainPage() {
                         annotationsDisabled={false}
                         highlightedSquares={getTrainingBoardHighlights(state)}
                         onMove={handleMove}
-                        data-testid="train-board"
+                        dataTestId="train-board"
                       />
                     )}
                   </BoardWithPlayerStrips>
@@ -2976,6 +3140,8 @@ function buildVisibleSequencePositions(params: {
   initialOpponentMove: TrainingMove | null;
 }): VisibleSequencePosition[] {
   const positions: VisibleSequencePosition[] = [];
+  const userSide = getFenTurnSide(params.startingFen);
+  let userMoveIndex = 0;
 
   if (params.initialOpponentMove) {
     positions.push({
@@ -3004,13 +3170,18 @@ function buildVisibleSequencePositions(params: {
     const fenBefore = move.fenBefore ?? chess.fen();
     const fenAfter = move.fenAfter ?? fenAfterUci(fenBefore, move.uci);
     if (fenAfter) {
+      const positionUserMoveIndex = move.side === userSide ? userMoveIndex : undefined;
       positions.push({
         index: positions.length,
         fen: fenAfter,
         label: move.san,
         move,
         pitchIndex: params.initialOpponentMove ? positions.length - 1 : positions.length,
+        userMoveIndex: positionUserMoveIndex,
       });
+      if (move.side === userSide) {
+        userMoveIndex += 1;
+      }
       try {
         chess = new Chess(fenAfter);
       } catch {
@@ -3029,7 +3200,7 @@ function getAuthoritativeMoveClassification({
   move?: { classification?: MoveClassification } | null;
   moveScore?: { classification?: MoveClassification } | null;
 }) {
-  return moveScore?.classification ?? move?.classification;
+  return moveClassification({ move, moveScore });
 }
 
 function lastMoveFromTrainingMove(move?: TrainingMove | null) {
@@ -3287,7 +3458,7 @@ function EngineLinesSection({
           }
 
           const lead = line.bestSan || line.bestMove;
-          const pv = line.pvSan.slice(1, 13).join(" ");
+          const pv = engineLineContinuationSan(line);
           const cls = line.classification;
           const lineColor = engineLineColor(cls);
           const isBlurred = !revealBadLines && !isRecommendableClassification(cls);
@@ -3324,7 +3495,7 @@ function EngineLinesSection({
                   {lead}
                 </strong>
                 <span className="min-w-0 truncate text-xs font-bold text-[var(--app-muted)]">
-                  {pv || lead}
+                  {pv}
                 </span>
                 {isSelectedUserMove ? (
                   <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--app-accent)]">
