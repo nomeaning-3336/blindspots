@@ -21,6 +21,7 @@ import {
 } from "@/lib/analyze-preferences";
 import {
   DEFAULT_BLINDSPOTS_ELO,
+  buildLastMoveBadge,
   classificationColor,
   classificationIcon,
   classificationLabel,
@@ -1543,9 +1544,20 @@ export default function TrainPage() {
       : activeReplayPosition?.move
         ? lastMoveFromTrainingMove(activeReplayPosition.move)
         : lastMove;
-  const boardLastMoveBadge = isExploringResults && !activeExploratoryPosition && !exploratoryFen
-    ? moveBadgeForPosition(activeSequencePosition)
-    : null;
+  const boardLastMoveBadge = (() => {
+    if (isExploringResults && !activeExploratoryPosition && !exploratoryFen) {
+      const moveScore = activeSequencePosition?.pitchIndex != null
+        ? asyncMoveEvaluations[activeSequencePosition.pitchIndex]?.moveScore
+        : null;
+      const classification = getAuthoritativeMoveClassification({
+        move: activeSequencePosition?.move,
+        moveScore,
+      });
+      if (classification) return buildLastMoveBadge(classification);
+      return null;
+    }
+    return null;
+  })();
   const selectedMove =
     selectedMoveIndex != null && selectedMoveIndex > 0 && selectedMoveIndex <= moves.length
       ? moves[selectedMoveIndex - 1]
@@ -2982,6 +2994,16 @@ function buildVisibleSequencePositions(params: {
   return positions;
 }
 
+function getAuthoritativeMoveClassification({
+  move,
+  moveScore,
+}: {
+  move?: { classification?: MoveClassification } | null;
+  moveScore?: { classification?: MoveClassification } | null;
+}) {
+  return moveScore?.classification ?? move?.classification;
+}
+
 function lastMoveFromTrainingMove(move?: TrainingMove | null) {
   if (!move?.uci || move.uci.length < 4) return null;
   return {
@@ -3451,6 +3473,7 @@ function ResultsPanel({
               ? (index) => onSelectMove(index)
               : undefined
           }
+          asyncMoveEvaluations={asyncMoveEvaluations}
         />
         <div className="mt-auto grid grid-cols-2 gap-2 pt-1">
           <button
@@ -3472,7 +3495,7 @@ function ResultsPanel({
     <div className="flex flex-1 flex-col gap-4 opacity-80 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
       <EloResultCard result={eloResult} isLoading={isSaving} />
       <EvalGraph points={graphPoints} currentIndex={positions.length - 1} compact engineCp={currentEngineEval} />
-      <AnalysisMoveTable moves={userMoves} isAnalyzing={isSaving} compact showEvaluations={true} />
+      <AnalysisMoveTable moves={userMoves} isAnalyzing={isSaving} compact showEvaluations={true} asyncMoveEvaluations={asyncMoveEvaluations} />
       <div className="grid grid-cols-2 gap-2 pt-1">
         <button
           type="button"
@@ -3623,6 +3646,7 @@ function AnalysisMoveTable({
   showEvaluations = false,
   onSelectPosition,
   onHoverMove,
+  asyncMoveEvaluations,
 }: {
   moves: Array<TrainingMove & { absoluteIndex?: number }>;
   currentIndex?: number;
@@ -3632,6 +3656,7 @@ function AnalysisMoveTable({
   showEvaluations?: boolean;
   onSelectPosition?: (index: number) => void;
   onHoverMove?: (move: MoveHighlightTarget | null) => void;
+  asyncMoveEvaluations?: Record<number, { status: "pending" | "done" | "error"; moveScore?: MoveScore; positionEvaluation?: unknown }>;
 }) {
   return (
     <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)]">
@@ -3648,7 +3673,10 @@ function AnalysisMoveTable({
         const positionIndex = (move.absoluteIndex ?? index) + 1;
         const isSelected = selectedMoveIndex != null && selectedMoveIndex === positionIndex;
         const pendingValue = isAnalyzing ? "..." : "--";
-        const visibleClassification = showEvaluations ? move.classification : undefined;
+        const moveScore = asyncMoveEvaluations?.[move.absoluteIndex ?? index]?.moveScore;
+        const visibleClassification = showEvaluations
+          ? getAuthoritativeMoveClassification({ move, moveScore })
+          : undefined;
         return (
         <button
           type="button"
@@ -3666,7 +3694,7 @@ function AnalysisMoveTable({
           }}
           onPointerEnter={() => {
             const squares = moveFromUci(move.uci);
-            onHoverMove?.(squares ? { ...squares, classification: move.classification } : null);
+            onHoverMove?.(squares ? { ...squares, classification: visibleClassification } : null);
           }}
           onPointerLeave={() => onHoverMove?.(null)}
         >

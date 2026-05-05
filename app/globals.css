@@ -438,11 +438,8 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   }
 
   .app-paper-shell {
-    background:
-      linear-gradient(color-mix(in srgb, var(--app-border-strong) 5%, transparent) 1px, transparent 1px),
-      linear-gradient(90deg, color-mix(in srgb, var(--app-border-strong) 5%, transparent) 1px, transparent 1px),
-      var(--app-bg);
-    background-size: 32px 32px, 32px 32px, auto;
+    position: relative;
+    overflow-x: hidden;
   }
 
   .app-brutal-section {

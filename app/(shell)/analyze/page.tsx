@@ -15,7 +15,15 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Pro
   }
 }
 
-export default async function AnalyzePage() {
+type AnalyzePageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function AnalyzePage({ searchParams }: AnalyzePageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const rawFen = resolvedSearchParams.fen;
+  const initialFen = Array.isArray(rawFen) ? rawFen[0] : rawFen;
+
   const userIdResult = await getVerifiedAppUserId();
   const userId = userIdResult.status === "valid" ? userIdResult.userId : null;
   const initialPreferences = await withTimeout(
@@ -26,6 +34,7 @@ export default async function AnalyzePage() {
 
   return (
     <AnalyzeShell
+      initialFen={typeof initialFen === "string" && initialFen.trim().length > 0 ? initialFen : null}
       initialPreferences={initialPreferences}
       analyzePreferencesPersistUrl={userId ? "/api/analyze/preferences" : null}
     />

@@ -671,126 +671,137 @@ function BoardAnnotations({
   if (arrows.length === 0 && circles.length === 0 && !hasEngineArrows && !previewArrow) return null;
 
   return (
-    <svg
-      className="pointer-events-none absolute inset-0 z-40 h-full w-full"
-      viewBox="0 0 8 8"
-      aria-hidden="true"
-    >
-      {engineArrows?.map((arrow, index) => {
-        const from = squareCenter(arrow.from, orientation);
-        const to = squareCenter(arrow.to, orientation);
-        if (!from || !to) return null;
-        const rank = arrow.rank ?? index + 1;
-        const color = arrow.color ?? engineArrowColor(rank);
-        const isHoveredTarget = hoveredSquare === arrow.to || index === localHoveredEngineIndex;
-        const opacity = arrow.emphasis || isHoveredTarget ? 1 : engineArrowOpacity(rank);
-        const nodeRadius = arrow.emphasis || isHoveredTarget ? 0.16 : 0.125;
-        const dx = to.x - from.x;
-        const dy = to.y - from.y;
-        const len = Math.hypot(dx, dy) || 1;
-        const ux = dx / len;
-        const uy = dy / len;
-        const lineEndX = to.x - ux * nodeRadius;
-        const lineEndY = to.y - uy * nodeRadius;
-        return (
-          <line
-            key={`engine-line-${arrow.from}-${arrow.to}-${index}`}
-            x1={from.x}
-            y1={from.y}
-            x2={lineEndX}
-            y2={lineEndY}
-            stroke={color}
-            strokeWidth={0.024}
-            strokeLinecap="butt"
-            opacity={opacity}
-          />
-        );
-      })}
-      {engineTargetNodes.map(({ arrow, index, rank }) => {
-        const to = squareCenter(arrow.to, orientation);
-        if (!to) return null;
-        const color = arrow.color ?? engineArrowColor(rank);
-        const isHoveredTarget = hoveredSquare === arrow.to || index === localHoveredEngineIndex;
-        const opacity = arrow.emphasis || isHoveredTarget ? 1 : engineArrowOpacity(rank);
-        const nodeRadius = arrow.emphasis || isHoveredTarget ? 0.16 : 0.125;
-        const label = arrow.label ? displayEvalText(arrow.label) : "";
-        return (
-          <g key={`engine-node-${arrow.from}-${arrow.to}-${index}`} opacity={opacity}>
-            {label ? (
-              <>
-                <circle
-                  cx={to.x}
-                  cy={to.y}
-                  r={nodeRadius}
-                  fill={color}
-                  className="pointer-events-auto cursor-pointer"
-                  onPointerEnter={() => setLocalHoveredEngineIndex(index)}
-                  onPointerLeave={() => setLocalHoveredEngineIndex(null)}
-                  onClick={() => onEngineArrowClick?.({ from: arrow.from, to: arrow.to })}
-                />
-                <text
-                  x={to.x}
-                  y={to.y}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fontSize={label.startsWith("−") ? 0.11 : 0.13}
-                  fontWeight={800}
-                  className="pointer-events-none"
-                  letterSpacing={label.startsWith("−") ? 0 : "0.02em"}
-                  fill="#050505"
-                  fontFamily="JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
-                  fontVariant="tabular-nums lining-nums"
-                >
-                  {label}
-                </text>
-              </>
-            ) : null}
-          </g>
-        );
-      })}
-      {circles.map((square) => {
-        const center = squareCenter(square, orientation);
-        return center ? (
-          <circle
-            key={square}
-            cx={center.x}
-            cy={center.y}
-            r="0.42"
-            fill="none"
-            stroke="var(--app-accent)"
-            strokeWidth="0.08"
-            opacity="0.82"
-          />
-        ) : null;
-      })}
-      {arrows.map((arrow, index) => {
-        const from = squareCenter(arrow.from, orientation);
-        const to = squareCenter(arrow.to, orientation);
-        if (!from || !to) return null;
-        const isPreview = previewArrow?.from === arrow.from && previewArrow?.to === arrow.to && index === arrows.length - 1;
-        const geometry = arrowGeometry(from, to);
-        return (
-          <g
-            key={`${arrow.from}-${arrow.to}-${index}`}
-            opacity={isPreview ? "0.58" : "0.82"}
-          >
+    <>
+      {/* Engine lines — below pieces (z-5) so origin piece covers the line start */}
+      <svg
+        className="pointer-events-none absolute inset-0 z-[5] h-full w-full"
+        viewBox="0 0 8 8"
+        aria-hidden="true"
+      >
+        {engineArrows?.map((arrow, index) => {
+          const from = squareCenter(arrow.from, orientation);
+          const to = squareCenter(arrow.to, orientation);
+          if (!from || !to) return null;
+          const rank = arrow.rank ?? index + 1;
+          const color = arrow.color ?? engineArrowColor(rank);
+          const isHoveredTarget = hoveredSquare === arrow.to || index === localHoveredEngineIndex;
+          const opacity = arrow.emphasis || isHoveredTarget ? 1 : engineArrowOpacity(rank);
+          const nodeRadius = arrow.emphasis || isHoveredTarget ? 0.16 : 0.125;
+          const dx = to.x - from.x;
+          const dy = to.y - from.y;
+          const len = Math.hypot(dx, dy) || 1;
+          const ux = dx / len;
+          const uy = dy / len;
+          const lineEndX = to.x - ux * nodeRadius;
+          const lineEndY = to.y - uy * nodeRadius;
+          return (
             <line
+              key={`engine-line-${arrow.from}-${arrow.to}-${index}`}
               x1={from.x}
               y1={from.y}
-              x2={geometry.lineEnd.x}
-              y2={geometry.lineEnd.y}
+              x2={lineEndX}
+              y2={lineEndY}
+              stroke={color}
+              strokeWidth={0.024}
+              strokeLinecap="butt"
+              opacity={opacity}
+            />
+          );
+        })}
+      </svg>
+
+      {/* Destination nodes + annotations — above pieces (z-40) */}
+      <svg
+        className="pointer-events-none absolute inset-0 z-40 h-full w-full"
+        viewBox="0 0 8 8"
+        aria-hidden="true"
+      >
+        {engineTargetNodes.map(({ arrow, index, rank }) => {
+          const to = squareCenter(arrow.to, orientation);
+          if (!to) return null;
+          const color = arrow.color ?? engineArrowColor(rank);
+          const isHoveredTarget = hoveredSquare === arrow.to || index === localHoveredEngineIndex;
+          const opacity = arrow.emphasis || isHoveredTarget ? 1 : engineArrowOpacity(rank);
+          const nodeRadius = arrow.emphasis || isHoveredTarget ? 0.16 : 0.125;
+          const label = arrow.label ? displayEvalText(arrow.label) : "";
+          return (
+            <g key={`engine-node-${arrow.from}-${arrow.to}-${index}`} opacity={opacity}>
+              {label ? (
+                <>
+                  <circle
+                    cx={to.x}
+                    cy={to.y}
+                    r={nodeRadius}
+                    fill={color}
+                    className="pointer-events-auto cursor-pointer"
+                    onPointerEnter={() => setLocalHoveredEngineIndex(index)}
+                    onPointerLeave={() => setLocalHoveredEngineIndex(null)}
+                    onClick={() => onEngineArrowClick?.({ from: arrow.from, to: arrow.to })}
+                  />
+                  <text
+                    x={to.x}
+                    y={to.y}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize={label.startsWith("−") ? 0.11 : 0.13}
+                    fontWeight={800}
+                    className="pointer-events-none"
+                    letterSpacing={label.startsWith("−") ? 0 : "0.02em"}
+                    fill="#050505"
+                    fontFamily="JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+                    fontVariant="tabular-nums lining-nums"
+                  >
+                    {label}
+                  </text>
+                </>
+              ) : null}
+            </g>
+          );
+        })}
+        {circles.map((square) => {
+          const center = squareCenter(square, orientation);
+          return center ? (
+            <circle
+              key={square}
+              cx={center.x}
+              cy={center.y}
+              r="0.42"
+              fill="none"
               stroke="var(--app-accent)"
-              strokeWidth="0.17"
-              strokeLinecap="round"
+              strokeWidth="0.08"
+              opacity="0.82"
             />
-            <polygon
-              points={geometry.headPoints}
-              fill="var(--app-accent)"
-            />
-          </g>
-        );
-      })}
-    </svg>
+          ) : null;
+        })}
+        {arrows.map((arrow, index) => {
+          const from = squareCenter(arrow.from, orientation);
+          const to = squareCenter(arrow.to, orientation);
+          if (!from || !to) return null;
+          const isPreview = previewArrow?.from === arrow.from && previewArrow?.to === arrow.to && index === arrows.length - 1;
+          const geometry = arrowGeometry(from, to);
+          return (
+            <g
+              key={`${arrow.from}-${arrow.to}-${index}`}
+              opacity={isPreview ? "0.58" : "0.82"}
+            >
+              <line
+                x1={from.x}
+                y1={from.y}
+                x2={geometry.lineEnd.x}
+                y2={geometry.lineEnd.y}
+                stroke="var(--app-accent)"
+                strokeWidth="0.17"
+                strokeLinecap="round"
+              />
+              <polygon
+                points={geometry.headPoints}
+                fill="var(--app-accent)"
+              />
+            </g>
+          );
+        })}
+      </svg>
+    </>
   );
 }
 
