@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { Chess } from "chess.js";
 import type { Move, Square } from "chess.js";
 import { shouldClearAnnotationsOnPointerDown } from "@/lib/board-annotations";
@@ -166,6 +166,10 @@ export function AnalysisBoard({
   const [annotationArrows, setAnnotationArrows] = useState<BoardAnnotationArrow[]>([]);
   const [pieceGlide, setPieceGlide] = useState<PieceGlideAnimation | null>(null);
   const boardRef = useRef<HTMLDivElement | null>(null);
+  const draggedPieceRef = useRef<HTMLDivElement | null>(null);
+  const dragPositionRef = useRef<{ x: number; y: number } | null>(null);
+  const dragFrameRef = useRef<number | null>(null);
+  const hoveredSquareRef = useRef<string | null>(null);
   const previousFenRef = useRef<string | null>(null);
   const dragOriginRef = useRef<{ x: number; y: number } | null>(null);
   const dragPreviewOriginRef = useRef<{
@@ -197,6 +201,36 @@ export function AnalysisBoard({
 
     return bestBySquare;
   }, [engineArrows]);
+
+  function clearDragFrame() {
+    if (dragFrameRef.current === null) return;
+    window.cancelAnimationFrame(dragFrameRef.current);
+    dragFrameRef.current = null;
+  }
+
+  function scheduleDraggedPieceTransform(position: { x: number; y: number }) {
+    dragPositionRef.current = position;
+    if (dragFrameRef.current !== null) return;
+
+    dragFrameRef.current = window.requestAnimationFrame(() => {
+      dragFrameRef.current = null;
+      const latest = dragPositionRef.current;
+      const node = draggedPieceRef.current;
+      if (!latest || !node) return;
+
+      node.style.transform = `translate(${latest.x}px, ${latest.y}px) translate(-50%, -50%)`;
+    });
+  }
+
+  useEffect(() => {
+    hoveredSquareRef.current = hoveredSquare;
+  }, [hoveredSquare]);
+
+  useEffect(() => {
+    return () => {
+      clearDragFrame();
+    };
+  }, []);
 
   useLayoutEffect(() => {
     const previousFen = previousFenRef.current;
@@ -265,16 +299,22 @@ export function AnalysisBoard({
     function handleWindowPointerMove(event: PointerEvent) {
       const previewOrigin = dragPreviewOriginRef.current;
       const boardPointer = pointerToBoardPoint(event.clientX, event.clientY);
-      setDragPosition(
+      const nextDragPosition =
         previewOrigin
           ? dragPreviewPosition({
               pointer: boardPointer,
               originPointer: previewOrigin.pointer,
               originCenter: previewOrigin.center,
             })
-          : boardPointer,
-      );
-      setHoveredSquare(squareFromClientPoint(event.clientX, event.clientY));
+          : boardPointer;
+      scheduleDraggedPieceTransform(nextDragPosition);
+
+      const nextHoveredSquare = squareFromClientPoint(event.clientX, event.clientY);
+      if (hoveredSquareRef.current !== nextHoveredSquare) {
+        hoveredSquareRef.current = nextHoveredSquare;
+        setHoveredSquare(nextHoveredSquare);
+        setDragPosition(nextDragPosition);
+      }
     }
 
     function handleWindowPointerUp(event: PointerEvent) {
@@ -282,6 +322,8 @@ export function AnalysisBoard({
       const origin = dragOriginRef.current;
       dragOriginRef.current = null;
       dragPreviewOriginRef.current = null;
+      dragPositionRef.current = null;
+      clearDragFrame();
       setDragFrom(null);
       setHoveredSquare(targetSquare);
       setDragPosition(null);
@@ -296,6 +338,8 @@ export function AnalysisBoard({
 
     function handleWindowPointerCancel() {
       dragPreviewOriginRef.current = null;
+      dragPositionRef.current = null;
+      clearDragFrame();
       setDragFrom(null);
       setHoveredSquare(null);
       setDragPosition(null);
@@ -466,6 +510,8 @@ export function AnalysisBoard({
       pointer,
       center: pointer,
     };
+    dragPositionRef.current = isOwnTurnPiece ? pointer : null;
+    hoveredSquareRef.current = square;
     setDragFrom(square);
     setHoveredSquare(square);
     setDragPosition(isOwnTurnPiece ? pointer : null);
@@ -672,6 +718,7 @@ export function AnalysisBoard({
       ) : null}
       {dragFrom && dragPosition ? (
         <DraggedPiece
+          nodeRef={draggedPieceRef}
           chess={chess}
           pieceAssetSet={pieceAssetSet}
           size={dragPieceSize}
@@ -685,6 +732,7 @@ export function AnalysisBoard({
 }
 
 function DraggedPiece({
+  nodeRef,
   chess,
   pieceAssetSet,
   size,
@@ -692,6 +740,7 @@ function DraggedPiece({
   x,
   y,
 }: {
+  nodeRef: RefObject<HTMLDivElement | null>;
   chess: Chess | null;
   pieceAssetSet: string;
   size: number;
@@ -704,13 +753,15 @@ function DraggedPiece({
 
   return (
     <div
+      ref={nodeRef}
       className="pointer-events-none absolute z-[9999] flex items-center justify-center"
       style={{
-        left: x,
-        top: y,
+        left: 0,
+        top: 0,
         width: size,
         height: size,
-        transform: "translate(-50%, -50%)",
+        transform: `translate(${x}px, ${y}px) translate(-50%, -50%)`,
+        willChange: "transform",
       }}
     >
       <img
