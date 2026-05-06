@@ -1108,6 +1108,7 @@ export default function TrainPage() {
     setSelectedMoveIndex(null);
     setHoveredMoveSquares(null);
     setHoveredEngineLineIndex(null);
+    setActiveReplayIndex(null);
 
     try {
       const chess = new Chess(boardFen);
