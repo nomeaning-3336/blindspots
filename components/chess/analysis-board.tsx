@@ -49,7 +49,6 @@ export type AnalysisBoardProps = {
   legalTargets?: string[];
   highlightedSquares?: Record<string, string> | BoardHighlight[];
   engineArrows?: EngineArrow[];
-  maxEngineArrows?: number;
   lastMove?: { from: string; to: string } | null;
   lastMoveBadge?: LastMoveBadge | null;
   pieceAnimation?: boolean;
@@ -108,7 +107,6 @@ export function AnalysisBoard({
   boardTheme = "midnight",
   pieceTheme = "maestro",
   engineArrows,
-  maxEngineArrows,
   onMove,
   onSquareClick,
   onCircleHover,
@@ -162,6 +160,7 @@ export function AnalysisBoard({
   const [annotationArrows, setAnnotationArrows] = useState<BoardAnnotationArrow[]>([]);
   const [pieceGlide, setPieceGlide] = useState<PieceGlideAnimation | null>(null);
   const boardRef = useRef<HTMLDivElement | null>(null);
+  const previousFenRef = useRef<string | null>(null);
   const dragOriginRef = useRef<{ x: number; y: number } | null>(null);
   const dragPreviewOriginRef = useRef<{
     pointer: { x: number; y: number };
@@ -179,26 +178,10 @@ export function AnalysisBoard({
     return sourceSquare && chess ? legalMovesFrom(chess, sourceSquare) : [];
   }, [activeSelected, chess, dragFrom]);
   const activeTargets = legalTargets ?? computedTargets;
-  const visibleEngineArrows = useMemo(() => {
-    if (!engineArrows) return engineArrows;
-
-    const defaultLimit = mode === "training" ? 3 : undefined;
-    const limit = maxEngineArrows ?? defaultLimit;
-
-    if (limit === undefined || engineArrows.length <= limit) return engineArrows;
-
-    const emphasized = engineArrows.filter((arrow) => arrow.emphasis);
-    const regular = engineArrows
-      .filter((arrow) => !arrow.emphasis)
-      .sort((left, right) => (left.rank ?? 999) - (right.rank ?? 999));
-
-    return [...emphasized, ...regular].slice(0, Math.max(limit, emphasized.length));
-  }, [engineArrows, maxEngineArrows, mode]);
-
   const bestEngineArrowByTarget = useMemo(() => {
     const bestBySquare = new Map<string, { arrow: EngineArrow; rank: number }>();
 
-    visibleEngineArrows?.forEach((arrow, index) => {
+    engineArrows?.forEach((arrow, index) => {
       const rank = arrow.rank ?? index + 1;
       const current = bestBySquare.get(arrow.to);
       if (!current || rank < current.rank) {
@@ -207,16 +190,31 @@ export function AnalysisBoard({
     });
 
     return bestBySquare;
-  }, [visibleEngineArrows]);
+  }, [engineArrows]);
 
   useEffect(() => {
-    if (!pieceAnimation || !lastMove?.from || !lastMove?.to || lastMove.from === lastMove.to || !chess) {
+    const previousFen = previousFenRef.current;
+    previousFenRef.current = fen;
+
+    if (!pieceAnimation || !lastMove?.from || !lastMove?.to || lastMove.from === lastMove.to || !chess || !previousFen) {
       setPieceGlide(null);
       return;
     }
 
+    const previousChess = safeChess(previousFen);
+    if (!previousChess) {
+      setPieceGlide(null);
+      return;
+    }
+
+    const previousPiece = previousChess.get(lastMove.from as Square);
     const movedPiece = chess.get(lastMove.to as Square);
-    if (!movedPiece) {
+    if (
+      !previousPiece ||
+      !movedPiece ||
+      previousPiece.color !== movedPiece.color ||
+      previousPiece.type !== movedPiece.type
+    ) {
       setPieceGlide(null);
       return;
     }
@@ -240,7 +238,7 @@ export function AnalysisBoard({
 
     const timeout = window.setTimeout(() => {
       setPieceGlide((current) => (current?.id === animationId ? null : current));
-    }, 190);
+    }, 155);
 
     return () => {
       window.cancelAnimationFrame(frame);
@@ -369,10 +367,10 @@ export function AnalysisBoard({
   useEffect(() => {
     const isHoveredAnnotationCircle = hoveredSquare ? annotationCircles.includes(hoveredSquare) : false;
     const isHoveredEngineTarget = hoveredSquare
-      ? visibleEngineArrows?.some((arrow) => arrow.to === hoveredSquare) ?? false
+      ? engineArrows?.some((arrow) => arrow.to === hoveredSquare) ?? false
       : false;
     onCircleHover?.(isHoveredAnnotationCircle || isHoveredEngineTarget ? hoveredSquare : null);
-  }, [visibleEngineArrows, hoveredSquare, annotationCircles, onCircleHover]);
+  }, [engineArrows, hoveredSquare, annotationCircles, onCircleHover]);
 
   function handleSquareClick(square: string) {
     const engineTarget = bestEngineArrowByTarget.get(square);
@@ -660,7 +658,7 @@ export function AnalysisBoard({
       <BoardAnnotations
         arrows={previewArrow ? [...annotationArrows, previewArrow] : annotationArrows}
         circles={annotationCircles}
-        engineArrows={visibleEngineArrows}
+        engineArrows={engineArrows}
         hoveredSquare={hoveredSquare}
         orientation={orientation}
         previewArrow={previewArrow}
@@ -743,11 +741,11 @@ function PieceGlideOverlay({
 
   return (
     <div
-      className="pointer-events-none absolute left-0 top-0 z-[35] flex h-[12.5%] w-[12.5%] items-center justify-center"
+      className="pointer-events-none absolute left-0 top-0 z-[20] flex h-[12.5%] w-[12.5%] items-center justify-center"
       style={{
         transform: `translate(${target.col * 100}%, ${target.row * 100}%)`,
         transition: animation.started
-          ? "transform 165ms cubic-bezier(0.2, 0.85, 0.25, 1)"
+          ? "transform 135ms ease-out"
           : "none",
         willChange: "transform",
       }}
