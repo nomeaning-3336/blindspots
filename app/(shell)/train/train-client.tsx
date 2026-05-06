@@ -3857,6 +3857,9 @@ function AnalysisMoveTable({
           !isManualPostmortemExploration &&
           selectedMoveIndex != null &&
           selectedMoveIndex === positionIndex;
+        const isCurrentPosition =
+          !isManualPostmortemExploration &&
+          currentIndex === positionIndex;
         const pendingValue = isAnalyzing ? "..." : "--";
         const moveScore = asyncMoveEvaluations?.[move.absoluteIndex ?? index]?.moveScore;
         const visibleClassification = showEvaluations
@@ -3875,7 +3878,7 @@ function AnalysisMoveTable({
             "grid w-full grid-cols-[minmax(0,1.1fr)_68px_68px_76px] items-center border-b border-[var(--app-border-soft)] px-3 text-left last:border-b-0",
             compact ? "min-h-9 text-xs" : "min-h-10 text-sm",
             onSelectPosition ? "cursor-pointer transition" : "cursor-default",
-            currentIndex === positionIndex || isSelected ? "bg-[var(--app-highlight-soft)]" : "",
+            isCurrentPosition || isSelected ? "bg-[var(--app-highlight-soft)]" : "",
           ].join(" ")}
           disabled={!onSelectPosition}
           onClick={(event) => {
