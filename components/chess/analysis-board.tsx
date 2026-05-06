@@ -1169,6 +1169,15 @@ function inferPieceGlideMove(previousChess: Chess, currentChess: Chess): {
     }
   }
 
+  const isCleanMoveTransition =
+    (disappeared.length === 1 && appeared.length === 1) ||
+    (disappeared.length === 2 && appeared.length === 1) ||
+    (disappeared.length === 1 && appeared.length === 2);
+
+  if (!isCleanMoveTransition) {
+    return null;
+  }
+
   const candidates = disappeared.flatMap((fromPiece) =>
     appeared
       .filter((toPiece) => toPiece.color === fromPiece.color && toPiece.type === fromPiece.type)
