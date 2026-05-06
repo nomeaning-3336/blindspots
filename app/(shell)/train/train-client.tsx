@@ -1105,6 +1105,10 @@ export default function TrainPage() {
   function handleExploreMove(move: BoardMove) {
     if (!isExploringResults) return;
 
+    setSelectedMoveIndex(null);
+    setHoveredMoveSquares(null);
+    setHoveredEngineLineIndex(null);
+
     try {
       const chess = new Chess(boardFen);
       const playedMove = chess.move({ from: move.from, to: move.to, promotion: "q" });
