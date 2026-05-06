@@ -66,6 +66,8 @@ const SKILL_LEVEL_STARTING_ELO: Record<SkillLevel, number> = {
   expert: 2000,
 };
 
+const ENABLE_CLIENT_STOCKFISH_LINES = false;
+
 type TrainingMove = {
   san: string;
   uci: string;
