@@ -20,6 +20,12 @@ type PieceGlideAnimation = {
   started: boolean;
 };
 
+type BoardPieceSnapshot = {
+  square: string;
+  color: "w" | "b";
+  type: string;
+};
+
 export type BoardHighlight = {
   square: string;
   color?: string;
@@ -196,7 +202,7 @@ export function AnalysisBoard({
     const previousFen = previousFenRef.current;
     previousFenRef.current = fen;
 
-    if (!pieceAnimation || !lastMove?.from || !lastMove?.to || lastMove.from === lastMove.to || !chess || !previousFen) {
+    if (!pieceAnimation || !chess || !previousFen || previousFen === fen) {
       setPieceGlide(null);
       return;
     }
@@ -207,47 +213,19 @@ export function AnalysisBoard({
       return;
     }
 
-    const forwardPreviousPiece = previousChess.get(lastMove.from as Square);
-    const forwardCurrentPiece = chess.get(lastMove.to as Square);
-    const backwardPreviousPiece = previousChess.get(lastMove.to as Square);
-    const backwardCurrentPiece = chess.get(lastMove.from as Square);
-
-    let animationFrom: string | null = null;
-    let animationTo: string | null = null;
-    let code: string | null = null;
-
-    if (
-      forwardPreviousPiece &&
-      forwardCurrentPiece &&
-      forwardPreviousPiece.color === forwardCurrentPiece.color &&
-      forwardPreviousPiece.type === forwardCurrentPiece.type
-    ) {
-      animationFrom = lastMove.from;
-      animationTo = lastMove.to;
-      code = pieceCodeForAsset(forwardCurrentPiece.color, forwardCurrentPiece.type);
-    } else if (
-      backwardPreviousPiece &&
-      backwardCurrentPiece &&
-      backwardPreviousPiece.color === backwardCurrentPiece.color &&
-      backwardPreviousPiece.type === backwardCurrentPiece.type
-    ) {
-      animationFrom = lastMove.to;
-      animationTo = lastMove.from;
-      code = pieceCodeForAsset(backwardCurrentPiece.color, backwardCurrentPiece.type);
-    }
-
-    if (!animationFrom || !animationTo || !code) {
+    const inferredMove = inferPieceGlideMove(previousChess, chess);
+    if (!inferredMove) {
       setPieceGlide(null);
       return;
     }
 
-    const animationId = `${fen}|${animationFrom}-${animationTo}|${code}`;
+    const animationId = `${fen}|${inferredMove.from}-${inferredMove.to}|${inferredMove.pieceCode}`;
 
     setPieceGlide({
       id: animationId,
-      from: animationFrom,
-      to: animationTo,
-      pieceCode: code,
+      from: inferredMove.from,
+      to: inferredMove.to,
+      pieceCode: inferredMove.pieceCode,
       started: false,
     });
 
@@ -265,7 +243,7 @@ export function AnalysisBoard({
       window.cancelAnimationFrame(frame);
       window.clearTimeout(timeout);
     };
-  }, [chess, fen, lastMove?.from, lastMove?.to, pieceAnimation]);
+  }, [chess, fen, pieceAnimation]);
 
   useEffect(() => {
     setInternalSelected(null);
@@ -1025,6 +1003,86 @@ function squareGridOffset(square: string, orientation: BoardOrientation) {
     col: center.x - 0.5,
     row: center.y - 0.5,
   };
+}
+
+function inferPieceGlideMove(previousChess: Chess, currentChess: Chess): {
+  from: string;
+  to: string;
+  pieceCode: string;
+} | null {
+  const disappeared: BoardPieceSnapshot[] = [];
+  const appeared: BoardPieceSnapshot[] = [];
+
+  for (const square of allBoardSquares()) {
+    const previousPiece = previousChess.get(square as Square);
+    const currentPiece = currentChess.get(square as Square);
+
+    const isSamePiece =
+      previousPiece &&
+      currentPiece &&
+      previousPiece.color === currentPiece.color &&
+      previousPiece.type === currentPiece.type;
+
+    if (previousPiece && !isSamePiece) {
+      disappeared.push({
+        square,
+        color: previousPiece.color,
+        type: previousPiece.type,
+      });
+    }
+
+    if (currentPiece && !isSamePiece) {
+      appeared.push({
+        square,
+        color: currentPiece.color,
+        type: currentPiece.type,
+      });
+    }
+  }
+
+  const candidates = disappeared.flatMap((fromPiece) =>
+    appeared
+      .filter((toPiece) => toPiece.color === fromPiece.color && toPiece.type === fromPiece.type)
+      .map((toPiece) => ({
+        from: fromPiece.square,
+        to: toPiece.square,
+        pieceCode: pieceCodeForAsset(toPiece.color, toPiece.type),
+        distance: squareDistance(fromPiece.square, toPiece.square),
+      })),
+  );
+
+  if (candidates.length === 0) return null;
+
+  candidates.sort((left, right) => left.distance - right.distance);
+  const best = candidates[0];
+
+  const sameColorTypeMatches = candidates.filter((candidate) => candidate.distance === best.distance);
+  if (sameColorTypeMatches.length > 1) return null;
+
+  return {
+    from: best.from,
+    to: best.to,
+    pieceCode: best.pieceCode,
+  };
+}
+
+function allBoardSquares() {
+  const squares: string[] = [];
+  for (const file of FILES) {
+    for (const rank of RANKS) {
+      squares.push(`${file}${rank}`);
+    }
+  }
+  return squares;
+}
+
+function squareDistance(from: string, to: string) {
+  const fromFile = FILES.indexOf(from[0]);
+  const fromRank = RANKS.indexOf(from[1]);
+  const toFile = FILES.indexOf(to[0]);
+  const toRank = RANKS.indexOf(to[1]);
+  if (fromFile === -1 || fromRank === -1 || toFile === -1 || toRank === -1) return Number.POSITIVE_INFINITY;
+  return Math.hypot(toFile - fromFile, toRank - fromRank);
 }
 
 function squaresForOrientation(orientation: BoardOrientation) {
