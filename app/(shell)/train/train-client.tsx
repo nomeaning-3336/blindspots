@@ -490,6 +490,7 @@ export default function TrainPage() {
   const trainLayoutGridRef = useRef<HTMLDivElement | null>(null);
   const startTrainingGestureConsumedRef = useRef(false);
   const isPostMortemVisible = state === "complete" || state === "drift";
+  const shouldAnimatePieces = state === "active" || isPostMortemVisible;
 
   useEffect(() => {
     engineLineCacheRef.current = engineLineCache;
@@ -2151,7 +2152,7 @@ export default function TrainPage() {
                         <AnalysisBoard
                           fen={boardFen}
                           mode="training"
-                          pieceAnimation={isPostMortemVisible}
+                          pieceAnimation={shouldAnimatePieces}
                           orientation={boardOrientation}
                           coordinates
                           showLegalTargets={false}
@@ -2186,7 +2187,7 @@ export default function TrainPage() {
                       <AnalysisBoard
                         fen={boardFen}
                         mode="training"
-                        pieceAnimation={isPostMortemVisible}
+                        pieceAnimation={shouldAnimatePieces}
                         orientation={boardOrientation}
                         coordinates
                         showLegalTargets
