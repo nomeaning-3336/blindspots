@@ -335,7 +335,9 @@ export function AnalysisBoard({
   }, [fen]);
 
   useEffect(() => {
-    if (!dragFrom || disabled || mode !== "training" || !chess) return;
+    const activeChess = chess;
+    if (!dragFrom || disabled || mode !== "training" || !activeChess) return;
+    const dragChess: Chess = activeChess;
     const sourceSquare = dragFrom;
 
     function handleWindowPointerMove(event: PointerEvent) {
@@ -366,7 +368,7 @@ export function AnalysisBoard({
         event.clientX - (origin?.x ?? event.clientX),
         event.clientY - (origin?.y ?? event.clientY),
       ) > 8;
-      const legalMove = targetSquare ? findLegalMove(chess, sourceSquare, targetSquare) : null;
+      const legalMove = targetSquare ? findLegalMove(dragChess, sourceSquare, targetSquare) : null;
       const releaseOffset = gridOffsetFromClientPoint(event.clientX, event.clientY);
       const fromOffset = squareGridOffset(sourceSquare, orientation);
       const toOffset = targetSquare ? squareGridOffset(targetSquare, orientation) : null;
