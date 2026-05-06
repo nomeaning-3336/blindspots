@@ -636,6 +636,55 @@ export default function TrainPage() {
     };
   }, [fen, isAwaitingStartGesture, pendingInitialEngineMove]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (process.env.NODE_ENV === "production") return;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__blindspotsAnalyzeFen = async (fenOverride?: string) => {
+      const targetFen = fenOverride ?? fen;
+
+      function logLines(lines: Array<{ rank: number; depth: number; cp: number; mate?: number | null; bestSan: string; pvSan: string[] }>) {
+        console.table(
+          lines.map((line) => ({
+            rank: line.rank,
+            depth: line.depth,
+            cp: line.cp,
+            mate: line.mate ?? null,
+            bestSan: line.bestSan,
+            pvSan: line.pvSan.join(" "),
+          })),
+        );
+      }
+
+      try {
+        const [{ getClientStockfishEngine }, { clientLinesToTrainingEngineLines }] = await Promise.all([
+          import("@/lib/stockfish/client-engine"),
+          import("@/lib/stockfish/client-lines-to-training-lines"),
+        ]);
+
+        const engine = getClientStockfishEngine();
+        const result = await engine.analyzeFen({
+          fen: targetFen,
+          multiPv: 3,
+          movetimeMs: 800,
+          onUpdate: (lines) => {
+            logLines(clientLinesToTrainingEngineLines({ fen: targetFen, lines }));
+          },
+        });
+        const convertedLines = clientLinesToTrainingEngineLines({ fen: targetFen, lines: result.lines });
+        logLines(convertedLines);
+        return convertedLines;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message !== "Client Stockfish search stopped.") {
+          console.error("Client Stockfish smoke test failed.", error);
+        }
+        return [];
+      }
+    };
+  }, [fen]);
+
   // Start gesture handler — intercepts the first user interaction to unlock audio
   // and play the pending initial engine move.
   useEffect(() => {
