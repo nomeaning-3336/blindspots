@@ -163,7 +163,8 @@ function SummaryTab({ summary, hasData }: { summary: DashboardSummary; hasData: 
   return (
     <div className="grid gap-5">
       <QueueSummaryCards summary={summary} />
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(260px,0.44fr)_minmax(0,0.56fr)] lg:items-start">
         <ProgressSnapshot summary={summary} hasData={hasData} />
         <MoveClassifications classifications={summary.classifications} />
       </div>
@@ -358,7 +359,7 @@ function RecentActivitySection({
 
   return (
     <section className="app-brutal-section p-5 md:p-6">
-      <SectionLabel right={`${allRows.length} shown`}>Recent training</SectionLabel>
+      <SectionLabel>Recent training</SectionLabel>
       <div className="grid gap-3">
         {allRows.map((row) => (
           <ActivityCard key={row.key} row={row} />
@@ -595,20 +596,20 @@ function PositionRow({ position }: { position: DashboardPosition }) {
 function ProgressSnapshot({ summary, hasData }: { summary: DashboardSummary; hasData: boolean }) {
   const lastSession = formatDate(summary.lastSessionAt);
   return (
-    <section>
+    <section className="app-brutal-section flex min-h-[190px] flex-col justify-center p-5 md:min-h-[220px] md:p-6 lg:self-center">
       <SectionLabel>Progress snapshot</SectionLabel>
-      <div className="mt-3 flex flex-col gap-2 text-xs">
-        <div className="flex justify-between">
-          <span className="text-[var(--app-muted)]">Sequences Completed</span>
-          <span className="font-bold text-[var(--app-text)]">{hasData ? formatNumber(summary.totalSequences) : "-"}</span>
+      <div className="mt-4 flex flex-col gap-3">
+        <div className="app-brutal-row flex items-center justify-between gap-4 rounded-lg px-4 py-3">
+          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">Sequences Completed</span>
+          <span className="text-xl font-bold leading-none text-[var(--app-text)]">{hasData ? formatNumber(summary.totalSequences) : "-"}</span>
         </div>
-        <div className="flex justify-between">
-          <span className="text-[var(--app-muted)]">Moves Evaluated</span>
-          <span className="font-bold text-[var(--app-text)]">{hasData ? formatNumber(summary.movesEvaluated) : "-"}</span>
+        <div className="app-brutal-row flex items-center justify-between gap-4 rounded-lg px-4 py-3">
+          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">Moves Evaluated</span>
+          <span className="text-xl font-bold leading-none text-[var(--app-text)]">{hasData ? formatNumber(summary.movesEvaluated) : "-"}</span>
         </div>
-        <div className="flex justify-between">
-          <span className="text-[var(--app-muted)]">Last Session</span>
-          <span className="font-bold text-[var(--app-text)]">{summary.lastSessionAt ? lastSession.text : "never"}</span>
+        <div className="app-brutal-row flex items-center justify-between gap-4 rounded-lg px-4 py-3">
+          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">Last Session</span>
+          <span className="text-sm font-bold text-[var(--app-text)]">{summary.lastSessionAt ? lastSession.text : "never"}</span>
         </div>
       </div>
     </section>
@@ -623,7 +624,7 @@ function MoveClassifications({ classifications }: { classifications: DashboardCl
 
   if (!classifications || rows.length === 0) {
     return (
-      <section className="min-w-0">
+      <section className="app-brutal-section min-h-[230px] min-w-0 p-5 md:min-h-[275px] md:p-6">
         <SectionLabel>Move classifications</SectionLabel>
         <div className="text-xs leading-6 text-[var(--app-muted)]">
           No classified moves yet. Train a sequence. Stockfish does the rest.
@@ -634,11 +635,10 @@ function MoveClassifications({ classifications }: { classifications: DashboardCl
 
   const total = rows.reduce((sum, row) => sum + classifications[row.id], 0);
   const displayTotal = Math.max(total, 1);
-  const rowCount = Math.max(1, Math.ceil(rows.length / 2));
 
   return (
-    <section className="min-w-0">
-      <SectionLabel right={`${formatNumber(total)} moves`}>Move classifications</SectionLabel>
+    <section className="app-brutal-section min-h-[230px] min-w-0 p-5 md:min-h-[275px] md:p-6">
+      <SectionLabel>Move classifications</SectionLabel>
       <div>
         <div className="mb-4 flex h-2 overflow-hidden border border-[var(--app-border-soft)] bg-[var(--app-bg)]">
           {rows.map((row) => {
@@ -653,19 +653,16 @@ function MoveClassifications({ classifications }: { classifications: DashboardCl
             );
           })}
         </div>
-        <div
-          className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-flow-col sm:grid-cols-2"
-          style={{ gridTemplateRows: `repeat(${rowCount}, minmax(0, auto))` }}
-        >
+        <div className="flex flex-col gap-2.5">
           {rows.map((row) => {
             const count = classifications[row.id];
             const pct = total > 0 ? `${((count / total) * 100).toFixed(1)}%` : "0.0%";
             return (
-              <div key={row.id} className="grid grid-cols-[8px_minmax(0,1fr)_auto_44px] items-center gap-2 text-[11px]">
-                <span className="h-2 w-2" style={{ background: row.color }} />
-                <span className="min-w-0 truncate text-[var(--app-text)]">{row.label}</span>
-                <span className="font-bold text-[var(--app-text)]">{formatNumber(count)}</span>
-                <span className="text-right font-bold text-[var(--app-text)]">{pct}</span>
+              <div key={row.id} className="grid grid-cols-[10px_minmax(0,1fr)_auto_48px] items-center gap-2 text-sm">
+                <span className="h-2.5 w-2.5 rounded-sm" style={{ background: row.color }} />
+                <span className="min-w-0 truncate font-medium text-[var(--app-text)]">{row.label}</span>
+                <span className="font-bold tabular-nums text-[var(--app-text)]">{formatNumber(count)}</span>
+                <span className="text-right font-bold tabular-nums text-[var(--app-text)]">{pct}</span>
               </div>
             );
           })}
