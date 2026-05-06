@@ -2069,6 +2069,7 @@ export default function TrainPage() {
                         <AnalysisBoard
                           fen={boardFen}
                           mode="training"
+                          pieceAnimation={isPostMortemVisible}
                           orientation={boardOrientation}
                           coordinates
                           showLegalTargets={false}
@@ -2103,6 +2104,7 @@ export default function TrainPage() {
                       <AnalysisBoard
                         fen={boardFen}
                         mode="training"
+                        pieceAnimation={isPostMortemVisible}
                         orientation={boardOrientation}
                         coordinates
                         showLegalTargets
