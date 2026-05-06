@@ -417,6 +417,7 @@ export default function TrainPage() {
   const [exploratoryHistoryIndex, setExploratoryHistoryIndex] = useState(-1);
   const [exploreSelectedSquare, setExploreSelectedSquare] = useState<string | null>(null);
   const [selectedMoveIndex, setSelectedMoveIndex] = useState<number | null>(null);
+  const [isManualPostmortemExploration, setIsManualPostmortemExploration] = useState(false);
   const [engineLineCache, setEngineLineCache] = useState<Record<string, EngineLineResult[]>>({});
   const [engineLineErrorFens, setEngineLineErrorFens] = useState<Set<string>>(new Set());
   const [engineLineLoadingFen, setEngineLineLoadingFen] = useState<string | null>(null);
@@ -685,6 +686,7 @@ export default function TrainPage() {
     setExploreSelectedSquare(null);
     setSelectedMoveIndex(null);
     setActiveReplayIndex(null);
+    setIsManualPostmortemExploration(false);
     setEngineLineCache({});
     setEngineLineErrorFens(new Set());
     setEngineLineLoadingFen(null);
@@ -850,6 +852,7 @@ export default function TrainPage() {
     setExploreSelectedSquare(null);
     setSelectedMoveIndex(null);
     setActiveReplayIndex(null);
+    setIsManualPostmortemExploration(false);
     setEngineLineCache({});
     setEngineLineErrorFens(new Set());
     setEngineLineLoadingFen(null);
@@ -1040,6 +1043,7 @@ export default function TrainPage() {
     setExploratoryLastMove(null);
     setExploratoryHistory([]);
     setExploratoryHistoryIndex(-1);
+    setIsManualPostmortemExploration(false);
   }
 
   function handleMove(move: BoardMove) {
@@ -1105,6 +1109,7 @@ export default function TrainPage() {
   function handleExploreMove(move: BoardMove) {
     if (!isExploringResults) return;
 
+    setIsManualPostmortemExploration(true);
     setSelectedMoveIndex(null);
     setHoveredMoveSquares(null);
     setHoveredEngineLineIndex(null);
@@ -1915,6 +1920,7 @@ export default function TrainPage() {
       e.stopPropagation();
 
       const nextPosition = positions[nextIndex];
+      setIsManualPostmortemExploration(false);
       setActiveReplayIndex(nextIndex === liveLastIndex ? null : nextIndex);
 
       if (e.key === "ArrowRight" && nextPosition?.move) {
@@ -1963,6 +1969,7 @@ export default function TrainPage() {
     const currentIndex = exploratoryHistoryIndex;
     const movingForward = nextIndex > currentIndex;
 
+    setIsManualPostmortemExploration(false);
     setSelectedMoveIndex(null);
     setHoveredEngineLineIndex(null);
     setHoveredMoveSquares(null);
@@ -1995,6 +2002,7 @@ export default function TrainPage() {
       return;
     }
     const previousIndex = activeExploreIndex;
+    setIsManualPostmortemExploration(false);
     setSelectedMoveIndex(boundedIndex);
     resetExploratoryLine();
     setExploreSelectedSquare(null);
@@ -2189,6 +2197,7 @@ export default function TrainPage() {
               onNavigate={navigateExploreTo}
               onNextPosition={() => switchState("active")}
               selectedMoveIndex={selectedMoveIndex}
+              isManualPostmortemExploration={isManualPostmortemExploration}
               selectedMoveUci={selectedMoveUci}
               onSelectMove={(positionIndex) => {
                 navigateExploreTo(positionIndex);
@@ -3569,6 +3578,7 @@ function ResultsPanel({
   selectedMoveIndex,
   selectedMoveUci,
   onSelectMove,
+  isManualPostmortemExploration,
 }: {
   eloResult: EloResult | null;
   isSaving: boolean;
@@ -3595,6 +3605,7 @@ function ResultsPanel({
   selectedMoveIndex: number | null;
   selectedMoveUci: string | null;
   onSelectMove?: (positionIndex: number) => void;
+  isManualPostmortemExploration: boolean;
 }) {
   const userMoves = moves
     .map((move, index) => ({ ...move, absoluteIndex: index }))
@@ -3629,6 +3640,7 @@ function ResultsPanel({
           canonicalMoves={canonicalMoves}
           currentIndex={currentIndex}
           selectedMoveIndex={selectedMoveIndex}
+          isManualPostmortemExploration={isManualPostmortemExploration}
           isAnalyzing={isSaving}
           compact
           showEvaluations={true}
@@ -3812,6 +3824,7 @@ function AnalysisMoveTable({
   onSelectPosition,
   onHoverMove,
   asyncMoveEvaluations,
+  isManualPostmortemExploration = false,
 }: {
   moves: Array<TrainingMove & { absoluteIndex?: number }>;
   canonicalMoves?: CanonicalPostmortemMove[];
@@ -3823,6 +3836,7 @@ function AnalysisMoveTable({
   onSelectPosition?: (index: number) => void;
   onHoverMove?: (move: MoveHighlightTarget | null) => void;
   asyncMoveEvaluations?: Record<number, { status: "pending" | "done" | "error"; moveScore?: MoveScore; positionEvaluation?: unknown }>;
+  isManualPostmortemExploration?: boolean;
 }) {
   return (
     <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)]">
@@ -3839,7 +3853,10 @@ function AnalysisMoveTable({
         const positionIndex = (move.absoluteIndex ?? index) + 1;
         const canonicalMove = canonicalMoves?.find((entry) => entry.positionIndex === positionIndex) ?? null;
         const canonicalRow = canonicalMove?.tableRow ?? null;
-        const isSelected = selectedMoveIndex != null && selectedMoveIndex === positionIndex;
+        const isSelected =
+          !isManualPostmortemExploration &&
+          selectedMoveIndex != null &&
+          selectedMoveIndex === positionIndex;
         const pendingValue = isAnalyzing ? "..." : "--";
         const moveScore = asyncMoveEvaluations?.[move.absoluteIndex ?? index]?.moveScore;
         const visibleClassification = showEvaluations
