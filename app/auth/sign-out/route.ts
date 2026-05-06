@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { publicUrl } from "@/lib/public-origin";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
@@ -10,9 +11,9 @@ export async function GET(request: Request) {
       console.error("Failed to sign out from Supabase", error);
     }
 
-    return applyCookies(NextResponse.redirect(new URL("/", request.url), 303));
+    return applyCookies(NextResponse.redirect(publicUrl(request, "/"), 303));
   } catch (error) {
     console.error("Sign-out route failed", error);
-    return NextResponse.redirect(new URL("/", request.url), 303);
+    return NextResponse.redirect(publicUrl(request, "/"), 303);
   }
 }
