@@ -42,6 +42,12 @@ import {
   mergePieceLinesWithDeeperKnownLines,
 } from "@/lib/training/engine-line-cache";
 import {
+  formatPostmortemEvalLabel,
+  getEvalBarFill,
+  getPostmortemTerminalDisplay,
+  whitePositiveMateCp,
+} from "@/lib/training/postmortem-terminal-display";
+import {
   postMortemNavigationAction,
   type PostMortemNavigationKey,
 } from "@/lib/training-postmortem-navigation";
@@ -1741,7 +1747,13 @@ export default function TrainPage() {
     : classifiedDisplayLines.filter((line) => isRecommendableClassification(line.classification));
   const hoveredEngineLineMove =
     hoveredEngineLineIndex == null ? null : classifiedDisplayLines[hoveredEngineLineIndex]?.bestMove ?? null;
-  const currentEngineEval = currentEngineLines[0]?.cp;
+  const terminalBoardDisplay = useMemo(
+    () => getPostmortemTerminalDisplay(boardFen),
+    [boardFen],
+  );
+  const currentEngineEval = currentEngineLines[0]?.cp ?? terminalBoardDisplay.evalCp ?? undefined;
+  const currentEngineMate = currentEngineLines[0]?.mate ?? terminalBoardDisplay.evalMate ?? null;
+  const currentEngineMateCp = whitePositiveMateCp(boardFen, currentEngineMate, currentEngineEval);
   const boardFrameClassName = [
     "app-brutal-board-frame relative max-w-full overflow-visible",
     isExploringResults
@@ -2078,7 +2090,13 @@ export default function TrainPage() {
                     isExploring={isExploringResults}
                   >
                     {isExploringResults ? (
-                      <BoardWithEvalBar evalCp={currentEngineEval} isLoading={isEngineLinesLoading} orientation={boardOrientation}>
+                      <BoardWithEvalBar
+                        evalCp={currentEngineEval}
+                        evalMate={currentEngineMate}
+                        evalMateCp={currentEngineMateCp}
+                        isLoading={isEngineLinesLoading}
+                        orientation={boardOrientation}
+                      >
                         <AnalysisBoard
                           fen={boardFen}
                           mode="training"
@@ -2188,6 +2206,7 @@ export default function TrainPage() {
               isEngineLinesLoading={isDisplayLoading}
               hasEngineLineError={hasEngineLineError}
               currentEngineEval={currentEngineEval}
+              engineEmptyMessage={terminalBoardDisplay.engineEmptyMessage}
               isPieceSelected={Boolean(exploreSelectedSquare)}
               hoveredAnnotationSquare={hoveredAnnotationSquare}
               hoveredEngineLineIndex={hoveredEngineLineIndex}
@@ -3378,6 +3397,7 @@ function EngineLinesSection({
   lines,
   isLoading,
   hasError = false,
+  emptyMessageOverride,
   revealBadLines = false,
   hoveredDestinationSquare,
   hoveredIndex,
@@ -3388,6 +3408,7 @@ function EngineLinesSection({
   lines: EngineLineResult[];
   isLoading: boolean;
   hasError?: boolean;
+  emptyMessageOverride?: string | null;
   revealBadLines?: boolean;
   hoveredDestinationSquare?: string | null;
   hoveredIndex?: number | null;
@@ -3397,7 +3418,9 @@ function EngineLinesSection({
 }) {
   const emptyMessage = isLoading
     ? "Receiving engine lines..."
-    : hasError
+    : emptyMessageOverride
+      ? emptyMessageOverride
+      : hasError
       ? "No engine lines yet."
       : "Engine lines unavailable";
   const displayRows: Array<EngineLineResult | null> = Array.from({ length: 5 }, (_, index) => lines[index] ?? null);
@@ -3460,7 +3483,7 @@ function EngineLinesSection({
                   <ClassificationBadge classification={cls} />
                 ) : <span />}
                 <span className="text-xs font-black tabular-nums text-[var(--app-text)]">
-                  {formatEval(line.cp)}
+                  {formatPostmortemEvalLabel(line.cp, line.mate)}
                 </span>
                 <strong className="min-w-0 truncate text-base font-black leading-none text-[var(--app-text)]">
                   {lead}
@@ -3491,25 +3514,39 @@ function EngineLinesSection({
 
 function BoardWithEvalBar({
   evalCp,
+  evalMate,
+  evalMateCp,
   isLoading,
   orientation,
   children,
 }: {
   evalCp?: number;
+  evalMate?: number | null;
+  evalMateCp?: number | null;
   isLoading: boolean;
   orientation: "white" | "black";
   children: ReactNode;
 }) {
-  const [lastEvalCp, setLastEvalCp] = useState<number | null>(null);
+  const [lastEval, setLastEval] = useState<{ cp: number | null; mate: number | null; mateCp: number | null }>({
+    cp: null,
+    mate: null,
+    mateCp: null,
+  });
 
   useEffect(() => {
-    if (typeof evalCp === "number") setLastEvalCp(evalCp);
-  }, [evalCp]);
+    if (typeof evalCp === "number" || typeof evalMate === "number") {
+      setLastEval({
+        cp: typeof evalCp === "number" ? evalCp : null,
+        mate: typeof evalMate === "number" ? evalMate : null,
+        mateCp: typeof evalMateCp === "number" ? evalMateCp : null,
+      });
+    }
+  }, [evalCp, evalMate, evalMateCp]);
 
-  const displayEvalCp = typeof evalCp === "number" ? evalCp : isLoading ? lastEvalCp : null;
-  const clamped = typeof displayEvalCp === "number" ? Math.max(-600, Math.min(600, displayEvalCp)) : 0;
-  const whitePct = 50 + (clamped / 600) * 42;
-  const blackPct = 100 - whitePct;
+  const displayEvalCp = typeof evalCp === "number" ? evalCp : isLoading ? lastEval.cp : null;
+  const displayEvalMate = typeof evalMate === "number" ? evalMate : isLoading ? lastEval.mate : null;
+  const displayEvalMateCp = typeof evalMateCp === "number" ? evalMateCp : isLoading ? lastEval.mateCp : null;
+  const { whitePct, blackPct, decisiveSide } = getEvalBarFill(displayEvalCp, displayEvalMate, displayEvalMateCp);
 
   // Determine which side is top/bottom based on board orientation
   const topSide = orientation === "white" ? "black" : "white";
@@ -3539,10 +3576,16 @@ function BoardWithEvalBar({
           <span
             className={[
               "absolute inset-x-0 top-1 text-center text-[9px] font-bold",
-              topSide === "white" ? "text-black" : "text-white",
+              decisiveSide === "white"
+                ? "text-black"
+                : decisiveSide === "black"
+                  ? "text-white"
+                  : topSide === "white" ? "text-black" : "text-white",
             ].join(" ")}
           >
-            {typeof displayEvalCp === "number" ? formatEval(displayEvalCp) : isLoading ? "..." : "--"}
+            {typeof displayEvalCp === "number" || typeof displayEvalMate === "number"
+              ? formatPostmortemEvalLabel(displayEvalCp, displayEvalMate)
+              : isLoading ? "..." : "--"}
           </span>
         </div>
       </div>
@@ -3565,6 +3608,7 @@ function ResultsPanel({
   currentIndex,
   engineLines,
   currentEngineEval,
+  engineEmptyMessage,
   isEngineLinesLoading,
   hasEngineLineError,
   isPieceSelected,
@@ -3592,6 +3636,7 @@ function ResultsPanel({
   currentIndex: number;
   engineLines: EngineLineResult[];
   currentEngineEval?: number;
+  engineEmptyMessage?: string | null;
   isEngineLinesLoading: boolean;
   hasEngineLineError?: boolean;
   isPieceSelected: boolean;
@@ -3627,6 +3672,7 @@ function ResultsPanel({
             lines={engineLines}
             isLoading={isEngineLinesLoading}
             hasError={hasEngineLineError}
+            emptyMessageOverride={engineEmptyMessage}
             revealBadLines={isPieceSelected}
             hoveredDestinationSquare={hoveredAnnotationSquare}
             hoveredIndex={hoveredEngineLineIndex}
@@ -4027,13 +4073,6 @@ function ClassificationBadge({ classification }: { classification: MoveClassific
   );
 }
 
-function formatEval(cp: number) {
-  if (Math.abs(cp) >= 600) return cp > 0 ? "+6.0" : "-6.0";
-  const pawns = cp / 100;
-  if (Math.abs(pawns) < 0.05) return "0.0";
-  return `${pawns > 0 ? "+" : ""}${pawns.toFixed(1)}`;
-}
-
 function buildEngineArrows(
   lines: EngineLineResult[],
   emphasizedMoveUci: string | null = null,
@@ -4041,7 +4080,7 @@ function buildEngineArrows(
   return lines.map((line, index) => ({
     from: line.bestMove.slice(0, 2),
     to: line.bestMove.slice(2, 4),
-    label: formatEval(line.cp),
+    label: formatPostmortemEvalLabel(line.cp, line.mate),
     rank: index + 1,
     emphasis: emphasizedMoveUci === line.bestMove,
     color: classificationColor(line.classification),
