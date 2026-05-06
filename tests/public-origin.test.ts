@@ -30,3 +30,15 @@ test("builds public URLs without leaking localhost", () => {
     "https://blindspots.gg/auth/callback?next=%2F",
   );
 });
+
+test("builds sign-out redirect URL without leaking localhost", () => {
+  const request = new Request("http://localhost:3000/auth/sign-out", {
+    headers: {
+      "x-forwarded-host": "blindspots.gg",
+      "x-forwarded-proto": "https",
+      host: "localhost:3000",
+    },
+  });
+
+  assert.equal(publicOrigin.publicUrl(request, "/").toString(), "https://blindspots.gg/");
+});
