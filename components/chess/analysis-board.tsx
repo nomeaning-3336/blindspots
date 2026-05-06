@@ -207,25 +207,46 @@ export function AnalysisBoard({
       return;
     }
 
-    const previousPiece = previousChess.get(lastMove.from as Square);
-    const movedPiece = chess.get(lastMove.to as Square);
+    const forwardPreviousPiece = previousChess.get(lastMove.from as Square);
+    const forwardCurrentPiece = chess.get(lastMove.to as Square);
+    const backwardPreviousPiece = previousChess.get(lastMove.to as Square);
+    const backwardCurrentPiece = chess.get(lastMove.from as Square);
+
+    let animationFrom: string | null = null;
+    let animationTo: string | null = null;
+    let code: string | null = null;
+
     if (
-      !previousPiece ||
-      !movedPiece ||
-      previousPiece.color !== movedPiece.color ||
-      previousPiece.type !== movedPiece.type
+      forwardPreviousPiece &&
+      forwardCurrentPiece &&
+      forwardPreviousPiece.color === forwardCurrentPiece.color &&
+      forwardPreviousPiece.type === forwardCurrentPiece.type
     ) {
+      animationFrom = lastMove.from;
+      animationTo = lastMove.to;
+      code = pieceCodeForAsset(forwardCurrentPiece.color, forwardCurrentPiece.type);
+    } else if (
+      backwardPreviousPiece &&
+      backwardCurrentPiece &&
+      backwardPreviousPiece.color === backwardCurrentPiece.color &&
+      backwardPreviousPiece.type === backwardCurrentPiece.type
+    ) {
+      animationFrom = lastMove.to;
+      animationTo = lastMove.from;
+      code = pieceCodeForAsset(backwardCurrentPiece.color, backwardCurrentPiece.type);
+    }
+
+    if (!animationFrom || !animationTo || !code) {
       setPieceGlide(null);
       return;
     }
 
-    const code = pieceCodeForAsset(movedPiece.color, movedPiece.type);
-    const animationId = `${fen}|${lastMove.from}-${lastMove.to}|${code}`;
+    const animationId = `${fen}|${animationFrom}-${animationTo}|${code}`;
 
     setPieceGlide({
       id: animationId,
-      from: lastMove.from,
-      to: lastMove.to,
+      from: animationFrom,
+      to: animationTo,
       pieceCode: code,
       started: false,
     });
