@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Chess } from "chess.js";
 import type { Move, Square } from "chess.js";
 import { shouldClearAnnotationsOnPointerDown } from "@/lib/board-annotations";
@@ -192,7 +192,7 @@ export function AnalysisBoard({
     return bestBySquare;
   }, [engineArrows]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previousFen = previousFenRef.current;
     previousFenRef.current = fen;
 
@@ -238,7 +238,7 @@ export function AnalysisBoard({
 
     const timeout = window.setTimeout(() => {
       setPieceGlide((current) => (current?.id === animationId ? null : current));
-    }, 155);
+    }, 240);
 
     return () => {
       window.cancelAnimationFrame(frame);
@@ -745,7 +745,7 @@ function PieceGlideOverlay({
       style={{
         transform: `translate(${target.col * 100}%, ${target.row * 100}%)`,
         transition: animation.started
-          ? "transform 135ms ease-out"
+          ? "transform 220ms ease-out"
           : "none",
         willChange: "transform",
       }}
