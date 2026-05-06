@@ -12,12 +12,24 @@ type BoardOrientation = "white" | "black";
 type BoardMode = "analysis" | "training";
 type BoardAnnotationArrow = { from: string; to: string };
 
+type BoardGridOffset = {
+  col: number;
+  row: number;
+};
+
 type PieceGlideAnimation = {
   id: string;
   from: string;
   to: string;
   pieceCode: string;
   started: boolean;
+  initialOffset?: BoardGridOffset;
+};
+
+type DragCompletionAnimationHint = {
+  from: string;
+  to: string;
+  initialOffset: BoardGridOffset;
 };
 
 type BoardPieceSnapshot = {
@@ -153,6 +165,24 @@ export function AnalysisBoard({
     return `${file}${rank}`;
   }
 
+  function gridOffsetFromClientPoint(clientX: number, clientY: number): BoardGridOffset | null {
+    const rect = boardRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+
+    const size = Math.min(rect.width, rect.height);
+    if (size <= 0) return null;
+
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const centerCol = Math.min(7.5, Math.max(0.5, (x / size) * 8));
+    const centerRow = Math.min(7.5, Math.max(0.5, (y / size) * 8));
+
+    return {
+      col: centerCol - 0.5,
+      row: centerRow - 0.5,
+    };
+  }
+
   const [internalSelected, setInternalSelected] = useState<string | null>(null);
   const [dragFrom, setDragFrom] = useState<string | null>(null);
   const [hoveredSquare, setHoveredSquare] = useState<string | null>(null);
@@ -171,6 +201,7 @@ export function AnalysisBoard({
   const dragFrameRef = useRef<number | null>(null);
   const hoveredSquareRef = useRef<string | null>(null);
   const previousFenRef = useRef<string | null>(null);
+  const dragCompletionAnimationHintRef = useRef<DragCompletionAnimationHint | null>(null);
   const dragOriginRef = useRef<{ x: number; y: number } | null>(null);
   const dragPreviewOriginRef = useRef<{
     pointer: { x: number; y: number };
@@ -237,23 +268,33 @@ export function AnalysisBoard({
     previousFenRef.current = fen;
 
     if (!pieceAnimation || !chess || !previousFen || previousFen === fen) {
+      dragCompletionAnimationHintRef.current = null;
       setPieceGlide(null);
       return;
     }
 
     const previousChess = safeChess(previousFen);
     if (!previousChess) {
+      dragCompletionAnimationHintRef.current = null;
       setPieceGlide(null);
       return;
     }
 
     const inferredMove = inferPieceGlideMove(previousChess, chess);
     if (!inferredMove) {
+      dragCompletionAnimationHintRef.current = null;
       setPieceGlide(null);
       return;
     }
 
     const animationId = `${fen}|${inferredMove.from}-${inferredMove.to}|${inferredMove.pieceCode}`;
+    const dragCompletionAnimationHint = dragCompletionAnimationHintRef.current;
+    const initialOffset =
+      dragCompletionAnimationHint?.from === inferredMove.from &&
+      dragCompletionAnimationHint.to === inferredMove.to
+        ? dragCompletionAnimationHint.initialOffset
+        : undefined;
+    dragCompletionAnimationHintRef.current = null;
 
     setPieceGlide({
       id: animationId,
@@ -261,6 +302,7 @@ export function AnalysisBoard({
       to: inferredMove.to,
       pieceCode: inferredMove.pieceCode,
       started: false,
+      initialOffset,
     });
 
     const frame = window.requestAnimationFrame(() => {
@@ -320,6 +362,22 @@ export function AnalysisBoard({
     function handleWindowPointerUp(event: PointerEvent) {
       const targetSquare = squareFromClientPoint(event.clientX, event.clientY);
       const origin = dragOriginRef.current;
+      const moved = Math.hypot(
+        event.clientX - (origin?.x ?? event.clientX),
+        event.clientY - (origin?.y ?? event.clientY),
+      ) > 8;
+      const legalMove = targetSquare ? findLegalMove(chess, sourceSquare, targetSquare) : null;
+      const releaseOffset = gridOffsetFromClientPoint(event.clientX, event.clientY);
+      const fromOffset = squareGridOffset(sourceSquare, orientation);
+      const toOffset = targetSquare ? squareGridOffset(targetSquare, orientation) : null;
+      dragCompletionAnimationHintRef.current =
+        moved && targetSquare && legalMove && releaseOffset && fromOffset && toOffset
+          ? {
+              from: sourceSquare,
+              to: targetSquare,
+              initialOffset: closestGridOffsetOnSegment(releaseOffset, fromOffset, toOffset),
+            }
+          : null;
       dragOriginRef.current = null;
       dragPreviewOriginRef.current = null;
       dragPositionRef.current = null;
@@ -327,9 +385,7 @@ export function AnalysisBoard({
       setDragFrom(null);
       setHoveredSquare(targetSquare);
       setDragPosition(null);
-      const dx = event.clientX - (origin?.x ?? event.clientX);
-      const dy = event.clientY - (origin?.y ?? event.clientY);
-      if (Math.hypot(dx, dy) > 8) {
+      if (moved) {
         if (targetSquare) playMove(sourceSquare, targetSquare);
       } else {
         handleSquareClick(sourceSquare);
@@ -339,6 +395,7 @@ export function AnalysisBoard({
     function handleWindowPointerCancel() {
       dragPreviewOriginRef.current = null;
       dragPositionRef.current = null;
+      dragCompletionAnimationHintRef.current = null;
       clearDragFrame();
       setDragFrom(null);
       setHoveredSquare(null);
@@ -505,6 +562,7 @@ export function AnalysisBoard({
     event.preventDefault();
     event.stopPropagation();
     const pointer = pointerToBoardPoint(event.clientX, event.clientY);
+    dragCompletionAnimationHintRef.current = null;
     dragOriginRef.current = { x: event.clientX, y: event.clientY };
     dragPreviewOriginRef.current = {
       pointer,
@@ -783,7 +841,7 @@ function PieceGlideOverlay({
   orientation: BoardOrientation;
   pieceAssetSet: string;
 }) {
-  const from = squareGridOffset(animation.from, orientation);
+  const from = animation.initialOffset ?? squareGridOffset(animation.from, orientation);
   const to = squareGridOffset(animation.to, orientation);
   if (!from || !to) return null;
 
@@ -1053,6 +1111,24 @@ function squareGridOffset(square: string, orientation: BoardOrientation) {
   return {
     col: center.x - 0.5,
     row: center.y - 0.5,
+  };
+}
+
+function closestGridOffsetOnSegment(
+  point: BoardGridOffset,
+  from: BoardGridOffset,
+  to: BoardGridOffset,
+): BoardGridOffset {
+  const dx = to.col - from.col;
+  const dy = to.row - from.row;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared <= 0) return from;
+
+  const rawT = ((point.col - from.col) * dx + (point.row - from.row) * dy) / lengthSquared;
+  const t = Math.min(1, Math.max(0, rawT));
+  return {
+    col: from.col + dx * t,
+    row: from.row + dy * t,
   };
 }
 
