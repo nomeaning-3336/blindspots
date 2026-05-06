@@ -105,11 +105,37 @@ export function AnalysisBoard({
   dataTestId,
 }: AnalysisBoardProps) {
   const chess = useMemo(() => safeChess(fen), [fen]);
+
   function pointerToBoardPoint(clientX: number, clientY: number) {
-  const rect = boardRef.current?.getBoundingClientRect();
-  if (!rect) return { x: clientX, y: clientY };
-  return { x: clientX - rect.left, y: clientY - rect.top };
-}
+    const rect = boardRef.current?.getBoundingClientRect();
+    if (!rect) return { x: clientX, y: clientY };
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }
+
+  function squareFromClientPoint(clientX: number, clientY: number) {
+    const rect = boardRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+
+    const size = Math.min(rect.width, rect.height);
+    if (size <= 0) return null;
+
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    if (x < 0 || y < 0 || x > size || y > size) return null;
+
+    const fileFromLeft = Math.min(7, Math.max(0, Math.floor((x / size) * 8)));
+    const rankFromTop = Math.min(7, Math.max(0, Math.floor((y / size) * 8)));
+
+    const fileIndex = orientation === "white" ? fileFromLeft : 7 - fileFromLeft;
+    const rankIndex = orientation === "white" ? 7 - rankFromTop : rankFromTop;
+
+    const file = FILES[fileIndex];
+    const rank = RANKS[rankIndex];
+    if (!file || !rank) return null;
+
+    return `${file}${rank}`;
+  }
 
   const [internalSelected, setInternalSelected] = useState<string | null>(null);
   const [dragFrom, setDragFrom] = useState<string | null>(null);
@@ -183,11 +209,11 @@ export function AnalysisBoard({
             })
           : boardPointer,
       );
-      setHoveredSquare(squareFromPoint(event.clientX, event.clientY));
+      setHoveredSquare(squareFromClientPoint(event.clientX, event.clientY));
     }
 
     function handleWindowPointerUp(event: PointerEvent) {
-      const targetSquare = squareFromPoint(event.clientX, event.clientY);
+      const targetSquare = squareFromClientPoint(event.clientX, event.clientY);
       const origin = dragOriginRef.current;
       dragOriginRef.current = null;
       dragPreviewOriginRef.current = null;
@@ -226,12 +252,12 @@ export function AnalysisBoard({
 
     function handleWindowPointerMove(event: PointerEvent) {
       if (annotationKind) {
-        setAnnotationHover(squareFromPoint(event.clientX, event.clientY));
+        setAnnotationHover(squareFromClientPoint(event.clientX, event.clientY));
       }
     }
 
     function handleWindowPointerUp(event: PointerEvent) {
-      const targetSquare = squareFromPoint(event.clientX, event.clientY) ?? sourceSquare;
+      const targetSquare = squareFromClientPoint(event.clientX, event.clientY) ?? sourceSquare;
       const origin = annotationOriginRef.current;
       annotationOriginRef.current = null;
       setAnnotationStart(null);
@@ -861,11 +887,6 @@ function squareCenter(square: string, orientation: BoardOrientation) {
   return { x: col + 0.5, y: row + 0.5 };
 }
 
-function squareFromPoint(clientX: number, clientY: number) {
-  const element = document.elementFromPoint(clientX, clientY);
-  const squareElement = element?.closest("[data-square]");
-  return squareElement instanceof HTMLElement ? squareElement.dataset.square ?? null : null;
-}
 
 function squaresForOrientation(orientation: BoardOrientation) {
   const ranks = orientation === "white" ? [...RANKS].reverse() : RANKS;
