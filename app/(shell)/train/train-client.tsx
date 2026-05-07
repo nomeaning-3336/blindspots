@@ -518,6 +518,7 @@ export default function TrainPage() {
   const shouldAnimatePieces = state === "active" || isPostMortemVisible;
   const [mistakeMemories, setMistakeMemories] = useState<Record<string, PositionMistakeMemory>>({});
   const seededMistakeFensRef = useRef<Set<string>>(new Set());
+  const [postmortemSidePanel, setPostmortemSidePanel] = useState<"analysis" | "memory">("analysis");
 
   useEffect(() => {
     engineLineCacheRef.current = engineLineCache;
@@ -783,6 +784,7 @@ export default function TrainPage() {
     setDisplayStartingFen(startingFen);
     seededMistakeFensRef.current.clear();
     setMistakeMemories({});
+    setPostmortemSidePanel("analysis");
     if (nextState === "active") {
       setCurrentChallengeElo(null);
       startTrainingGestureConsumedRef.current = true;
@@ -2563,51 +2565,99 @@ export default function TrainPage() {
               resultMode === "results" ? "p-3 sm:p-4" : "p-3 sm:p-4",
             ].join(" ")}
           >
-            <div className="train-postmortem-panel flex flex-1 flex-col gap-4">
-              <ResultsPanel
-              eloResult={eloResult}
-              isSaving={isCompletingSequence}
-              moves={moves}
-              asyncMoveEvaluations={asyncMoveEvaluations}
-              userSide={userMoveSide}
-              startingFen={startingFen}
-              mode={resultMode}
-              positions={visibleSequencePositions}
-              canonicalMoves={canonicalPostmortemMoves}
-              currentIndex={activeExploreIndex}
-              engineLines={classifiedDisplayLines}
-              isEngineLinesLoading={isDisplayLoading}
-              hasEngineLineError={hasEngineLineError}
-              currentEngineEval={currentEngineEval}
-              engineEmptyMessage={terminalBoardDisplay.engineEmptyMessage}
-              isPieceSelected={Boolean(exploreSelectedSquare)}
-              hoveredAnnotationSquare={hoveredAnnotationSquare}
-              hoveredEngineLineIndex={hoveredEngineLineIndex}
-              onEngineLineHover={setHoveredEngineLineIndex}
-              onEngineLineSelect={handleExploreMove}
-              onMoveHover={setHoveredMoveSquares}
-              onNavigate={navigateExploreTo}
-              onNextPosition={() => switchState("active")}
-              selectedMoveIndex={selectedMoveIndex}
-              isManualPostmortemExploration={isManualPostmortemExploration}
-              selectedMoveUci={selectedMoveUci}
-              onSelectMove={(positionIndex) => {
-                navigateExploreTo(positionIndex);
-              }}
-            />
+            {/* ── Compact toggle: Analysis | Mistake Memory ───────────────── */}
+            <div className="flex shrink-0 items-stretch gap-0 overflow-hidden rounded-[6px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] text-[11px] font-bold uppercase tracking-[0.1em]">
+              <button
+                type="button"
+                className={[
+                  "flex-1 px-3 py-2 text-center transition",
+                  postmortemSidePanel === "analysis"
+                    ? "bg-[var(--app-accent)] text-black"
+                    : "text-[var(--app-muted)] hover:text-[var(--app-text)]",
+                ].join(" ")}
+                onClick={() => setPostmortemSidePanel("analysis")}
+              >
+                Analysis
+              </button>
+              <button
+                type="button"
+                className={[
+                  "flex-1 px-3 py-2 text-center transition",
+                  postmortemSidePanel === "memory"
+                    ? "bg-[var(--app-accent)] text-black"
+                    : "text-[var(--app-muted)] hover:text-[var(--app-text)]",
+                ].join(" ")}
+                onClick={() => setPostmortemSidePanel("memory")}
+              >
+                Mistake Memory
+                {activeMistakeMemory && activeMistakeMemory.failedMoves.length > 0 ? (
+                  <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--app-class-blunder)] px-1 text-[9px] font-bold text-white">
+                    {activeMistakeMemory.failedMoves.length}
+                  </span>
+                ) : null}
+              </button>
             </div>
-            <div className="shrink-0">
-              <MistakeMemoryPanel
-                memory={activeMistakeMemory}
-                onSelectFailedMove={handleSelectFailedMove}
-                onUpdateNote={handleUpdateNote}
-                onAddBoardSnapshot={handleAddBoardSnapshot}
-                onHoverFailedMove={handleHoverFailedMove}
-                onHoverEnd={handleHoverFailedMoveEnd}
-                boardFen={boardFen}
-                boardOrientation={boardOrientation}
-                boardLastMove={replayLastMove}
+
+            {/* ── Panel content ───────────────────────────────────────────── */}
+            <div className="train-postmortem-panel flex min-h-0 flex-1 flex-col gap-4">
+              {postmortemSidePanel === "analysis" ? (
+                <ResultsPanel
+                eloResult={eloResult}
+                isSaving={isCompletingSequence}
+                moves={moves}
+                asyncMoveEvaluations={asyncMoveEvaluations}
+                userSide={userMoveSide}
+                startingFen={startingFen}
+                mode={resultMode}
+                positions={visibleSequencePositions}
+                canonicalMoves={canonicalPostmortemMoves}
+                currentIndex={activeExploreIndex}
+                engineLines={classifiedDisplayLines}
+                isEngineLinesLoading={isDisplayLoading}
+                hasEngineLineError={hasEngineLineError}
+                currentEngineEval={currentEngineEval}
+                engineEmptyMessage={terminalBoardDisplay.engineEmptyMessage}
+                isPieceSelected={Boolean(exploreSelectedSquare)}
+                hoveredAnnotationSquare={hoveredAnnotationSquare}
+                hoveredEngineLineIndex={hoveredEngineLineIndex}
+                onEngineLineHover={setHoveredEngineLineIndex}
+                onEngineLineSelect={handleExploreMove}
+                onMoveHover={setHoveredMoveSquares}
+                onNavigate={navigateExploreTo}
+                selectedMoveIndex={selectedMoveIndex}
+                isManualPostmortemExploration={isManualPostmortemExploration}
+                selectedMoveUci={selectedMoveUci}
+                onSelectMove={(positionIndex) => {
+                  navigateExploreTo(positionIndex);
+                }}
               />
+              ) : (
+                <MistakeMemoryPanel
+                  memory={activeMistakeMemory}
+                  onSelectFailedMove={handleSelectFailedMove}
+                  onUpdateNote={handleUpdateNote}
+                  onAddBoardSnapshot={handleAddBoardSnapshot}
+                  onHoverFailedMove={handleHoverFailedMove}
+                  onHoverEnd={handleHoverFailedMoveEnd}
+                  boardFen={boardFen}
+                  boardOrientation={boardOrientation}
+                  boardLastMove={replayLastMove}
+                />
+              )}
+            </div>
+
+            {/* ── Action buttons visible below both tabs ────────────────── */}
+            <div className="mt-auto grid grid-cols-2 gap-2 pt-1 shrink-0">
+              <button
+                type="button"
+                className={`${primaryActionClassName} w-full`}
+                onClick={() => switchState("active")}
+              >
+                Next position
+              </button>
+              <a href="/" className={`${secondaryActionClassName} w-full`}>
+                Return to Dashboard
+              </a>
             </div>
           </aside>
         ) : null}
@@ -4004,7 +4054,6 @@ function ResultsPanel({
   onEngineLineSelect,
   onMoveHover,
   onNavigate,
-  onNextPosition,
   selectedMoveIndex,
   selectedMoveUci,
   onSelectMove,
@@ -4032,7 +4081,6 @@ function ResultsPanel({
   onEngineLineSelect: (move: BoardMove) => void;
   onMoveHover: (move: MoveHighlightTarget | null) => void;
   onNavigate: (index: number) => void;
-  onNextPosition: () => void;
   selectedMoveIndex: number | null;
   selectedMoveUci: string | null;
   onSelectMove?: (positionIndex: number) => void;
@@ -4083,18 +4131,6 @@ function ResultsPanel({
           }
           asyncMoveEvaluations={asyncMoveEvaluations}
         />
-        <div className="mt-auto grid grid-cols-2 gap-2 pt-1">
-          <button
-            type="button"
-            className={`${primaryActionClassName} w-full`}
-            onClick={onNextPosition}
-          >
-            Next position
-          </button>
-          <a href="/" className={`${secondaryActionClassName} w-full`}>
-            Return to Dashboard
-          </a>
-        </div>
       </div>
     );
   }
@@ -4104,18 +4140,6 @@ function ResultsPanel({
       <EloResultCard result={eloResult} isLoading={isSaving} />
       <EvalGraph points={graphPoints} currentIndex={positions.length - 1} compact engineCp={currentEngineEval} />
       <AnalysisMoveTable moves={userMoves} canonicalMoves={canonicalMoves} isAnalyzing={isSaving} compact showEvaluations={true} asyncMoveEvaluations={asyncMoveEvaluations} />
-      <div className="grid grid-cols-2 gap-2 pt-1">
-        <button
-          type="button"
-          className={`${primaryActionClassName} w-full`}
-          onClick={onNextPosition}
-        >
-          Next position
-        </button>
-        <a href="/" className={`${secondaryActionClassName} w-full`}>
-          Return to Dashboard
-        </a>
-      </div>
     </div>
   );
 }

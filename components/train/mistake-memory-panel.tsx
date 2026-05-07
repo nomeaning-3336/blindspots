@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import type { PositionMistakeMemory, MistakeMoveMemory } from "@/lib/training/mistake-memory";
 import {
   classificationColor,
@@ -11,23 +11,14 @@ import {
 import { formatLossLabel } from "@/lib/training/eval-format";
 
 type MistakeMemoryPanelProps = {
-  /** The current position's mistake memory (null if no failed moves). */
   memory: PositionMistakeMemory | null;
-  /** Called when the user selects a failed move by UCI. */
   onSelectFailedMove: (uci: string) => void;
-  /** Called when the user types a note. Debounced, so fired after the user stops typing. */
   onUpdateNote: (uci: string, text: string) => void;
-  /** Called when the user clicks "Add board snapshot". */
   onAddBoardSnapshot: (uci: string) => void;
-  /** Called on pointer enter for a failed move row — highlight the board. */
   onHoverFailedMove: (from: string, to: string) => void;
-  /** Called on pointer leave from a failed move row. */
   onHoverEnd: () => void;
-  /** Current board FEN (for snapshot). */
   boardFen: string;
-  /** Current board orientation. */
   boardOrientation: "white" | "black";
-  /** Current board lastMove (for snapshot). */
   boardLastMove: { from: string; to: string } | null;
 };
 
@@ -42,6 +33,7 @@ export function MistakeMemoryPanel({
   boardOrientation,
   boardLastMove,
 }: MistakeMemoryPanelProps) {
+  // ── All hooks — stable between memory=null and memory=non-null ──────
   const selectedMove = useMemo<MistakeMoveMemory | null>(() => {
     if (!memory || !memory.selectedFailedMoveUci) return null;
     return (
@@ -53,45 +45,57 @@ export function MistakeMemoryPanel({
 
   const selectedUci = memory?.selectedFailedMoveUci ?? null;
 
-  // ── Text notes with local debounce ──────────────────────────────────
-  const [localNote, setLocalNote] = useState("");
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const selectedUciRef = useRef<string | null>(null);
+  // Sort failed moves by cpLoss descending (worst first)
+  const sortedMoves = useMemo(
+    () =>
+      memory
+        ? [...memory.failedMoves].sort(
+            (a, b) => (b.cpLoss ?? 0) - (a.cpLoss ?? 0),
+          )
+        : [],
+    [memory?.failedMoves],
+  );
 
-  // When the selected move changes, load its text note into local state.
+  const [localNote, setLocalNote] = useState("");
+  const onUpdateNoteRef = useRef(onUpdateNote);
+  onUpdateNoteRef.current = onUpdateNote;
+  const selectedUciRef = useRef<string | null>(null);
+  const pendingNoteRef = useRef<string | null>(null);
+
+  // When the selected move changes, flush pending note and load new one.
   useEffect(() => {
-    if (!selectedMove) {
-      setLocalNote("");
-      return;
+    const uci = selectedMove?.uci ?? null;
+    // Flush pending note for previous selection before switching
+    if (selectedUciRef.current && selectedUciRef.current !== uci && pendingNoteRef.current !== null) {
+      onUpdateNoteRef.current(selectedUciRef.current, pendingNoteRef.current);
     }
-    selectedUciRef.current = selectedMove.uci;
-    const textBlock = selectedMove.notes.find((n) => n.type === "text");
+    selectedUciRef.current = uci;
+    pendingNoteRef.current = null;
+    const textBlock = selectedMove?.notes.find((n) => n.type === "text");
     setLocalNote(textBlock?.type === "text" ? textBlock.text : "");
   }, [selectedMove?.uci, memory?.selectedFailedMoveUci]);
 
-  const handleNoteChange = useCallback(
-    (text: string) => {
-      setLocalNote(text);
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => {
-        const uci = selectedUciRef.current;
-        if (uci) {
-          onUpdateNote(uci, text);
-        }
-      }, 400);
-    },
-    [onUpdateNote],
-  );
-
-  // Cleanup debounce on unmount
+  // Flush pending note on unmount
   useEffect(() => {
     return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (selectedUciRef.current && pendingNoteRef.current !== null) {
+        onUpdateNoteRef.current(selectedUciRef.current, pendingNoteRef.current);
+      }
     };
   }, []);
 
-  // ── Nothing to show ─────────────────────────────────────────────────
-  if (!memory || memory.failedMoves.length === 0) {
+  function handleNoteChange(text: string) {
+    setLocalNote(text);
+    const uci = selectedUciRef.current;
+    if (!uci) return;
+    pendingNoteRef.current = text;
+    onUpdateNoteRef.current(uci, text);
+  }
+
+  const failedMoveCount = memory?.failedMoves.length ?? 0;
+
+  // ── Empty state ─────────────────────────────────────────────────────
+  if (failedMoveCount === 0) {
     return (
       <div className="train-mistake-memory-panel flex flex-col gap-2">
         <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-3">
@@ -107,16 +111,6 @@ export function MistakeMemoryPanel({
   }
 
   // ── Main panel ──────────────────────────────────────────────────────
-
-  // Sort failed moves by cpLoss descending (worst first)
-  const sortedMoves = useMemo(
-    () =>
-      [...memory.failedMoves].sort(
-        (a, b) => (b.cpLoss ?? 0) - (a.cpLoss ?? 0),
-      ),
-    [memory.failedMoves],
-  );
-
   return (
     <div className="train-mistake-memory-panel flex flex-col gap-2">
       <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)]">
@@ -146,7 +140,6 @@ export function MistakeMemoryPanel({
                 }}
                 onPointerLeave={onHoverEnd}
               >
-                {/* Classification badge */}
                 {cls ? (
                   <img
                     src={classificationIcon(cls as MoveClassification)}
@@ -157,14 +150,12 @@ export function MistakeMemoryPanel({
                 ) : (
                   <span className="inline-block h-3.5 w-3.5 shrink-0 rounded-full border border-[var(--app-border-soft)]" />
                 )}
-                {/* Move SAN */}
                 <span
                   className="min-w-0 truncate font-bold tabular-nums"
                   style={{ color: cls ? classificationColor(cls as MoveClassification) : undefined }}
                 >
                   {failedMove.san ?? failedMove.uci}
                 </span>
-                {/* CP loss */}
                 {failedMove.cpLoss != null ? (
                   <span className="shrink-0 tabular-nums text-[var(--app-muted)]">
                     {formatLossLabel(failedMove.cpLoss, failedMove.mateAfter)}
@@ -200,27 +191,13 @@ export function MistakeMemoryPanel({
                 aria-hidden="true"
                 className="shrink-0"
               >
-                <rect
-                  x="1"
-                  y="2"
-                  width="10"
-                  height="8"
-                  rx="1"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                />
+                <rect x="1" y="2" width="10" height="8" rx="1" stroke="currentColor" strokeWidth="1.2" />
                 <circle cx="6" cy="6" r="2" stroke="currentColor" strokeWidth="1.2" />
-                <path
-                  d="M4 1.5h4"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                  strokeLinecap="round"
-                />
+                <path d="M4 1.5h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
               </svg>
               Add board snapshot
             </button>
 
-            {/* Render existing snapshot blocks */}
             {selectedMove.notes
               .filter((n) => n.type === "board-snapshot")
               .map((block, i) => {
