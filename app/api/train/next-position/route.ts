@@ -25,6 +25,8 @@ import { normalizeBucketStats, thompsonSample, type BucketStats } from "@/lib/tr
 import { getPositionMateStatus } from "@/lib/engines/dispatcher";
 import { getOpponentElo } from "@/lib/training/elo";
 import { getNextMistakeForTraining, normalizeUserMistakeForTraining } from "@/lib/training/mistake-store";
+import { getPreviousPosition } from "@/lib/training/position-index";
+import { normalizeSetupPrelude } from "@/lib/training/setup-prelude";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -139,12 +141,17 @@ if (!optionalError && optionalData) {
       // Fall through to legacy path — do not return invalid data
     } else {
       const tags = normalizeThemeTags(mistake.theme_tags);
+      const setupPrelude = normalizeSetupPrelude({
+        fen: normalized.fen,
+        previousFen: normalized.previousFen,
+        playedMove: normalized.playedMove,
+      });
       const response: NextPositionResponse = {
         mistakeId: normalized.id,
         fen: normalized.fen,
         decisionFen: normalized.decisionFen ?? undefined,
-        previousFen: normalized.previousFen ?? undefined,
-        playedMove: normalized.playedMove ?? undefined,
+        previousFen: setupPrelude?.previousFen,
+        playedMove: setupPrelude?.playedMove,
         actualMoveUci: normalized.actualMoveUci ?? undefined,
         actualMoveSan: normalized.actualMoveSan ?? undefined,
         bestMoveUci: normalized.bestMoveUci ?? undefined,
@@ -239,10 +246,19 @@ if (!optionalError && optionalData) {
 
   const enriched = enrichTrainingQueueItem(nextPosition);
 
+  const enrichedPreviousPosition = nextPosition.previousFen
+    ? null
+    : await getPreviousPosition(nextPosition.fen).catch(() => null);
+  const setupPrelude = normalizeSetupPrelude({
+    fen: nextPosition.fen,
+    previousFen: nextPosition.previousFen ?? enrichedPreviousPosition?.previousFen,
+    playedMove: nextPosition.previousFen ? nextPosition.playedMove : enrichedPreviousPosition?.playedMove,
+  });
+
   const response: NextPositionResponse = {
     fen: nextPosition.fen,
-    previousFen: nextPosition.previousFen ?? undefined,
-    playedMove: nextPosition.playedMove ?? undefined,
+    previousFen: setupPrelude?.previousFen,
+    playedMove: setupPrelude?.playedMove,
     source: nextPosition.source,
     sequenceLength,
     selectedServeMode: selection.selectedServeMode,

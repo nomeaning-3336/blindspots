@@ -768,6 +768,13 @@ export default function TrainPage() {
     setDisplayStartingFen(startingFen);
     if (nextState === "active") {
       setCurrentChallengeElo(null);
+      startTrainingGestureConsumedRef.current = true;
+      setIsAwaitingStartGesture(false);
+      setIsPositionLoading(true);
+      void unlockTrainAudio();
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[train-start-gesture] next-position-click-consumed-gesture");
+      }
       void loadNextPosition();
     }
     if (nextState === "complete") {
@@ -937,8 +944,27 @@ export default function TrainPage() {
 
       if (startTrainingGestureConsumedRef.current) {
         setIsAwaitingStartGesture(false);
+        if (process.env.NODE_ENV !== "production") {
+          console.log("[train-start-gesture] apply-next-position-auto-start-prelude", {
+            fen: payload.fen,
+            previousFen: payload.previousFen,
+            playedMove: payload.playedMove,
+          });
+        }
         void startPendingInitialEngineMove(payload);
       } else {
+        if (process.env.NODE_ENV !== "production") {
+          console.log("[train-start-gesture] cold-load-awaiting-gesture", {
+            fen: payload.fen,
+            previousFen: payload.previousFen,
+            playedMove: payload.playedMove,
+          });
+          console.log("[train-start-gesture] hard-refresh-awaiting-gesture", {
+            fen: payload.fen,
+            previousFen: payload.previousFen,
+            playedMove: payload.playedMove,
+          });
+        }
         setIsAwaitingStartGesture(true);
       }
     } else {
@@ -2348,18 +2374,6 @@ export default function TrainPage() {
                       />
                     )}
                   </BoardWithPlayerStrips>
-                  {isActiveSetupReplay && initialOpponentMove && !isAwaitingStartGesture ? (
-                    activeSetupReplayIndex === 1 ? (
-                      <div className="mt-2 flex items-center justify-center gap-2 rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] px-3 py-2">
-                        <span className="text-xs font-bold uppercase tracking-[0.1em] text-[var(--app-muted)]">Opponent just played</span>
-                        <span className="text-sm font-bold text-[var(--app-text)]">{initialOpponentMove.san}</span>
-                      </div>
-                    ) : (
-                      <div className="mt-2 flex items-center justify-center rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] px-3 py-2">
-                        <span className="text-xs font-bold uppercase tracking-[0.1em] text-[var(--app-muted)]">Before opponent move</span>
-                      </div>
-                    )
-                  ) : null}
                   {isAwaitingStartGesture ? (
                     <div
                       className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-[10px] bg-black/70 backdrop-blur-sm"
