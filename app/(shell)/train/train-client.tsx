@@ -67,6 +67,8 @@ const SKILL_LEVEL_STARTING_ELO: Record<SkillLevel, number> = {
 };
 
 const ENABLE_CLIENT_STOCKFISH_LINES = true;
+const CLIENT_STOCKFISH_MULTIPV = 5;
+const CLIENT_STOCKFISH_MOVETIME_MS = 800;
 
 type TrainingMove = {
   san: string;
@@ -486,6 +488,7 @@ export default function TrainPage() {
   const nextPositionPrefetchRef = useRef<Promise<NextPositionResponse | null> | null>(null);
   const engineLineCacheRef = useRef<Record<string, EngineLineResult[]>>({});
   const engineLinePrefetchRef = useRef<Map<string, Promise<void>>>(new Map());
+  const completedEngineLineFensRef = useRef<Set<string>>(new Set());
   const pieceLineCacheRef = useRef<Record<string, EngineLineResult[]>>({});
   const trainLayoutGridRef = useRef<HTMLDivElement | null>(null);
   const startTrainingGestureConsumedRef = useRef(false);
@@ -667,8 +670,8 @@ export default function TrainPage() {
         const engine = getClientStockfishEngine();
         const result = await engine.analyzeFen({
           fen: targetFen,
-          multiPv: 3,
-          movetimeMs: 800,
+          multiPv: CLIENT_STOCKFISH_MULTIPV,
+          movetimeMs: CLIENT_STOCKFISH_MOVETIME_MS,
           onUpdate: (lines) => {
             logLines(clientLinesToTrainingEngineLines({ fen: targetFen, lines }));
           },
@@ -746,6 +749,7 @@ export default function TrainPage() {
     setActiveReplayIndex(null);
     setIsManualPostmortemExploration(false);
     setEngineLineCache({});
+    completedEngineLineFensRef.current.clear();
     setEngineLineErrorFens(new Set());
     setEngineLineLoadingFen(null);
     setIsOpponentThinking(false);
@@ -912,6 +916,7 @@ export default function TrainPage() {
     setActiveReplayIndex(null);
     setIsManualPostmortemExploration(false);
     setEngineLineCache({});
+    completedEngineLineFensRef.current.clear();
     setEngineLineErrorFens(new Set());
     setEngineLineLoadingFen(null);
     setPieceLineCache({});
@@ -991,6 +996,32 @@ export default function TrainPage() {
     });
   }
 
+  function normalizeEngineLineSnapshot(lines: EngineLineResult[]) {
+    return lines
+      .filter((line) => line.bestMove)
+      .sort((left, right) => {
+        const leftRank = typeof left.rank === "number" ? left.rank : Number.MAX_SAFE_INTEGER;
+        const rightRank = typeof right.rank === "number" ? right.rank : Number.MAX_SAFE_INTEGER;
+        if (leftRank !== rightRank) return leftRank - rightRank;
+        return right.depth - left.depth;
+      })
+      .slice(0, CLIENT_STOCKFISH_MULTIPV)
+      .map((line, index) => ({
+        ...line,
+        rank: index + 1,
+      }));
+  }
+
+  function replaceAndStoreEngineLinesForFen(fenToAnalyze: string, lines: EngineLineResult[]) {
+    const snapshotLines = normalizeEngineLineSnapshot(lines);
+
+    setEngineLineCache((current) => {
+      const next = { ...current, [fenToAnalyze]: snapshotLines };
+      engineLineCacheRef.current = next;
+      return next;
+    });
+  }
+
   function mergeAndStoreEngineLinesForFen(fenToAnalyze: string, lines: EngineLineResult[]) {
     const existingTopLines =
       engineLineCacheRef.current[fenToAnalyze] ??
@@ -1043,6 +1074,7 @@ export default function TrainPage() {
     if (hadError) {
       markEngineLineErrorFen(fenToAnalyze);
     } else {
+      completedEngineLineFensRef.current.add(fenToAnalyze);
       clearEngineLineErrorFen(fenToAnalyze);
     }
   }
@@ -1056,22 +1088,24 @@ export default function TrainPage() {
     const engine = getClientStockfishEngine();
     const result = await engine.analyzeFen({
       fen: fenToAnalyze,
-      multiPv: 3,
-      movetimeMs: 800,
+      multiPv: CLIENT_STOCKFISH_MULTIPV,
+      movetimeMs: CLIENT_STOCKFISH_MOVETIME_MS,
       onUpdate: (lines) => {
         const convertedLines = clientLinesToTrainingEngineLines({ fen: fenToAnalyze, lines });
-        mergeAndStoreEngineLinesForFen(fenToAnalyze, convertedLines);
+        replaceAndStoreEngineLinesForFen(fenToAnalyze, convertedLines);
       },
     });
 
     const convertedLines = clientLinesToTrainingEngineLines({ fen: fenToAnalyze, lines: result.lines });
-    mergeAndStoreEngineLinesForFen(fenToAnalyze, convertedLines);
+    replaceAndStoreEngineLinesForFen(fenToAnalyze, convertedLines);
+    completedEngineLineFensRef.current.add(fenToAnalyze);
     clearEngineLineErrorFen(fenToAnalyze);
   }
 
   async function fetchEngineLinesForFen(fenToAnalyze: string) {
     const cached = engineLineCacheRef.current[fenToAnalyze];
-    if (cached) return;
+    const hasCompletedClientLines = completedEngineLineFensRef.current.has(fenToAnalyze);
+    if (cached && (!ENABLE_CLIENT_STOCKFISH_LINES || hasCompletedClientLines)) return;
     const pending = engineLinePrefetchRef.current.get(fenToAnalyze);
     if (pending) return pending;
 
