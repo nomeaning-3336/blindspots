@@ -52,6 +52,18 @@ import {
   type PostMortemNavigationKey,
 } from "@/lib/training-postmortem-navigation";
 import { runStartTrainingTransition } from "@/lib/train-onboarding-transition";
+import {
+  buildSessionMistakeMemories,
+  createEmptyPositionMemory,
+  normalizeDecisionFen,
+  selectFailedMove,
+  updateNoteBlock,
+  appendBoardSnapshot,
+  isFailedClassification,
+  type PositionMistakeMemory,
+  type MistakeMoveMemory,
+} from "@/lib/training/mistake-memory";
+import { MistakeMemoryPanel } from "@/components/train/mistake-memory-panel";
 
 type TrainingState = "active" | "complete" | "drift" | "resolving";
 type OnboardingScreen = "loading" | "connect" | "analysis" | "summary" | "done";
@@ -69,6 +81,7 @@ const SKILL_LEVEL_STARTING_ELO: Record<SkillLevel, number> = {
 const ENABLE_CLIENT_STOCKFISH_LINES = true;
 const CLIENT_STOCKFISH_MULTIPV = 5;
 const CLIENT_STOCKFISH_MOVETIME_MS = 800;
+const PRELUDE_SETUP_MOVE_DELAY_MS = 1000;
 
 type TrainingMove = {
   san: string;
@@ -503,6 +516,8 @@ export default function TrainPage() {
   const startTrainingGestureConsumedRef = useRef(false);
   const isPostMortemVisible = state === "complete" || state === "drift";
   const shouldAnimatePieces = state === "active" || isPostMortemVisible;
+  const [mistakeMemories, setMistakeMemories] = useState<Record<string, PositionMistakeMemory>>({});
+  const seededMistakeFensRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     engineLineCacheRef.current = engineLineCache;
@@ -766,6 +781,8 @@ export default function TrainPage() {
     setEloResult(null);
     setLastMove(null);
     setDisplayStartingFen(startingFen);
+    seededMistakeFensRef.current.clear();
+    setMistakeMemories({});
     if (nextState === "active") {
       setCurrentChallengeElo(null);
       startTrainingGestureConsumedRef.current = true;
@@ -1008,6 +1025,7 @@ export default function TrainPage() {
     // Show the "before" position briefly.
     setFen(previousFen);
     await nextAnimationFrame();
+    await delayMs(PRELUDE_SETUP_MOVE_DELAY_MS);
 
     if (initialOpponentRequestRef.current !== requestId) return;
 
@@ -1828,6 +1846,137 @@ export default function TrainPage() {
   const activeSequencePosition = visibleSequencePositions[activeExploreIndex] ?? visibleSequencePositions[0];
   const activeCanonicalMove = canonicalPostmortemMoves.find((move) => move.positionIndex === activeExploreIndex) ?? null;
 
+  // ── Mistake memory: seed from session evaluations ───────────────────
+  // Build a map from session data. Only seeds once per (normalized) FEN;
+  // user edits (notes, snapshots, selection) are not overwritten.
+  useEffect(() => {
+    if (!isPostMortemVisible) return;
+
+    const sessionMemories: Record<string, PositionMistakeMemory> = {};
+
+    for (const pos of visibleSequencePositions) {
+      if (pos.userMoveIndex == null || !pos.move?.fenBefore) continue;
+      const classification = getAuthoritativeMoveClassification({
+        move: pos.move,
+        moveScore: completedMoveScoreByUserMoveIndex.get(pos.userMoveIndex),
+      });
+      if (!isFailedClassification(classification)) continue;
+
+      const normFen = normalizeDecisionFen(pos.move.fenBefore);
+      if (seededMistakeFensRef.current.has(`${normFen}::${pos.move.uci}`)) continue;
+
+      const existing = sessionMemories[normFen] ?? mistakeMemories[normFen] ?? createEmptyPositionMemory(pos.move.fenBefore);
+      sessionMemories[normFen] = {
+        decisionFen: existing.decisionFen,
+        failedMoves: (() => {
+          const moveIdx = existing.failedMoves.findIndex((m) => m.uci === pos.move!.uci);
+          if (moveIdx >= 0) return existing.failedMoves; // Already present
+          return [
+            ...existing.failedMoves,
+            {
+              uci: pos.move.uci,
+              san: pos.move.san,
+              classification,
+              cpLoss: pos.move.cpLoss,
+              evalBefore: pos.move.evalBefore ?? null,
+              evalAfter: pos.move.evalAfter ?? null,
+              mateBefore: pos.move.mateBefore ?? null,
+              mateAfter: pos.move.mateAfter ?? null,
+              attemptCount: 1,
+              firstAttemptedAt: new Date().toISOString(),
+              lastAttemptedAt: new Date().toISOString(),
+              notes: [],
+            } satisfies MistakeMoveMemory,
+          ];
+        })(),
+        selectedFailedMoveUci: existing.selectedFailedMoveUci,
+      };
+      seededMistakeFensRef.current.add(`${normFen}::${pos.move.uci}`);
+    }
+
+    if (Object.keys(sessionMemories).length > 0) {
+      setMistakeMemories((prev) => ({ ...prev, ...sessionMemories }));
+    }
+  }, [isPostMortemVisible, visibleSequencePositions, completedMoveScoreByUserMoveIndex]);
+
+  // Derive the active decision FEN from the currently selected/stepped position.
+  const activeDecisionFen = useMemo<string | null>(() => {
+    if (!isPostMortemVisible) return null;
+    const pos = visibleSequencePositions[activeExploreIndex];
+    if (!pos?.move?.fenBefore) return null;
+    return normalizeDecisionFen(pos.move.fenBefore);
+  }, [isPostMortemVisible, activeExploreIndex, visibleSequencePositions]);
+
+  const activeMistakeMemory = useMemo<PositionMistakeMemory | null>(() => {
+    if (!activeDecisionFen) return null;
+    const mem = mistakeMemories[activeDecisionFen];
+    return mem
+      ? {
+          ...mem,
+          selectedFailedMoveUci: mem.selectedFailedMoveUci ?? mem.failedMoves[0]?.uci,
+        }
+      : null;
+  }, [activeDecisionFen, mistakeMemories]);
+
+  function handleSelectFailedMove(uci: string) {
+    if (!activeDecisionFen) return;
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[mistake-memory] select-failed-move", uci);
+    }
+    setMistakeMemories((prev) => {
+      const mem = prev[activeDecisionFen];
+      if (!mem) return prev;
+      return { ...prev, [activeDecisionFen]: selectFailedMove(mem, uci) };
+    });
+  }
+
+  function handleUpdateNote(uci: string, text: string) {
+    if (!activeDecisionFen) return;
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[mistake-memory] update-note", activeDecisionFen, uci);
+    }
+    setMistakeMemories((prev) => {
+      const mem = prev[activeDecisionFen];
+      if (!mem) return prev;
+      return { ...prev, [activeDecisionFen]: updateNoteBlock(mem, uci, text) };
+    });
+  }
+
+  function handleAddBoardSnapshot(uci: string) {
+    if (!activeDecisionFen) return;
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[mistake-memory] add-board-snapshot", activeDecisionFen, uci, boardFen);
+    }
+    setMistakeMemories((prev) => {
+      const mem = prev[activeDecisionFen];
+      if (!mem) return prev;
+      return {
+        ...prev,
+        [activeDecisionFen]: appendBoardSnapshot(mem, uci, {
+          fen: boardFen,
+          lastMove: replayLastMove ?? undefined,
+          orientation: boardOrientation,
+        }),
+      };
+    });
+  }
+
+  function handleHoverFailedMove(from: string, to: string) {
+    setHoveredMoveSquares({ from, to });
+  }
+
+  function handleHoverFailedMoveEnd() {
+    setHoveredMoveSquares(null);
+  }
+
+  // Dev-only: log active position changes
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    if (activeDecisionFen) {
+      console.log("[mistake-memory] active-position", activeDecisionFen);
+    }
+  }, [activeDecisionFen]);
+
   // Dev-only replay state instrumentation
   useEffect(() => {
     if (process.env.NODE_ENV === "production" && !(window as unknown as Record<string, unknown>).__BLINDSPOTS_QA__) return;
@@ -2446,6 +2595,19 @@ export default function TrainPage() {
                 navigateExploreTo(positionIndex);
               }}
             />
+            </div>
+            <div className="shrink-0">
+              <MistakeMemoryPanel
+                memory={activeMistakeMemory}
+                onSelectFailedMove={handleSelectFailedMove}
+                onUpdateNote={handleUpdateNote}
+                onAddBoardSnapshot={handleAddBoardSnapshot}
+                onHoverFailedMove={handleHoverFailedMove}
+                onHoverEnd={handleHoverFailedMoveEnd}
+                boardFen={boardFen}
+                boardOrientation={boardOrientation}
+                boardLastMove={replayLastMove}
+              />
             </div>
           </aside>
         ) : null}
