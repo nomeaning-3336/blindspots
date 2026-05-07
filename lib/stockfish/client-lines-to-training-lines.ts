@@ -26,10 +26,16 @@ export function clientLinesToTrainingEngineLines({
 }): TrainingEngineLineResult[] {
   const isBlackToMove = fen.split(/\s+/)[1] === "b";
 
-  return lines.flatMap((line) => {
-    const converted = clientLineToTrainingEngineLine(fen, line, isBlackToMove);
-    return converted ? [converted] : [];
-  });
+  return lines
+    .flatMap((line) => {
+      const converted = clientLineToTrainingEngineLine(fen, line, isBlackToMove);
+      return converted ? [converted] : [];
+    })
+    .sort((left, right) => compareTrainingLinesForSideToMove(left, right, isBlackToMove))
+    .map((line, index) => ({
+      ...line,
+      rank: index + 1,
+    }));
 }
 
 function clientLineToTrainingEngineLine(
@@ -108,4 +114,25 @@ function normalizePromotion(value: string): PromotionPiece | undefined {
 function mateScoreToCp(mate: number | null) {
   if (mate == null) return 0;
   return mate > 0 ? 100000 : -100000;
+}
+
+function compareTrainingLinesForSideToMove(
+  left: TrainingEngineLineResult,
+  right: TrainingEngineLineResult,
+  isBlackToMove: boolean,
+) {
+  const leftScore = sideToMoveScore(left, isBlackToMove);
+  const rightScore = sideToMoveScore(right, isBlackToMove);
+  if (leftScore !== rightScore) return rightScore - leftScore;
+
+  return right.depth - left.depth;
+}
+
+function sideToMoveScore(line: TrainingEngineLineResult, isBlackToMove: boolean) {
+  if (typeof line.mate === "number") {
+    const mateCp = mateScoreToCp(line.mate);
+    return isBlackToMove ? -mateCp : mateCp;
+  }
+
+  return isBlackToMove ? -line.cp : line.cp;
 }

@@ -163,6 +163,15 @@ function trainPieceLineCacheKey(fen: string, square: string) {
   return `${fen}::${square}`;
 }
 
+function scoreEngineLineForSideToMove(line: EngineLineResult, isBlackToMove: boolean) {
+  if (typeof line.mate === "number") {
+    const mateCp = line.mate > 0 ? 100000 : -100000;
+    return isBlackToMove ? -mateCp : mateCp;
+  }
+
+  return isBlackToMove ? -line.cp : line.cp;
+}
+
 type EvalGraphPoint = {
   value: number;
   positionIndex: number;
@@ -996,13 +1005,15 @@ export default function TrainPage() {
     });
   }
 
-  function normalizeEngineLineSnapshot(lines: EngineLineResult[]) {
+  function normalizeEngineLineSnapshot(fenForLines: string, lines: EngineLineResult[]) {
+    const isBlackToMove = fenForLines.split(/\s+/)[1] === "b";
+
     return lines
       .filter((line) => line.bestMove)
       .sort((left, right) => {
-        const leftRank = typeof left.rank === "number" ? left.rank : Number.MAX_SAFE_INTEGER;
-        const rightRank = typeof right.rank === "number" ? right.rank : Number.MAX_SAFE_INTEGER;
-        if (leftRank !== rightRank) return leftRank - rightRank;
+        const leftScore = scoreEngineLineForSideToMove(left, isBlackToMove);
+        const rightScore = scoreEngineLineForSideToMove(right, isBlackToMove);
+        if (leftScore !== rightScore) return rightScore - leftScore;
         return right.depth - left.depth;
       })
       .slice(0, CLIENT_STOCKFISH_MULTIPV)
@@ -1013,7 +1024,7 @@ export default function TrainPage() {
   }
 
   function replaceAndStoreEngineLinesForFen(fenToAnalyze: string, lines: EngineLineResult[]) {
-    const snapshotLines = normalizeEngineLineSnapshot(lines);
+    const snapshotLines = normalizeEngineLineSnapshot(fenToAnalyze, lines);
 
     setEngineLineCache((current) => {
       const next = { ...current, [fenToAnalyze]: snapshotLines };
@@ -1036,7 +1047,7 @@ export default function TrainPage() {
       const mergedLines = Array.from(
         buildDeepestEngineLineMap(fenToAnalyze, [currentLines, deepestTopLines]).values(),
       );
-      const next = { ...current, [fenToAnalyze]: mergedLines };
+      const next = { ...current, [fenToAnalyze]: normalizeEngineLineSnapshot(fenToAnalyze, mergedLines) };
       engineLineCacheRef.current = next;
       return next;
     });
@@ -1105,11 +1116,13 @@ export default function TrainPage() {
             best: convertedLines[0] ? { san: convertedLines[0].bestSan, cp: convertedLines[0].cp, mate: convertedLines[0].mate, rank: convertedLines[0].rank, depth: convertedLines[0].depth } : null,
           });
         }
-        replaceAndStoreEngineLinesForFen(fenToAnalyze, convertedLines);
       },
     });
 
     const convertedLines = clientLinesToTrainingEngineLines({ fen: fenToAnalyze, lines: result.lines });
+    if (convertedLines.length === 0) {
+      throw new Error("Client Stockfish returned no coherent engine lines.");
+    }
     replaceAndStoreEngineLinesForFen(fenToAnalyze, convertedLines);
     completedEngineLineFensRef.current.add(fenToAnalyze);
     clearEngineLineErrorFen(fenToAnalyze);
