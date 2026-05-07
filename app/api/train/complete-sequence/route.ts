@@ -17,6 +17,8 @@ import { classifyTrainingBucket, classifyTrainingPhase } from "@/lib/training/po
 import type { TrainingBucket, TrainingPhase } from "@/lib/training/queue-core";
 import { classifyTrainingOutcome } from "@/lib/training/mistake-srs";
 import { updateMistakeAfterTraining } from "@/lib/training/mistake-store";
+import { mineMistakesFromSequence } from "@/lib/training/mistake-mining-persistence";
+import type { MineableMoveInput } from "@/lib/training/mistake-mining";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -255,6 +257,27 @@ export async function POST(request: Request) {
     throw new Error(`Failed to save training session: ${sessionError.message}`);
   }
   const sessionInsertMs = Date.now() - sessionInsertStartedAt;
+
+  // Fire-and-forget mining of app-native active mistakes — never blocks response.
+  const minedMistakesInput: MineableMoveInput[] = sequenceEvaluation.positionEvaluations.map((pe) => ({
+    decisionFen: pe.decisionFen,
+    uci: pe.userMove.uci,
+    san: pe.userMove.san,
+    classification: pe.classification,
+    cpLoss: pe.cpLoss,
+    evalBefore: pe.evalBefore,
+    evalAfter: pe.evalAfter,
+    mateBefore: pe.mateBefore ?? null,
+    mateAfter: pe.mateAfter ?? null,
+    fenAfterUserMove: pe.fenAfterUserMove,
+  }));
+  mineMistakesFromSequence({
+    userId,
+    sessionId: session.id,
+    positionEvaluations: minedMistakesInput,
+  }).catch(() => {
+    // Mining is best-effort; never fail the sequence completion.
+  });
 
   if (selectedMistakeId) {
     // Row-based mistake path: update SRS state first (session insert succeeded), then Elo
