@@ -1948,6 +1948,7 @@ export default function TrainPage() {
       console.log("[move-notes] update-note", moveKey);
     }
     setMoveAnnotations((prev) => updateNoteText(prev, moveKey, text));
+    dirtyMoveNoteKeysRef.current.add(moveKey);
   }
 
   function handleNoteHoverMove(from: string, to: string) {
@@ -1959,15 +1960,70 @@ export default function TrainPage() {
   }
 
   // ── Persist notes to Supabase with debounce ──────────────────────
+  const dirtyMoveNoteKeysRef = useRef<Set<string>>(new Set());
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Ref mirror so the setTimeout callback always reads the latest annotations.
+  const moveAnnotationsRef = useRef(moveAnnotations);
+  moveAnnotationsRef.current = moveAnnotations;
+
+  // Debounced sync: on each tick, POST all dirty keys.
   useEffect(() => {
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     syncTimerRef.current = setTimeout(() => {
-      const key = selectedMoveKey;
-      if (!key) return;
-      const annotation = moveAnnotations[key];
-      if (!annotation || !annotation.noteText) return;
-      const entry = annotation;
+      const dirty = dirtyMoveNoteKeysRef.current;
+      if (dirty.size === 0) return;
+
+      const snapshot = moveAnnotationsRef.current;
+      for (const key of dirty) {
+        const entry = snapshot[key];
+        if (!entry) continue;
+        fetch("/api/train/move-notes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            moveKey: entry.moveKey,
+            decisionFen: entry.decisionFen,
+            moveUci: entry.uci,
+            moveSan: entry.san ?? null,
+            noteText: entry.noteText,
+            classification: entry.classification ?? null,
+            cpLoss: entry.cpLoss ?? null,
+            evalBeforeCp: entry.evalBefore ?? null,
+            evalAfterCp: entry.evalAfter ?? null,
+            mateBefore: entry.mateBefore ?? null,
+            mateAfter: entry.mateAfter ?? null,
+            attemptCount: entry.attemptCount,
+          }),
+        })
+          .then(() => {
+            // Only clear if the note hasn't changed since we sent it
+            const current = moveAnnotationsRef.current[key]?.noteText;
+            if (current === entry.noteText) {
+              dirtyMoveNoteKeysRef.current.delete(key);
+            }
+          })
+          .catch((err: unknown) => {
+            if (process.env.NODE_ENV !== "production") {
+              console.warn("[move-notes] sync failed for", key, err);
+            }
+          });
+      }
+    }, 2000);
+    return () => {
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    };
+  }, [moveAnnotations]);
+
+  // Flush remaining dirty notes when postmortem panel closes.
+  useEffect(() => {
+    if (isPostMortemVisible) return;
+    const dirty = dirtyMoveNoteKeysRef.current;
+    if (dirty.size === 0) return;
+    const snapshot = moveAnnotationsRef.current;
+    for (const key of dirty) {
+      const entry = snapshot[key];
+      if (!entry) continue;
       fetch("/api/train/move-notes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1985,16 +2041,10 @@ export default function TrainPage() {
           mateAfter: entry.mateAfter ?? null,
           attemptCount: entry.attemptCount,
         }),
-      }).catch((err: unknown) => {
-        if (process.env.NODE_ENV !== "production") {
-          console.warn("[move-notes] sync failed", err);
-        }
-      });
-    }, 2000);
-    return () => {
-      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
-    };
-  }, [moveAnnotations, selectedMoveKey]);
+      }).catch(() => {});
+    }
+    dirtyMoveNoteKeysRef.current = new Set();
+  }, [isPostMortemVisible]);
 
   // Load existing notes from Supabase when postmortem opens.
   useEffect(() => {
