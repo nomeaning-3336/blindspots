@@ -53,17 +53,14 @@ import {
 } from "@/lib/training-postmortem-navigation";
 import { runStartTrainingTransition } from "@/lib/train-onboarding-transition";
 import {
-  buildSessionMistakeMemories,
-  createEmptyPositionMemory,
+  buildSessionAnnotations,
+  buildMoveKey,
   normalizeDecisionFen,
-  selectFailedMove,
-  updateNoteBlock,
-  appendBoardSnapshot,
   isFailedClassification,
-  type PositionMistakeMemory,
-  type MistakeMoveMemory,
+  updateNoteText,
+  type AnnotatedMove,
 } from "@/lib/training/mistake-memory";
-import { MistakeMemoryPanel } from "@/components/train/mistake-memory-panel";
+import { MoveNotesPanel } from "@/components/train/mistake-memory-panel";
 
 type TrainingState = "active" | "complete" | "drift" | "resolving";
 type OnboardingScreen = "loading" | "connect" | "analysis" | "summary" | "done";
@@ -516,9 +513,9 @@ export default function TrainPage() {
   const startTrainingGestureConsumedRef = useRef(false);
   const isPostMortemVisible = state === "complete" || state === "drift";
   const shouldAnimatePieces = state === "active" || isPostMortemVisible;
-  const [mistakeMemories, setMistakeMemories] = useState<Record<string, PositionMistakeMemory>>({});
-  const seededMistakeFensRef = useRef<Set<string>>(new Set());
-  const sessionNewMoveUcisRef = useRef<Set<string>>(new Set());
+  const [moveAnnotations, setMoveAnnotations] = useState<Record<string, AnnotatedMove>>({});
+  const seededMoveKeysRef = useRef<Set<string>>(new Set());
+  const [selectedMoveKey, setSelectedMoveKey] = useState<string | null>(null);
   const [postmortemSidePanel, setPostmortemSidePanel] = useState<"analysis" | "memory">("analysis");
 
   useEffect(() => {
@@ -783,9 +780,9 @@ export default function TrainPage() {
     setEloResult(null);
     setLastMove(null);
     setDisplayStartingFen(startingFen);
-    seededMistakeFensRef.current.clear();
-    sessionNewMoveUcisRef.current.clear();
-    setMistakeMemories({});
+    seededMoveKeysRef.current.clear();
+    setMoveAnnotations({});
+    setSelectedMoveKey(null);
     setPostmortemSidePanel("analysis");
     if (nextState === "active") {
       setCurrentChallengeElo(null);
@@ -1850,139 +1847,201 @@ export default function TrainPage() {
   const activeSequencePosition = visibleSequencePositions[activeExploreIndex] ?? visibleSequencePositions[0];
   const activeCanonicalMove = canonicalPostmortemMoves.find((move) => move.positionIndex === activeExploreIndex) ?? null;
 
-  // ── Mistake memory: seed from session evaluations ───────────────────
-  // Build a map from session data. Only seeds once per (normalized) FEN;
-  // user edits (notes, snapshots, selection) are not overwritten.
+  // ── Move annotations: seed from session evaluations ──────────────
+  // Build a flat map of moveKey → AnnotatedMove from session data.
+  // Seeds all user moves once per moveKey; user edits (noteText) are preserved.
   useEffect(() => {
     if (!isPostMortemVisible) return;
 
-    const sessionMemories: Record<string, PositionMistakeMemory> = {};
+    const sessionAnnotations: Record<string, AnnotatedMove> = {};
 
     for (const pos of visibleSequencePositions) {
       if (pos.userMoveIndex == null || !pos.move?.fenBefore) continue;
+
+      const moveKey = buildMoveKey(pos.move.fenBefore, pos.move.uci);
+      if (seededMoveKeysRef.current.has(moveKey)) continue;
+
       const classification = getAuthoritativeMoveClassification({
         move: pos.move,
         moveScore: completedMoveScoreByUserMoveIndex.get(pos.userMoveIndex),
       });
-      if (!isFailedClassification(classification)) continue;
 
-      const normFen = normalizeDecisionFen(pos.move.fenBefore);
-      if (seededMistakeFensRef.current.has(`${normFen}::${pos.move.uci}`)) continue;
+      // Merge with any earlier entry in this batch, then with existing state
+      const batchEntry = sessionAnnotations[moveKey];
+      const existingStateEntry = moveAnnotations[moveKey];
+      const merged = batchEntry ?? existingStateEntry;
+      const now = new Date().toISOString();
 
-      const existing = sessionMemories[normFen] ?? mistakeMemories[normFen] ?? createEmptyPositionMemory(pos.move.fenBefore);
-      sessionMemories[normFen] = {
-        decisionFen: existing.decisionFen,
-        failedMoves: (() => {
-          const moveIdx = existing.failedMoves.findIndex((m) => m.uci === pos.move!.uci);
-          if (moveIdx >= 0) return existing.failedMoves; // Already present
-          return [
-            ...existing.failedMoves,
-            {
-              uci: pos.move.uci,
-              san: pos.move.san,
-              classification,
-              cpLoss: pos.move.cpLoss,
-              evalBefore: pos.move.evalBefore ?? null,
-              evalAfter: pos.move.evalAfter ?? null,
-              mateBefore: pos.move.mateBefore ?? null,
-              mateAfter: pos.move.mateAfter ?? null,
-              attemptCount: 1,
-              firstAttemptedAt: new Date().toISOString(),
-              lastAttemptedAt: new Date().toISOString(),
-              notes: [],
-            } satisfies MistakeMoveMemory,
-          ];
-        })(),
-        selectedFailedMoveUci: existing.selectedFailedMoveUci,
-      };
-      if (existing.failedMoves.findIndex((m) => m.uci === pos.move!.uci) < 0) {
-        sessionNewMoveUcisRef.current.add(pos.move!.uci);
-      }
-      seededMistakeFensRef.current.add(`${normFen}::${pos.move!.uci}`);
+      sessionAnnotations[moveKey] = merged
+        ? {
+            ...merged,
+            san: pos.move.san ?? merged.san,
+            classification: classification ?? merged.classification,
+            cpLoss: pos.move.cpLoss ?? merged.cpLoss,
+            evalBefore: pos.move.evalBefore ?? merged.evalBefore,
+            evalAfter: pos.move.evalAfter ?? merged.evalAfter,
+            mateBefore: pos.move.mateBefore ?? merged.mateBefore,
+            mateAfter: pos.move.mateAfter ?? merged.mateAfter,
+            attemptCount: merged.attemptCount + 1,
+            lastAttemptedAt: now,
+          }
+        : {
+            moveKey,
+            decisionFen: normalizeDecisionFen(pos.move.fenBefore),
+            uci: pos.move.uci,
+            san: pos.move.san,
+            classification,
+            cpLoss: pos.move.cpLoss,
+            evalBefore: pos.move.evalBefore ?? null,
+            evalAfter: pos.move.evalAfter ?? null,
+            mateBefore: pos.move.mateBefore ?? null,
+            mateAfter: pos.move.mateAfter ?? null,
+            attemptCount: 1,
+            firstAttemptedAt: now,
+            lastAttemptedAt: now,
+            noteText: "",
+          };
+
+      seededMoveKeysRef.current.add(moveKey);
     }
 
-    if (Object.keys(sessionMemories).length > 0) {
-      setMistakeMemories((prev) => ({ ...prev, ...sessionMemories }));
+    if (Object.keys(sessionAnnotations).length > 0) {
+      setMoveAnnotations((prev) => ({ ...prev, ...sessionAnnotations }));
     }
   }, [isPostMortemVisible, visibleSequencePositions, completedMoveScoreByUserMoveIndex]);
 
-  // Derive the active decision FEN from the currently selected/stepped position.
-  const activeDecisionFen = useMemo<string | null>(() => {
-    if (!isPostMortemVisible) return null;
-    const pos = visibleSequencePositions[activeExploreIndex];
-    if (!pos?.move?.fenBefore) return null;
-    return normalizeDecisionFen(pos.move.fenBefore);
-  }, [isPostMortemVisible, activeExploreIndex, visibleSequencePositions]);
+  // ── Move notes: derive annotatable user moves ─────────────────────
+  // Show all user moves from the canonical postmortem moves table.
+  const annotatableMoves = useMemo(() => {
+    if (!isPostMortemVisible) return [];
+    return canonicalPostmortemMoves
+      .filter((cm) => cm.kind === "user" && cm.uci && cm.move?.fenBefore)
+      .map((cm) => ({
+        moveKey: buildMoveKey(cm.move!.fenBefore!, cm.uci!),
+        san: cm.san ?? "",
+        uci: cm.uci!,
+        from: cm.from,
+        to: cm.to,
+        classification: cm.classification,
+        cpLoss: cm.cpLoss as number | undefined,
+        mateAfter: cm.mateAfter as number | null | undefined,
+      }));
+  }, [isPostMortemVisible, canonicalPostmortemMoves]);
 
-  const activeMistakeMemory = useMemo<PositionMistakeMemory | null>(() => {
-    if (!activeDecisionFen) return null;
-    const mem = mistakeMemories[activeDecisionFen];
-    return mem
-      ? {
-          ...mem,
-          selectedFailedMoveUci: mem.selectedFailedMoveUci ?? mem.failedMoves[0]?.uci,
-        }
-      : null;
-  }, [activeDecisionFen, mistakeMemories]);
-
-  function handleSelectFailedMove(uci: string) {
-    if (!activeDecisionFen) return;
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[mistake-memory] select-failed-move", uci);
+  // Dev-only: log annotation state
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    if (annotatableMoves.length > 0) {
+      console.log("[move-notes] annotatable-moves", annotatableMoves.length);
     }
-    setMistakeMemories((prev) => {
-      const mem = prev[activeDecisionFen];
-      if (!mem) return prev;
-      return { ...prev, [activeDecisionFen]: selectFailedMove(mem, uci) };
-    });
+  }, [annotatableMoves]);
+
+  function handleSelectMove(moveKey: string) {
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[move-notes] select-move", moveKey);
+    }
+    setSelectedMoveKey(moveKey);
   }
 
-  function handleUpdateNote(uci: string, text: string) {
-    if (!activeDecisionFen) return;
+  function handleUpdateNote(moveKey: string, text: string) {
     if (process.env.NODE_ENV !== "production") {
-      console.log("[mistake-memory] update-note", activeDecisionFen, uci);
+      console.log("[move-notes] update-note", moveKey);
     }
-    setMistakeMemories((prev) => {
-      const mem = prev[activeDecisionFen];
-      if (!mem) return prev;
-      return { ...prev, [activeDecisionFen]: updateNoteBlock(mem, uci, text) };
-    });
+    setMoveAnnotations((prev) => updateNoteText(prev, moveKey, text));
   }
 
-  function handleAddBoardSnapshot(uci: string) {
-    if (!activeDecisionFen) return;
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[mistake-memory] add-board-snapshot", activeDecisionFen, uci, boardFen);
-    }
-    setMistakeMemories((prev) => {
-      const mem = prev[activeDecisionFen];
-      if (!mem) return prev;
-      return {
-        ...prev,
-        [activeDecisionFen]: appendBoardSnapshot(mem, uci, {
-          fen: boardFen,
-          lastMove: replayLastMove ?? undefined,
-          orientation: boardOrientation,
-        }),
-      };
-    });
-  }
-
-  function handleHoverFailedMove(from: string, to: string) {
+  function handleNoteHoverMove(from: string, to: string) {
     setHoveredMoveSquares({ from, to });
   }
 
-  function handleHoverFailedMoveEnd() {
+  function handleNoteHoverEnd() {
     setHoveredMoveSquares(null);
   }
 
-  // Dev-only: log active position changes
+  // ── Persist notes to Supabase with debounce ──────────────────────
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (process.env.NODE_ENV === "production") return;
-    if (activeDecisionFen) {
-      console.log("[mistake-memory] active-position", activeDecisionFen);
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(() => {
+      const key = selectedMoveKey;
+      if (!key) return;
+      const annotation = moveAnnotations[key];
+      if (!annotation || !annotation.noteText) return;
+      const entry = annotation;
+      fetch("/api/train/move-notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          moveKey: entry.moveKey,
+          decisionFen: entry.decisionFen,
+          moveUci: entry.uci,
+          moveSan: entry.san ?? null,
+          noteText: entry.noteText,
+          classification: entry.classification ?? null,
+          cpLoss: entry.cpLoss ?? null,
+          evalBeforeCp: entry.evalBefore ?? null,
+          evalAfterCp: entry.evalAfter ?? null,
+          mateBefore: entry.mateBefore ?? null,
+          mateAfter: entry.mateAfter ?? null,
+          attemptCount: entry.attemptCount,
+        }),
+      }).catch((err: unknown) => {
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[move-notes] sync failed", err);
+        }
+      });
+    }, 2000);
+    return () => {
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    };
+  }, [moveAnnotations, selectedMoveKey]);
+
+  // Load existing notes from Supabase when postmortem opens.
+  useEffect(() => {
+    if (!isPostMortemVisible) return;
+    const loadedFens = new Set<string>();
+    for (const move of annotatableMoves) {
+      const fen = move.moveKey.split("::")[0];
+      if (!fen || loadedFens.has(fen)) continue;
+      loadedFens.add(fen);
     }
-  }, [activeDecisionFen]);
+    if (loadedFens.size === 0) return;
+    for (const fen of loadedFens) {
+      fetch(`/api/train/move-notes?decisionFen=${encodeURIComponent(fen)}`)
+        .then((res) => res.json())
+        .then((data: { notes?: Array<Record<string, unknown>> }) => {
+          if (!data.notes) return;
+          const loaded: Record<string, AnnotatedMove> = {};
+          for (const row of data.notes) {
+            const moveKey = row.move_key as string;
+            loaded[moveKey] = {
+              moveKey,
+              decisionFen: row.decision_fen as string,
+              uci: row.move_uci as string,
+              san: (row.move_san as string) ?? undefined,
+              classification: (row.classification as string) ?? undefined,
+              cpLoss: (row.cp_loss as number) ?? undefined,
+              evalBefore: (row.eval_before_cp as number) ?? null,
+              evalAfter: (row.eval_after_cp as number) ?? null,
+              mateBefore: (row.mate_before as number) ?? null,
+              mateAfter: (row.mate_after as number) ?? null,
+              attemptCount: (row.attempt_count as number) ?? 1,
+              firstAttemptedAt: (row.first_attempted_at as string) ?? new Date().toISOString(),
+              lastAttemptedAt: (row.last_attempted_at as string) ?? new Date().toISOString(),
+              noteText: (row.note_text as string) ?? "",
+            };
+          }
+          if (Object.keys(loaded).length > 0) {
+            setMoveAnnotations((prev) => ({ ...prev, ...loaded }));
+          }
+        })
+        .catch((err: unknown) => {
+          if (process.env.NODE_ENV !== "production") {
+            console.warn("[move-notes] load failed", err);
+          }
+        });
+    }
+  }, [isPostMortemVisible]);
 
   // Dev-only replay state instrumentation
   useEffect(() => {
@@ -2710,7 +2769,7 @@ export default function TrainPage() {
               resultMode === "results" ? "p-3 sm:p-4" : "p-3 sm:p-4",
             ].join(" ")}
           >
-            {/* ── Compact toggle: Analysis | Mistake Memory ───────────────── */}
+            {/* ── Compact toggle: Analysis | Notes ──────────────────────── */}
             <div className="inline-flex justify-center w-full gap-1">
               {(["analysis", "memory"] as const).map((item) => {
                 const active = postmortemSidePanel === item;
@@ -2727,12 +2786,7 @@ export default function TrainPage() {
                     ].join(" ")}
                     onClick={() => setPostmortemSidePanel(item)}
                   >
-                    {item === "analysis" ? "Analysis" : "Mistake Memory"}
-                    {item === "memory" && activeMistakeMemory && activeMistakeMemory.failedMoves.length > 0 ? (
-                      <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--app-class-blunder)] px-1 text-[9px] font-bold leading-none text-white">
-                        {activeMistakeMemory.failedMoves.length}
-                      </span>
-                    ) : null}
+                    {item === "analysis" ? "Analysis" : "Notes"}
                   </button>
                 );
               })}
@@ -2772,15 +2826,14 @@ export default function TrainPage() {
                 }}
               />
               ) : (
-                <MistakeMemoryPanel
-                  memory={activeMistakeMemory}
-                  onSelectFailedMove={handleSelectFailedMove}
+                <MoveNotesPanel
+                  moves={annotatableMoves}
+                  annotations={moveAnnotations}
+                  selectedMoveKey={selectedMoveKey}
+                  onSelectMove={handleSelectMove}
                   onUpdateNote={handleUpdateNote}
-                  onAddBoardSnapshot={handleAddBoardSnapshot}
-                  boardFen={boardFen}
-                  boardOrientation={boardOrientation}
-                  boardLastMove={replayLastMove}
-                  newMoveUcis={sessionNewMoveUcisRef.current}
+                  onHoverMove={handleNoteHoverMove}
+                  onHoverEnd={handleNoteHoverEnd}
                 />
               )}
             </div>

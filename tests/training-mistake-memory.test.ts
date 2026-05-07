@@ -8,16 +8,15 @@ const mod: typeof import("../lib/training/mistake-memory") =
 
 const {
   normalizeDecisionFen,
-  createEmptyPositionMemory,
-  upsertFailedMoveMemory,
-  selectFailedMove,
-  updateNoteBlock,
-  appendBoardSnapshot,
-  buildSessionMistakeMemories,
+  buildMoveKey,
+  buildSessionAnnotations,
+  upsertAnnotatedMove,
+  updateNoteText,
+  getAnnotationsForDecisionFen,
   isFailedClassification,
 } = mod;
 
-import type { PositionMistakeMemory } from "../lib/training/mistake-memory";
+import type { AnnotatedMove } from "../lib/training/mistake-memory";
 
 function testFen(extra = ""): string {
   return `rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1${extra ? " " + extra : ""}`;
@@ -51,168 +50,176 @@ describe("normalizeDecisionFen", () => {
   });
 });
 
-describe("createEmptyPositionMemory", () => {
-  it("creates a zero-move memory for the given FEN", () => {
-    const fen = testFen();
-    const mem = createEmptyPositionMemory(fen);
-    assert.equal(mem.decisionFen, normalizeDecisionFen(fen));
-    assert.deepEqual(mem.failedMoves, []);
-    assert.equal(mem.selectedFailedMoveUci, undefined);
+describe("buildMoveKey", () => {
+  it("uses normalized decision FEN and UCI", () => {
+    const fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1";
+    const key = buildMoveKey(fen, "g8f6");
+    assert.equal(key, "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -::g8f6");
+  });
+
+  it("produces the same key regardless of halfmove clock", () => {
+    const fenA = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1";
+    const fenB = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 6 42";
+    assert.equal(buildMoveKey(fenA, "g8f6"), buildMoveKey(fenB, "g8f6"));
   });
 });
 
-describe("upsertFailedMoveMemory", () => {
-  it("adds a new failed move", () => {
-    const mem = createEmptyPositionMemory(testFen());
-    const updated = upsertFailedMoveMemory(mem, {
+describe("buildSessionAnnotations", () => {
+  it("includes all user moves, not just failed ones", () => {
+    const result = buildSessionAnnotations([
+      { uci: "g1f3", san: "Nf3", classification: "mistake", cpLoss: 85, decisionFen: testFen() },
+      { uci: "f1e2", san: "Be2", classification: "good", cpLoss: 20, decisionFen: testFen() },
+    ]);
+    assert.equal(Object.keys(result).length, 2);
+  });
+
+  it("uses moveKey as keys in the flat map", () => {
+    const result = buildSessionAnnotations([
+      { uci: "g1f3", san: "Nf3", decisionFen: testFen() },
+    ]);
+    const key = buildMoveKey(testFen(), "g1f3");
+    assert.ok(result[key]);
+    assert.equal(result[key].uci, "g1f3");
+  });
+
+  it("increments attemptCount and preserves noteText on re-upsert", () => {
+    let result = buildSessionAnnotations([
+      { uci: "g1f3", san: "Nf3", classification: "mistake", cpLoss: 85, decisionFen: testFen() },
+    ]);
+    const key = buildMoveKey(testFen(), "g1f3");
+    // Manually set a note
+    result = updateNoteText(result, key, "My note");
+    assert.equal(result[key].noteText, "My note");
+    assert.equal(result[key].attemptCount, 1);
+    // Rebuild
+    result = buildSessionAnnotations([
+      { uci: "g1f3", san: "Nf3", classification: "blunder", cpLoss: 120, decisionFen: testFen() },
+    ], result);
+    assert.equal(result[key].attemptCount, 2);
+    assert.equal(result[key].classification, "blunder");
+    // noteText should be preserved
+    assert.equal(result[key].noteText, "My note");
+  });
+
+  it("preserves existing entries when provided", () => {
+    const key = buildMoveKey(testFen(), "b1c3");
+    const existing: Record<string, AnnotatedMove> = {
+      [key]: {
+        moveKey: key,
+        decisionFen: normalizeDecisionFen(testFen()),
+        uci: "b1c3",
+        san: "Nc3",
+        attemptCount: 1,
+        firstAttemptedAt: "2025-01-01T00:00:00Z",
+        lastAttemptedAt: "2025-01-01T00:00:00Z",
+        noteText: "Existing note",
+      },
+    };
+    const result = buildSessionAnnotations([
+      { uci: "g1f3", san: "Nf3", classification: "mistake", cpLoss: 85, decisionFen: testFen() },
+    ], existing);
+    // Existing entry preserved
+    assert.equal(result[key].noteText, "Existing note");
+    // New entry added
+    const newKey = buildMoveKey(testFen(), "g1f3");
+    assert.equal(result[newKey].uci, "g1f3");
+    assert.equal(Object.keys(result).length, 2);
+  });
+
+  it("returns empty record for no inputs", () => {
+    const result = buildSessionAnnotations([]);
+    assert.deepEqual(result, {});
+  });
+});
+
+describe("upsertAnnotatedMove", () => {
+  it("adds a new annotated move", () => {
+    const key = buildMoveKey(testFen(), "g1f3");
+    const result = upsertAnnotatedMove({}, {
+      moveKey: key,
+      decisionFen: testFen(),
       uci: "g1f3",
       san: "Nf3",
       classification: "mistake",
       cpLoss: 85,
     });
-    assert.equal(updated.failedMoves.length, 1);
-    assert.equal(updated.failedMoves[0].uci, "g1f3");
-    assert.equal(updated.failedMoves[0].san, "Nf3");
-    assert.equal(updated.failedMoves[0].classification, "mistake");
-    assert.equal(updated.failedMoves[0].cpLoss, 85);
-    assert.equal(updated.failedMoves[0].attemptCount, 1);
+    assert.ok(result[key]);
+    assert.equal(result[key].attemptCount, 1);
+    assert.equal(result[key].uci, "g1f3");
   });
 
-  it("increments attemptCount on re-upsert", () => {
-    let mem = createEmptyPositionMemory(testFen());
-    mem = upsertFailedMoveMemory(mem, { uci: "g1f3", san: "Nf3" });
-    mem = upsertFailedMoveMemory(mem, { uci: "g1f3", classification: "blunder", cpLoss: 120 });
-    assert.equal(mem.failedMoves.length, 1);
-    assert.equal(mem.failedMoves[0].attemptCount, 2);
-    assert.equal(mem.failedMoves[0].classification, "blunder");
-    assert.equal(mem.failedMoves[0].cpLoss, 120);
-  });
-
-  it("tracks multiple distinct failed moves", () => {
-    let mem = createEmptyPositionMemory(testFen());
-    mem = upsertFailedMoveMemory(mem, { uci: "g1f3", san: "Nf3" });
-    mem = upsertFailedMoveMemory(mem, { uci: "f1e2", san: "Be2" });
-    assert.equal(mem.failedMoves.length, 2);
-  });
-});
-
-describe("selectFailedMove", () => {
-  it("sets selectedFailedMoveUci for an existing move", () => {
-    let mem = createEmptyPositionMemory(testFen());
-    mem = upsertFailedMoveMemory(mem, { uci: "g1f3", san: "Nf3" });
-    mem = upsertFailedMoveMemory(mem, { uci: "f1e2", san: "Be2" });
-    mem = selectFailedMove(mem, "g1f3");
-    assert.equal(mem.selectedFailedMoveUci, "g1f3");
-  });
-
-  it("clears selectedFailedMoveUci for a non-existent move", () => {
-    let mem = createEmptyPositionMemory(testFen());
-    mem = upsertFailedMoveMemory(mem, { uci: "g1f3", san: "Nf3" });
-    mem = selectFailedMove(mem, "g1f3");
-    assert.equal(mem.selectedFailedMoveUci, "g1f3");
-    mem = selectFailedMove(mem, "nonexistent");
-    assert.equal(mem.selectedFailedMoveUci, undefined);
+  it("increments attemptCount and preserves noteText", () => {
+    const key = buildMoveKey(testFen(), "g1f3");
+    let result = upsertAnnotatedMove({}, {
+      moveKey: key,
+      decisionFen: testFen(),
+      uci: "g1f3",
+      san: "Nf3",
+    });
+    result = updateNoteText(result, key, "My note");
+    result = upsertAnnotatedMove(result, {
+      moveKey: key,
+      decisionFen: testFen(),
+      uci: "g1f3",
+      classification: "blunder",
+      cpLoss: 120,
+    });
+    assert.equal(result[key].attemptCount, 2);
+    assert.equal(result[key].classification, "blunder");
+    assert.equal(result[key].noteText, "My note");
   });
 });
 
-describe("updateNoteBlock", () => {
-  it("adds a text note to a failed move", () => {
-    let mem = createEmptyPositionMemory(testFen());
-    mem = upsertFailedMoveMemory(mem, { uci: "g1f3", san: "Nf3" });
-    mem = updateNoteBlock(mem, "g1f3", "Should have developed the bishop first.", "2025-01-01T00:00:00Z");
-    const move = mem.failedMoves[0];
-    const textBlocks = move.notes.filter((n) => n.type === "text");
-    assert.equal(textBlocks.length, 1);
-    if (textBlocks[0]?.type === "text") {
-      assert.equal(textBlocks[0].text, "Should have developed the bishop first.");
-      assert.equal(textBlocks[0].updatedAt, "2025-01-01T00:00:00Z");
-    }
-  });
-
-  it("overwrites existing text note", () => {
-    let mem = createEmptyPositionMemory(testFen());
-    mem = upsertFailedMoveMemory(mem, { uci: "g1f3", san: "Nf3" });
-    mem = updateNoteBlock(mem, "g1f3", "Version 1", "2025-01-01T00:00:00Z");
-    mem = updateNoteBlock(mem, "g1f3", "Version 2", "2025-06-01T00:00:00Z");
-    const textBlocks = mem.failedMoves[0].notes.filter((n) => n.type === "text");
-    assert.equal(textBlocks.length, 1);
-    if (textBlocks[0]?.type === "text") {
-      assert.equal(textBlocks[0].text, "Version 2");
-    }
-  });
-
-  it("does nothing for a non-existent UCI", () => {
-    const mem = createEmptyPositionMemory(testFen());
-    const result = updateNoteBlock(mem, "nonexistent", "text");
-    assert.deepEqual(result, mem);
-  });
-});
-
-describe("appendBoardSnapshot", () => {
-  it("appends a board-snapshot block", () => {
-    let mem = createEmptyPositionMemory(testFen());
-    mem = upsertFailedMoveMemory(mem, { uci: "g1f3", san: "Nf3" });
-    mem = appendBoardSnapshot(
-      mem,
-      "g1f3",
-      { fen: testFen(), lastMove: { from: "g1", to: "f3" }, orientation: "white" },
-      "2025-01-01T00:00:00Z",
-    );
-    const snapshots = mem.failedMoves[0].notes.filter((n) => n.type === "board-snapshot");
-    assert.equal(snapshots.length, 1);
-    if (snapshots[0]?.type === "board-snapshot") {
-      assert.equal(snapshots[0].fen, testFen());
-      assert.deepEqual(snapshots[0].lastMove, { from: "g1", to: "f3" });
-      assert.equal(snapshots[0].orientation, "white");
-    }
-  });
-
-  it("does nothing for a non-existent UCI", () => {
-    const mem = createEmptyPositionMemory(testFen());
-    const result = appendBoardSnapshot(mem, "nonexistent", { fen: testFen() });
-    assert.deepEqual(result, mem);
-  });
-});
-
-describe("buildSessionMistakeMemories", () => {
-  it("builds memories from failed moves only", () => {
-    const result = buildSessionMistakeMemories([
-      { uci: "g1f3", san: "Nf3", classification: "mistake", cpLoss: 85, decisionFen: testFen() },
-      { uci: "f1e2", san: "Be2", classification: "good", cpLoss: 20, decisionFen: testFen() },
+describe("updateNoteText", () => {
+  it("updates note text for an existing move", () => {
+    const key = buildMoveKey(testFen(), "g1f3");
+    let result = buildSessionAnnotations([
+      { uci: "g1f3", san: "Nf3", decisionFen: testFen() },
     ]);
-    const normFen = normalizeDecisionFen(testFen());
-    assert.ok(result[normFen]);
-    assert.equal(result[normFen].failedMoves.length, 1);
-    assert.equal(result[normFen].failedMoves[0].uci, "g1f3");
+    result = updateNoteText(result, key, "Should have developed the bishop.");
+    assert.equal(result[key].noteText, "Should have developed the bishop.");
   });
 
-  it("preserves existing entries when provided", () => {
-    const normFen = normalizeDecisionFen(testFen());
-    const existing: Record<string, PositionMistakeMemory> = {
-      [normFen]: {
-        decisionFen: normFen,
-        failedMoves: [{
-          uci: "b1c3",
-          san: "Nc3",
-          attemptCount: 1,
-          firstAttemptedAt: "2025-01-01T00:00:00Z",
-          lastAttemptedAt: "2025-01-01T00:00:00Z",
-          notes: [],
-        }],
-      },
-    };
-    const result = buildSessionMistakeMemories(
-      [{ uci: "g1f3", san: "Nf3", classification: "mistake", cpLoss: 85, decisionFen: testFen() }],
-      existing,
-    );
-    assert.equal(result[normFen].failedMoves.length, 2);
+  it("does nothing for a non-existent key", () => {
+    const result = buildSessionAnnotations([]);
+    const updated = updateNoteText(result, "nonexistent::key", "text");
+    // Creates a minimal entry
+    assert.ok(updated["nonexistent::key"]);
+    assert.equal(updated["nonexistent::key"].noteText, "text");
   });
 
-  it("returns empty record for no failed moves", () => {
-    const result = buildSessionMistakeMemories([
-      { uci: "g1f3", san: "Nf3", classification: "good", decisionFen: testFen() },
+  it("is per-moveKey", () => {
+    const keyA = buildMoveKey(testFen(), "g1f3");
+    const keyB = buildMoveKey(testFen(), "f1e2");
+    let result = buildSessionAnnotations([
+      { uci: "g1f3", san: "Nf3", decisionFen: testFen() },
+      { uci: "f1e2", san: "Be2", decisionFen: testFen() },
     ]);
-    assert.deepEqual(result, {});
+    result = updateNoteText(result, keyA, "Note A");
+    result = updateNoteText(result, keyB, "Note B");
+    assert.equal(result[keyA].noteText, "Note A");
+    assert.equal(result[keyB].noteText, "Note B");
+  });
+});
+
+describe("getAnnotationsForDecisionFen", () => {
+  it("returns all annotations for a normalized FEN", () => {
+    const fenA = testFen();
+    const fenB = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    const result = buildSessionAnnotations([
+      { uci: "g1f3", san: "Nf3", decisionFen: fenA },
+      { uci: "f1e2", san: "Be2", decisionFen: fenA },
+      { uci: "e2e4", san: "e4", decisionFen: fenB },
+    ]);
+    const fenANotes = getAnnotationsForDecisionFen(result, fenA);
+    assert.equal(fenANotes.length, 2);
+    const fenBNotes = getAnnotationsForDecisionFen(result, fenB);
+    assert.equal(fenBNotes.length, 1);
+  });
+
+  it("returns empty array for FEN with no annotations", () => {
+    const result = getAnnotationsForDecisionFen({}, testFen());
+    assert.deepEqual(result, []);
   });
 });
 
