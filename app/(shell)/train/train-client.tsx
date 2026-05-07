@@ -431,6 +431,7 @@ const mockRep = {
 export default function TrainPage() {
   const [state, setState] = useState<TrainingState>("active");
   const [startingFen, setStartingFen] = useState<string>("");
+  const initialPreludeRef = useRef<{ previousFen: string; playedMove: string } | null>(null);
   const [fen, setFen] = useState<string>(DEFAULT_TRAINING_FEN);
   const [moves, setMoves] = useState<TrainingMove[]>(mockRep.moveHistory);
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(null);
@@ -937,6 +938,9 @@ export default function TrainPage() {
 
     const visibleInitialFen = payload.previousFen ?? payload.fen;
     setStartingFen(payload.fen);
+    initialPreludeRef.current = (payload.previousFen && payload.playedMove)
+      ? { previousFen: payload.previousFen, playedMove: payload.playedMove }
+      : null;
     setDisplayStartingFen(visibleInitialFen);
     setFen(visibleInitialFen);
     setHasLoadedPosition(true);
@@ -1567,6 +1571,8 @@ export default function TrainPage() {
           selectedMistakeId: currentMistakeIdRef.current,
           queueSource: currentQueueSourceRef.current,
           challengeElo: currentChallengeElo,
+          previousFen: initialPreludeRef.current?.previousFen ?? null,
+          playedMove: initialPreludeRef.current?.playedMove ?? null,
           precomputedEvaluations: completedEvaluations,
         }),
       });
