@@ -1085,6 +1085,9 @@ export default function TrainPage() {
       import("@/lib/stockfish/client-lines-to-training-lines"),
     ]);
 
+    const sideToMove = fenToAnalyze.split(/\s+/)[1] ?? "?";
+    const isDev = process.env.NODE_ENV !== "production";
+
     const engine = getClientStockfishEngine();
     const result = await engine.analyzeFen({
       fen: fenToAnalyze,
@@ -1092,6 +1095,16 @@ export default function TrainPage() {
       movetimeMs: CLIENT_STOCKFISH_MOVETIME_MS,
       onUpdate: (lines) => {
         const convertedLines = clientLinesToTrainingEngineLines({ fen: fenToAnalyze, lines });
+        if (isDev) {
+          console.log("[client-engine-lines:debug]", {
+            source: "client-update",
+            fen: fenToAnalyze,
+            sideToMove,
+            rawClientLines: lines.length,
+            convertedLines: convertedLines.length,
+            best: convertedLines[0] ? { san: convertedLines[0].bestSan, cp: convertedLines[0].cp, mate: convertedLines[0].mate, rank: convertedLines[0].rank, depth: convertedLines[0].depth } : null,
+          });
+        }
         replaceAndStoreEngineLinesForFen(fenToAnalyze, convertedLines);
       },
     });
@@ -1100,12 +1113,33 @@ export default function TrainPage() {
     replaceAndStoreEngineLinesForFen(fenToAnalyze, convertedLines);
     completedEngineLineFensRef.current.add(fenToAnalyze);
     clearEngineLineErrorFen(fenToAnalyze);
+    if (isDev) {
+      console.log("[client-engine-lines:debug]", {
+        source: "client-final",
+        fen: fenToAnalyze,
+        sideToMove,
+        rawClientLines: result.lines.length,
+        convertedLines: convertedLines.length,
+        best: convertedLines[0] ? { san: convertedLines[0].bestSan, cp: convertedLines[0].cp, mate: convertedLines[0].mate, rank: convertedLines[0].rank, depth: convertedLines[0].depth } : null,
+        completed: completedEngineLineFensRef.current.has(fenToAnalyze),
+      });
+    }
   }
 
   async function fetchEngineLinesForFen(fenToAnalyze: string) {
     const cached = engineLineCacheRef.current[fenToAnalyze];
     const hasCompletedClientLines = completedEngineLineFensRef.current.has(fenToAnalyze);
-    if (cached && (!ENABLE_CLIENT_STOCKFISH_LINES || hasCompletedClientLines)) return;
+    if (cached && (!ENABLE_CLIENT_STOCKFISH_LINES || hasCompletedClientLines)) {
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[client-engine-lines:debug]", {
+          source: "cache-hit",
+          fen: fenToAnalyze,
+          cachedLines: cached.length,
+          completed: hasCompletedClientLines,
+        });
+      }
+      return;
+    }
     const pending = engineLinePrefetchRef.current.get(fenToAnalyze);
     if (pending) return pending;
 
@@ -1117,6 +1151,12 @@ export default function TrainPage() {
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           if (message === "Client Stockfish search stopped.") {
+            if (process.env.NODE_ENV !== "production") {
+              console.log("[client-engine-lines:debug]", {
+                source: "cancel",
+                fen: fenToAnalyze,
+              });
+            }
             return;
           }
           console.warn("[client-engine-lines] falling back to server:", message);
