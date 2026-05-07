@@ -66,7 +66,7 @@ const SKILL_LEVEL_STARTING_ELO: Record<SkillLevel, number> = {
   expert: 2000,
 };
 
-const ENABLE_CLIENT_STOCKFISH_LINES = false;
+const ENABLE_CLIENT_STOCKFISH_LINES = true;
 
 type TrainingMove = {
   san: string;
@@ -991,6 +991,84 @@ export default function TrainPage() {
     });
   }
 
+  function mergeAndStoreEngineLinesForFen(fenToAnalyze: string, lines: EngineLineResult[]) {
+    const existingTopLines =
+      engineLineCacheRef.current[fenToAnalyze] ??
+      engineLineCache[fenToAnalyze] ??
+      [];
+    const deepestTopLines = Array.from(
+      buildDeepestEngineLineMap(fenToAnalyze, [existingTopLines, lines]).values(),
+    );
+
+    setEngineLineCache((current) => {
+      const currentLines = current[fenToAnalyze] ?? [];
+      const mergedLines = Array.from(
+        buildDeepestEngineLineMap(fenToAnalyze, [currentLines, deepestTopLines]).values(),
+      );
+      const next = { ...current, [fenToAnalyze]: mergedLines };
+      engineLineCacheRef.current = next;
+      return next;
+    });
+  }
+
+  function markEngineLineErrorFen(fenToAnalyze: string) {
+    setEngineLineErrorFens((current) => {
+      const next = new Set(current);
+      next.add(fenToAnalyze);
+      return next;
+    });
+  }
+
+  function clearEngineLineErrorFen(fenToAnalyze: string) {
+    setEngineLineErrorFens((current) => {
+      if (!current.has(fenToAnalyze)) return current;
+      const next = new Set(current);
+      next.delete(fenToAnalyze);
+      return next;
+    });
+  }
+
+  async function fetchServerEngineLinesForFen(fenToAnalyze: string) {
+    const response = await fetch("/api/train/engine-lines", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fen: fenToAnalyze }),
+    });
+    const payload = (await response.json().catch(() => null)) as { lines?: EngineLineResult[]; error?: string } | null;
+    const lines = response.ok && Array.isArray(payload?.lines) ? payload.lines : [];
+    const hadError = typeof payload?.error === "string" || !response.ok;
+
+    mergeAndStoreEngineLinesForFen(fenToAnalyze, lines);
+
+    if (hadError) {
+      markEngineLineErrorFen(fenToAnalyze);
+    } else {
+      clearEngineLineErrorFen(fenToAnalyze);
+    }
+  }
+
+  async function fetchClientEngineLinesForFen(fenToAnalyze: string) {
+    const [{ getClientStockfishEngine }, { clientLinesToTrainingEngineLines }] = await Promise.all([
+      import("@/lib/stockfish/client-engine"),
+      import("@/lib/stockfish/client-lines-to-training-lines"),
+    ]);
+
+    const engine = getClientStockfishEngine();
+    const result = await engine.analyzeFen({
+      fen: fenToAnalyze,
+      multiPv: 3,
+      movetimeMs: 800,
+      onUpdate: (lines) => {
+        const convertedLines = clientLinesToTrainingEngineLines({ fen: fenToAnalyze, lines });
+        mergeAndStoreEngineLinesForFen(fenToAnalyze, convertedLines);
+      },
+    });
+
+    const convertedLines = clientLinesToTrainingEngineLines({ fen: fenToAnalyze, lines: result.lines });
+    mergeAndStoreEngineLinesForFen(fenToAnalyze, convertedLines);
+    clearEngineLineErrorFen(fenToAnalyze);
+  }
+
   async function fetchEngineLinesForFen(fenToAnalyze: string) {
     const cached = engineLineCacheRef.current[fenToAnalyze];
     if (cached) return;
@@ -998,46 +1076,23 @@ export default function TrainPage() {
     if (pending) return pending;
 
     const promise = (async () => {
-      const response = await fetch("/api/train/engine-lines", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fen: fenToAnalyze }),
-      });
-      const payload = (await response.json().catch(() => null)) as { lines?: EngineLineResult[]; error?: string } | null;
-      const lines = response.ok && Array.isArray(payload?.lines) ? payload.lines : [];
-      const hadError = typeof payload?.error === "string" || !response.ok;
-      const existingTopLines =
-        engineLineCacheRef.current[fenToAnalyze] ??
-        engineLineCache[fenToAnalyze] ??
-        [];
-      const deepestTopLines = Array.from(
-        buildDeepestEngineLineMap(fenToAnalyze, [existingTopLines, lines]).values(),
-      );
-      setEngineLineCache((current) => {
-        if (current[fenToAnalyze]) return current;
-        const next = { ...current, [fenToAnalyze]: deepestTopLines };
-        engineLineCacheRef.current = next;
-        return next;
-      });
-      if (hadError) {
-        setEngineLineErrorFens((current) => {
-          const next = new Set(current);
-          next.add(fenToAnalyze);
-          return next;
-        });
+      if (ENABLE_CLIENT_STOCKFISH_LINES) {
+        try {
+          await fetchClientEngineLinesForFen(fenToAnalyze);
+          return;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (message === "Client Stockfish search stopped.") {
+            return;
+          }
+          console.warn("[client-engine-lines] falling back to server:", message);
+        }
       }
+
+      await fetchServerEngineLinesForFen(fenToAnalyze);
     })().catch(() => {
-      setEngineLineCache((current) => {
-        if (current[fenToAnalyze]) return current;
-        const next = { ...current, [fenToAnalyze]: [] };
-        engineLineCacheRef.current = next;
-        return next;
-      });
-      setEngineLineErrorFens((current) => {
-        const next = new Set(current);
-        next.add(fenToAnalyze);
-        return next;
-      });
+      mergeAndStoreEngineLinesForFen(fenToAnalyze, []);
+      markEngineLineErrorFen(fenToAnalyze);
     }).finally(() => {
       engineLinePrefetchRef.current.delete(fenToAnalyze);
     });
@@ -1089,7 +1144,7 @@ export default function TrainPage() {
     if (fens.length === 0) return;
 
     void (async () => {
-      const concurrency = 2;
+      const concurrency = ENABLE_CLIENT_STOCKFISH_LINES ? 1 : 2;
       for (let index = 0; index < fens.length; index += concurrency) {
         await Promise.all(fens.slice(index, index + concurrency).map((fenToAnalyze) => fetchEngineLinesForFen(fenToAnalyze)));
       }
