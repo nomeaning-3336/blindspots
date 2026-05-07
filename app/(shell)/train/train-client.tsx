@@ -2212,31 +2212,18 @@ export default function TrainPage() {
       event.preventDefault();
       event.stopPropagation();
 
-      const action = postMortemNavigationAction({
-        key: event.key as PostMortemNavigationKey,
-        resultMode,
-        activeExploreIndex,
-        visibleSequenceLength: visibleSequencePositions.length,
-        exploratoryHistoryLength: exploratoryHistory.length,
-        exploratoryHistoryIndex,
-      });
-
-      if (action.type === "enter-explore") {
-        setSelectedMoveIndex(null);
-        setExploreIndex(Math.max(0, visibleSequencePositions.length - 1));
-        resetExploratoryLine();
-        setExploreSelectedSquare(null);
-        setResultMode("explore");
+      if (event.key === "Home") {
+        navigateExploreTo(0, "start");
         return;
       }
-
-      if (action.type === "branch") {
-        navigateExploratoryLine(action.index);
+      if (event.key === "End") {
+        navigateExploreTo(Math.max(0, visibleSequencePositions.length - 1), "end");
         return;
       }
-
-      if (action.type === "sequence") {
-        navigateExploreTo(action.index, action.boundary);
+      if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+        goReplayPrevious();
+      } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+        goReplayNext();
       }
     }
 
@@ -2257,16 +2244,9 @@ export default function TrainPage() {
       event.stopPropagation();
 
       if (event.key === "ArrowLeft" || event.key === "Home") {
-        if (activeSetupReplayIndex === 1) {
-          setActiveSetupReplayIndex(0);
-        }
+        goReplayPrevious();
       } else if (event.key === "ArrowRight" || event.key === "End") {
-        if (activeSetupReplayIndex === 0) {
-          setActiveSetupReplayIndex(1);
-          if (initialOpponentMove) {
-            playTrainMoveSound({ move: initialOpponentMove, pitchIndex: 0, advanceLivePitch: false, source: "replay" });
-          }
-        }
+        goReplayNext();
       }
     }
 
@@ -2295,34 +2275,13 @@ export default function TrainPage() {
       if (isEditableTarget(e.target)) return;
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
 
-      const positions = visibleSequencePositions;
-      if (positions.length <= 1) return;
-
-      const liveLastIndex = positions.length - 1;
-      const currentIndex = activeReplayIndex ?? liveLastIndex;
-
-      const nextIndex =
-        e.key === "ArrowLeft"
-          ? Math.max(0, currentIndex - 1)
-          : Math.min(liveLastIndex, currentIndex + 1);
-
-      if (nextIndex === currentIndex) return;
-
       e.preventDefault();
       e.stopPropagation();
 
-      const nextPosition = positions[nextIndex];
-      setIsManualPostmortemExploration(false);
-      setActiveReplayIndex(nextIndex === liveLastIndex ? null : nextIndex);
-
-      if (e.key === "ArrowRight" && nextPosition?.move) {
-        playTrainMoveSound({
-          move: nextPosition.move,
-          plyRef: moveSoundPlyRef,
-          pitchIndex: nextPosition.pitchIndex,
-          source: "replay",
-          advanceLivePitch: false,
-        });
+      if (e.key === "ArrowLeft") {
+        goReplayPrevious();
+      } else {
+        goReplayNext();
       }
     }
 
@@ -2416,6 +2375,187 @@ export default function TrainPage() {
     setExploreIndex(boundedIndex);
   }
 
+  // ── Shared navigation helpers (reused by keyboard + wheel) ──
+
+  function goReplayPrevious() {
+    // Active setup replay: go to previous FEN (index 0)
+    if (isActiveSetupReplay) {
+      if (activeSetupReplayIndex === 1) setActiveSetupReplayIndex(0);
+      return;
+    }
+
+    // Active sequence replay: step backward through move history
+    if (state === "active") {
+      if (isAwaitingStartGesture || isOpponentThinking || isCompletingSequence) return;
+      const positions = visibleSequencePositions;
+      if (positions.length <= 1) return;
+      const liveLastIndex = positions.length - 1;
+      const currentIndex = activeReplayIndex ?? liveLastIndex;
+      const nextIndex = Math.max(0, currentIndex - 1);
+      if (nextIndex === currentIndex) return;
+      setIsManualPostmortemExploration(false);
+      setActiveReplayIndex(nextIndex === liveLastIndex ? null : nextIndex);
+      return;
+    }
+
+    // Postmortem: use shared navigation action dispatch
+    if (state === "complete") {
+      const action = postMortemNavigationAction({
+        key: "ArrowLeft",
+        resultMode,
+        activeExploreIndex,
+        visibleSequenceLength: visibleSequencePositions.length,
+        exploratoryHistoryLength: exploratoryHistory.length,
+        exploratoryHistoryIndex,
+      });
+
+      if (action.type === "enter-explore") {
+        setSelectedMoveIndex(null);
+        setExploreIndex(Math.max(0, visibleSequencePositions.length - 1));
+        resetExploratoryLine();
+        setExploreSelectedSquare(null);
+        setResultMode("explore");
+        return;
+      }
+
+      if (action.type === "branch") {
+        navigateExploratoryLine(action.index);
+        return;
+      }
+
+      if (action.type === "sequence") {
+        navigateExploreTo(action.index, action.boundary);
+      }
+    }
+  }
+
+  function goReplayNext() {
+    // Active setup replay: advance to current FEN (index 1)
+    if (isActiveSetupReplay) {
+      if (activeSetupReplayIndex === 0) {
+        setActiveSetupReplayIndex(1);
+        if (initialOpponentMove) {
+          playTrainMoveSound({ move: initialOpponentMove, pitchIndex: 0, advanceLivePitch: false, source: "replay" });
+        }
+      }
+      return;
+    }
+
+    // Active sequence replay: step forward through move history
+    if (state === "active") {
+      if (isAwaitingStartGesture || isOpponentThinking || isCompletingSequence) return;
+      const positions = visibleSequencePositions;
+      if (positions.length <= 1) return;
+      const liveLastIndex = positions.length - 1;
+      const currentIndex = activeReplayIndex ?? liveLastIndex;
+      const nextIndex = Math.min(liveLastIndex, currentIndex + 1);
+      if (nextIndex === currentIndex) return;
+      setIsManualPostmortemExploration(false);
+      setActiveReplayIndex(nextIndex === liveLastIndex ? null : nextIndex);
+
+      const nextPosition = positions[nextIndex];
+      if (nextPosition?.move) {
+        playTrainMoveSound({
+          move: nextPosition.move,
+          plyRef: moveSoundPlyRef,
+          pitchIndex: nextPosition.pitchIndex,
+          source: "replay",
+          advanceLivePitch: false,
+        });
+      }
+      return;
+    }
+
+    // Postmortem: use shared navigation action dispatch
+    if (state === "complete") {
+      const action = postMortemNavigationAction({
+        key: "ArrowRight",
+        resultMode,
+        activeExploreIndex,
+        visibleSequenceLength: visibleSequencePositions.length,
+        exploratoryHistoryLength: exploratoryHistory.length,
+        exploratoryHistoryIndex,
+      });
+
+      if (action.type === "enter-explore") {
+        setSelectedMoveIndex(null);
+        setExploreIndex(Math.max(0, visibleSequencePositions.length - 1));
+        resetExploratoryLine();
+        setExploreSelectedSquare(null);
+        setResultMode("explore");
+        return;
+      }
+
+      if (action.type === "branch") {
+        navigateExploratoryLine(action.index);
+        return;
+      }
+
+      if (action.type === "sequence") {
+        navigateExploreTo(action.index, action.boundary);
+      }
+    }
+  }
+
+  // ── Wheel navigation (board scroll → replay step) ──
+
+  const boardContainerRef = useRef<HTMLDivElement | null>(null);
+  const wheelDeltaAccRef = useRef(0);
+  const wheelNavLastRef = useRef(0);
+
+  useEffect(() => {
+    const container = boardContainerRef.current;
+    if (!container) return;
+
+    function isScrollablePanelDescendant(target: EventTarget | null): boolean {
+      if (!(target instanceof Element)) return false;
+      // Don't hijack scroll when inside scrollable panels / engine lines / move table / mistake memory
+      return target.closest(
+        "textarea, input, select, [contenteditable='true'], [data-ignore-train-shortcuts='true'], [data-train-postmortem-panel], .train-mistake-memory-panel, [data-train-sidebar]",
+      ) !== null;
+    }
+
+    function handleWheel(e: WheelEvent) {
+      // Never hijack when interacting with form controls or scrollable panels
+      if (isScrollablePanelDescendant(e.target)) return;
+
+      // Only navigate when in a navigable state
+      const canNav = isActiveSetupReplay || state === "active" || state === "complete";
+      if (!canNav) return;
+
+      // Guard during edge states
+      if (state === "active" && (isAwaitingStartGesture || isOpponentThinking || isCompletingSequence)) return;
+
+      e.preventDefault();
+
+      wheelDeltaAccRef.current += e.deltaY;
+
+      const absAcc = Math.abs(wheelDeltaAccRef.current);
+      if (absAcc < 40) return;
+
+      const now = performance.now();
+      if (now - wheelNavLastRef.current < 150) return;
+      wheelNavLastRef.current = now;
+
+      const direction = wheelDeltaAccRef.current > 0 ? "next" : "previous";
+      wheelDeltaAccRef.current = 0;
+
+      if (process.env.NODE_ENV === "development") {
+        const mode = isActiveSetupReplay ? "setup" : state === "active" ? "active" : "complete";
+        console.log("[train-wheel-nav]", { direction, mode, targetIndex: isActiveSetupReplay ? activeSetupReplayIndex : state === "active" ? (activeReplayIndex ?? visibleSequencePositions.length - 1) : activeExploreIndex });
+      }
+
+      if (direction === "next") {
+        goReplayNext();
+      } else {
+        goReplayPrevious();
+      }
+    }
+
+    container.addEventListener("wheel", handleWheel, { passive: false });
+    return () => container.removeEventListener("wheel", handleWheel);
+  }, [isActiveSetupReplay, state, isAwaitingStartGesture, isOpponentThinking, isCompletingSequence, activeSetupReplayIndex, activeReplayIndex, activeExploreIndex, visibleSequencePositions, resultMode, exploratoryHistory.length, exploratoryHistoryIndex]);
+
   if (onboardingScreen !== "done") {
     return (
       <TrainOnboarding
@@ -2459,7 +2599,7 @@ export default function TrainPage() {
           ].join(" ")}
         >
           <div className="flex min-h-0 min-w-0 items-center justify-center">
-            <div className={boardFrameClassName}>
+            <div ref={boardContainerRef} className={boardFrameClassName}>
               {boardFen ? (
                 <>
                   <BoardWithPlayerStrips
