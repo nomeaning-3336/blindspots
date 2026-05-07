@@ -149,3 +149,60 @@ test("clientLinesToTrainingEngineLines keeps white-to-move mate positive", () =>
   assert.equal(lines[0].mate, 5, "white-to-move mate should stay positive");
   assert.equal(lines[0].cp, 100000);
 });
+
+test("clientLinesToTrainingEngineLines sorts white-to-move lines by strongest white eval", () => {
+  const lines = converter.clientLinesToTrainingEngineLines({
+    fen: STARTING_FEN,
+    lines: [
+      {
+        rank: 2,
+        depth: 13,
+        cp: 10,
+        mate: null,
+        bestMove: "d2d4",
+        pv: ["d2d4"],
+      },
+      {
+        rank: 1,
+        depth: 12,
+        cp: 80,
+        mate: null,
+        bestMove: "e2e4",
+        pv: ["e2e4"],
+      },
+    ],
+  });
+
+  assert.deepEqual(lines.map((line: { bestMove: string }) => line.bestMove), ["e2e4", "d2d4"]);
+  assert.deepEqual(lines.map((line: { rank: number }) => line.rank), [1, 2]);
+});
+
+test("clientLinesToTrainingEngineLines sorts black-to-move lines by strongest black eval", () => {
+  const BLACK_FEN = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1";
+
+  const lines = converter.clientLinesToTrainingEngineLines({
+    fen: BLACK_FEN,
+    lines: [
+      {
+        rank: 1,
+        depth: 12,
+        cp: 10,
+        mate: null,
+        bestMove: "e7e5",
+        pv: ["e7e5"],
+      },
+      {
+        rank: 2,
+        depth: 13,
+        cp: 80,
+        mate: null,
+        bestMove: "d7d5",
+        pv: ["d7d5"],
+      },
+    ],
+  });
+
+  assert.deepEqual(lines.map((line: { bestMove: string }) => line.bestMove), ["d7d5", "e7e5"]);
+  assert.deepEqual(lines.map((line: { cp: number }) => line.cp), [-80, -10]);
+  assert.deepEqual(lines.map((line: { rank: number }) => line.rank), [1, 2]);
+});

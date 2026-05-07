@@ -1,4 +1,5 @@
 import { parseBestMove, parseUciInfoLine } from "./uci-parser";
+import { selectCoherentClientLines } from "./client-line-snapshots";
 import type {
   AnalyzeFenInput,
   AnalyzeFenResult,
@@ -21,7 +22,9 @@ type PendingReady = {
 
 type PendingSearch = {
   id: number;
+  multiPv: number;
   linesByRank: Map<number, ClientEngineLine>;
+  lineHistory: ClientEngineLine[];
   bestMove: string | null;
   onUpdate?: (lines: ClientEngineLine[]) => void;
   resolve: (result: AnalyzeFenResult) => void;
@@ -69,7 +72,9 @@ export class ClientStockfishEngine {
 
       this.pendingSearch = {
         id,
+        multiPv,
         linesByRank: new Map(),
+        lineHistory: [],
         bestMove: null,
         onUpdate: input.onUpdate,
         resolve,
@@ -161,6 +166,7 @@ export class ClientStockfishEngine {
     const parsedLine = parseUciInfoLine(line);
     if (parsedLine) {
       search.linesByRank.set(parsedLine.rank, parsedLine);
+      search.lineHistory.push(parsedLine);
       search.onUpdate?.(this.currentLines(search));
       return;
     }
@@ -177,7 +183,7 @@ export class ClientStockfishEngine {
   };
 
   private currentLines(search: PendingSearch) {
-    return [...search.linesByRank.values()].sort((left, right) => left.rank - right.rank);
+    return selectCoherentClientLines(search.linesByRank, search.lineHistory, search.multiPv);
   }
 
   private resolvePendingReady(kind: "uci" | "ready") {
