@@ -918,9 +918,9 @@ function BoardAnnotations({
 
   return (
     <>
-      {/* Engine lines — below pieces (z-5) so origin piece covers the line start */}
+      {/* Engine lines — above pieces so arrows are visible over destination pieces */}
       <svg
-        className="pointer-events-none absolute inset-0 z-[5] h-full w-full"
+        className="pointer-events-none absolute inset-0 z-[30] h-full w-full"
         viewBox="0 0 8 8"
         aria-hidden="true"
       >
