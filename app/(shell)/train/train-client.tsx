@@ -971,6 +971,10 @@ export default function TrainPage() {
     const applied = applyIndexedMove(previousFen, playedMove);
     if (!applied) return;
 
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[train-setup-move]", { previousFen, playedMove, fen: payload.fen, san: applied.move.san, uci: applied.move.uci, from: applied.lastMove.from, to: applied.lastMove.to });
+    }
+
     initialOpponentMoveRef.current = applied.move;
 
     setIsOpponentThinking(true);
@@ -2344,6 +2348,18 @@ export default function TrainPage() {
                       />
                     )}
                   </BoardWithPlayerStrips>
+                  {isActiveSetupReplay && initialOpponentMove && !isAwaitingStartGesture ? (
+                    activeSetupReplayIndex === 1 ? (
+                      <div className="mt-2 flex items-center justify-center gap-2 rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] px-3 py-2">
+                        <span className="text-xs font-bold uppercase tracking-[0.1em] text-[var(--app-muted)]">Opponent just played</span>
+                        <span className="text-sm font-bold text-[var(--app-text)]">{initialOpponentMove.san}</span>
+                      </div>
+                    ) : (
+                      <div className="mt-2 flex items-center justify-center rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] px-3 py-2">
+                        <span className="text-xs font-bold uppercase tracking-[0.1em] text-[var(--app-muted)]">Before opponent move</span>
+                      </div>
+                    )
+                  ) : null}
                   {isAwaitingStartGesture ? (
                     <div
                       className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-[10px] bg-black/70 backdrop-blur-sm"
