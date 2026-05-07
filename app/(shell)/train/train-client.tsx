@@ -518,6 +518,7 @@ export default function TrainPage() {
   const shouldAnimatePieces = state === "active" || isPostMortemVisible;
   const [mistakeMemories, setMistakeMemories] = useState<Record<string, PositionMistakeMemory>>({});
   const seededMistakeFensRef = useRef<Set<string>>(new Set());
+  const sessionNewMoveUcisRef = useRef<Set<string>>(new Set());
   const [postmortemSidePanel, setPostmortemSidePanel] = useState<"analysis" | "memory">("analysis");
 
   useEffect(() => {
@@ -783,6 +784,7 @@ export default function TrainPage() {
     setLastMove(null);
     setDisplayStartingFen(startingFen);
     seededMistakeFensRef.current.clear();
+    sessionNewMoveUcisRef.current.clear();
     setMistakeMemories({});
     setPostmortemSidePanel("analysis");
     if (nextState === "active") {
@@ -1893,7 +1895,10 @@ export default function TrainPage() {
         })(),
         selectedFailedMoveUci: existing.selectedFailedMoveUci,
       };
-      seededMistakeFensRef.current.add(`${normFen}::${pos.move.uci}`);
+      if (existing.failedMoves.findIndex((m) => m.uci === pos.move!.uci) < 0) {
+        sessionNewMoveUcisRef.current.add(pos.move!.uci);
+      }
+      seededMistakeFensRef.current.add(`${normFen}::${pos.move!.uci}`);
     }
 
     if (Object.keys(sessionMemories).length > 0) {
@@ -2566,36 +2571,31 @@ export default function TrainPage() {
             ].join(" ")}
           >
             {/* ── Compact toggle: Analysis | Mistake Memory ───────────────── */}
-            <div className="flex shrink-0 items-stretch gap-0 overflow-hidden rounded-[6px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] text-[11px] font-bold uppercase tracking-[0.1em]">
-              <button
-                type="button"
-                className={[
-                  "flex-1 px-3 py-2 text-center transition",
-                  postmortemSidePanel === "analysis"
-                    ? "bg-[var(--app-accent)] text-black"
-                    : "text-[var(--app-muted)] hover:text-[var(--app-text)]",
-                ].join(" ")}
-                onClick={() => setPostmortemSidePanel("analysis")}
-              >
-                Analysis
-              </button>
-              <button
-                type="button"
-                className={[
-                  "flex-1 px-3 py-2 text-center transition",
-                  postmortemSidePanel === "memory"
-                    ? "bg-[var(--app-accent)] text-black"
-                    : "text-[var(--app-muted)] hover:text-[var(--app-text)]",
-                ].join(" ")}
-                onClick={() => setPostmortemSidePanel("memory")}
-              >
-                Mistake Memory
-                {activeMistakeMemory && activeMistakeMemory.failedMoves.length > 0 ? (
-                  <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--app-class-blunder)] px-1 text-[9px] font-bold text-white">
-                    {activeMistakeMemory.failedMoves.length}
-                  </span>
-                ) : null}
-              </button>
+            <div className="inline-flex justify-center w-full gap-1">
+              {(["analysis", "memory"] as const).map((item) => {
+                const active = postmortemSidePanel === item;
+                return (
+                  <button
+                    key={item}
+                    type="button"
+                    className={[
+                      "inline-flex items-center border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] transition",
+                      active
+                        ? "relative z-10 border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
+                        : "cursor-pointer border-[var(--app-border)] bg-transparent text-[var(--app-muted)] hover:border-[var(--app-accent)] hover:text-[var(--app-text)]",
+                      "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]",
+                    ].join(" ")}
+                    onClick={() => setPostmortemSidePanel(item)}
+                  >
+                    {item === "analysis" ? "Analysis" : "Mistake Memory"}
+                    {item === "memory" && activeMistakeMemory && activeMistakeMemory.failedMoves.length > 0 ? (
+                      <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--app-class-blunder)] px-1 text-[9px] font-bold leading-none text-white">
+                        {activeMistakeMemory.failedMoves.length}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
             </div>
 
             {/* ── Panel content ───────────────────────────────────────────── */}
@@ -2637,11 +2637,10 @@ export default function TrainPage() {
                   onSelectFailedMove={handleSelectFailedMove}
                   onUpdateNote={handleUpdateNote}
                   onAddBoardSnapshot={handleAddBoardSnapshot}
-                  onHoverFailedMove={handleHoverFailedMove}
-                  onHoverEnd={handleHoverFailedMoveEnd}
                   boardFen={boardFen}
                   boardOrientation={boardOrientation}
                   boardLastMove={replayLastMove}
+                  newMoveUcis={sessionNewMoveUcisRef.current}
                 />
               )}
             </div>
