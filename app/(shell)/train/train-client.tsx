@@ -1967,63 +1967,19 @@ export default function TrainPage() {
   const moveAnnotationsRef = useRef(moveAnnotations);
   moveAnnotationsRef.current = moveAnnotations;
 
-  // Debounced sync: on each tick, POST all dirty keys.
-  useEffect(() => {
+  function retryLater() {
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
-    syncTimerRef.current = setTimeout(() => {
-      const dirty = dirtyMoveNoteKeysRef.current;
-      if (dirty.size === 0) return;
+    syncTimerRef.current = setTimeout(() => syncDirtyMoveNoteKeys("retry"), 2000);
+  }
 
-      const snapshot = moveAnnotationsRef.current;
-      for (const key of dirty) {
-        const entry = snapshot[key];
-        if (!entry) continue;
-        fetch("/api/train/move-notes", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            moveKey: entry.moveKey,
-            decisionFen: entry.decisionFen,
-            moveUci: entry.uci,
-            moveSan: entry.san ?? null,
-            noteText: entry.noteText,
-            classification: entry.classification ?? null,
-            cpLoss: entry.cpLoss ?? null,
-            evalBeforeCp: entry.evalBefore ?? null,
-            evalAfterCp: entry.evalAfter ?? null,
-            mateBefore: entry.mateBefore ?? null,
-            mateAfter: entry.mateAfter ?? null,
-            attemptCount: entry.attemptCount,
-          }),
-        })
-          .then(() => {
-            // Only clear if the note hasn't changed since we sent it
-            const current = moveAnnotationsRef.current[key]?.noteText;
-            if (current === entry.noteText) {
-              dirtyMoveNoteKeysRef.current.delete(key);
-            }
-          })
-          .catch((err: unknown) => {
-            if (process.env.NODE_ENV !== "production") {
-              console.warn("[move-notes] sync failed for", key, err);
-            }
-          });
-      }
-    }, 2000);
-    return () => {
-      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
-    };
-  }, [moveAnnotations]);
-
-  // Flush remaining dirty notes when postmortem panel closes.
-  useEffect(() => {
-    if (isPostMortemVisible) return;
+  function syncDirtyMoveNoteKeys(reason: "debounce" | "flush" | "retry") {
     const dirty = dirtyMoveNoteKeysRef.current;
     if (dirty.size === 0) return;
     const snapshot = moveAnnotationsRef.current;
     for (const key of dirty) {
       const entry = snapshot[key];
-      if (!entry) continue;
+      if (!entry) { dirty.delete(key); continue; }
+      const sentNoteText = entry.noteText;
       fetch("/api/train/move-notes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2041,9 +1997,43 @@ export default function TrainPage() {
           mateAfter: entry.mateAfter ?? null,
           attemptCount: entry.attemptCount,
         }),
-      }).catch(() => {});
+      })
+        .then(() => {
+          const currentText = moveAnnotationsRef.current[key]?.noteText ?? "";
+          if (currentText === sentNoteText) {
+            dirty.delete(key);
+          } else if (reason !== "flush") {
+            retryLater();
+          }
+        })
+        .catch((err: unknown) => {
+          if (process.env.NODE_ENV !== "production") {
+            console.warn("[move-notes] sync failed for", key, err);
+          }
+          if (reason !== "flush") {
+            retryLater();
+          }
+        });
     }
-    dirtyMoveNoteKeysRef.current = new Set();
+  }
+
+  // Debounced sync: on each tick, POST all dirty keys.
+  useEffect(() => {
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(() => {
+      syncDirtyMoveNoteKeys("debounce");
+    }, 2000);
+    return () => {
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    };
+  }, [moveAnnotations]);
+
+  // Flush dirty notes when postmortem panel closes.
+  // Keys are only removed from the dirty set on successful POST,
+  // so nothing is lost if the network or API fails.
+  useEffect(() => {
+    if (isPostMortemVisible) return;
+    syncDirtyMoveNoteKeys("flush");
   }, [isPostMortemVisible]);
 
   // Load existing notes from Supabase when postmortem opens.
