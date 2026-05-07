@@ -3,6 +3,12 @@ import { resolve } from "node:path";
 import { extractFenConsequenceFingerprint } from "../fen-consequence-similarity";
 import { validatePlayableTrainingFen } from "./position-validity";
 import type { Json } from "../supabase/database";
+
+const ENABLE_GENERATED_TRAINING_CORPUS = true;
+const GENERATED_DIR = resolve(process.cwd(), "public", "generated-training");
+const GENERATED_OPENING = resolve(GENERATED_DIR, "generated_training_opening_positions.json");
+const GENERATED_MIDDLEGAME = resolve(GENERATED_DIR, "generated_training_middlegame_positions.json");
+const GENERATED_ENDGAME = resolve(GENERATED_DIR, "generated_training_endgame_positions.json");
 import {
   ensureTrainingQueuesHavePositionsCore,
   selectAndReserveNextTrainingPositionCore,
@@ -289,13 +295,11 @@ async function sampleEliteExplorePositions(count: number, excludeFens: Set<strin
 // ─── Middlegame Positions ────────────────────────────────────────────────────
 
 /**
- * Sample middlegame seed positions from the elite pool.
+ * Sample middlegame seed positions.
  *
- * This deliberately does not use training_opening_positions.json. The opening
- * file is opening-tagged, so asking it for middlegames returns an empty or
- * misleading seed pool. Elite positions already contain real game positions;
- * we filter by FEN shape and fullmove number, then enrich with middlegame
- * metadata before passing through normal queue validation.
+ * When ENABLE_GENERATED_TRAINING_CORPUS is true, reads from the generated
+ * middlegame corpus (pre-classified by phase, with valid preludes).
+ * Otherwise falls back to filtering elite_positions.json by FEN shape.
  */
 export async function sampleMiddlegamePositions(
   count: number,
@@ -305,6 +309,36 @@ export async function sampleMiddlegamePositions(
 ): Promise<TrainingQueueItem[]> {
   if (count <= 0) return [];
 
+  if (ENABLE_GENERATED_TRAINING_CORPUS) {
+    const positions = await readGeneratedMiddlegamePositions();
+    return shuffle(positions)
+      .flatMap((position) => {
+        const fen = typeof position.fen === "string" ? position.fen : "";
+        if (!fen || excludeFens.has(fen)) return [];
+
+        const bucket = (enrichBucket(position) ?? "middlegame") as TrainingBucket;
+        if (bucketFilter && bucketFilter !== "middlegame" && bucket !== bucketFilter) return [];
+
+        excludeFens.add(fen);
+        const item = queueItemFromFen(fen, "elite", now.toISOString(), {
+          previousFen: enrichPreviousFen(position),
+          playedMove: enrichPlayedMove(position),
+          gameId: enrichGameId(position),
+          ply: enrichPly(position),
+          phase: "middlegame",
+          bucket,
+          tags: enrichTags(position) ?? ["middlegame"],
+          isTactic: false,
+          tacticRating: undefined,
+          openingName: undefined,
+          eco: undefined,
+        });
+        return item ? [item] : [];
+      })
+      .slice(0, count);
+  }
+
+  // Legacy: filter elite positions by FEN shape
   const raw = await readFile(resolve(process.cwd(), "public", "elite_positions.json"), "utf8").catch(() => "[]");
   const positions = JSON.parse(raw) as ElitePosition[];
 
@@ -337,6 +371,15 @@ export async function sampleMiddlegamePositions(
       return item ? [item] : [];
     })
     .slice(0, count);
+}
+
+async function readGeneratedMiddlegamePositions(): Promise<OpeningPosition[]> {
+  try {
+    const raw = await readFile(GENERATED_MIDDLEGAME, "utf8");
+    return JSON.parse(raw) as OpeningPosition[];
+  } catch {
+    return [];
+  }
 }
 
 function trimQueue(queue: TrainingQueueItem[]) {
@@ -430,7 +473,10 @@ type OpeningPosition = {
 
 async function readOpeningPositions(): Promise<OpeningPosition[]> {
   try {
-    const raw = await readFile(resolve(process.cwd(), "public", "training_opening_positions.json"), "utf8");
+    const path = ENABLE_GENERATED_TRAINING_CORPUS
+      ? GENERATED_OPENING
+      : resolve(process.cwd(), "public", "training_opening_positions.json");
+    const raw = await readFile(path, "utf8");
     return JSON.parse(raw) as OpeningPosition[];
   } catch {
     return [];
@@ -532,7 +578,10 @@ type EndgamePosition = OpeningPosition;
 
 async function readEndgamePositions(): Promise<EndgamePosition[]> {
   try {
-    const raw = await readFile(resolve(process.cwd(), "public", "training_endgame_positions.json"), "utf8");
+    const path = ENABLE_GENERATED_TRAINING_CORPUS
+      ? GENERATED_ENDGAME
+      : resolve(process.cwd(), "public", "training_endgame_positions.json");
+    const raw = await readFile(path, "utf8");
     return JSON.parse(raw) as EndgamePosition[];
   } catch {
     return [];
@@ -657,11 +706,13 @@ function enrichGameId(pos: OpeningPosition): string | undefined {
     ? pos.gameId
     : typeof pos.game_id === "string"
       ? pos.game_id
-      : undefined;
+      : typeof (pos as Record<string, unknown>).sourceGameId === "string"
+        ? (pos as Record<string, unknown>).sourceGameId as string
+        : undefined;
 }
 
 function enrichPly(pos: OpeningPosition): number | undefined {
-  const v = pos.ply;
+  const v = pos.ply ?? (pos as Record<string, unknown>).sourcePly;
   const parsed = typeof v === "number" ? v : Number(v);
   return Number.isFinite(parsed) ? Math.floor(parsed) : undefined;
 }
