@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { extractFenConsequenceFingerprint } from "../fen-consequence-similarity";
 import { validatePlayableTrainingFen } from "./position-validity";
+import { normalizeSetupPrelude } from "./setup-prelude";
 import type { Json } from "../supabase/database";
 
 const ENABLE_GENERATED_TRAINING_CORPUS = true;
@@ -195,6 +196,10 @@ export function normalizeQueue(value: Json | null | undefined): TrainingQueueIte
       : typeof candidate.played_move === "string"
         ? candidate.played_move
         : undefined;
+    // When generated corpus is enabled, reject elite/filler items without valid setup prelude.
+    if (ENABLE_GENERATED_TRAINING_CORPUS && source === "elite" && !normalizeSetupPrelude({ fen, previousFen, playedMove })) {
+      return [];
+    }
     const mateDistancePlies = normalizeMateDistancePlies(
       candidate.mateDistancePlies ?? candidate.mate_distance_plies,
     );
@@ -250,6 +255,10 @@ function queueItemFromFen(
 
 async function sampleEliteExplorePositions(count: number, excludeFens: Set<string>, now: Date) {
   if (count <= 0) return [];
+
+  if (ENABLE_GENERATED_TRAINING_CORPUS) {
+    return sampleWildcardPositions(count, excludeFens, now);
+  }
 
   const raw = await readFile(resolve(process.cwd(), "public", "elite_positions.json"), "utf8").catch(() => "[]");
   const positions = JSON.parse(raw) as ElitePosition[];
@@ -547,6 +556,11 @@ export async function sampleTacticalPositions(
 ): Promise<TrainingQueueItem[]> {
   if (count <= 0) return [];
 
+  // No generated puzzle/tactic corpus yet — fall back to wildcard mixed corpus.
+  if (ENABLE_GENERATED_TRAINING_CORPUS) {
+    return sampleWildcardPositions(count, excludeFens, now);
+  }
+
   const positions = await readTacticPositions();
   return shuffle(positions)
     .flatMap((position) => {
@@ -626,6 +640,29 @@ export async function sampleEndgamePositions(
       return item ? [item] : [];
     })
     .slice(0, count);
+}
+
+// ─── Wildcard Sampler (generated corpus mixed) ─────────────────────────────────
+
+/**
+ * Sample positions from all three generated corpora mixed together.
+ * Used for wildcard mode and as a safe fallback when no generated tactic corpus exists.
+ */
+export async function sampleWildcardPositions(
+  count: number,
+  excludeFens: Set<string>,
+  now: Date,
+): Promise<TrainingQueueItem[]> {
+  if (count <= 0) return [];
+  const perPool = Math.ceil(count / 3);
+  const [opening, middlegame, endgame] = await Promise.all([
+    sampleOpeningPositions(perPool, new Set(excludeFens), now),
+    sampleMiddlegamePositions(perPool, new Set(excludeFens), now),
+    sampleEndgamePositions(perPool, new Set(excludeFens), now),
+  ]);
+  const all = shuffle([...opening, ...middlegame, ...endgame]).slice(0, count);
+  for (const item of all) excludeFens.add(item.fen);
+  return all;
 }
 
 // ─── Phase/Bucket Samplers ────────────────────────────────────────────────────

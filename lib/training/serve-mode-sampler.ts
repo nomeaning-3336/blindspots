@@ -4,7 +4,7 @@
  */
 
 import type { TrainingQueueItem } from "./queue-core";
-import { sampleOpeningPositions, sampleTacticalPositions, sampleEndgamePositions, sampleMiddlegamePositions } from "./queues";
+import { sampleOpeningPositions, sampleTacticalPositions, sampleEndgamePositions, sampleMiddlegamePositions, sampleWildcardPositions } from "./queues";
 
 export async function getModeSeedCandidates(
   mode: string,
@@ -34,8 +34,7 @@ export async function getModeSeedCandidates(
     case "middlegame_positional":
       return sampleMiddlegamePositions(count, excludeFens, now, "middlegame_positional");
     case "wildcard":
-      // Wildcard uses elite explore sampling (generic diversification)
-      return [];
+      return sampleWildcardPositions(count, excludeFens, now);
     case "exploit":
     case "explore":
       return [];
