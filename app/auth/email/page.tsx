@@ -68,7 +68,7 @@ export default async function EmailAuthPage({
               </h1>
               <p className="mx-auto max-w-xl text-sm leading-8 text-[var(--app-muted)]">
                 {showSuccess
-                  ? "We sent a sign-in link to the address below. Open it on this device to continue."
+                  ? "We sent a sign-in link. Open it on this device to continue."
                   : "Sign in or create an account with just your email address."}
               </p>
             </div>
@@ -76,17 +76,19 @@ export default async function EmailAuthPage({
             <div className="app-brutal-card-auth grid gap-6 border border-white/10 p-6 md:p-8">
               {showSuccess ? (
                 <div className="space-y-4">
-                  <div className="border border-emerald-400/35 bg-emerald-400/10 px-4 py-3 text-sm leading-6 text-emerald-100">
-                    Check your inbox. The link is on its way.
-                  </div>
-                  {email ? (
-                    <p className="text-center text-sm text-[var(--app-text)]">
-                      Sent to <span className="font-mono font-bold">{email}</span>
+                  <div className="border border-emerald-400/35 bg-emerald-400/10 px-5 py-5 text-center text-emerald-100">
+                    <p className="text-sm font-bold leading-6">
+                      Check your inbox. The link is on its way.
                     </p>
-                  ) : null}
-                  <p className="text-center text-xs text-[var(--app-muted)]">
-                    The link expires in about an hour. If you do not see it, check your spam folder.
-                  </p>
+                    {email ? (
+                      <p className="mt-4 text-sm leading-6">
+                        Sent to <span className="font-mono font-bold text-[var(--app-text)]">{email}</span>
+                      </p>
+                    ) : null}
+                    <p className="mt-3 text-xs leading-6 text-emerald-100/75">
+                      The link expires in about an hour. If you do not see it, check your spam folder.
+                    </p>
+                  </div>
                   <form action="/auth/send-magic-link" method="post" className="grid gap-4">
                     <input type="hidden" name="next" value={nextPath} />
                     <input type="hidden" name="email" value={email ?? ""} />
