@@ -415,40 +415,47 @@ async function selectValidTrainingPosition({
 
     if (selectedFenValidity.ok) {
       const engineValidity = await validateEngineServeability(dueRevisit.fen);
-
       if (engineValidity.ok) {
-        selectedPhase = enriched.phase;
-        selectedBucket = enriched.bucket;
-        selectedServeMode = deriveServeModeFromCandidate({
-          requestedServeMode,
-          phase: selectedPhase,
-          bucket: selectedBucket,
-          isTactic: dueRevisit.isTactic,
-          selectedQueue: "revisit",
-        });
-        return {
-          item: dueRevisit,
-          selectedQueue: "revisit" as const,
-          wasDueRevisit: true,
-          queues: removeFenFromAllQueues(currentQueues, dueRevisit.fen),
-          rejectedRecentExactCount: 0,
-          rejectedNearDuplicateCount: 0,
-          nearDuplicateReason: null,
-          rejectedInvalidCount: rejectedInvalidReasons.length,
-          rejectedInvalidReasons,
-          selectedFenValidity,
-          selectedServeMode,
-          selectedPhase,
-          selectedBucket,
-          banditPreferredBucket,
-          banditCandidateBuckets,
-          banditUsed: false,
-          banditFallbackUsed: false,
-          phaseFallbackUsed: requestedServeMode !== "revisit",
-        };
+        // Reject revisit items without valid setup prelude (stale legacy queue entries).
+        if (normalizeSetupPrelude({
+          fen: dueRevisit.fen,
+          previousFen: dueRevisit.previousFen,
+          playedMove: dueRevisit.playedMove,
+        })) {
+          selectedPhase = enriched.phase;
+          selectedBucket = enriched.bucket;
+          selectedServeMode = deriveServeModeFromCandidate({
+            requestedServeMode,
+            phase: selectedPhase,
+            bucket: selectedBucket,
+            isTactic: dueRevisit.isTactic,
+            selectedQueue: "revisit",
+          });
+          return {
+            item: dueRevisit,
+            selectedQueue: "revisit" as const,
+            wasDueRevisit: true,
+            queues: removeFenFromAllQueues(currentQueues, dueRevisit.fen),
+            rejectedRecentExactCount: 0,
+            rejectedNearDuplicateCount: 0,
+            nearDuplicateReason: null,
+            rejectedInvalidCount: rejectedInvalidReasons.length,
+            rejectedInvalidReasons,
+            selectedFenValidity,
+            selectedServeMode,
+            selectedPhase,
+            selectedBucket,
+            banditPreferredBucket,
+            banditCandidateBuckets,
+            banditUsed: false,
+            banditFallbackUsed: false,
+            phaseFallbackUsed: requestedServeMode !== "revisit",
+          };
+        }
+        rejectedInvalidReasons.push("missing_setup_prelude");
+      } else {
+        rejectedInvalidReasons.push(engineValidity.reason);
       }
-
-      rejectedInvalidReasons.push(engineValidity.reason);
     } else {
       rejectedInvalidReasons.push(selectedFenValidity.reason ?? "invalid_position");
     }
@@ -496,6 +503,22 @@ async function selectValidTrainingPosition({
 
           if (!engineValidity.ok) {
             rejectedInvalidReasons.push(engineValidity.reason);
+            invalidRecentEntries.push({
+              fen: seedSelection.item.fen,
+              gameId: seedSelection.item.gameId,
+              ply: seedSelection.item.ply,
+            });
+            recentFenSet.add(seedSelection.item.fen);
+            continue;
+          }
+
+          // Reject generated/filler candidates without valid setup prelude.
+          if (!normalizeSetupPrelude({
+            fen: seedSelection.item.fen,
+            previousFen: seedSelection.item.previousFen,
+            playedMove: seedSelection.item.playedMove,
+          })) {
+            rejectedInvalidReasons.push("missing_setup_prelude");
             invalidRecentEntries.push({
               fen: seedSelection.item.fen,
               gameId: seedSelection.item.gameId,
@@ -574,6 +597,22 @@ async function selectValidTrainingPosition({
 
       if (!engineValidity.ok) {
         rejectedInvalidReasons.push(engineValidity.reason);
+        invalidRecentEntries.push({
+          fen: reservation.item.fen,
+          gameId: reservation.item.gameId,
+          ply: reservation.item.ply,
+        });
+        recentFenSet.add(reservation.item.fen);
+        continue;
+      }
+
+      // Reject queue items without valid setup prelude.
+      if (!normalizeSetupPrelude({
+        fen: reservation.item.fen,
+        previousFen: reservation.item.previousFen,
+        playedMove: reservation.item.playedMove,
+      })) {
+        rejectedInvalidReasons.push("missing_setup_prelude");
         invalidRecentEntries.push({
           fen: reservation.item.fen,
           gameId: reservation.item.gameId,
