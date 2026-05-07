@@ -51,6 +51,9 @@ type CompleteSequencePayload = {
   selectedMistakeId?: unknown;
   queueSource?: unknown;
   precomputedEvaluations?: unknown;
+  /** Setup prelude into the first decisionFen (i.e. startingFen). */
+  previousFen?: unknown;
+  playedMove?: unknown;
 };
 
 type MoveClassification = "brilliant" | "critical" | "best" | "excellent" | "good" | "okay" | "inaccuracy" | "mistake" | "blunder";
@@ -259,7 +262,9 @@ export async function POST(request: Request) {
   const sessionInsertMs = Date.now() - sessionInsertStartedAt;
 
   // Fire-and-forget mining of app-native active mistakes — never blocks response.
-  const minedMistakesInput: MineableMoveInput[] = sequenceEvaluation.positionEvaluations.map((pe) => ({
+  const initialPreviousFen = typeof payload?.previousFen === "string" ? payload.previousFen : null;
+  const initialPlayedMove = typeof payload?.playedMove === "string" ? payload.playedMove : null;
+  const minedMistakesInput: MineableMoveInput[] = sequenceEvaluation.positionEvaluations.map((pe, index) => ({
     decisionFen: pe.decisionFen,
     uci: pe.userMove.uci,
     san: pe.userMove.san,
@@ -270,6 +275,9 @@ export async function POST(request: Request) {
     mateBefore: pe.mateBefore ?? null,
     mateAfter: pe.mateAfter ?? null,
     fenAfterUserMove: pe.fenAfterUserMove,
+    // Pass the served-position prelude as the explicit setup for the first evaluated move.
+    previousDecisionFen: index === 0 ? initialPreviousFen : undefined,
+    previousMoveUci: index === 0 ? initialPlayedMove : undefined,
   }));
   mineMistakesFromSequence({
     userId,

@@ -1,11 +1,9 @@
 /**
- * App-native mistake mining — extract failed user moves from training
- * sequences and persist them into the Active Mistakes pool.
+ * App-native mistake mining — pure helpers.
+ *
+ * These functions have no transitive local .ts imports so they can be
+ * loaded via createRequire in Node test files.
  */
-
-import { normalizeDecisionFen, isFailedClassification } from "./mistake-memory";
-import { normalizeSetupPrelude } from "./setup-prelude";
-import { inferLegalMoveBetweenFens } from "./fen-transition";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -40,7 +38,8 @@ export type MineableMoveInput = {
   mateBefore?: number | null;
   mateAfter?: number | null;
   fenAfterUserMove?: string;
-  /** Previous move in the sequence timeline (to build setup prelude) */
+  /** Explicit setup prelude fields — used by the caller when available
+   *  (e.g. the initial served-position prelude for the first move). */
   previousDecisionFen?: string | null;
   previousMoveUci?: string | null;
   previousMoveSan?: string | null;
@@ -58,11 +57,31 @@ export type MiningSummary = {
   missingPreludeCount: number;
 };
 
+// ── Inlined helpers (same logic as mistake-memory.ts) ───────────────
+
+/**
+ * Strip irrelevant FEN fields so positions are keyed by board state
+ * plus castling / en-passant rights only.
+ */
+export function normalizeDecisionFen(fen: string): string {
+  const parts = fen.trim().split(/\s+/);
+  return parts.slice(0, 4).join(" ");
+}
+
+const FAIL_CLASSIFICATIONS = new Set(["inaccuracy", "mistake", "blunder"]);
+
+/**
+ * Classifications considered "mistakes" worth mining.
+ */
+export function isFailedClassification(classification?: string): boolean {
+  if (!classification) return false;
+  return FAIL_CLASSIFICATIONS.has(classification);
+}
+
 // ── Build move key ─────────────────────────────────────────────────
 
 /**
  * Build a stable move key: normalized(decisionFen) + "::" + uci.
- * Same format as buildMoveKey in mistake-memory.ts.
  */
 export function buildMinedMistakeKey(decisionFen: string, uci: string): string {
   return `${normalizeDecisionFen(decisionFen)}::${uci}`;
@@ -132,85 +151,3 @@ export function nextReviewAtForMinedMistake(
       return new Date(ms + 2 * 60 * 60 * 1000);
   }
 }
-
-// ── Extraction ─────────────────────────────────────────────────────
-
-/**
- * Extract mineable failed user moves from a training sequence evaluation.
- *
- * Each entry in positionEvaluations represents one user move, with
- * fenAfterUserMove recording the board state after that move.
- * The opponent's reply sits between fenAfterUserMove[i-1] and decisionFen[i].
- *
- * Setup preludes are captured for moves i > 0 where we can infer the
- * opponent's move between the previous fenAfterUserMove and current decisionFen.
- */
-export function extractMineableMistakesFromSequence(
-  positionEvaluations: MineableMoveInput[],
-): MineableMove[] {
-  const result: MineableMove[] = [];
-
-  for (let i = 0; i < positionEvaluations.length; i++) {
-    const evalRow = positionEvaluations[i];
-
-    if (!evalRow || typeof evalRow !== "object") continue;
-
-    const decisionFen = evalRow.decisionFen;
-    const uci = evalRow.uci;
-
-    if (!decisionFen) continue;
-    if (!uci) continue;
-
-    if (!isMineableUserMistake(evalRow.classification)) continue;
-
-    const moveKey = buildMinedMistakeKey(decisionFen, uci);
-
-    let setupPreviousFen: string | null = null;
-    let setupPlayedMoveUci: string | null = null;
-    let setupPlayedMoveSan: string | null = null;
-
-    // For i > 0: the opponent played from fenAfterUserMove[i-1] to decisionFen[i].
-    // Infer the opponent's move and validate the prelude.
-    if (i > 0) {
-      const prevRow = positionEvaluations[i - 1];
-      if (prevRow?.fenAfterUserMove) {
-        const inferred = inferLegalMoveBetweenFens({
-          fromFen: prevRow.fenAfterUserMove,
-          toFen: decisionFen,
-        });
-        if (inferred) {
-          const prelude = normalizeSetupPrelude({
-            fen: decisionFen,
-            previousFen: prevRow.fenAfterUserMove,
-            playedMove: inferred,
-          });
-          if (prelude) {
-            setupPreviousFen = prevRow.fenAfterUserMove;
-            setupPlayedMoveUci = inferred;
-            setupPlayedMoveSan = null; // opponent move SAN not available from positionEvaluations
-          }
-        }
-      }
-    }
-
-    result.push({
-      moveKey,
-      decisionFen,
-      uci,
-      san: evalRow.san ?? "",
-      classification: evalRow.classification ?? "",
-      cpLoss: typeof evalRow.cpLoss === "number" ? evalRow.cpLoss : 0,
-      evalBefore: typeof evalRow.evalBefore === "number" ? evalRow.evalBefore : 0,
-      evalAfter: typeof evalRow.evalAfter === "number" ? evalRow.evalAfter : 0,
-      mateBefore: evalRow.mateBefore ?? null,
-      mateAfter: evalRow.mateAfter ?? null,
-      fenAfterUserMove: evalRow.fenAfterUserMove ?? "",
-      setupPreviousFen,
-      setupPlayedMoveUci,
-      setupPlayedMoveSan,
-    });
-  }
-
-  return result;
-}
-
