@@ -12,6 +12,7 @@
     "watch:analyze-css": "tailwindcss -i ./standalone.tailwind.css -o ./standalone.css --watch",
     "test:theme-backgrounds": "node scripts/check-theme-backgrounds.mjs",
     "test:analysis-multipv": "node scripts/check-analysis-multipv-snapshots.mjs",
+    "validate:training-preludes": "node scripts/validate-training-preludes.mjs",
     "db:query": "node --env-file=.env.agent.local scripts/db-query.mjs",
     "test:performance-time-management": "node --test --experimental-strip-types tests/performance-time-management.test.ts",
     "test:performance-client-analysis": "node --test --experimental-strip-types tests/performance-client-analysis.test.ts",
