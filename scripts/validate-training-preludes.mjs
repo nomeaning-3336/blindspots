@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import process from "node:process";
 import { Chess } from "chess.js";
@@ -10,13 +10,40 @@ const DATASETS = [
   "elite_positions.json",
 ];
 
+const GENERATED_DATASETS = [
+  "generated-training/generated_training_opening_positions.json",
+  "generated-training/generated_training_middlegame_positions.json",
+  "generated-training/generated_training_endgame_positions.json",
+];
+
+const includeGenerated =
+  process.argv.includes("--include-generated") ||
+  process.argv.includes("--all");
+
 const MAX_FAILURES = 20;
 const strict = process.argv.includes("--strict");
+
+const datasetsToValidate = [...DATASETS];
+
+if (includeGenerated) {
+  datasetsToValidate.push(...GENERATED_DATASETS);
+} else {
+  // Auto-include generated datasets if they exist
+  for (const filename of GENERATED_DATASETS) {
+    try {
+      await stat(resolve(process.cwd(), "public", filename));
+      datasetsToValidate.push(filename);
+      console.log(`Including generated dataset: ${filename}`);
+    } catch {
+      // file does not exist, skip
+    }
+  }
+}
 
 const summaries = [];
 const failures = [];
 
-for (const filename of DATASETS) {
+for (const filename of datasetsToValidate) {
   const rows = await readDataset(filename);
   const summary = {
     filename,
