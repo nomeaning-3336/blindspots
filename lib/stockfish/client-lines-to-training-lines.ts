@@ -24,8 +24,10 @@ export function clientLinesToTrainingEngineLines({
   fen: string;
   lines: ClientEngineLine[];
 }): TrainingEngineLineResult[] {
+  const isBlackToMove = fen.split(/\s+/)[1] === "b";
+
   return lines.flatMap((line) => {
-    const converted = clientLineToTrainingEngineLine(fen, line);
+    const converted = clientLineToTrainingEngineLine(fen, line, isBlackToMove);
     return converted ? [converted] : [];
   });
 }
@@ -33,6 +35,7 @@ export function clientLinesToTrainingEngineLines({
 function clientLineToTrainingEngineLine(
   fen: string,
   line: ClientEngineLine,
+  isBlackToMove: boolean,
 ): TrainingEngineLineResult | null {
   if (line.pv.length === 0) return null;
 
@@ -54,9 +57,12 @@ function clientLineToTrainingEngineLine(
   const bestSan = pvSan[0];
   if (!bestMove || !bestSan) return null;
 
+  const rawCp = line.cp ?? mateScoreToCp(line.mate);
+  const rawMate = line.mate;
+
   return {
-    cp: line.cp ?? mateScoreToCp(line.mate),
-    mate: line.mate,
+    cp: isBlackToMove ? -rawCp : rawCp,
+    mate: typeof rawMate === "number" ? (isBlackToMove ? -rawMate : rawMate) : rawMate,
     depth: line.depth,
     rank: line.rank,
     bestMove,
