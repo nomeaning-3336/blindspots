@@ -75,8 +75,7 @@ export async function GET(request: Request) {
   if (userId) {
     const onboarding = await getOnboardingStateForUser(userId);
     if (!onboarding.trainingOnboardingCompleted) {
-      // User has not completed onboarding — send them there instead
-      redirectPath = "/onboarding";
+      redirectPath = "/train";
     }
   }
 
