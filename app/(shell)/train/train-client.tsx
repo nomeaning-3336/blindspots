@@ -4636,20 +4636,25 @@ function TrainOnboardingIntroOverlay({
       aria-label="Click to continue"
     >
       <div
-        className="app-brutal-card mx-4 max-w-lg border-2 p-8"
+        className="app-brutal-card relative mx-4 max-w-lg border-2 p-8"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={`Onboarding step ${step + 1} of ${totalSteps}`}
       >
-        <div className="mb-6 flex items-center justify-between">
-          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--app-muted)]">
-            {current.eyebrow}
-          </div>
-          <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--app-muted)]">
-            {step + 1} / {totalSteps}
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onSkip(); }}
+          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center text-[var(--app-muted)] transition hover:text-[var(--app-text)]"
+          aria-label="Close onboarding"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+
+        <div className="mb-6" />
 
         <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
           {current.headline}
@@ -4658,15 +4663,7 @@ function TrainOnboardingIntroOverlay({
           {current.body}
         </p>
 
-        <div className="flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onSkip(); }}
-            className="min-h-11 border border-[var(--app-border)] px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)]"
-          >
-            Skip tour
-          </button>
-
+        <div className="flex items-center justify-end gap-3">
           {isLast && current.cta ? (
             <button
               type="button"
