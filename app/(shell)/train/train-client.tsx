@@ -521,25 +521,21 @@ export default function TrainPage(props: TrainPageProps) {
 
   const PREPLAY_TOUR_STEPS = [
     {
-      eyebrow: "01 / Welcome",
       headline: "Welcome.",
-      body: "You play here, we learn here. Blindspots starts with generated positions, then slowly replaces the filler with your own mistakes.",
+      body: "You will make mistakes here. We will show you those mistakes again and again until you stop making them. It does not get much simpler than that.",
     },
     {
-      eyebrow: "02 / The board",
-      headline: "This is not a one-move puzzle vending machine.",
-      body: "You will play a short sequence. The goal is to keep the position alive across multiple decisions, not just find one shiny engine move.",
+      headline: "The board.",
+      body: "This is not a puzzle vending machine. There is not one sacred correct move waiting to be discovered. Your job is simple: play four consecutive moves against an engine opponent.",
     },
     {
-      eyebrow: "03 / Eval preservation",
-      headline: "The engine watches the whole line.",
-      body: "Every move is checked for how much eval you preserve or bleed. Small leaks matter. Giant leaks get bottled for later.",
+      headline: "Eval preservation.",
+      body: "After each sequence, we ask our friend Stockfish how your four moves held up. If the position cracked badly enough, you may see it again later and try to find something better.",
     },
     {
-      eyebrow: "04 / Your first run",
-      headline: "Go play a sequence.",
-      body: "After you finish, we will show the postmortem: eval swings, move grades, notes, and the mistakes that come back to haunt you productively.",
-      cta: "Click to load your first position",
+      headline: "Your first run.",
+      body: "Go ahead and play. Do whatever you would do in a normal game, including hanging your queen seven different ways. No pressure at all.",
+      cta: "Press to Start",
     },
   ];
 
