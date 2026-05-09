@@ -590,7 +590,7 @@ export default function TrainPage(props: TrainPageProps) {
     {
       headline: "Your move.",
       body: "Go ahead.",
-      cta: "Click to load your first position",
+      cta: "Begin the Sequence",
     },
   ];
 
