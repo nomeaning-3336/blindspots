@@ -5,6 +5,12 @@ import { useSearchParams } from "next/navigation";
 import { Chess, type Square } from "chess.js";
 import { AnalysisBoard, type BoardMove, type EngineArrow } from "@/components/chess/analysis-board";
 import {
+  BoardWithEvalBar,
+  ClassificationBadge,
+  EngineLinesSection,
+  type EngineLineResult,
+} from "@/components/train/postmortem-shared";
+import {
   classifyRankedMove,
   isRecommendableClassification,
 } from "@/lib/move-classification";
@@ -26,7 +32,6 @@ import {
   classificationColor,
   classificationIcon,
   classificationLabel,
-  engineLineContinuationSan,
   formatClassifiedMoveLead,
   getTrainingBoardHighlights,
   moveHighlightsForClassifiedMove,
@@ -44,7 +49,6 @@ import {
 } from "@/lib/training/engine-line-cache";
 import {
   formatPostmortemEvalLabel,
-  getEvalBarFill,
   getPostmortemTerminalDisplay,
   whitePositiveMateCp,
 } from "@/lib/training/postmortem-terminal-display";
@@ -154,20 +158,6 @@ type VisibleSequencePosition = {
   move?: TrainingMove;
   pitchIndex?: number;
   userMoveIndex?: number;
-};
-
-type EngineLineResult = {
-  cp: number;
-  mate?: number | null;
-  depth: number;
-  rank: number;
-  bestMove: string;
-  bestSan: string;
-  pv: string[];
-  pvSan: string[];
-  continuationSan?: string[];
-  classification?: MoveClassification;
-  source?: "multipv" | "candidate";
 };
 
 function trainPieceLineCacheKey(fen: string, square: string) {
@@ -2711,30 +2701,6 @@ export default function TrainPage(props: TrainPageProps) {
     return () => container.removeEventListener("wheel", handleWheel);
   }, [isActiveSetupReplay, state, isAwaitingStartGesture, isOpponentThinking, isCompletingSequence, activeSetupReplayIndex, activeReplayIndex, activeExploreIndex, visibleSequencePositions, resultMode, exploratoryHistory.length, exploratoryHistoryIndex]);
 
-  if (onboardingScreen !== "done") {
-    return (
-      <TrainOnboarding
-        screen={onboardingScreen}
-        selectedProvider={selectedProvider}
-        username={profileUsername}
-        connectionMessage={connectionMessage}
-        isConnectingProfile={isConnectingProfile}
-        analysisStep={analysisStep}
-        analysisError={analysisError}
-        analysisElapsedMs={analysisElapsedMs}
-        summary={initializationSummary}
-        skillLevel={skillLevel}
-        onSkillLevelChange={setSkillLevel}
-        onSelectProvider={setSelectedProvider}
-        onUsernameChange={setProfileUsername}
-        onConnectProfile={connectProfile}
-        onSkip={skipConnection}
-        onStartTraining={() => void startFirstSession()}
-        isStartingTraining={isStartingTraining}
-      />
-    );
-  }
-
   if (trainOnboardingIntroActive) {
     return (
       <>
@@ -2792,6 +2758,30 @@ export default function TrainPage(props: TrainPageProps) {
           }}
         />
       </>
+    );
+  }
+
+  if (onboardingScreen !== "done") {
+    return (
+      <TrainOnboarding
+        screen={onboardingScreen}
+        selectedProvider={selectedProvider}
+        username={profileUsername}
+        connectionMessage={connectionMessage}
+        isConnectingProfile={isConnectingProfile}
+        analysisStep={analysisStep}
+        analysisError={analysisError}
+        analysisElapsedMs={analysisElapsedMs}
+        summary={initializationSummary}
+        skillLevel={skillLevel}
+        onSkillLevelChange={setSkillLevel}
+        onSelectProvider={setSelectedProvider}
+        onUsernameChange={setProfileUsername}
+        onConnectProfile={connectProfile}
+        onSkip={skipConnection}
+        onStartTraining={() => void startFirstSession()}
+        isStartingTraining={isStartingTraining}
+      />
     );
   }
 
@@ -4171,212 +4161,6 @@ function engineLineClassification(
   return classifyRankedMove(index, lines, fen);
 }
 
-function engineLineColor(cls: MoveClassification | undefined): string {
-  return classificationColor(cls);
-}
-
-function EngineLinesSection({
-  lines,
-  isLoading,
-  hasError = false,
-  emptyMessageOverride,
-  revealBadLines = false,
-  hoveredDestinationSquare,
-  hoveredIndex,
-  onHoverLine,
-  onSelectLine,
-  selectedMoveUci,
-}: {
-  lines: EngineLineResult[];
-  isLoading: boolean;
-  hasError?: boolean;
-  emptyMessageOverride?: string | null;
-  revealBadLines?: boolean;
-  hoveredDestinationSquare?: string | null;
-  hoveredIndex?: number | null;
-  onHoverLine?: (index: number | null) => void;
-  onSelectLine?: (move: BoardMove) => void;
-  selectedMoveUci?: string | null;
-}) {
-  const emptyMessage = isLoading
-    ? "Receiving engine lines..."
-    : emptyMessageOverride
-      ? emptyMessageOverride
-      : hasError
-      ? "No engine lines yet."
-      : "Engine lines unavailable";
-  const displayRows: Array<EngineLineResult | null> = Array.from({ length: 5 }, (_, index) => lines[index] ?? null);
-  return (
-    <section className="grid gap-2" aria-live="polite">
-      <div className="flex items-center gap-3">
-        <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">
-          Engine lines
-        </h2>
-      </div>
-      <div className={["grid gap-2", isLoading ? "opacity-60" : ""].join(" ")}>
-        {displayRows.map((line, index) => {
-          if (!line) {
-            const shouldShowEmptyMessage = index === 0 && lines.length === 0 && !isLoading;
-            return (
-              <div
-                key={`engine-placeholder-${index}`}
-                aria-hidden="true"
-                className={[
-                  "min-h-[38px] rounded-none border border-dashed border-[var(--app-border-soft)] bg-transparent",
-                  shouldShowEmptyMessage
-                    ? "flex items-center px-3 text-xs font-bold text-[var(--app-muted)] opacity-100"
-                    : "opacity-45",
-                ].join(" ")}
-              >
-                {shouldShowEmptyMessage ? emptyMessage : null}
-              </div>
-            );
-          }
-
-          const lead = line.bestSan || line.bestMove;
-          const pv = engineLineContinuationSan(line);
-          const cls = line.classification;
-          const lineColor = engineLineColor(cls);
-          const isBlurred = !revealBadLines && !isRecommendableClassification(cls);
-          const isHovered =
-            hoveredIndex === index ||
-            (hoveredDestinationSquare ? line.bestMove.slice(2, 4) === hoveredDestinationSquare : false);
-          const isSelectedUserMove = selectedMoveUci ? line.bestMove === selectedMoveUci : false;
-          return (
-            <div
-              key={`${line.rank}-${line.bestMove}-${index}`}
-              className="relative cursor-pointer overflow-hidden rounded-none border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] py-2 pl-2.5 pr-3 transition-colors duration-100"
-              style={{
-                borderLeftColor: lineColor,
-                borderLeftWidth: 3,
-                background: isHovered ? "color-mix(in srgb, var(--app-accent) 6%, var(--app-surface-subtle))" : undefined,
-                filter: isBlurred ? "blur(2px)" : undefined,
-                opacity: isBlurred ? 0.48 : undefined,
-              }}
-              onPointerEnter={() => onHoverLine?.(index)}
-              onPointerLeave={() => onHoverLine?.(null)}
-              onClick={() => onSelectLine?.({ from: line.bestMove.slice(0, 2), to: line.bestMove.slice(2, 4) })}
-            >
-              <div className="grid grid-cols-[22px_auto_auto_auto_minmax(0,1fr)_auto_auto] items-center gap-2">
-                <span className="text-right text-xs font-black leading-none text-[var(--app-text)]">
-                  #{index + 1}
-                </span>
-                {cls && !isSelectedUserMove ? (
-                  <ClassificationBadge classification={cls} />
-                ) : <span />}
-                <span className="text-xs font-black tabular-nums text-[var(--app-text)]">
-                  {formatPostmortemEvalLabel(line.cp, line.mate)}
-                </span>
-                <strong className="min-w-0 truncate text-base font-black leading-none text-[var(--app-text)]">
-                  {lead}
-                </strong>
-                <span className="min-w-0 truncate text-xs font-bold text-[var(--app-muted)]">
-                  {pv}
-                </span>
-                {isSelectedUserMove ? (
-                  <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--app-accent)]">
-                    Your move
-                  </span>
-                ) : line.source === "candidate" ? (
-                  <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--app-muted-soft)]">
-                    candidate
-                  </span>
-                ) : null}
-                <span className="justify-self-end text-[10px] font-bold tabular-nums text-[var(--app-muted-soft)]">
-                  {line.depth || 18}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function BoardWithEvalBar({
-  evalCp,
-  evalMate,
-  evalMateCp,
-  isLoading,
-  orientation,
-  children,
-}: {
-  evalCp?: number;
-  evalMate?: number | null;
-  evalMateCp?: number | null;
-  isLoading: boolean;
-  orientation: "white" | "black";
-  children: ReactNode;
-}) {
-  const [lastEval, setLastEval] = useState<{ cp: number | null; mate: number | null; mateCp: number | null }>({
-    cp: null,
-    mate: null,
-    mateCp: null,
-  });
-
-  useEffect(() => {
-    if (typeof evalCp === "number" || typeof evalMate === "number") {
-      setLastEval({
-        cp: typeof evalCp === "number" ? evalCp : null,
-        mate: typeof evalMate === "number" ? evalMate : null,
-        mateCp: typeof evalMateCp === "number" ? evalMateCp : null,
-      });
-    }
-  }, [evalCp, evalMate, evalMateCp]);
-
-  const displayEvalCp = typeof evalCp === "number" ? evalCp : isLoading ? lastEval.cp : null;
-  const displayEvalMate = typeof evalMate === "number" ? evalMate : isLoading ? lastEval.mate : null;
-  const displayEvalMateCp = typeof evalMateCp === "number" ? evalMateCp : isLoading ? lastEval.mateCp : null;
-  const { whitePct, blackPct, decisiveSide } = getEvalBarFill(displayEvalCp, displayEvalMate, displayEvalMateCp);
-
-  // Determine which side is top/bottom based on board orientation
-  const topSide = orientation === "white" ? "black" : "white";
-  const bottomSide = orientation === "white" ? "white" : "black";
-
-  const topPct = topSide === "white" ? whitePct : blackPct;
-  const bottomPct = bottomSide === "white" ? whitePct : blackPct;
-
-  return (
-    <div className="relative w-full overflow-visible pl-9">
-      <div className="pointer-events-none absolute left-0 top-0 h-full w-6 shrink-0">
-        <div className="relative h-full overflow-hidden rounded-[4px] border border-[var(--app-border-soft)] bg-black">
-          <div
-            className={[
-              "absolute left-0 right-0 top-0 transition-[height] duration-200",
-              topSide === "white" ? "bg-white" : "bg-black",
-            ].join(" ")}
-            style={{ height: `${topPct}%` }}
-          />
-          <div
-            className={[
-              "absolute left-0 right-0 bottom-0 transition-[height] duration-200",
-              bottomSide === "white" ? "bg-white" : "bg-black",
-            ].join(" ")}
-            style={{ height: `${bottomPct}%` }}
-          />
-          <span
-            className={[
-              "absolute inset-x-0 top-1 text-center text-[9px] font-bold",
-              decisiveSide === "white"
-                ? "text-black"
-                : decisiveSide === "black"
-                  ? "text-white"
-                  : topSide === "white" ? "text-black" : "text-white",
-            ].join(" ")}
-          >
-            {typeof displayEvalCp === "number" || typeof displayEvalMate === "number"
-              ? formatPostmortemEvalLabel(displayEvalCp, displayEvalMate)
-              : isLoading ? "..." : "--"}
-          </span>
-        </div>
-      </div>
-
-      {children}
-    </div>
-  );
-}
-
 function ResultsPanel({
   eloResult,
   isSaving,
@@ -4903,24 +4687,6 @@ function TrainOnboardingIntroOverlay({
         </div>
       </div>
     </div>
-  );
-}
-
-function ClassificationBadge({ classification }: { classification: MoveClassification }) {
-  const label = classificationLabel(classification);
-  return (
-    <span
-      className="grid h-4 w-4 shrink-0 place-items-center"
-      title={label}
-      aria-label={label}
-    >
-      <img
-        src={classificationIcon(classification)}
-        alt=""
-        className="h-4 w-4"
-        draggable={false}
-      />
-    </span>
   );
 }
 

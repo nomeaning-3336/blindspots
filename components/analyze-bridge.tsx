@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { AnalysisBoard, type BoardMove } from "@/components/chess/analysis-board";
+import {
+  BoardWithEvalBar,
+  EngineLinesSection,
+  type EngineLineResult,
+} from "@/components/train/postmortem-shared";
 import type { AnalyzePreferences } from "@/lib/analyze-preferences";
+import { whitePositiveMateCp } from "@/lib/training/postmortem-terminal-display";
+import type { MoveClassification } from "@/lib/move-classification";
 
 declare global {
   interface Window {
@@ -25,6 +34,133 @@ const ANALYZE_CHESS_SCRIPT_ID = "analyze-chess-js";
 const ANALYZE_APP_SCRIPT_ID = "analyze-runtime";
 const ANALYZE_PAGE_TITLE =
   "Blindspots.gg - Chess Training for the Positions You Keep Getting Wrong";
+
+type AnalyzeRuntimeRow = {
+  depth?: number;
+  multipv?: number;
+  scoreCp?: number;
+  mate?: number | null;
+  pv?: string[];
+  bestUci?: string;
+  firstSan?: string;
+  restSan?: string;
+  continuationSan?: string[];
+};
+
+type AnalyzeRuntimeApi = {
+  _renderCount?: number;
+  currentFen?: () => string | undefined;
+  doMove?: (uci: string) => void;
+  setAppTheme?: (theme: string | null) => void;
+  pauseForNavigation?: () => void;
+  classificationForFenAndUci?: (fen: string, uci: string) => { label?: string } | null;
+  state?: {
+    current?: { fen?: string };
+    orientation?: "white" | "black";
+    boardTheme?: AnalyzePreferences["boardTheme"];
+    pieceTheme?: AnalyzePreferences["pieceTheme"];
+    analysisRows?: AnalyzeRuntimeRow[];
+    analysisRowsFen?: string;
+    engineBusy?: boolean;
+    engineLoading?: boolean;
+    engineLinesHidden?: boolean;
+  };
+};
+
+type AnalyzeRuntimeSnapshot = {
+  fen: string;
+  orientation: "white" | "black";
+  boardTheme: AnalyzePreferences["boardTheme"];
+  pieceTheme: AnalyzePreferences["pieceTheme"];
+  lines: EngineLineResult[];
+  evalCp?: number;
+  evalMate?: number | null;
+  isLoading: boolean;
+};
+
+const DEFAULT_ANALYZE_SNAPSHOT: AnalyzeRuntimeSnapshot = {
+  fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  orientation: "white",
+  boardTheme: "midnight",
+  pieceTheme: "maestro",
+  lines: [],
+  isLoading: true,
+};
+
+function normalizeAnalysisSan(value: string | undefined) {
+  return String(value || "")
+    .replace(/^\d+\.\.\.\s*/, "")
+    .replace(/^\d+\.\s*/, "")
+    .trim();
+}
+
+function splitAnalyzeContinuation(value: string | undefined) {
+  return String(value || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function classificationFromAnalyzeLabel(label: string | undefined): MoveClassification | undefined {
+  const normalized = String(label || "").trim().toLowerCase();
+  if (
+    normalized === "brilliant" ||
+    normalized === "critical" ||
+    normalized === "best" ||
+    normalized === "excellent" ||
+    normalized === "good" ||
+    normalized === "okay" ||
+    normalized === "inaccuracy" ||
+    normalized === "mistake" ||
+    normalized === "blunder"
+  ) {
+    return normalized;
+  }
+  return undefined;
+}
+
+function snapshotFromAnalyzeRuntime(): AnalyzeRuntimeSnapshot {
+  const api = window.__chessSomething as AnalyzeRuntimeApi | undefined;
+  const state = api?.state;
+  const fen = api?.currentFen?.() || state?.current?.fen || DEFAULT_ANALYZE_SNAPSHOT.fen;
+  const rows = Array.isArray(state?.analysisRows) && state?.analysisRowsFen === fen
+    ? state.analysisRows
+    : [];
+  const lines = rows
+    .filter((row) => row.bestUci)
+    .slice(0, 5)
+    .map((row, index): EngineLineResult => {
+      const classification = classificationFromAnalyzeLabel(
+        api?.classificationForFenAndUci?.(fen, row.bestUci || "")?.label,
+      );
+      return {
+        cp: typeof row.scoreCp === "number" ? row.scoreCp : 0,
+        mate: typeof row.mate === "number" ? row.mate : null,
+        depth: typeof row.depth === "number" ? row.depth : 0,
+        rank: typeof row.multipv === "number" ? row.multipv : index + 1,
+        bestMove: row.bestUci || "",
+        bestSan: normalizeAnalysisSan(row.firstSan) || row.bestUci || "",
+        pv: Array.isArray(row.pv) ? row.pv : [],
+        pvSan: splitAnalyzeContinuation(row.restSan),
+        continuationSan: Array.isArray(row.continuationSan)
+          ? row.continuationSan
+          : splitAnalyzeContinuation(row.restSan),
+        classification,
+        source: "multipv",
+      };
+    });
+
+  return {
+    fen,
+    orientation: state?.orientation === "black" ? "black" : "white",
+    boardTheme: state?.boardTheme || DEFAULT_ANALYZE_SNAPSHOT.boardTheme,
+    pieceTheme: state?.pieceTheme || DEFAULT_ANALYZE_SNAPSHOT.pieceTheme,
+    lines,
+    evalCp: lines[0]?.cp,
+    evalMate: lines[0]?.mate ?? null,
+    isLoading: Boolean(state?.engineBusy || state?.engineLoading) && !state?.engineLinesHidden,
+  };
+}
 
 function ensureStyleLink(id: string, href: string) {
   const existing = document.getElementById(id) as HTMLLinkElement | null;
@@ -1260,6 +1396,83 @@ function ensureOverrideStyle() {
       transform: none !important;
     }
 
+    #analyze-app-host #app .board-stack {
+      border: 1px solid color-mix(in srgb, var(--app-text) 72%, transparent) !important;
+      background: var(--app-panel-solid) !important;
+      box-shadow: 4px 4px 0 #050505 !important;
+      border-radius: 12px !important;
+      padding: 12px !important;
+      overflow: hidden !important;
+    }
+
+    #analyze-react-board-slot {
+      width: var(--board-shell-width) !important;
+      max-width: 100% !important;
+    }
+
+    #analyze-react-board-slot .app-brutal-board-frame {
+      width: 100% !important;
+    }
+
+    #analyze-app-host #app .board-stack > .board-frame {
+      display: none !important;
+    }
+
+    #analyze-app-host #app .board-frame,
+    #analyze-react-board-slot .app-brutal-board-frame {
+      border: 1px solid #050505 !important;
+      background: var(--app-panel-solid) !important;
+      box-shadow: 3px 3px 0 #050505 !important;
+      border-radius: 10px !important;
+      overflow: hidden !important;
+    }
+
+    #analyze-app-host #app .board-shell-wrap {
+      border: 0 !important;
+      border-radius: 9px !important;
+      background: transparent !important;
+      box-shadow: none !important;
+    }
+
+    #analyze-app-host #app .eval-bar {
+      border: 0 !important;
+      border-right: 1px solid #050505 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }
+
+    #analyze-app-host #app .board-analysis > :not(#analyze-react-lines-slot) {
+      display: none !important;
+    }
+
+    #analyze-react-lines-slot {
+      display: block !important;
+      min-height: 0 !important;
+    }
+
+    #analyze-app-host #app .analysis-main {
+      grid-template-columns:
+        minmax(22px, 22px)
+        minmax(calc((var(--lead-cols, 6) + 2) * 0.82ch), auto)
+        minmax(76px, max-content)
+        minmax(var(--analysis-stats-col, 11.5ch), auto) !important;
+      gap: 8px !important;
+      align-items: center !important;
+    }
+
+    #analyze-app-host #app .analysis-row {
+      min-height: 40px !important;
+      padding: 0 12px !important;
+    }
+
+    #analyze-app-host #app .analysis-pv {
+      padding-left: 30px !important;
+      margin-top: 2px !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+    }
+
     @media (min-width: 1024px) {
       #analyze-app-host #app .workspace {
         grid-template-columns: minmax(0, 1fr) !important;
@@ -1280,8 +1493,8 @@ function ensureOverrideStyle() {
       #analyze-app-host #app .board-stage {
         --analysis-panel-width: clamp(28rem, 30vw, 34rem) !important;
         --board-shell-width: min(
-          calc(var(--analyze-viewport-room, 100dvh) - var(--board-options-height, 0px) - var(--board-stack-gap, 10px) - 32px),
-          calc(100vw - var(--analysis-panel-width) - 96px),
+          calc(var(--analyze-viewport-room, 100dvh) - var(--board-options-height, 0px) - var(--board-stack-gap, 10px) - 68px),
+          calc(100vw - var(--analysis-panel-width) - 136px),
           760px
         ) !important;
         width: min(100%, 100rem) !important;
@@ -1304,6 +1517,7 @@ function ensureOverrideStyle() {
         max-width: 100% !important;
         height: auto !important;
         min-height: 0 !important;
+        align-self: start !important;
       }
 
       #analyze-app-host #app .board-analysis {
@@ -1397,6 +1611,11 @@ export function AnalyzeBridge({
 }) {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
+  const [runtimeSnapshot, setRuntimeSnapshot] = useState<AnalyzeRuntimeSnapshot>(DEFAULT_ANALYZE_SNAPSHOT);
+  const [portalTargets, setPortalTargets] = useState<{
+    board: HTMLElement;
+    lines: HTMLElement;
+  } | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -1405,6 +1624,8 @@ export function AnalyzeBridge({
     const hoverCleanups: Array<() => void> = [];
     let themeObserver: MutationObserver | null = null;
     let titleObserver: MutationObserver | null = null;
+    let runtimeObserver: MutationObserver | null = null;
+    let snapshotInterval: number | null = null;
 
     const enforceAnalyzeTitle = () => {
       if (document.title !== ANALYZE_PAGE_TITLE) {
@@ -1451,6 +1672,35 @@ export function AnalyzeBridge({
     const syncAppTheme = () => {
       const theme = document.documentElement.dataset.theme || null;
       window.__chessSomething?.setAppTheme?.(theme);
+    };
+
+    const syncRuntimeSnapshot = () => {
+      setRuntimeSnapshot(snapshotFromAnalyzeRuntime());
+    };
+
+    const ensureReactSurfaceSlots = () => {
+      if (!host) return false;
+      const boardStack = host.querySelector<HTMLElement>("#app .board-stack");
+      const boardFrame = host.querySelector<HTMLElement>("#app .board-frame");
+      const boardAnalysis = host.querySelector<HTMLElement>("#app .board-analysis");
+      if (!boardStack || !boardFrame || !boardAnalysis) return false;
+
+      let boardSlot = host.querySelector<HTMLElement>("#analyze-react-board-slot");
+      if (!boardSlot) {
+        boardSlot = document.createElement("div");
+        boardSlot.id = "analyze-react-board-slot";
+        boardStack.insertBefore(boardSlot, boardFrame);
+      }
+
+      let linesSlot = host.querySelector<HTMLElement>("#analyze-react-lines-slot");
+      if (!linesSlot) {
+        linesSlot = document.createElement("div");
+        linesSlot.id = "analyze-react-lines-slot";
+        boardAnalysis.appendChild(linesSlot);
+      }
+
+      setPortalTargets({ board: boardSlot, lines: linesSlot });
+      return true;
     };
 
     document.body.classList.add("analyze-embedded");
@@ -1524,6 +1774,22 @@ export function AnalyzeBridge({
         enforceAnalyzeTitle();
         syncAppTheme();
         wireVisualHoverState();
+        ensureReactSurfaceSlots();
+        syncRuntimeSnapshot();
+        const appNode = host?.querySelector("#app");
+        if (appNode) {
+          runtimeObserver = new MutationObserver(() => {
+            ensureReactSurfaceSlots();
+            syncRuntimeSnapshot();
+          });
+          runtimeObserver.observe(appNode, {
+            attributes: true,
+            childList: true,
+            subtree: true,
+            characterData: true,
+          });
+        }
+        snapshotInterval = window.setInterval(syncRuntimeSnapshot, 250);
         if (host?.querySelector("#app")?.hasChildNodes()) {
           setStatus("ready");
         } else {
@@ -1556,7 +1822,10 @@ export function AnalyzeBridge({
       window.removeEventListener("resize", syncViewportRoom);
       themeObserver?.disconnect();
       titleObserver?.disconnect();
+      runtimeObserver?.disconnect();
+      if (snapshotInterval) window.clearInterval(snapshotInterval);
       hoverCleanups.forEach((cleanup) => cleanup());
+      setPortalTargets(null);
       document.body.classList.remove("analyze-embedded");
     };
   }, [
@@ -1574,6 +1843,28 @@ export function AnalyzeBridge({
     >
       {/* Standalone app mounts into #app */}
       <div id="app" />
+      {portalTargets
+        ? createPortal(
+            <AnalyzeReactBoardSurface snapshot={runtimeSnapshot} />,
+            portalTargets.board,
+          )
+        : null}
+      {portalTargets
+        ? createPortal(
+            <div className="p-3">
+              <EngineLinesSection
+                lines={runtimeSnapshot.lines}
+                isLoading={runtimeSnapshot.isLoading}
+                revealBadLines
+                onSelectLine={(move) => {
+                  const uci = `${move.from}${move.to}`;
+                  window.__chessSomething?.doMove?.(uci);
+                }}
+              />
+            </div>,
+            portalTargets.lines,
+          )
+        : null}
 
       {status === "error" && (
         <div
@@ -1586,6 +1877,49 @@ export function AnalyzeBridge({
           <p className="text-red-400">Analyze boot failed: {error}</p>
         </div>
       )}
+    </div>
+  );
+}
+
+function AnalyzeReactBoardSurface({
+  snapshot,
+}: {
+  snapshot: AnalyzeRuntimeSnapshot;
+}) {
+  const topLine = snapshot.lines[0] ?? null;
+  const handleMove = (move: BoardMove) => {
+    const uci = move.uci || `${move.from}${move.to}`;
+    window.__chessSomething?.doMove?.(uci);
+  };
+
+  return (
+    <div className="app-brutal-board-frame relative max-w-full overflow-visible">
+      <BoardWithEvalBar
+        evalCp={snapshot.evalCp}
+        evalMate={snapshot.evalMate}
+        evalMateCp={whitePositiveMateCp(snapshot.fen, snapshot.evalMate ?? null, snapshot.evalCp)}
+        isLoading={snapshot.isLoading}
+        orientation={snapshot.orientation}
+      >
+        <AnalysisBoard
+          fen={snapshot.fen}
+          mode="analysis"
+          pieceAnimation
+          orientation={snapshot.orientation}
+          coordinates
+          boardTheme={snapshot.boardTheme}
+          pieceTheme={snapshot.pieceTheme}
+          engineArrows={topLine ? [{
+            from: topLine.bestMove.slice(0, 2),
+            to: topLine.bestMove.slice(2, 4),
+            label: topLine.bestSan,
+            rank: 1,
+            emphasis: true,
+          }] : []}
+          onMove={handleMove}
+          dataTestId="analyze-react-board"
+        />
+      </BoardWithEvalBar>
     </div>
   );
 }

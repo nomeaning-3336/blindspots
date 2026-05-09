@@ -28,7 +28,7 @@ export async function getOnboardingStateForUser(userId: string): Promise<Onboard
   }
 
   return {
-    trainingOnboardingCompleted: data?.training_onboarding_completed_at !== null,
+    trainingOnboardingCompleted: Boolean(data?.training_onboarding_completed_at),
     trainingOnboardingCompletedAt: data?.training_onboarding_completed_at ?? null,
   };
 }
@@ -52,7 +52,7 @@ export async function completeOnboardingForUser(userId: string): Promise<Onboard
   }
 
   return {
-    trainingOnboardingCompleted: data.training_onboarding_completed_at !== null,
+    trainingOnboardingCompleted: Boolean(data.training_onboarding_completed_at),
     trainingOnboardingCompletedAt: data.training_onboarding_completed_at,
   };
 }
