@@ -101,7 +101,7 @@ const POSTMORTEM_TOUR_STEPS = [
   {
     target: "engine-lines",
     headline: "Engine lines",
-    body: "Here you can see the top 5 engine lines for a given board position.",
+    body: "Here you can see the top 5 engine lines for a given board position. These are also visualized on the board.",
   },
   {
     target: "eval-graph",
