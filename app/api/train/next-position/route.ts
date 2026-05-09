@@ -26,7 +26,7 @@ import { getPositionMateStatus } from "@/lib/engines/dispatcher";
 import { getOpponentElo } from "@/lib/training/elo";
 import { getNextMistakeForTraining, getNextActiveAppMistake, normalizeUserMistakeForTraining } from "@/lib/training/mistake-store";
 import { getPreviousPosition } from "@/lib/training/position-index";
-import { normalizeSetupPrelude } from "@/lib/training/setup-prelude";
+import { normalizeSetupPrelude, validateSetupPrelude } from "@/lib/training/setup-prelude";
 import {
   DEFAULT_BLINDSPOTS_ELO,
   buildDefaultBlindspotProfile,
@@ -134,40 +134,61 @@ if (!optionalError && optionalData) {
   const activeAppResult = await getNextActiveAppMistake(userId);
   if (activeAppResult.mistake) {
     const row = activeAppResult.mistake;
-    const response: NextPositionResponse = {
-      mistakeId: row.id,
+
+    // Validate prelude before serving — reject invalid or missing setup
+    const preludeValidation = validateSetupPrelude({
       fen: row.decisionFen,
-      decisionFen: row.decisionFen,
       previousFen: row.setupPreviousFen,
       playedMove: row.setupPlayedMoveUci,
-      actualMoveUci: row.actualMoveUci || undefined,
-      actualMoveSan: row.actualMoveSan ?? undefined,
-      source: "app_training",
-      queueSource: "active_mistake",
-      selectedServeMode: "active_mistake",
-      cpLoss: row.cpLoss ?? undefined,
-      sequenceLength,
-      challengeElo,
-    };
-
-    if (process.env.NODE_ENV !== "production") {
-      response.debug = {
-        queueSource: "active_mistake",
+    });
+    if (!preludeValidation.ok) {
+      // Skip this candidate and fall through to next path
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[next-position] active_app_mistake rejected invalid prelude", {
+          mistakeId: row.id,
+          reason: preludeValidation.reason,
+          decisionFen: row.decisionFen,
+          setupPreviousFen: row.setupPreviousFen,
+          setupPlayedMoveUci: row.setupPlayedMoveUci,
+        });
+      }
+      // fall through to row-based path
+    } else {
+      const response: NextPositionResponse = {
         mistakeId: row.id,
-        sourceType: row.sourceType,
-        sourceProvider: row.sourceProvider,
-        cpLoss: row.cpLoss,
-        classification: row.classification,
-        severity: row.severity,
-        selectedQueueKind: "active_mistake",
-        showMoveNotesHelper: true,
-        reviewStatus: "active",
-        activeMistakeCandidateCount: activeAppResult.candidateCount,
-        rejectedActiveMistakeNoPreludeCount: activeAppResult.rejectedNoPreludeCount,
+        fen: row.decisionFen,
+        decisionFen: row.decisionFen,
+        previousFen: preludeValidation.previousFen,
+        playedMove: preludeValidation.playedMove,
+        actualMoveUci: row.actualMoveUci || undefined,
+        actualMoveSan: row.actualMoveSan ?? undefined,
+        source: "app_training",
+        queueSource: "active_mistake",
+        selectedServeMode: "active_mistake",
+        cpLoss: row.cpLoss ?? undefined,
+        sequenceLength,
+        challengeElo,
       };
-    }
 
-    return NextResponse.json(response);
+      if (process.env.NODE_ENV !== "production") {
+        response.debug = {
+          queueSource: "active_mistake",
+          mistakeId: row.id,
+          sourceType: row.sourceType,
+          sourceProvider: row.sourceProvider,
+          cpLoss: row.cpLoss,
+          classification: row.classification,
+          severity: row.severity,
+          selectedQueueKind: "active_mistake",
+          showMoveNotesHelper: true,
+          reviewStatus: "active",
+          activeMistakeCandidateCount: activeAppResult.candidateCount,
+          rejectedActiveMistakeNoPreludeCount: activeAppResult.rejectedNoPreludeCount,
+        };
+      }
+
+      return NextResponse.json(response);
+    }
   }
 
   // Row-based mistake training — imported/legacy path
@@ -190,42 +211,57 @@ if (!optionalError && optionalData) {
         previousFen: normalized.previousFen,
         playedMove: normalized.playedMove,
       });
-      const response: NextPositionResponse = {
-        mistakeId: normalized.id,
-        fen: normalized.fen,
-        decisionFen: normalized.decisionFen ?? undefined,
-        previousFen: setupPrelude?.previousFen,
-        playedMove: setupPrelude?.playedMove,
-        actualMoveUci: normalized.actualMoveUci ?? undefined,
-        actualMoveSan: normalized.actualMoveSan ?? undefined,
-        bestMoveUci: normalized.bestMoveUci ?? undefined,
-        bestMoveSan: normalized.bestMoveSan ?? undefined,
-        source: normalized.source,
-        queueSource: mistakeResult.queueSource ?? undefined,
-        selectedServeMode: mistakeResult.queueSource ?? undefined,
-        tags,
-        openingName: mistake.opening_name ?? undefined,
-        eco: mistake.eco ?? undefined,
-        cpLoss: mistake.cp_loss ?? undefined,
-        sequenceLength,
-        challengeElo,
-      };
 
-      if (process.env.NODE_ENV !== "production") {
-        response.debug = {
-          queueSource: mistakeResult.queueSource,
+      // Reject row-based mistakes without valid setup prelude
+      if (!setupPrelude) {
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[next-position] row-based mistake rejected — no valid prelude", {
+            mistakeId: normalized.id,
+            sourceType: mistake.source_type,
+            fen: normalized.fen,
+            previousFen: normalized.previousFen,
+            playedMove: normalized.playedMove,
+          });
+        }
+        // fall through to seeded/legacy queue path
+      } else {
+        const response: NextPositionResponse = {
           mistakeId: normalized.id,
-          sourceType: mistake.source_type,
-          cpLoss: mistake.cp_loss,
-          reviewCount: mistake.review_count,
-          intervalDays: mistake.interval_days,
-          nextReviewAt: mistake.next_review_at ?? undefined,
-          servedCount: mistake.served_count,
-          rowBased: true,
+          fen: normalized.fen,
+          decisionFen: normalized.decisionFen ?? undefined,
+          previousFen: setupPrelude.previousFen,
+          playedMove: setupPrelude.playedMove,
+          actualMoveUci: normalized.actualMoveUci ?? undefined,
+          actualMoveSan: normalized.actualMoveSan ?? undefined,
+          bestMoveUci: normalized.bestMoveUci ?? undefined,
+          bestMoveSan: normalized.bestMoveSan ?? undefined,
+          source: normalized.source,
+          queueSource: mistakeResult.queueSource ?? undefined,
+          selectedServeMode: mistakeResult.queueSource ?? undefined,
+          tags,
+          openingName: mistake.opening_name ?? undefined,
+          eco: mistake.eco ?? undefined,
+          cpLoss: mistake.cp_loss ?? undefined,
+          sequenceLength,
+          challengeElo,
         };
-      }
 
-      return NextResponse.json(response);
+        if (process.env.NODE_ENV !== "production") {
+          response.debug = {
+            queueSource: mistakeResult.queueSource,
+            mistakeId: normalized.id,
+            sourceType: mistake.source_type,
+            cpLoss: mistake.cp_loss,
+            reviewCount: mistake.review_count,
+            intervalDays: mistake.interval_days,
+            nextReviewAt: mistake.next_review_at ?? undefined,
+            servedCount: mistake.served_count,
+            rowBased: true,
+          };
+        }
+
+        return NextResponse.json(response);
+      }
     }
   }
 
