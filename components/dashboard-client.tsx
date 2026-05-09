@@ -106,7 +106,7 @@ function DashboardHero({
       <div className="grid gap-5 lg:grid-cols-[minmax(0,0.34fr)_minmax(0,0.66fr)] lg:items-center">
         <div className="flex min-w-0 flex-col gap-5">
           <div>
-            <div className="app-eyebrow mb-3">Dashboard</div>
+            <div className="mb-3 flex items-center justify-between gap-3 text-[13px] font-bold uppercase tracking-[0.2em] text-[var(--app-muted)]"><span>Your Blindspots Elo</span></div>
             <div className="text-[64px] font-bold leading-none text-[var(--app-text)] md:text-[76px]">
               {elo == null ? "-" : formatNumber(elo)}
             </div>
@@ -141,9 +141,6 @@ function DashboardHero({
         </div>
 
         <div className="min-w-0 lg:border-l lg:border-[var(--app-border-soft)] lg:pl-6">
-          <SectionLabel right={summary.eloHistory.length >= 2 ? "trend" : undefined}>
-            Blindspots Elo
-          </SectionLabel>
           {summary.eloHistory.length >= 2 ? (
             <EloChart points={summary.eloHistory} />
           ) : (
