@@ -103,7 +103,7 @@ export default async function EmailAuthPage({
               ) : (
                 <>
                   {errorMessage ? (
-                    <div className="border border-rose-400/35 bg-rose-400/10 px-4 py-3 text-sm leading-6 text-rose-100">
+                    <div className="border border-rose-400/35 bg-rose-400/10 px-4 py-3 text-center text-sm leading-6 text-rose-100">
                       {errorMessage}
                     </div>
                   ) : null}

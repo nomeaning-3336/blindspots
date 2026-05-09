@@ -19,6 +19,7 @@ import {
   type TrainingPhase,
 } from "./queue-core";
 import type { ServeMode } from "./serving-policy";
+import { collectSampledQueueItems } from "./sample-collector";
 
 const MAX_QUEUE_ITEMS = 20;
 
@@ -319,9 +320,8 @@ export async function sampleMiddlegamePositions(
   if (count <= 0) return [];
 
   if (ENABLE_GENERATED_TRAINING_CORPUS) {
-    const positions = await readGeneratedMiddlegamePositions();
-    return shuffle(positions)
-      .flatMap((position) => {
+  const positions = await readGeneratedMiddlegamePositions();
+    return collectSampledQueueItems(shuffle(positions), count, (position) => {
         const fen = typeof position.fen === "string" ? position.fen : "";
         if (!fen || excludeFens.has(fen)) return [];
 
@@ -343,16 +343,14 @@ export async function sampleMiddlegamePositions(
           eco: undefined,
         });
         return item ? [item] : [];
-      })
-      .slice(0, count);
+      });
   }
 
   // Legacy: filter elite positions by FEN shape
   const raw = await readFile(resolve(process.cwd(), "public", "elite_positions.json"), "utf8").catch(() => "[]");
   const positions = JSON.parse(raw) as ElitePosition[];
 
-  return shuffle(positions)
-    .flatMap((position) => {
+  return collectSampledQueueItems(shuffle(positions), count, (position) => {
       const fen = typeof position.fen === "string" ? position.fen : "";
       if (!fen || excludeFens.has(fen)) return [];
 
@@ -378,8 +376,7 @@ export async function sampleMiddlegamePositions(
         eco: undefined,
       });
       return item ? [item] : [];
-    })
-    .slice(0, count);
+    });
 }
 
 async function readGeneratedMiddlegamePositions(): Promise<OpeningPosition[]> {
@@ -505,8 +502,7 @@ export async function sampleOpeningPositions(
   if (count <= 0) return [];
 
   const positions = await readOpeningPositions();
-  return shuffle(positions)
-    .flatMap((position) => {
+  return collectSampledQueueItems(shuffle(positions), count, (position) => {
       const fen = typeof position.fen === "string" ? position.fen : "";
       if (!fen || excludeFens.has(fen)) return [];
 
@@ -528,8 +524,7 @@ export async function sampleOpeningPositions(
         eco: enrichEco(position),
       });
       return item ? [item] : [];
-    })
-    .slice(0, count);
+    });
 }
 
 // ─── Tactical Positions ───────────────────────────────────────────────────────
@@ -562,8 +557,7 @@ export async function sampleTacticalPositions(
   }
 
   const positions = await readTacticPositions();
-  return shuffle(positions)
-    .flatMap((position) => {
+  return collectSampledQueueItems(shuffle(positions), count, (position) => {
       const fen = typeof position.fen === "string" ? position.fen : "";
       if (!fen || excludeFens.has(fen)) return [];
 
@@ -582,8 +576,7 @@ export async function sampleTacticalPositions(
         eco: enrichEco(position),
       });
       return item ? [item] : [];
-    })
-    .slice(0, count);
+    });
 }
 
 // ─── Endgame Positions ───────────────────────────────────────────────────────
@@ -615,8 +608,7 @@ export async function sampleEndgamePositions(
   if (count <= 0) return [];
 
   const positions = await readEndgamePositions();
-  return shuffle(positions)
-    .flatMap((position) => {
+  return collectSampledQueueItems(shuffle(positions), count, (position) => {
       const fen = typeof position.fen === "string" ? position.fen : "";
       if (!fen || excludeFens.has(fen)) return [];
 
@@ -638,8 +630,7 @@ export async function sampleEndgamePositions(
         eco: undefined,
       });
       return item ? [item] : [];
-    })
-    .slice(0, count);
+    });
 }
 
 // ─── Wildcard Sampler (generated corpus mixed) ─────────────────────────────────
@@ -692,8 +683,7 @@ export async function samplePhasePositions(
 
   // Legacy fallback: filter metadata-tagged rows from the opening pool.
   const positions = await readOpeningPositions();
-  return shuffle(positions)
-    .flatMap((position) => {
+  return collectSampledQueueItems(shuffle(positions), count, (position) => {
       const fen = typeof position.fen === "string" ? position.fen : "";
       if (!fen || excludeFens.has(fen)) return [];
 
@@ -716,8 +706,7 @@ export async function samplePhasePositions(
         eco: enrichEco(position),
       });
       return item ? [item] : [];
-    })
-    .slice(0, count);
+    });
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
