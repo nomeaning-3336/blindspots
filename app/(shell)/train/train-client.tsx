@@ -4668,9 +4668,9 @@ function TrainOnboardingIntroOverlay({
         <div className="flex items-center justify-between gap-3">
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); onBack(); }}
-            disabled={isFirst}
-            className="min-h-11 border border-[var(--app-border)] px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)] disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={(e) => { e.stopPropagation(); if (!isFirst) onBack(); }}
+            aria-disabled={isFirst}
+            className="min-h-11 border border-[var(--app-border)] px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)] aria-disabled:cursor-not-allowed aria-disabled:opacity-40"
           >
             Back
           </button>
