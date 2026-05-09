@@ -751,12 +751,17 @@ export default function TrainPage(props: TrainPageProps) {
   }, [shouldRunPreplayOnboarding, trainOnboardingIntroDone]);
 
 
+  const isOnboardingFirstPostmortem =
+    shouldRunPreplayOnboarding &&
+    hasStartedFirstOnboardingSequenceRef.current &&
+    !postmortemOnboardingFinished &&
+    isPostMortemVisible;
+
   useEffect(() => {
     if (!shouldRunPreplayOnboarding) return;
     if (!trainOnboardingIntroDone) return;
     if (!hasStartedFirstOnboardingSequenceRef.current) return;
     if (!isPostMortemVisible) return;
-    if (!eloResult) return;
     if (isCompletingSequence) return;
     if (postmortemOnboardingFinished || postmortemOnboardingActive) return;
 
@@ -3313,8 +3318,10 @@ export default function TrainPage(props: TrainPageProps) {
             <div className="train-postmortem-panel flex min-h-0 flex-1 flex-col gap-2 pr-1">
               {postmortemSidePanel === "analysis" ? (
                 <ResultsPanel
-                eloResult={eloResult}
-                isSaving={isCompletingSequence}
+                eloResult={isOnboardingFirstPostmortem ? { eloBefore: 1200, eloAfter: 1200, eloDelta: 0, kFactor: 0, opponentElo: 0, expectedScore: 0, actualScore: 0, rawDelta: 0, clampedDelta: 0, skipped: false } as EloResult : eloResult}
+                isSaving={isOnboardingFirstPostmortem ? false : isCompletingSequence}
+                hideDelta={isOnboardingFirstPostmortem}
+                subtext={isOnboardingFirstPostmortem ? "First sequence completed" : undefined}
                 moves={moves}
                 asyncMoveEvaluations={asyncMoveEvaluations}
                 userSide={userMoveSide}
@@ -4705,7 +4712,7 @@ function StatusBanner({
   );
 }
 
-function EloResultCard({ result, isLoading }: { result: EloResult | null; isLoading: boolean }) {
+function EloResultCard({ result, isLoading, hideDelta, subtext }: { result: EloResult | null; isLoading: boolean; hideDelta?: boolean; subtext?: string }) {
   if (isLoading && !result) {
     return null;
   }
@@ -4724,12 +4731,23 @@ function EloResultCard({ result, isLoading }: { result: EloResult | null; isLoad
     <div data-tour="elo-card" className="rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-3">
       <div className="flex items-center">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-base font-bold text-[var(--app-muted)]">{result.eloBefore}</span>
-          <span className="text-sm font-bold text-[var(--app-muted)]">→</span>
-          <span className="text-2xl font-bold text-[var(--app-text)]">{result.eloAfter}</span>
-          <span className={`text-base font-bold ${deltaTone}`}>{signedDelta}</span>
+          {hideDelta ? (
+            <>
+              <span className="text-2xl font-bold text-[var(--app-text)]">{result.eloAfter}</span>
+            </>
+          ) : (
+            <>
+              <span className="text-base font-bold text-[var(--app-muted)]">{result.eloBefore}</span>
+              <span className="text-sm font-bold text-[var(--app-muted)]">→</span>
+              <span className="text-2xl font-bold text-[var(--app-text)]">{result.eloAfter}</span>
+              <span className={`text-base font-bold ${deltaTone}`}>{signedDelta}</span>
+            </>
+          )}
         </div>
       </div>
+      {subtext ? (
+        <div className="mt-1 text-xs font-bold text-[var(--app-muted)]">{subtext}</div>
+      ) : null}
     </div>
   );
 }
@@ -4796,9 +4814,13 @@ function ResultsPanel({
   selectedMoveUci,
   onSelectMove,
   isManualPostmortemExploration,
+  hideDelta,
+  subtext,
 }: {
   eloResult: EloResult | null;
   isSaving: boolean;
+  hideDelta?: boolean;
+  subtext?: string;
   moves: TrainingMove[];
   asyncMoveEvaluations: Record<number, { status: "pending" | "done" | "error"; moveScore?: MoveScore; positionEvaluation?: unknown }>;
   userSide: TrainingMove["side"];
@@ -4832,7 +4854,7 @@ function ResultsPanel({
   if (mode === "explore") {
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-2 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
-        <EloResultCard result={eloResult} isLoading={isSaving} />
+        <EloResultCard result={eloResult} isLoading={isSaving} hideDelta={hideDelta} subtext={subtext} />
         <EvalGraph
           points={graphPoints}
           currentIndex={currentIndex}
@@ -4877,7 +4899,7 @@ function ResultsPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 opacity-80 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
-      <EloResultCard result={eloResult} isLoading={isSaving} />
+      <EloResultCard result={eloResult} isLoading={isSaving} hideDelta={hideDelta} subtext={subtext} />
       <EvalGraph points={graphPoints} currentIndex={positions.length - 1} compact engineCp={currentEngineEval} />
       <AnalysisMoveTable moves={userMoves} canonicalMoves={canonicalMoves} isAnalyzing={isSaving} compact showEvaluations={true} asyncMoveEvaluations={asyncMoveEvaluations} />
     </div>
