@@ -563,21 +563,21 @@ export default function TrainPage(props: TrainPageProps) {
 
   const PREPLAY_TOUR_STEPS = [
     {
-      headline: "Welcome.",
-      body: "You will make mistakes here. We will show you those mistakes again and again until you stop making them. It does not get much simpler than that.",
+      headline: "Welcome to Blindspots.",
+      body: "Let's show you how this whole thing works, so you don't accidentally step on a rook with your pinky toe.",
     },
     {
-      headline: "The board.",
-      body: "This is not a puzzle vending machine. There is not one sacred correct move waiting to be discovered. Your job is simple: play four consecutive moves against an engine opponent.",
+      headline: "The loop.",
+      body: "You'll be playing what we call a sequence — a position where you have to persevere against an engine opponent for four moves.",
     },
     {
-      headline: "Eval preservation.",
-      body: "After each sequence, we ask our friend Stockfish how your four moves held up. If the position cracked badly enough, you may see it again later and try to find something better.",
+      headline: "Keep the position afloat.",
+      body: "Play your best chess for those four moves. At the end, we'll give our friend Stockfish a quick phone call to see how you did.",
     },
     {
-      headline: "Your first run.",
-      body: "Go ahead and play. Do whatever you would do in a normal game, including hanging your queen seven different ways. No pressure at all.",
-      cta: "Press to Start",
+      headline: "Your move.",
+      body: "Go ahead.",
+      cta: "Click to load your first position",
     },
   ];
 

@@ -1,0 +1,35 @@
+{
+  "cookies": [
+    {
+      "name": "ph_phc_oC4QBFvPEBpKoahvBTRMHeYxQSXubyThdAMdc6REtNQd_posthog",
+      "value": "%7B%22%24device_id%22%3A%22019e0caa-bfd7-72a3-b285-7f2b300fb5f5%22%2C%22distinct_id%22%3A%22019e0caa-bfd7-72a3-b285-7f2b300fb5f5%22%2C%22%24sesid%22%3A%5B1778334284719%2C%22019e0cfb-b5b4-7043-8494-956ebe952236%22%2C1778334283188%5D%2C%22%24user_state%22%3A%22anonymous%22%7D",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1809871512,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "__next_hmr_refresh_hash__",
+      "value": "7d83dd763cef43b11eabc5781af1afc2633457081244afec",
+      "domain": "localhost",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "http://localhost:3000",
+      "localStorage": [
+        {
+          "name": "ph_phc_oC4QBFvPEBpKoahvBTRMHeYxQSXubyThdAMdc6REtNQd_posthog",
+          "value": "{\"$device_id\":\"019e0caa-bfd7-72a3-b285-7f2b300fb5f5\",\"distinct_id\":\"019e0caa-bfd7-72a3-b285-7f2b300fb5f5\",\"$sesid\":[1778334284719,\"019e0cfb-b5b4-7043-8494-956ebe952236\",1778334283188],\"$user_state\":\"anonymous\",\"$initialization_time\":\"2026-05-09T13:44:44.691Z\",\"$configured_session_timeout_ms\":1800000,\"$error_tracking_suppression_rules\":[],\"$session_recording_remote_config\":{\"cache_timestamp\":1778334285080,\"enabled\":true,\"canvasFps\":null,\"canvasQuality\":null,\"consoleLogRecordingEnabled\":true,\"endpoint\":\"/s/\",\"eventTriggers\":[],\"linkedFlag\":null,\"masking\":null,\"minimumDurationMilliseconds\":null,\"networkPayloadCapture\":{\"capturePerformance\":{\"network_timing\":true,\"web_vitals\":true,\"web_vitals_allowed_metrics\":null}},\"recordCanvas\":false,\"recorderVersion\":\"v2\",\"sampleRate\":null,\"scriptConfig\":{\"script\":\"posthog-recorder\"},\"triggerMatchType\":null,\"urlBlocklist\":[],\"urlTriggers\":[],\"version\":1,\"canvasRecording\":{\"enabled\":false,\"fps\":null,\"quality\":null}},\"$autocapture_disabled_server_side\":false,\"$product_tours_enabled_server_side\":false,\"$heatmaps_enabled_server_side\":true,\"$web_vitals_enabled_server_side\":true,\"$web_vitals_allowed_metrics\":null,\"$exception_capture_enabled_server_side\":false,\"$dead_clicks_enabled_server_side\":false,\"$client_session_props\":{\"sessionId\":\"019e0cfb-b5b4-7043-8494-956ebe952236\",\"props\":{\"r\":\"http://localhost:3000/\",\"u\":\"http://localhost:3000/\"}},\"$sess_rec_flush_size\":470439,\"$feature_flag_errors\":[],\"$active_feature_flags\":[],\"$enabled_feature_flags\":{},\"$feature_flag_payloads\":{},\"$feature_flag_details\":{},\"$feature_flag_request_id\":\"e26939dd-c6dc-4c30-9dd3-e8007b23b761\",\"$feature_flag_evaluated_at\":1778335485590,\"$debug_first_full_snapshot_timestamp\":1778334284739}"
+        }
+      ]
+    }
+  ]
+}
