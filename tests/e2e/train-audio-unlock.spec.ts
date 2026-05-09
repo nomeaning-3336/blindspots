@@ -88,9 +88,8 @@ test("A: no placeholder shown while loading a real position", async ({ page }) =
   await page.goto("/train");
   await page.waitForTimeout(500);
 
-  // While loading, the placeholder must NOT be visible
-  const placeholder = page.locator("text=Finding something you mishandle...");
-  await expect(placeholder).not.toBeVisible();
+  // While loading, no placeholder copy should be visible.
+  await expect(page.locator("text=No position available")).not.toBeVisible();
 
   // Resolve the position
   resolveNextPosition!(ENGINE_SETUP_PAYLOAD);

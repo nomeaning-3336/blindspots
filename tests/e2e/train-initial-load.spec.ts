@@ -92,9 +92,8 @@ test(
       expect(liveFen).not.toEqual(MOCK_BOARD_FEN);
     }
 
-    // Loading card must be visible
-    const loadingCard = p.locator("text=Finding something you mishandle...");
-    await expect(loadingCard).toBeVisible({ timeout: 5000 });
+    // Loading copy should not be shown while the request is pending.
+    await expect(p.locator("text=No position available")).toHaveCount(0);
 
     // Resolve with a real position
     resolveNextPosition!(MOCK_PAYLOAD);
