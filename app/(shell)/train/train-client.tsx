@@ -483,6 +483,7 @@ export default function TrainPage(props: TrainPageProps) {
   const [pieceLineCache, setPieceLineCache] = useState<Record<string, EngineLineResult[]>>({});
   const [pieceLinesLoadingKey, setPieceLinesLoadingKey] = useState<string | null>(null);
   const moveSoundPlyRef = useRef(0);
+  const hasStartedFirstOnboardingSequenceRef = useRef(false);
   const completingRef = useRef(false);
   const completionRequestRef = useRef(0);
   const initialOpponentMoveRef = useRef<TrainingMove | null>(null);
@@ -872,6 +873,9 @@ export default function TrainPage(props: TrainPageProps) {
   }, [state]);
 
   async function loadNextPosition(options: { autoStart?: boolean } = {}) {
+    // Guard against double loading during onboarding start
+    if (options.autoStart && hasStartedFirstOnboardingSequenceRef.current) return;
+
     const cachedPosition = cachedNextPosition;
     if (cachedPosition?.fen) {
       setCachedNextPosition(null);
@@ -2758,6 +2762,8 @@ export default function TrainPage(props: TrainPageProps) {
             if (trainOnboardingIntroStep < PREPLAY_TOUR_STEPS.length - 1) {
               setTrainOnboardingIntroStep((s) => s + 1);
             } else {
+              if (hasStartedFirstOnboardingSequenceRef.current) return;
+              hasStartedFirstOnboardingSequenceRef.current = true;
               startTrainingGestureConsumedRef.current = true;
               setTrainOnboardingIntroDone(true);
               void unlockTrainAudio();
@@ -2770,6 +2776,8 @@ export default function TrainPage(props: TrainPageProps) {
             }
           }}
           onSkip={() => {
+            if (hasStartedFirstOnboardingSequenceRef.current) return;
+            hasStartedFirstOnboardingSequenceRef.current = true;
             startTrainingGestureConsumedRef.current = true;
             setTrainOnboardingIntroDone(true);
             void unlockTrainAudio();
