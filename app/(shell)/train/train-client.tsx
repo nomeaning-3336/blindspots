@@ -3318,10 +3318,9 @@ export default function TrainPage(props: TrainPageProps) {
             <div className="train-postmortem-panel flex min-h-0 flex-1 flex-col gap-2 pr-1">
               {postmortemSidePanel === "analysis" ? (
                 <ResultsPanel
-                eloResult={isOnboardingFirstPostmortem ? { eloBefore: 1200, eloAfter: 1200, eloDelta: 0, kFactor: 0, opponentElo: 0, expectedScore: 0, actualScore: 0, rawDelta: 0, clampedDelta: 0, skipped: false } as EloResult : eloResult}
-                isSaving={isOnboardingFirstPostmortem ? false : isCompletingSequence}
                 hideDelta={isOnboardingFirstPostmortem}
-                subtext={isOnboardingFirstPostmortem ? "First sequence completed" : undefined}
+                isSaving={isOnboardingFirstPostmortem ? false : isCompletingSequence}
+                eloResult={isOnboardingFirstPostmortem ? { eloBefore: 1200, eloAfter: 1200, eloDelta: 0, kFactor: 0, opponentElo: 0, expectedScore: 0, actualScore: 0, rawDelta: 0, clampedDelta: 0, skipped: false } as EloResult : eloResult}
                 moves={moves}
                 asyncMoveEvaluations={asyncMoveEvaluations}
                 userSide={userMoveSide}
