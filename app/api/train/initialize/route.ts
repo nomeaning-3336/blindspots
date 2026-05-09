@@ -13,6 +13,10 @@ import {
   normalizeSkillLevel,
   type SkillLevel,
 } from "@/lib/training/elo";
+import {
+  buildDefaultBlindspotProfile,
+  shouldShowTrainingOnboarding,
+} from "@/lib/training/default-profile";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,7 +48,7 @@ export async function GET() {
   }
 
   const [profile, preferences, linkedProfiles] = await Promise.all([
-    getBlindspotProfile(userId),
+    getOrCreateDefaultBlindspotProfile(userId),
     getTrainingPreferences(userId),
     getLinkedChessProfilesForUser(userId),
   ]);
@@ -53,7 +57,7 @@ export async function GET() {
     profile,
     preferences,
     linkedProfiles,
-    shouldShowOnboarding: shouldShowOnboarding(profile),
+    shouldShowOnboarding: shouldShowTrainingOnboarding(profile),
   });
 }
 
@@ -249,6 +253,15 @@ async function getBlindspotProfile(userId: string) {
   return data;
 }
 
+async function getOrCreateDefaultBlindspotProfile(userId: string) {
+  const existing = await getBlindspotProfile(userId);
+  if (existing) return existing;
+
+  const values = buildDefaultBlindspotProfile(userId);
+  await upsertBlindspotProfile(userId, values);
+  return values;
+}
+
 async function getTrainingPreferences(userId: string) {
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
@@ -357,16 +370,4 @@ function normalizeSequenceLength(value: unknown) {
   const parsed = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(parsed)) return DEFAULT_SEQUENCE_LENGTH;
   return Math.max(MIN_SEQUENCE_LENGTH, Math.min(MAX_SEQUENCE_LENGTH, Math.round(parsed)));
-}
-
-function shouldShowOnboarding(
-  profile: Awaited<ReturnType<typeof getBlindspotProfile>>,
-) {
-  if (!profile) return true;
-  return !(
-    profile.profile_initialized ||
-    profile.initialization_status === "skipped" ||
-    profile.initialization_status === "failed" ||
-    profile.initialization_status === "no_games"
-  );
 }

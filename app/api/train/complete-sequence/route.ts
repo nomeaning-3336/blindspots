@@ -19,6 +19,7 @@ import { classifyTrainingOutcome } from "@/lib/training/mistake-srs";
 import { updateMistakeAfterTraining, updateActiveMistakeAfterTraining } from "@/lib/training/mistake-store";
 import { mineMistakesFromSequence } from "@/lib/training/mistake-mining-persistence";
 import type { MineableMoveInput } from "@/lib/training/mistake-mining";
+import { buildDefaultBlindspotProfile } from "@/lib/training/default-profile";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -1166,20 +1167,7 @@ async function getOrCreateProfile(userId: string) {
   const { data: inserted, error: insertError } = await supabase
     .from("user_blindspot_profile")
     .insert({
-      user_id: userId,
-      blindspots_elo: 250,
-      rating_deviation: 650,
-      initial_skill_level: "beginner",
-      total_sequences: 0,
-      initialization_status: "skipped",
-      profile_initialized: false,
-      exploit_queue: [],
-      explore_queue: [],
-      revisit_queue: [],
-      mastered_queue: [],
-      recent_served_fens: [],
-      recent_served_modes: [],
-      bucket_stats: { opening: { alpha: 1, beta: 1, attempts: 0 }, middlegame: { alpha: 1, beta: 1, attempts: 0 }, endgame: { alpha: 1, beta: 1, attempts: 0 }, tactic: { alpha: 1, beta: 1, attempts: 0 }, opening_gambit: { alpha: 1, beta: 1, attempts: 0 }, opening_development: { alpha: 1, beta: 1, attempts: 0 }, middlegame_attack: { alpha: 1, beta: 1, attempts: 0 }, middlegame_positional: { alpha: 1, beta: 1, attempts: 0 }, endgame_rook: { alpha: 1, beta: 1, attempts: 0 }, endgame_pawn: { alpha: 1, beta: 1, attempts: 0 }, wildcard: { alpha: 1, beta: 1, attempts: 0 } },
+      ...buildDefaultBlindspotProfile(userId),
     })
     .select("user_id, blindspots_elo, rating_deviation, initial_skill_level, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens, bucket_stats, recent_served_modes, cluster_stats, recent_clusters")
     .single();

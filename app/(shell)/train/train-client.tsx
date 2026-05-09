@@ -597,14 +597,12 @@ export default function TrainPage() {
           setBlindspotsElo(payload.profile.blindspots_elo);
         }
 
-        if (payload.shouldShowOnboarding) {
-          setOnboardingScreen("connect");
-        } else {
-          setOnboardingScreen("done");
-          void loadNextPosition();
-        }
+        setOnboardingScreen("done");
+        void loadNextPosition();
       } catch {
-        if (alive) setOnboardingScreen("connect");
+        if (!alive) return;
+        setOnboardingScreen("done");
+        void loadNextPosition();
       }
     }
 
