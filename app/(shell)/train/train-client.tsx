@@ -2342,6 +2342,14 @@ export default function TrainPage(props: TrainPageProps) {
       console.log("[move-notes] select-move", moveKey);
     }
     setSelectedMoveKey(moveKey);
+    // Sync board and analysis table to the same move.
+    const canonicalMove = canonicalPostmortemMoves.find((cm) => {
+      if (!cm.move?.fenBefore || !cm.uci) return false;
+      return buildMoveKey(cm.move.fenBefore, cm.uci) === moveKey;
+    });
+    if (canonicalMove && canonicalMove.positionIndex != null) {
+      navigateExploreTo(canonicalMove.positionIndex);
+    }
   }
 
   function handleUpdateNote(moveKey: string, text: string) {
@@ -2351,6 +2359,17 @@ export default function TrainPage(props: TrainPageProps) {
     setMoveAnnotations((prev) => updateNoteText(prev, moveKey, text));
     dirtyMoveNoteKeysRef.current.add(moveKey);
   }
+
+  // ── Sync selectedMoveIndex -> selectedMoveKey for notes panel ────
+  useEffect(() => {
+    if (selectedMoveIndex == null || !isPostMortemVisible) return;
+    const canonicalMove = canonicalPostmortemMoves.find(
+      (m) => m.positionIndex === selectedMoveIndex,
+    );
+    if (!canonicalMove?.move?.fenBefore || !canonicalMove.uci) return;
+    const key = buildMoveKey(canonicalMove.move.fenBefore, canonicalMove.uci);
+    setSelectedMoveKey((current) => (current === key ? current : key));
+  }, [selectedMoveIndex, canonicalPostmortemMoves, isPostMortemVisible]);
 
   // ── Persist notes to Supabase with debounce ──────────────────────
   const dirtyMoveNoteKeysRef = useRef<Set<string>>(new Set());
