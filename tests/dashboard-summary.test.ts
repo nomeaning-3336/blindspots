@@ -48,6 +48,8 @@ test("builds dashboard summary from profile queues and completed sessions", () =
         position_evaluations: [{ classification: "good", clusterId: "app:v0:opening:wildcard" }],
       },
     ],
+    mistakes: [],
+    avgCpLoss: null,
   });
 
   assert.equal(summary.totalSequences, 3);
@@ -73,7 +75,7 @@ test("builds dashboard summary from profile queues and completed sessions", () =
 });
 
 test("uses empty-state fallbacks when profile and evaluations are missing", () => {
-  const summary = buildDashboardSummary({ profile: null, sessions: [] });
+  const summary = buildDashboardSummary({ profile: null, sessions: [], mistakes: [], avgCpLoss: null });
 
   assert.equal(summary.totalSequences, 0);
   assert.equal(summary.movesEvaluated, 0);
@@ -132,6 +134,8 @@ test("humanizes old v0 and new v1 cluster ids without exposing raw ids as labels
         ],
       },
     ],
+    mistakes: [],
+    avgCpLoss: null,
   });
 
   const labelsById = new Map(summary.clusters.map((cluster) => [cluster.id, cluster.label]));
@@ -177,8 +181,205 @@ test("hides sparse unknown and wildcard clusters from dashboard patterns", () =>
         ],
       },
     ],
+    mistakes: [],
+    avgCpLoss: null,
   });
 
   assert.equal(summary.clusters.length, 1);
   assert.equal(summary.clusters[0]?.id, "app:v1:middlegame:middlegame_attack:attack");
+});
+
+test("queue overview counts due active app-training mistake toward reviewDue and active", () => {
+  const summary = buildDashboardSummary({
+    profile: null,
+    sessions: [],
+    mistakes: [
+      {
+        id: "mistake-1",
+        source_type: "app_training",
+        starting_fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+        status: "active",
+        opening_name: null,
+        review_count: 0,
+        pass_count: 0,
+        acceptable_count: 0,
+        fail_count: 0,
+        last_attempt_at: null,
+        next_review_at: "2020-01-01T00:00:00Z",
+        cp_loss: 85,
+        served_count: 0,
+      },
+    ],
+  });
+
+  assert.equal(summary.queueOverview.reviewDue, 1);
+  assert.equal(summary.queueOverview.active, 1);
+  assert.equal(summary.queueOverview.filler, 0);
+  assert.equal(summary.queueOverview.mastered, 0);
+  assert.equal(summary.queueOverview.retired, 0);
+});
+
+test("queue overview counts non-due active app-training mistake only in active", () => {
+  const summary = buildDashboardSummary({
+    profile: null,
+    sessions: [],
+    mistakes: [
+      {
+        id: "mistake-1",
+        source_type: "app_training",
+        starting_fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+        status: "active",
+        opening_name: null,
+        review_count: 0,
+        pass_count: 0,
+        acceptable_count: 0,
+        fail_count: 0,
+        last_attempt_at: null,
+        next_review_at: "2099-01-01T00:00:00Z",
+        cp_loss: 85,
+        served_count: 0,
+      },
+    ],
+  });
+
+  assert.equal(summary.queueOverview.reviewDue, 0);
+  assert.equal(summary.queueOverview.active, 1);
+  assert.equal(summary.queueOverview.filler, 0);
+});
+
+test("queue overview does not count app-training as filler even when not due", () => {
+  const summary = buildDashboardSummary({
+    profile: null,
+    sessions: [],
+    mistakes: [
+      {
+        id: "mistake-1",
+        source_type: "app_training",
+        starting_fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+        status: "active",
+        opening_name: null,
+        review_count: 0,
+        pass_count: 0,
+        acceptable_count: 0,
+        fail_count: 0,
+        last_attempt_at: null,
+        next_review_at: null,
+        cp_loss: 85,
+        served_count: 0,
+      },
+    ],
+  });
+
+  assert.equal(summary.queueOverview.filler, 0);
+  assert.equal(summary.queueOverview.active, 1);
+});
+
+test("queue overview mixes app-training, legacy review, and filler correctly", () => {
+  const summary = buildDashboardSummary({
+    profile: null,
+    sessions: [],
+    mistakes: [
+      // Due active app-training
+      {
+        id: "mistake-1",
+        source_type: "app_training",
+        starting_fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+        status: "active",
+        opening_name: null,
+        review_count: 1,
+        pass_count: 0,
+        acceptable_count: 0,
+        fail_count: 1,
+        last_attempt_at: "2020-01-01T00:00:00Z",
+        next_review_at: "2020-01-01T00:00:00Z",
+        cp_loss: 350,
+        served_count: 1,
+      },
+      // Due legacy review mistake
+      {
+        id: "mistake-2",
+        source_type: "own_game",
+        starting_fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        status: "review",
+        opening_name: null,
+        review_count: 3,
+        pass_count: 2,
+        acceptable_count: 0,
+        fail_count: 1,
+        last_attempt_at: "2020-01-01T00:00:00Z",
+        next_review_at: "2020-01-01T00:00:00Z",
+        cp_loss: 120,
+        served_count: 3,
+      },
+      // Filler
+      {
+        id: "mistake-3",
+        source_type: "lichess_puzzle_filler",
+        starting_fen: "rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1",
+        status: "active",
+        opening_name: null,
+        review_count: 0,
+        pass_count: 0,
+        acceptable_count: 0,
+        fail_count: 0,
+        last_attempt_at: null,
+        next_review_at: null,
+        cp_loss: 50,
+        served_count: 0,
+      },
+      // Non-due active app-training
+      {
+        id: "mistake-4",
+        source_type: "app_training",
+        starting_fen: "rnbqkb1r/pppppppp/5n2/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2",
+        status: "active",
+        opening_name: null,
+        review_count: 0,
+        pass_count: 0,
+        acceptable_count: 0,
+        fail_count: 0,
+        last_attempt_at: null,
+        next_review_at: "2099-01-01T00:00:00Z",
+        cp_loss: 85,
+        served_count: 0,
+      },
+    ],
+  });
+
+  assert.equal(summary.queueOverview.reviewDue, 2); // app_training due + legacy review due
+  assert.equal(summary.queueOverview.active, 2);    // both app_training (due + not-due)
+  assert.equal(summary.queueOverview.filler, 1);
+  assert.equal(summary.queueOverview.mastered, 0);
+  assert.equal(summary.queueOverview.retired, 0);
+});
+
+test("sourceTypeLabel returns Training mistake for app_training", () => {
+  const summary = buildDashboardSummary({
+    profile: null,
+    sessions: [],
+    mistakes: [
+      {
+        id: "mistake-1",
+        source_type: "app_training",
+        starting_fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+        status: "active",
+        opening_name: null,
+        review_count: 0,
+        pass_count: 0,
+        acceptable_count: 0,
+        fail_count: 0,
+        last_attempt_at: null,
+        next_review_at: null,
+        cp_loss: 85,
+        served_count: 0,
+      },
+    ],
+  });
+
+  const pos = summary.positions.find((p) => p.id === "mistake-1");
+  assert.notEqual(pos, undefined);
+  assert.equal(pos!.sourceLabel, "Training mistake");
+  assert.equal(pos!.sourceType, "app_training");
+  assert.equal(pos!.statusLabel, "New");
+  assert.equal(pos!.queueLabel, "Active");
 });
