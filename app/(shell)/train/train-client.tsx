@@ -4618,6 +4618,7 @@ function TrainOnboardingIntroOverlay({
   onSkip: () => void;
 }) {
   const current = steps[step];
+  const isFirst = step === 0;
   const isLast = step === totalSteps - 1;
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -4664,7 +4665,8 @@ function TrainOnboardingIntroOverlay({
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onBack(); }}
-            className="min-h-11 border border-[var(--app-border)] px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)]"
+            disabled={isFirst}
+            className="min-h-11 border border-[var(--app-border)] px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Back
           </button>
