@@ -100,8 +100,8 @@ const POSTMORTEM_TOUR_STEPS = [
   },
   {
     target: "engine-lines",
-    headline: "Top five, ranked by cp.",
-    body: "Stockfish's preferred moves, sorted by who keeps the position healthiest. The badge next to your move says where it landed: best, fine, inaccuracy, the bad one.",
+    headline: "Engine lines",
+    body: "Here you can see the top 5 engine lines for a given board position.",
   },
   {
     target: "eval-graph",
