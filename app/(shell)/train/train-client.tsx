@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Chess, type Square } from "chess.js";
 import { AnalysisBoard, type BoardMove, type EngineArrow } from "@/components/chess/analysis-board";
 import {
@@ -83,6 +83,47 @@ const ENABLE_CLIENT_STOCKFISH_LINES = true;
 const CLIENT_STOCKFISH_MULTIPV = 5;
 const CLIENT_STOCKFISH_MOVETIME_MS = 800;
 const PRELUDE_SETUP_MOVE_DELAY_MS = 1000;
+
+type PostmortemTourStep = {
+  target: string;
+  headline: string;
+  body: string;
+  cta?: string;
+};
+
+const POSTMORTEM_TOUR_STEPS = [
+  {
+    target: "elo-card",
+    headline: "A number, doing its best.",
+    body: "This is your Blindspots-only rating, not your Lichess one or whatever you tell people at the club. It wobbles early, then settles into something honest. Sorry.",
+  },
+  {
+    target: "engine-lines",
+    headline: "Top five, ranked by cp.",
+    body: "Stockfish's preferred moves, sorted by who keeps the position healthiest. The badge next to your move says where it landed: best, fine, inaccuracy, the bad one.",
+  },
+  {
+    target: "eval-graph",
+    headline: "The crime scene, in line-chart form.",
+    body: "Each kink is one of your decisions. Flat lines mean you held the position. A cliff means something briefly forgot it was on the board.",
+  },
+  {
+    target: "move-table",
+    headline: "Receipts.",
+    body: "Every move you played: eval before, eval after, cp lost, verdict. Click a row to send the board back to that moment so you can stare at it like a detective.",
+  },
+  {
+    target: "notes-panel",
+    headline: "Tape a note to your future self.",
+    body: "Pick a move and write the trap down. \"Stop hanging the b-pawn\" is valid literature. Next time this position comes back, the note comes with it.",
+  },
+  {
+    target: "postmortem-actions",
+    headline: "Another one, or call it.",
+    body: "Next position queues another sequence. Your old mistakes get priority over filler, so the queue gets meaner over time. Or hit the dashboard to see what is still haunting you.",
+    cta: "Finish onboarding",
+  },
+] as const satisfies readonly PostmortemTourStep[];
 
 type TrainingMove = {
   san: string;
@@ -262,9 +303,9 @@ import {
 
 const postmortemActionTextClassName = "text-center text-xs font-bold uppercase leading-none tracking-[0.12em]";
 const primaryActionClassName =
-  `app-brutal-button inline-flex min-h-11 min-w-0 items-center justify-center px-4 py-3 text-sm`;
+  `app-brutal-button inline-flex min-h-9 min-w-0 items-center justify-center px-3 py-2 text-xs`;
 const secondaryActionClassName =
-  `inline-flex min-h-11 min-w-0 items-center justify-center rounded-[8px] border border-[#050505] bg-[var(--app-panel-solid)] px-3 py-3 text-sm font-bold uppercase tracking-[0.04em] text-[var(--app-text)] shadow-[3px_3px_0_#050505] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#050505] sm:px-4`;
+  `inline-flex min-h-9 min-w-0 items-center justify-center rounded-[8px] border border-[#050505] bg-[var(--app-panel-solid)] px-3 py-2 text-xs font-bold uppercase tracking-[0.04em] text-[var(--app-text)] shadow-[3px_3px_0_#050505] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#050505]`;
 
 function readVisualPreferences() {
   let storedPreferences: Partial<AnalyzePreferences> | null = null;
@@ -484,6 +525,7 @@ export default function TrainPage(props: TrainPageProps) {
   const [pieceLinesLoadingKey, setPieceLinesLoadingKey] = useState<string | null>(null);
   const moveSoundPlyRef = useRef(0);
   const hasStartedFirstOnboardingSequenceRef = useRef(false);
+  const introPreviewedPositionRef = useRef<NextPositionResponse | null>(null);
   const completingRef = useRef(false);
   const completionRequestRef = useRef(0);
   const initialOpponentMoveRef = useRef<TrainingMove | null>(null);
@@ -546,6 +588,10 @@ export default function TrainPage(props: TrainPageProps) {
   const seededMoveKeysRef = useRef<Set<string>>(new Set());
   const [selectedMoveKey, setSelectedMoveKey] = useState<string | null>(null);
   const [postmortemSidePanel, setPostmortemSidePanel] = useState<"analysis" | "memory">("analysis");
+  const [postmortemOnboardingActive, setPostmortemOnboardingActive] = useState(false);
+  const [postmortemOnboardingStep, setPostmortemOnboardingStep] = useState(0);
+  const [postmortemOnboardingFinished, setPostmortemOnboardingFinished] = useState(false);
+  const [onboardingCompletionInFlight, setOnboardingCompletionInFlight] = useState(false);
 
   useEffect(() => {
     engineLineCacheRef.current = engineLineCache;
@@ -669,6 +715,40 @@ export default function TrainPage(props: TrainPageProps) {
     };
   }, [shouldRunPreplayOnboarding, trainOnboardingIntroDone]);
 
+  useEffect(() => {
+    if (!trainOnboardingIntroActive) return;
+    if (onboardingScreen !== "done") return;
+    prefetchNextPosition({ previewIntro: true });
+  }, [trainOnboardingIntroActive, onboardingScreen]);
+
+  useEffect(() => {
+    if (!shouldRunPreplayOnboarding) return;
+    if (!trainOnboardingIntroDone) return;
+    if (!hasStartedFirstOnboardingSequenceRef.current) return;
+    if (!isPostMortemVisible) return;
+    if (postmortemOnboardingFinished || postmortemOnboardingActive) return;
+
+    setPostmortemOnboardingStep(0);
+    setPostmortemOnboardingActive(true);
+  }, [
+    shouldRunPreplayOnboarding,
+    trainOnboardingIntroDone,
+    isPostMortemVisible,
+    postmortemOnboardingFinished,
+    postmortemOnboardingActive,
+  ]);
+
+  useEffect(() => {
+    if (!postmortemOnboardingActive) return;
+    const target = POSTMORTEM_TOUR_STEPS[postmortemOnboardingStep]?.target;
+    if (!target) return;
+    if (target === "notes-panel") {
+      setPostmortemSidePanel("memory");
+    } else if (target !== "postmortem-actions") {
+      setPostmortemSidePanel("analysis");
+    }
+  }, [postmortemOnboardingActive, postmortemOnboardingStep]);
+
   useLayoutEffect(() => {
     let alive = true;
 
@@ -704,10 +784,21 @@ export default function TrainPage(props: TrainPageProps) {
     if (typeof window === "undefined") return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__blindspotsTrainState = {
+      state,
       fen,
       boardFen: fen,
       currentFen: fen,
+      hasLoadedPosition,
+      isPositionLoading,
       isAwaitingStartGesture,
+      trainOnboardingIntroActive,
+      trainOnboardingIntroDone,
+      isPostMortemVisible,
+      postmortemOnboardingActive,
+      postmortemOnboardingStep,
+      postmortemOnboardingFinished,
+      isOpponentThinking,
+      activeSetupReplayIndex,
       pendingInitialEngineMove: pendingInitialEngineMove
         ? {
             previousFen: pendingInitialEngineMove.previousFen,
@@ -716,7 +807,22 @@ export default function TrainPage(props: TrainPageProps) {
           }
         : null,
     };
-  }, [fen, isAwaitingStartGesture, pendingInitialEngineMove]);
+  }, [
+    state,
+    fen,
+    hasLoadedPosition,
+    isPositionLoading,
+    isAwaitingStartGesture,
+    trainOnboardingIntroActive,
+    trainOnboardingIntroDone,
+    isPostMortemVisible,
+    postmortemOnboardingActive,
+    postmortemOnboardingStep,
+    postmortemOnboardingFinished,
+    isOpponentThinking,
+    activeSetupReplayIndex,
+    pendingInitialEngineMove,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -873,14 +979,17 @@ export default function TrainPage(props: TrainPageProps) {
   }, [state]);
 
   async function loadNextPosition(options: { autoStart?: boolean } = {}) {
-    // Guard against double loading during onboarding start
-    if (options.autoStart && hasStartedFirstOnboardingSequenceRef.current) return;
-
     const cachedPosition = cachedNextPosition;
     if (cachedPosition?.fen) {
+      const skipPreludeAnimation =
+        Boolean(options.autoStart) && introPreviewedPositionRef.current === cachedPosition;
       setCachedNextPosition(null);
+      introPreviewedPositionRef.current = null;
       nextPositionPrefetchRef.current = null;
-      applyNextPosition(cachedPosition);
+      applyNextPosition(cachedPosition, {
+        autoStart: options.autoStart,
+        skipPreludeAnimation,
+      });
       setIsPositionLoading(false);
       return;
     }
@@ -899,6 +1008,7 @@ export default function TrainPage(props: TrainPageProps) {
         ? await pendingPrefetch
         : await fetchNextPosition();
       nextPositionPrefetchRef.current = null;
+      introPreviewedPositionRef.current = null;
       setCachedNextPosition(null);
 
       if (!payload?.fen) {
@@ -930,7 +1040,7 @@ export default function TrainPage(props: TrainPageProps) {
 
   function applyNextPosition(
     payload: NextPositionResponse,
-    options: { autoStart?: boolean } = {},
+    options: { autoStart?: boolean; skipPreludeAnimation?: boolean } = {},
   ) {
     if (!payload.fen) return;
 
@@ -1028,7 +1138,9 @@ export default function TrainPage(props: TrainPageProps) {
     if (payload.previousFen && payload.playedMove) {
       setPendingInitialEngineMove(payload);
 
-      if (shouldAutoStart) {
+      if (options.skipPreludeAnimation) {
+        completeInitialOpponentMove(payload);
+      } else if (shouldAutoStart) {
         setIsAwaitingStartGesture(false);
         if (process.env.NODE_ENV !== "production") {
           console.log("[train-start-gesture] apply-next-position-auto-start-prelude", {
@@ -1067,7 +1179,41 @@ export default function TrainPage(props: TrainPageProps) {
 
     await unlockTrainAudio();
     await primeTrainAudio();
-    await playInitialOpponentMoveFromPayload(pending);
+    const fallback = window.setTimeout(() => {
+      completeInitialOpponentMove(pending);
+    }, PRELUDE_SETUP_MOVE_DELAY_MS + 900);
+
+    try {
+      await playInitialOpponentMoveFromPayload(pending);
+    } finally {
+      window.clearTimeout(fallback);
+      completeInitialOpponentMove(pending);
+    }
+  }
+
+  function completeInitialOpponentMove(payload: NextPositionResponse) {
+    if (!payload.fen) return;
+
+    const applied = payload.previousFen && payload.playedMove
+      ? applyIndexedMove(payload.previousFen, payload.playedMove)
+      : null;
+
+    setState("active");
+    setHasLoadedPosition(true);
+    setIsPositionLoading(false);
+    setIsAwaitingStartGesture(false);
+    setIsOpponentThinking(false);
+    setPendingInitialEngineMove(null);
+    setActiveSetupReplayIndex(1);
+    setExploreSelectedSquare(null);
+
+    if (applied) {
+      initialOpponentMoveRef.current = applied.move;
+      setInitialOpponentMove(applied.move);
+      setLastMove(applied.lastMove);
+    }
+
+    setFen(payload.fen);
   }
 
   async function playInitialOpponentMoveFromPayload(payload: NextPositionResponse) {
@@ -1081,7 +1227,14 @@ export default function TrainPage(props: TrainPageProps) {
     const playedMove = payload.playedMove!;
 
     const applied = applyIndexedMove(previousFen, playedMove);
-    if (!applied) return;
+    if (!applied) {
+      if (initialOpponentRequestRef.current === requestId) {
+        setIsOpponentThinking(false);
+        setIsAwaitingStartGesture(false);
+        setPendingInitialEngineMove(null);
+      }
+      return;
+    }
 
     if (process.env.NODE_ENV !== "production") {
       console.log("[train-setup-move]", { previousFen, playedMove, fen: payload.fen, san: applied.move.san, uci: applied.move.uci, from: applied.lastMove.from, to: applied.lastMove.to });
@@ -1089,35 +1242,54 @@ export default function TrainPage(props: TrainPageProps) {
 
     initialOpponentMoveRef.current = applied.move;
 
-    setIsOpponentThinking(true);
+    try {
+      setIsOpponentThinking(true);
 
-    // Show the "before" position briefly.
-    setFen(previousFen);
-    await nextAnimationFrame();
-    await delayMs(PRELUDE_SETUP_MOVE_DELAY_MS);
+      // Show the "before" position briefly.
+      setFen(previousFen);
+      await nextAnimationFrame();
+      await delayMs(PRELUDE_SETUP_MOVE_DELAY_MS);
 
-    if (initialOpponentRequestRef.current !== requestId) return;
+      if (initialOpponentRequestRef.current !== requestId) return;
 
-    // Apply the move, sound, and visual transition together — synchronized.
-    setActiveSetupReplayIndex(1);
-    setInitialOpponentMove(applied.move);
-    setExploreSelectedSquare(null);
-    setLastMove(applied.lastMove);
-    setFen(payload.fen!);
-    playTrainMoveSound({ move: applied.move, plyRef: moveSoundPlyRef, source: "initial-engine", advanceLivePitch: false });
-
-    if (initialOpponentRequestRef.current === requestId) {
-      setIsOpponentThinking(false);
+      // Apply the move, sound, and visual transition together — synchronized.
+      setState("active");
+      setHasLoadedPosition(true);
+      setIsPositionLoading(false);
+      setActiveSetupReplayIndex(1);
+      setInitialOpponentMove(applied.move);
+      setExploreSelectedSquare(null);
+      setLastMove(applied.lastMove);
+      setFen(payload.fen!);
+      playTrainMoveSound({ move: applied.move, plyRef: moveSoundPlyRef, source: "initial-engine", advanceLivePitch: false });
+    } finally {
+      if (initialOpponentRequestRef.current === requestId) {
+        setIsOpponentThinking(false);
+        setIsAwaitingStartGesture(false);
+        setPendingInitialEngineMove(null);
+      }
     }
   }
 
-  function prefetchNextPosition() {
+  function prefetchNextPosition(options: { previewIntro?: boolean } = {}) {
     if (nextPositionPrefetchRef.current) return;
     const promise = fetchNextPosition();
     nextPositionPrefetchRef.current = promise;
     void promise.then((payload) => {
       if (payload?.fen && nextPositionPrefetchRef.current === promise) {
         setCachedNextPosition(payload);
+        if (options.previewIntro) {
+          introPreviewedPositionRef.current = payload;
+          setStartingFen(payload.fen);
+          setDisplayStartingFen(payload.fen);
+          setFen(payload.fen);
+          setHasLoadedPosition(true);
+          setIsPositionLoading(false);
+          setMoves([]);
+          setLastMove(null);
+          setInitialOpponentMove(null);
+          setPendingInitialEngineMove(null);
+        }
       }
     });
   }
@@ -1813,6 +1985,56 @@ export default function TrainPage(props: TrainPageProps) {
       setIsStartingTraining(false);
     }
   }
+
+  async function completeTrainingOnboarding() {
+    if (onboardingCompletionInFlight) return;
+    setOnboardingCompletionInFlight(true);
+    try {
+      const response = await fetch("/api/onboarding/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!response.ok) {
+        throw new Error(`Onboarding completion failed with ${response.status}`);
+      }
+      setPostmortemOnboardingFinished(true);
+      setPostmortemOnboardingActive(false);
+    } catch (error) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[train-postmortem-tour] completion failed", error);
+      }
+    } finally {
+      setOnboardingCompletionInFlight(false);
+    }
+  }
+
+  const handlePostmortemTourBack = useCallback(() => {
+    setPostmortemOnboardingStep((current) => Math.max(0, current - 1));
+  }, []);
+
+  const handlePostmortemTourNext = useCallback(() => {
+    setPostmortemOnboardingStep((current) => {
+      if (current < POSTMORTEM_TOUR_STEPS.length - 1) {
+        return current + 1;
+      }
+      void completeTrainingOnboarding();
+      return current;
+    });
+  }, [onboardingCompletionInFlight]);
+
+  const handlePostmortemTourSkip = useCallback(() => {
+    void completeTrainingOnboarding();
+  }, [onboardingCompletionInFlight]);
+
+  const handleMissingPostmortemTourTarget = useCallback(() => {
+    setPostmortemOnboardingStep((current) => {
+      if (current < POSTMORTEM_TOUR_STEPS.length - 1) {
+        return current + 1;
+      }
+      void completeTrainingOnboarding();
+      return current;
+    });
+  }, [onboardingCompletionInFlight]);
 
   const rating = state === "complete" ? (eloResult?.eloAfter ?? blindspotsElo) : blindspotsElo;
   const userMoveSide = getFenTurnSide(startingFen);
@@ -2939,11 +3161,11 @@ export default function TrainPage(props: TrainPageProps) {
             data-testid="train-move-panel"
             className={[
               "app-brutal-section flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden",
-              resultMode === "results" ? "p-3 sm:p-4" : "p-3 sm:p-4",
+              resultMode === "results" ? "p-2 sm:p-3" : "p-2 sm:p-3",
             ].join(" ")}
           >
             {/* ── Compact toggle: Analysis | Notes ──────────────────────── */}
-            <div className="inline-flex justify-center w-full gap-1">
+            <div className="inline-flex w-full shrink-0 justify-center gap-1">
               {(["analysis", "memory"] as const).map((item) => {
                 const active = postmortemSidePanel === item;
                 return (
@@ -2951,7 +3173,7 @@ export default function TrainPage(props: TrainPageProps) {
                     key={item}
                     type="button"
                     className={[
-                      "inline-flex items-center border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] transition",
+                      "inline-flex items-center border px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-[0.18em] transition",
                       active
                         ? "relative z-10 border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
                         : "cursor-pointer border-[var(--app-border)] bg-transparent text-[var(--app-muted)] hover:border-[var(--app-accent)] hover:text-[var(--app-text)]",
@@ -2966,7 +3188,7 @@ export default function TrainPage(props: TrainPageProps) {
             </div>
 
             {/* ── Panel content ───────────────────────────────────────────── */}
-            <div className="train-postmortem-panel flex min-h-0 flex-1 flex-col gap-4">
+            <div className="train-postmortem-panel flex min-h-0 flex-1 flex-col gap-2 pr-1">
               {postmortemSidePanel === "analysis" ? (
                 <ResultsPanel
                 eloResult={eloResult}
@@ -2999,18 +3221,20 @@ export default function TrainPage(props: TrainPageProps) {
                 }}
               />
               ) : (
-                <MoveNotesPanel
-                  moves={annotatableMoves}
-                  annotations={moveAnnotations}
-                  selectedMoveKey={selectedMoveKey}
-                  onSelectMove={handleSelectMove}
-                  onUpdateNote={handleUpdateNote}
-                />
+                <div data-tour="notes-panel" className="min-h-0 flex-1">
+                  <MoveNotesPanel
+                    moves={annotatableMoves}
+                    annotations={moveAnnotations}
+                    selectedMoveKey={selectedMoveKey}
+                    onSelectMove={handleSelectMove}
+                    onUpdateNote={handleUpdateNote}
+                  />
+                </div>
               )}
             </div>
 
             {/* ── Action buttons visible below both tabs ────────────────── */}
-            <div className="mt-auto grid grid-cols-2 gap-2 pt-1 shrink-0">
+            <div data-tour="postmortem-actions" className="grid shrink-0 grid-cols-2 gap-2 border-t border-[var(--app-border-soft)] bg-[var(--app-panel-solid)] pt-2">
               <button
                 type="button"
                 className={`${primaryActionClassName} w-full`}
@@ -3024,6 +3248,189 @@ export default function TrainPage(props: TrainPageProps) {
             </div>
           </aside>
         ) : null}
+      </div>
+      {postmortemOnboardingActive ? (
+        <TrainPostmortemTourOverlay
+          steps={POSTMORTEM_TOUR_STEPS}
+          step={postmortemOnboardingStep}
+          completionInFlight={onboardingCompletionInFlight}
+          onBack={handlePostmortemTourBack}
+          onNext={handlePostmortemTourNext}
+          onSkip={handlePostmortemTourSkip}
+          onMissingTarget={handleMissingPostmortemTourTarget}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function TrainPostmortemTourOverlay({
+  steps,
+  step,
+  completionInFlight,
+  onBack,
+  onNext,
+  onSkip,
+  onMissingTarget,
+}: {
+  steps: readonly PostmortemTourStep[];
+  step: number;
+  completionInFlight: boolean;
+  onBack: () => void;
+  onNext: () => void;
+  onSkip: () => void;
+  onMissingTarget: () => void;
+}) {
+  const current = steps[step] ?? steps[0];
+  const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
+  const [missingTarget, setMissingTarget] = useState(false);
+  const isFirst = step <= 0;
+  const isLast = step >= steps.length - 1;
+
+  useLayoutEffect(() => {
+    if (!current) return;
+    let frame = 0;
+    let timeout = 0;
+    let retry = 0;
+    let observer: ResizeObserver | null = null;
+    let update: (() => void) | null = null;
+
+    function measure() {
+      const target = document.querySelector(`[data-tour="${current.target}"]`);
+      if (!target) {
+        retry += 1;
+        if (retry >= 8) {
+          setMissingTarget(true);
+          if (process.env.NODE_ENV !== "production") {
+            console.warn(`[train-postmortem-tour] missing target: ${current.target}`);
+          }
+          timeout = window.setTimeout(onMissingTarget, 120);
+          return;
+        }
+        timeout = window.setTimeout(measure, 120);
+        return;
+      }
+
+      setMissingTarget(false);
+      target.scrollIntoView({ block: "center", inline: "nearest" });
+      update = () => {
+        frame = window.requestAnimationFrame(() => {
+          setTargetRect(target.getBoundingClientRect());
+        });
+      };
+
+      update();
+      observer = new ResizeObserver(update);
+      observer.observe(target);
+      window.addEventListener("resize", update);
+      window.addEventListener("scroll", update, true);
+    }
+
+    timeout = window.setTimeout(measure, 60);
+    return () => {
+      window.clearTimeout(timeout);
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      if (update) {
+        window.removeEventListener("resize", update);
+        window.removeEventListener("scroll", update, true);
+      }
+    };
+  }, [current, onMissingTarget]);
+
+  if (!current) return null;
+
+  const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
+  const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
+  const margin = 16;
+  const spotlight = targetRect
+    ? {
+        top: Math.max(margin, targetRect.top - 6),
+        left: Math.max(margin, targetRect.left - 6),
+        width: Math.min(viewportWidth - margin * 2, targetRect.width + 12),
+        height: Math.min(viewportHeight - margin * 2, targetRect.height + 12),
+      }
+    : null;
+  const cardWidth = Math.min(360, viewportWidth - margin * 2);
+  const canPlaceRight = spotlight ? spotlight.left + spotlight.width + cardWidth + margin * 2 <= viewportWidth : false;
+  const canPlaceLeft = spotlight ? spotlight.left - cardWidth - margin * 2 >= 0 : false;
+  const cardLeft = !spotlight
+    ? margin
+    : canPlaceRight
+      ? spotlight.left + spotlight.width + margin
+      : canPlaceLeft
+        ? spotlight.left - cardWidth - margin
+        : Math.max(margin, Math.min(viewportWidth - cardWidth - margin, spotlight.left));
+  const cardTop = !spotlight || viewportWidth < 760
+    ? Math.max(margin, viewportHeight - 260)
+    : Math.max(margin, Math.min(viewportHeight - 240, spotlight.top));
+
+  return (
+    <div className="fixed inset-0 z-[80]" role="dialog" aria-modal="true" aria-label="Postmortem onboarding">
+      <button
+        type="button"
+        aria-label="Next tour step"
+        className={["absolute inset-0 cursor-default", spotlight ? "bg-transparent" : "bg-black/68"].join(" ")}
+        onClick={onNext}
+      />
+      {spotlight ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed rounded-[10px] border border-[var(--app-accent)] shadow-[0_0_0_9999px_rgba(0,0,0,0.68),0_0_0_2px_color-mix(in_srgb,var(--app-accent)_42%,transparent)]"
+          style={{
+            top: spotlight.top,
+            left: spotlight.left,
+            width: spotlight.width,
+            height: spotlight.height,
+          }}
+        />
+      ) : null}
+      <div
+        className="fixed grid gap-4 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-4 text-[var(--app-text)] shadow-[4px_4px_0_#050505]"
+        style={{ top: cardTop, left: cardLeft, width: cardWidth }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="grid gap-2">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--app-muted)]">
+            {step + 1} / {steps.length}
+          </div>
+          <h2 className="text-lg font-bold leading-tight">{current.headline}</h2>
+          <p className="text-sm leading-6 text-[var(--app-muted)]">{missingTarget ? "Finding the section..." : current.body}</p>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            aria-disabled={isFirst}
+            className={[
+              "inline-flex min-h-9 items-center justify-center rounded-[8px] border border-[var(--app-border)] px-3 text-xs font-bold uppercase tracking-[0.04em]",
+              isFirst ? "cursor-default opacity-40" : "hover:border-[var(--app-accent)] hover:text-[var(--app-accent)]",
+            ].join(" ")}
+            onClick={() => {
+              if (isFirst) return;
+              onBack();
+            }}
+          >
+            Back
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="inline-flex min-h-9 items-center justify-center rounded-[8px] border border-[var(--app-border)] px-3 text-xs font-bold uppercase tracking-[0.04em] hover:border-[var(--app-accent)] hover:text-[var(--app-accent)]"
+              onClick={onSkip}
+              disabled={completionInFlight}
+            >
+              Skip tour
+            </button>
+            <button
+              type="button"
+              className="app-brutal-button inline-flex min-h-9 min-w-0 items-center justify-center px-3 py-2 text-xs"
+              onClick={onNext}
+              disabled={completionInFlight}
+            >
+              {completionInFlight ? "Saving..." : current.cta ?? "Next"}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -4123,8 +4530,8 @@ function StatusBanner({
 function EloResultCard({ result, isLoading }: { result: EloResult | null; isLoading: boolean }) {
   if (isLoading && !result) {
     return (
-      <div className="flex items-center rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-5">
-        <p className="text-lg font-bold text-[var(--app-muted)]">Saving result...</p>
+      <div data-tour="elo-card" className="flex items-center rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-3">
+        <p className="text-sm font-bold text-[var(--app-muted)]">Saving result...</p>
       </div>
     );
   }
@@ -4140,13 +4547,13 @@ function EloResultCard({ result, isLoading }: { result: EloResult | null; isLoad
   const signedDelta = result.eloDelta > 0 ? `+${result.eloDelta}` : String(result.eloDelta);
 
   return (
-    <div className="rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-5">
+    <div data-tour="elo-card" className="rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-3">
       <div className="flex items-center">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-xl font-bold text-[var(--app-muted)]">{result.eloBefore}</span>
-          <span className="text-lg font-bold text-[var(--app-muted)]">→</span>
-          <span className="text-3xl font-bold text-[var(--app-text)]">{result.eloAfter}</span>
-          <span className={`text-xl font-bold ${deltaTone}`}>{signedDelta}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-base font-bold text-[var(--app-muted)]">{result.eloBefore}</span>
+          <span className="text-sm font-bold text-[var(--app-muted)]">→</span>
+          <span className="text-2xl font-bold text-[var(--app-text)]">{result.eloAfter}</span>
+          <span className={`text-base font-bold ${deltaTone}`}>{signedDelta}</span>
         </div>
       </div>
     </div>
@@ -4250,7 +4657,7 @@ function ResultsPanel({
 
   if (mode === "explore") {
     return (
-      <div className="flex flex-1 flex-col gap-4 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
         <EloResultCard result={eloResult} isLoading={isSaving} />
         <EvalGraph
           points={graphPoints}
@@ -4259,18 +4666,20 @@ function ResultsPanel({
           onSelectPosition={onNavigate}
           engineCp={currentEngineEval}
         >
-          <EngineLinesSection
-            lines={engineLines}
-            isLoading={isEngineLinesLoading}
-            hasError={hasEngineLineError}
-            emptyMessageOverride={engineEmptyMessage}
-            revealBadLines={isPieceSelected}
-            hoveredDestinationSquare={hoveredAnnotationSquare}
-            hoveredIndex={hoveredEngineLineIndex}
-            onHoverLine={onEngineLineHover}
-            onSelectLine={onEngineLineSelect}
-            selectedMoveUci={selectedMoveUci}
-          />
+          <div data-tour="engine-lines">
+            <EngineLinesSection
+              lines={engineLines}
+              isLoading={isEngineLinesLoading}
+              hasError={hasEngineLineError}
+              emptyMessageOverride={engineEmptyMessage}
+              revealBadLines={isPieceSelected}
+              hoveredDestinationSquare={hoveredAnnotationSquare}
+              hoveredIndex={hoveredEngineLineIndex}
+              onHoverLine={onEngineLineHover}
+              onSelectLine={onEngineLineSelect}
+              selectedMoveUci={selectedMoveUci}
+            />
+          </div>
         </EvalGraph>
         <AnalysisMoveTable
           moves={userMoves}
@@ -4293,7 +4702,7 @@ function ResultsPanel({
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 opacity-80 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 opacity-80 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
       <EloResultCard result={eloResult} isLoading={isSaving} />
       <EvalGraph points={graphPoints} currentIndex={positions.length - 1} compact engineCp={currentEngineEval} />
       <AnalysisMoveTable moves={userMoves} canonicalMoves={canonicalMoves} isAnalyzing={isSaving} compact showEvaluations={true} asyncMoveEvaluations={asyncMoveEvaluations} />
@@ -4336,14 +4745,14 @@ function EvalGraph({
   });
 
   return (
-    <div className="grid gap-2">
+    <div className="grid shrink-0 gap-1.5">
       {children ? (
-        <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-3">
+        <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-2">
           {children}
         </div>
       ) : null}
-      <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)]">
-        <div className={compact ? "h-36" : "h-40"}>
+      <div data-tour="eval-graph" className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)]">
+        <div className={compact ? "h-20 min-[1500px]:h-24" : "h-28 min-[1500px]:h-36"}>
           {points.length >= 2 ? (
             <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" role="img" aria-label="Sequence eval graph">
               {[padding, height / 2, height - padding].map((lineY) => (
@@ -4452,17 +4861,18 @@ function AnalysisMoveTable({
   isManualPostmortemExploration?: boolean;
 }) {
   return (
-    <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)]">
-      <div className="grid min-h-8 grid-cols-[minmax(0,1.1fr)_68px_68px_76px] items-center border-b border-[var(--app-border-soft)] px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
+    <div data-tour="move-table" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[8px] border border-[var(--app-border-soft)]">
+      <div className="grid min-h-7 grid-cols-[minmax(0,1.1fr)_58px_58px_64px] items-center border-b border-[var(--app-border-soft)] px-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
         <span>Move</span>
         <span className="text-left">Before</span>
         <span className="text-left">After</span>
         <span className="text-left">Loss</span>
       </div>
-      {moves.length === 0 ? (
-        <div className="px-3 py-4 text-sm text-[var(--app-muted)]">No move grades yet.</div>
-      ) : null}
-      {moves.map((move, index) => {
+      <div className="min-h-0 flex-1">
+        {moves.length === 0 ? (
+          <div className="px-3 py-4 text-sm text-[var(--app-muted)]">No move grades yet.</div>
+        ) : null}
+        {moves.map((move, index) => {
         const positionIndex = (move.absoluteIndex ?? index) + 1;
         const canonicalMove = canonicalMoves?.find((entry) => entry.positionIndex === positionIndex) ?? null;
         const canonicalRow = canonicalMove?.tableRow ?? null;
@@ -4488,8 +4898,8 @@ function AnalysisMoveTable({
           type="button"
           key={`${move.uci}-${index}`}
           className={[
-            "grid w-full grid-cols-[minmax(0,1.1fr)_68px_68px_76px] items-center border-b border-[var(--app-border-soft)] px-3 text-left last:border-b-0",
-            compact ? "min-h-9 text-xs" : "min-h-10 text-sm",
+            "grid w-full grid-cols-[minmax(0,1.1fr)_58px_58px_64px] items-center border-b border-[var(--app-border-soft)] px-2.5 text-left last:border-b-0",
+            compact ? "min-h-8 text-[11px]" : "min-h-9 text-xs",
             onSelectPosition ? "cursor-pointer transition" : "cursor-default",
             isCurrentPosition || isSelected ? "bg-[var(--app-highlight-soft)]" : "",
           ].join(" ")}
@@ -4521,7 +4931,8 @@ function AnalysisMoveTable({
           </span>
         </button>
         );
-      })}
+        })}
+      </div>
     </div>
   );
 }

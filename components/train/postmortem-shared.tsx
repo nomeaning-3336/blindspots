@@ -61,13 +61,13 @@ export function EngineLinesSection({
   const displayRows: Array<EngineLineResult | null> = Array.from({ length: 5 }, (_, index) => lines[index] ?? null);
 
   return (
-    <section className="grid gap-2" aria-live="polite">
+    <section className="grid gap-1.5" aria-live="polite">
       <div className="flex items-center gap-3">
         <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">
           Engine lines
         </h2>
       </div>
-      <div className={["grid gap-2", isLoading ? "opacity-60" : ""].join(" ")}>
+      <div className={["grid gap-1.5", isLoading ? "opacity-60" : ""].join(" ")}>
         {displayRows.map((line, index) => {
           if (!line) {
             const shouldShowEmptyMessage = index === 0 && lines.length === 0 && !isLoading;
@@ -76,7 +76,7 @@ export function EngineLinesSection({
                 key={`engine-placeholder-${index}`}
                 aria-hidden="true"
                 className={[
-                  "min-h-[38px] rounded-none border border-dashed border-[var(--app-border-soft)] bg-transparent",
+                  "min-h-8 rounded-none border border-dashed border-[var(--app-border-soft)] bg-transparent",
                   shouldShowEmptyMessage
                     ? "flex items-center px-3 text-xs font-bold text-[var(--app-muted)] opacity-100"
                     : "opacity-45",
@@ -100,7 +100,7 @@ export function EngineLinesSection({
           return (
             <div
               key={`${line.rank}-${line.bestMove}-${index}`}
-              className="relative cursor-pointer overflow-hidden rounded-none border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] py-2 pl-2.5 pr-3 transition-colors duration-100"
+              className="relative min-h-8 cursor-pointer overflow-hidden rounded-none border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] py-1.5 pl-2.5 pr-3 transition-colors duration-100"
               style={{
                 borderLeftColor: lineColor,
                 borderLeftWidth: 3,
@@ -122,7 +122,7 @@ export function EngineLinesSection({
                 <span className="text-xs font-black tabular-nums text-[var(--app-text)]">
                   {formatPostmortemEvalLabel(line.cp, line.mate)}
                 </span>
-                <strong className="min-w-0 truncate text-base font-black leading-none text-[var(--app-text)]">
+                <strong className="min-w-0 truncate text-sm font-black leading-none text-[var(--app-text)]">
                   {lead}
                 </strong>
                 <span className="min-w-0 truncate text-xs font-bold text-[var(--app-muted)]">
