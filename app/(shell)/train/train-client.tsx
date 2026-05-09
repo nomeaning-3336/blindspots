@@ -288,8 +288,14 @@ const EVAL_GRAPH_RANGE = 14;
 const MIN_EVAL_GRAPH_SPAN = 2;
 const DEFAULT_TRAINING_FEN =
   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-const TRAIN_ONBOARDING_PLACEHOLDER_FEN =
-  "r3k2r/pp1nbppp/2p1pn2/q2p4/3P1B2/2NQPN2/PP3PPP/2KR3R w kq - 0 11";
+const ONBOARDING_PREVIEW_POSITION: NextPositionResponse = {
+  previousFen: "r2qk2r/3bbp2/p1np3p/2p1p3/1p2P3/2PP2Pp/PPB1QP1B/RN2K2R w KQkq - 0 18",
+  playedMove: "e1g1",
+  actualMoveSan: "O-O",
+  fen: "r2qk2r/3bbp2/p1np3p/2p1p3/1p2P3/2PP2Pp/PPB1QP1B/RN3RK1 b kq - 1 18",
+  sequenceLength: 4,
+  source: "onboarding",
+};
 // Train audio - managed by lib/train-audio.ts
 import {
   primeTrainAudio,
@@ -526,7 +532,6 @@ export default function TrainPage(props: TrainPageProps) {
   const [pieceLinesLoadingKey, setPieceLinesLoadingKey] = useState<string | null>(null);
   const moveSoundPlyRef = useRef(0);
   const hasStartedFirstOnboardingSequenceRef = useRef(false);
-  const introPreviewedPositionRef = useRef<NextPositionResponse | null>(null);
   const completingRef = useRef(false);
   const completionRequestRef = useRef(0);
   const initialOpponentMoveRef = useRef<TrainingMove | null>(null);
@@ -559,7 +564,7 @@ export default function TrainPage(props: TrainPageProps) {
   const shouldRunPreplayOnboarding = initialOnboarding || forceOnboarding;
 
   const [fen, setFen] = useState<string>(
-    shouldRunPreplayOnboarding ? TRAIN_ONBOARDING_PLACEHOLDER_FEN : DEFAULT_TRAINING_FEN,
+    shouldRunPreplayOnboarding ? ONBOARDING_PREVIEW_POSITION.previousFen!! : DEFAULT_TRAINING_FEN,
   );
 
   const PREPLAY_TOUR_STEPS = [
@@ -686,7 +691,7 @@ export default function TrainPage(props: TrainPageProps) {
         // Only seed onboarding intro if it hasn't been shown yet.
         // Do not call loadNextPosition here — onboarding intro CTA handles it.
         if (shouldRunPreplayOnboarding && !trainOnboardingIntroDone) {
-          const placeholderFen = TRAIN_ONBOARDING_PLACEHOLDER_FEN;
+          const placeholderFen = ONBOARDING_PREVIEW_POSITION.previousFen!;
           setStartingFen(placeholderFen);
           setDisplayStartingFen(placeholderFen);
           setFen(placeholderFen);
@@ -699,7 +704,7 @@ export default function TrainPage(props: TrainPageProps) {
         if (!alive) return;
         setOnboardingScreen("done");
         if (shouldRunPreplayOnboarding && !trainOnboardingIntroDone) {
-          const placeholderFen = TRAIN_ONBOARDING_PLACEHOLDER_FEN;
+          const placeholderFen = ONBOARDING_PREVIEW_POSITION.previousFen!;
           setStartingFen(placeholderFen);
           setDisplayStartingFen(placeholderFen);
           setFen(placeholderFen);
@@ -718,11 +723,6 @@ export default function TrainPage(props: TrainPageProps) {
     };
   }, [shouldRunPreplayOnboarding, trainOnboardingIntroDone]);
 
-  useEffect(() => {
-    if (!trainOnboardingIntroActive) return;
-    if (onboardingScreen !== "done") return;
-    prefetchNextPosition({ previewIntro: true });
-  }, [trainOnboardingIntroActive, onboardingScreen]);
 
   useEffect(() => {
     if (!shouldRunPreplayOnboarding) return;
@@ -759,12 +759,10 @@ export default function TrainPage(props: TrainPageProps) {
   async function startPreplayOnboardingPosition() {
     if (hasStartedFirstOnboardingSequenceRef.current) return;
     hasStartedFirstOnboardingSequenceRef.current = true;
-    startTrainingGestureConsumedRef.current = true;
     setIsStartingPreplayPosition(true);
 
     try {
-      await unlockTrainAudio();
-      await loadNextPosition({ autoStart: true });
+      await startPendingInitialEngineMove(ONBOARDING_PREVIEW_POSITION);
       setTrainOnboardingIntroDone(true);
     } finally {
       setIsStartingPreplayPosition(false);
@@ -1004,10 +1002,8 @@ export default function TrainPage(props: TrainPageProps) {
     const cachedPosition = cachedNextPosition;
     if (cachedPosition?.fen) {
       const skipPreludeAnimation =
-        Boolean(options.autoStart) &&
-        (introPreviewedPositionRef.current === cachedPosition || shouldRunPreplayOnboarding);
+        Boolean(options.autoStart) && shouldRunPreplayOnboarding;
       setCachedNextPosition(null);
-      introPreviewedPositionRef.current = null;
       nextPositionPrefetchRef.current = null;
       applyNextPosition(cachedPosition, {
         autoStart: options.autoStart,
@@ -1031,10 +1027,8 @@ export default function TrainPage(props: TrainPageProps) {
         ? await pendingPrefetch
         : await fetchNextPosition();
       const skipPreludeAnimation =
-        Boolean(options.autoStart) &&
-        (introPreviewedPositionRef.current === payload || shouldRunPreplayOnboarding);
+        Boolean(options.autoStart) && shouldRunPreplayOnboarding;
       nextPositionPrefetchRef.current = null;
-      introPreviewedPositionRef.current = null;
       setCachedNextPosition(null);
 
       if (!payload?.fen) {
@@ -1300,25 +1294,13 @@ export default function TrainPage(props: TrainPageProps) {
     }
   }
 
-  function prefetchNextPosition(options: { previewIntro?: boolean } = {}) {
+  function prefetchNextPosition() {
     if (nextPositionPrefetchRef.current) return;
     const promise = fetchNextPosition();
     nextPositionPrefetchRef.current = promise;
     void promise.then((payload) => {
       if (payload?.fen && nextPositionPrefetchRef.current === promise) {
         setCachedNextPosition(payload);
-        if (options.previewIntro) {
-          introPreviewedPositionRef.current = payload;
-          setStartingFen(payload.fen);
-          setDisplayStartingFen(payload.fen);
-          setFen(payload.fen);
-          setHasLoadedPosition(true);
-          setIsPositionLoading(false);
-          setMoves([]);
-          setLastMove(null);
-          setInitialOpponentMove(null);
-          setPendingInitialEngineMove(null);
-        }
       }
     });
   }
