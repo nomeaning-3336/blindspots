@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useSearchParams } from "next/navigation";
 import { Chess, type Square } from "chess.js";
 import { AnalysisBoard, type BoardMove, type EngineArrow } from "@/components/chess/analysis-board";
 import {
@@ -864,7 +863,7 @@ export default function TrainPage(props: TrainPageProps) {
     return () => window.clearTimeout(timer);
   }, [state]);
 
-  async function loadNextPosition() {
+  async function loadNextPosition(options: { autoStart?: boolean } = {}) {
     const cachedPosition = cachedNextPosition;
     if (cachedPosition?.fen) {
       setCachedNextPosition(null);
@@ -878,7 +877,9 @@ export default function TrainPage(props: TrainPageProps) {
     if (!pendingPrefetch) {
       setCurrentChallengeElo(null);
       setHasLoadedPosition(false);
-      setIsPositionLoading(true);
+      if (!options.autoStart) {
+        setIsPositionLoading(true);
+      }
     }
 
     try {
@@ -902,7 +903,7 @@ export default function TrainPage(props: TrainPageProps) {
         return;
       }
 
-      applyNextPosition(payload);
+      applyNextPosition(payload, { autoStart: options.autoStart });
     } finally {
       setIsPositionLoading(false);
     }
@@ -915,8 +916,13 @@ export default function TrainPage(props: TrainPageProps) {
     return payload;
   }
 
-  function applyNextPosition(payload: NextPositionResponse) {
+  function applyNextPosition(
+    payload: NextPositionResponse,
+    options: { autoStart?: boolean } = {},
+  ) {
     if (!payload.fen) return;
+
+    const shouldAutoStart = options.autoStart || startTrainingGestureConsumedRef.current;
 
     const debug = (payload as Record<string, unknown>).debug as Record<string, unknown> | undefined;
     selectedServeModeRef.current =
@@ -1010,7 +1016,7 @@ export default function TrainPage(props: TrainPageProps) {
     if (payload.previousFen && payload.playedMove) {
       setPendingInitialEngineMove(payload);
 
-      if (startTrainingGestureConsumedRef.current) {
+      if (shouldAutoStart) {
         setIsAwaitingStartGesture(false);
         if (process.env.NODE_ENV !== "production") {
           console.log("[train-start-gesture] apply-next-position-auto-start-prelude", {
@@ -2746,9 +2752,8 @@ export default function TrainPage(props: TrainPageProps) {
             } else {
               startTrainingGestureConsumedRef.current = true;
               setTrainOnboardingIntroDone(true);
-              setIsPositionLoading(true);
               void unlockTrainAudio();
-              void loadNextPosition();
+              void loadNextPosition({ autoStart: true });
             }
           }}
           onBack={() => {
@@ -2759,9 +2764,8 @@ export default function TrainPage(props: TrainPageProps) {
           onSkip={() => {
             startTrainingGestureConsumedRef.current = true;
             setTrainOnboardingIntroDone(true);
-            setIsPositionLoading(true);
             void unlockTrainAudio();
-            void loadNextPosition();
+            void loadNextPosition({ autoStart: true });
           }}
         />
       </>
