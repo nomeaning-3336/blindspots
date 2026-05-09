@@ -1957,14 +1957,6 @@ export default function TrainPage() {
     dirtyMoveNoteKeysRef.current.add(moveKey);
   }
 
-  function handleNoteHoverMove(from: string, to: string) {
-    setHoveredMoveSquares({ from, to });
-  }
-
-  function handleNoteHoverEnd() {
-    setHoveredMoveSquares(null);
-  }
-
   // ── Persist notes to Supabase with debounce ──────────────────────
   const dirtyMoveNoteKeysRef = useRef<Set<string>>(new Set());
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2878,8 +2870,6 @@ export default function TrainPage() {
                   selectedMoveKey={selectedMoveKey}
                   onSelectMove={handleSelectMove}
                   onUpdateNote={handleUpdateNote}
-                  onHoverMove={handleNoteHoverMove}
-                  onHoverEnd={handleNoteHoverEnd}
                 />
               )}
             </div>

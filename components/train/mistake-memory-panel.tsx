@@ -27,8 +27,6 @@ type MoveNotesPanelProps = {
   selectedMoveKey: string | null;
   onSelectMove: (moveKey: string) => void;
   onUpdateNote: (moveKey: string, text: string) => void;
-  onHoverMove?: (from: string, to: string) => void;
-  onHoverEnd?: () => void;
 };
 
 export function MoveNotesPanel({
@@ -37,8 +35,6 @@ export function MoveNotesPanel({
   selectedMoveKey,
   onSelectMove,
   onUpdateNote,
-  onHoverMove,
-  onHoverEnd,
 }: MoveNotesPanelProps) {
   const [localNote, setLocalNote] = useState("");
   const onUpdateNoteRef = useRef(onUpdateNote);
@@ -117,12 +113,6 @@ export function MoveNotesPanel({
                     : "hover:bg-[var(--app-surface-hover)]",
                 ].join(" ")}
                 onClick={() => onSelectMove(move.moveKey)}
-                onPointerEnter={() => {
-                  if (onHoverMove && move.from && move.to) {
-                    onHoverMove(move.from, move.to);
-                  }
-                }}
-                onPointerLeave={() => onHoverEnd?.()}
               >
                 <span className="flex min-w-0 items-center gap-2 font-bold">
                   {cls ? (
