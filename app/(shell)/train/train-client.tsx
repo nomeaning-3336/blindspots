@@ -4592,7 +4592,6 @@ function MoveList({
 }
 
 type TrainOnboardingIntroStep = {
-  eyebrow: string;
   headline: string;
   body: string;
   cta?: string;
@@ -4625,11 +4624,6 @@ function TrainOnboardingIntroOverlay({
     <div
       className="absolute inset-0 z-50 flex items-center justify-center"
       style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(2px)" }}
-      onClick={onNext}
-      onKeyDown={handleKeyDown}
-      role="button"
-      tabIndex={0}
-      aria-label="Click to continue"
     >
       <div
         className="app-brutal-card relative mx-4 max-w-lg border-2 p-8"
