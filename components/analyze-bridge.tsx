@@ -18,7 +18,7 @@ declare global {
 }
 
 const ANALYZE_BASE_PATH = "/analyze";
-const ANALYZE_ASSET_VERSION = "2026-04-25-nav-pause-v1";
+const ANALYZE_ASSET_VERSION = "2026-05-09-postmortem-parity";
 const ANALYZE_STYLE_ID = "analyze-style";
 const ANALYZE_OVERRIDE_ID = "analyze-react-override";
 const ANALYZE_CHESS_SCRIPT_ID = "analyze-chess-js";
@@ -80,6 +80,11 @@ function ensureOverrideStyle() {
 
     /* Hide the embedded topbar — React shell provides the header */
     #analyze-app-host #app .topbar {
+      display: none !important;
+    }
+
+    /* Hide the old standalone player strips — they are for 2-player mode, not embedded analysis */
+    #analyze-app-host #app .board-player-info {
       display: none !important;
     }
 
@@ -164,12 +169,7 @@ function ensureOverrideStyle() {
     }
 
     #analyze-app-host #app .board-frame {
-      margin-bottom: 2px !important;
-    }
-
-    #analyze-app-host #app .board-shell-wrap {
-      background: var(--app-bg) !important;
-      border-color: var(--app-border) !important;
+      margin-bottom: 0 !important;
     }
 
     #analyze-app-host #app .section-head {
@@ -196,8 +196,9 @@ function ensureOverrideStyle() {
 
     #analyze-app-host #app .board-stage {
       align-items: start !important;
+      --board-shell-height: var(--board-shell-width) !important;
       --board-stage-height: calc(
-        var(--board-shell-height) + var(--board-options-height) + var(--board-stack-gap)
+        var(--board-shell-width) + var(--board-options-height) + var(--board-stack-gap)
       ) !important;
     }
 
@@ -207,12 +208,20 @@ function ensureOverrideStyle() {
     }
 
     #analyze-app-host #app .board-frame {
-      height: auto !important;
+      height: var(--board-shell-width) !important;
+      grid-template-columns: var(--eval-bar-width, 14px) var(--board-shell-width) !important;
+      gap: 8px !important;
+      align-items: stretch !important;
+    }
+
+    #analyze-app-host #app .board-frame > * {
+      align-self: stretch !important;
     }
 
     #analyze-app-host #app .eval-bar {
       height: var(--board-shell-width) !important;
-      margin-top: var(--board-player-strip-size) !important;
+      margin-top: 0 !important;
+      align-self: stretch !important;
     }
 
     #analyze-app-host #app .board-options {
@@ -270,7 +279,6 @@ function ensureOverrideStyle() {
         --board-shell-width: min(
           calc(
             var(--analyze-viewport-room, 100dvh) -
-              (var(--board-player-strip-size) * 2) -
               var(--board-options-height) -
               var(--board-stack-gap) -
               24px
@@ -295,7 +303,6 @@ function ensureOverrideStyle() {
         --board-shell-width: min(
           calc(
             var(--analyze-viewport-room, 100dvh) -
-              (var(--board-player-strip-size) * 2) -
               var(--board-options-height) -
               var(--board-stack-gap) -
               24px
@@ -396,7 +403,6 @@ function ensureOverrideStyle() {
         --board-shell-width: min(
           calc(
             var(--analyze-viewport-room, 100dvh) -
-              (var(--board-player-strip-size) * 2) -
               var(--board-options-height) -
               var(--board-stack-gap) -
               22px
@@ -421,7 +427,6 @@ function ensureOverrideStyle() {
         --board-shell-width: min(
           calc(
             var(--analyze-viewport-room, 100dvh) -
-              (var(--board-player-strip-size) * 2) -
               var(--board-options-height) -
               var(--board-stack-gap) -
               22px
@@ -590,87 +595,114 @@ function ensureOverrideStyle() {
       letter-spacing: 0.1em !important;
     }
 
-    /* Remove borders from move classification icons */
-    #analyze-app-host #app .board-history-move-icon {
-      border: none !important;
-    }
-
     /* ============================================================
-       POLISH LAYER — sensual analyze surface.
-       Lifts flat panels to match landing's graphite+glow aesthetic.
+       TRAIN POST-MORTEM PARITY LAYER.
+       Matches /train post-mortem brutal/neobrutalist visual language.
+       Replaces the prior "sensual analyze surface" polish layer.
        ============================================================ */
-    #analyze-app-host::before {
-      content: "";
-      position: absolute;
-      inset: -12% -8% -8% -8%;
-      z-index: 0;
-      pointer-events: none;
-      background:
-        radial-gradient(720px 340px at 78% 6%, color-mix(in srgb, var(--app-accent) 10%, transparent), transparent 64%),
-        radial-gradient(520px 320px at 10% 104%, color-mix(in srgb, var(--app-accent) 5%, transparent), transparent 70%);
-      opacity: 0.9;
-    }
+
+    /* Host: no decorative glow — the shell page background carries the look */
+    #analyze-app-host::before { display: none !important; }
     #analyze-app-host > * { position: relative; z-index: 1; }
 
+    /* Container panels: use the same brutal card language as train post-mortem */
     #analyze-app-host #app .board-shell-wrap,
     #analyze-app-host #app .board-analysis,
     #analyze-app-host #app .board-history-panel,
     #analyze-app-host #app .section-head {
-      background:
-        linear-gradient(
-          180deg,
-          color-mix(in srgb, var(--app-panel-strong) 94%, transparent) 0%,
-          color-mix(in srgb, var(--app-panel-deep) 96%, transparent) 100%
-        ) !important;
-      border-color: color-mix(in srgb, var(--app-border-strong) 10%, transparent) !important;
-      box-shadow:
-        inset 0 1px 0 color-mix(in srgb, var(--app-border-strong) 6%, transparent),
-        0 22px 60px -36px color-mix(in srgb, var(--app-bg) 95%, transparent);
-      transition: border-color 200ms ease, box-shadow 240ms ease;
+      background: var(--app-panel-solid) !important;
+      border: 1px solid color-mix(in srgb, var(--app-text) 72%, transparent) !important;
+      box-shadow: 5px 5px 0 #050505 !important;
+      border-radius: 10px !important;
+      transition: transform 120ms ease, box-shadow 120ms ease !important;
     }
 
     #analyze-app-host #app .board-shell-wrap {
+      /* Convert from 3-row player-chrome container to pure square board wrapper */
+      display: grid !important;
+      grid-template-rows: var(--board-shell-width) !important;
+      height: var(--board-shell-width) !important;
+      width: var(--board-shell-width) !important;
+      border: 1px solid var(--app-border) !important;
       border-radius: 10px !important;
-      box-shadow:
-        inset 0 0 0 1px color-mix(in srgb, var(--app-border-strong) 7%, transparent),
-        0 0 0 1px color-mix(in srgb, var(--app-accent) 5%, transparent),
-        0 36px 90px -38px color-mix(in srgb, var(--app-bg) 96%, transparent),
-        0 0 60px -30px color-mix(in srgb, var(--app-accent) 40%, transparent) !important;
+      background: var(--app-panel-deep) !important;
+      box-shadow: var(--app-shadow) !important;
+      overflow: hidden !important;
+      padding: 0 !important;
+    }
+
+    #analyze-app-host #app .board-shell {
+      /* board-shell inherits the square exactly */
+      width: var(--board-shell-width) !important;
+      height: var(--board-shell-width) !important;
+      border-radius: 10px !important;
+      overflow: hidden !important;
+      border: none !important;
+      box-shadow: none !important;
+      background: transparent !important;
     }
 
     #analyze-app-host #app .section-head {
-      letter-spacing: 0.22em !important;
-      text-transform: uppercase;
       font-size: 0.64rem !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.22em !important;
+      text-transform: uppercase !important;
       color: color-mix(in srgb, var(--app-text) 72%, var(--app-muted) 28%) !important;
+      box-shadow: none !important;
+      background: var(--app-panel-solid) !important;
+      border-radius: 8px !important;
     }
 
+    /* Buttons: match train post-mortem brutal button treatment */
     #analyze-app-host #app .board-options .btn,
     #analyze-app-host #app .settings-trigger {
+      border: 1px solid #050505 !important;
+      background: var(--app-panel-solid) !important;
+      color: var(--app-text) !important;
+      box-shadow: 4px 4px 0 #050505 !important;
+      border-radius: 8px !important;
+      font-weight: 700 !important;
+      text-transform: uppercase !important;
+      letter-spacing: 0.04em !important;
       transition:
-        border-color 160ms ease,
-        background 160ms ease,
-        color 160ms ease,
-        box-shadow 220ms ease,
-        transform 160ms ease !important;
-      border-radius: 4px !important;
+        transform 120ms ease,
+        box-shadow 120ms ease,
+        background 120ms ease,
+        color 120ms ease !important;
     }
+
     #analyze-app-host #app .board-options .btn:hover,
     #analyze-app-host #app .board-options .btn:focus-visible,
     #analyze-app-host #app .board-options .btn[data-visual-hover="true"] {
-      box-shadow:
-        0 10px 26px -10px color-mix(in srgb, var(--app-accent) 55%, transparent),
-        inset 0 0 0 1px color-mix(in srgb, var(--app-accent) 18%, transparent) !important;
-      transform: translateY(-1px);
+      transform: translate(2px, 2px) !important;
+      box-shadow: 2px 2px 0 #050505 !important;
+      background: color-mix(in srgb, var(--app-text) 92%, transparent) !important;
+      color: var(--app-bg) !important;
     }
+
     #analyze-app-host #app .board-options .btn.primary,
     #analyze-app-host #app .board-options .btn[data-primary="true"] {
       background: var(--app-accent) !important;
       color: var(--app-accent-contrast) !important;
       border-color: var(--app-accent) !important;
-      box-shadow: 0 12px 32px -12px color-mix(in srgb, var(--app-accent) 50%, transparent) !important;
+      box-shadow: 5px 5px 0 #050505 !important;
     }
 
+    #analyze-app-host #app .board-options .btn.primary:hover,
+    #analyze-app-host #app .board-options .btn.primary:focus-visible,
+    #analyze-app-host #app .board-options .btn[data-primary="true"][data-visual-hover="true"] {
+      background: #fff !important;
+      box-shadow: 3px 3px 0 #050505 !important;
+      transform: translate(2px, 2px) !important;
+    }
+
+    #analyze-app-host #app .settings-trigger:hover,
+    #analyze-app-host #app .settings-trigger[data-visual-hover="true"] {
+      transform: translate(2px, 2px) !important;
+      box-shadow: 2px 2px 0 #050505 !important;
+    }
+
+    /* Active rows: match train post-mortem classification accent */
     #analyze-app-host #app .board-history-move.is-active,
     #analyze-app-host #app .board-history-move[aria-selected="true"],
     #analyze-app-host #app .analysis-row.is-active {
@@ -678,42 +710,36 @@ function ensureOverrideStyle() {
       box-shadow: inset 3px 0 0 0 var(--app-accent) !important;
     }
 
+    /* Eval bar: match train brutal treatment — thin border, brutal shadow, aligned to board */
     #analyze-app-host #app .eval-bar {
-      border-radius: 3px !important;
-      box-shadow:
-        inset 0 0 0 1px color-mix(in srgb, var(--app-border-strong) 9%, transparent),
-        0 10px 24px -16px color-mix(in srgb, var(--app-bg) 95%, transparent) !important;
+      border: 1px solid #050505 !important;
+      border-radius: 4px !important;
+      box-shadow: 3px 3px 0 #050505 !important;
     }
 
+    /* Focus states for inputs */
     #analyze-app-host #app #coachPill input:focus,
     #analyze-app-host #app #assistantInput:focus {
       outline: none !important;
       border-color: var(--app-accent) !important;
-      box-shadow:
-        0 0 0 3px color-mix(in srgb, var(--app-accent) 22%, transparent),
-        inset 0 1px 0 color-mix(in srgb, var(--app-border-strong) 8%, transparent) !important;
+      box-shadow: 4px 4px 0 #050505 !important;
     }
 
-    #analyze-app-host #app ::-webkit-scrollbar { width: 10px; height: 10px; }
+    /* Scrollbar: consistent brutal styling */
+    #analyze-app-host #app ::-webkit-scrollbar { width: 8px; height: 8px; }
     #analyze-app-host #app ::-webkit-scrollbar-track { background: transparent; }
     #analyze-app-host #app ::-webkit-scrollbar-thumb {
-      background: color-mix(in srgb, var(--app-border-strong) 12%, transparent);
-      border-radius: 10px;
-      border: 2px solid transparent;
-      background-clip: padding-box;
+      background: var(--app-border-strong) !important;
+      border-radius: 8px !important;
+      border: 2px solid transparent !important;
+      background-clip: padding-box !important;
     }
     #analyze-app-host #app ::-webkit-scrollbar-thumb:hover {
-      background: color-mix(in srgb, var(--app-accent) 40%, var(--app-border-strong) 28%);
-      background-clip: padding-box;
+      background: color-mix(in srgb, var(--app-text) 60%, transparent) !important;
+      background-clip: padding-box !important;
     }
 
-    #analyze-app-host #app .settings-trigger:hover,
-    #analyze-app-host #app .settings-trigger[data-visual-hover="true"] {
-      transform: translateY(-1px);
-      box-shadow:
-        0 10px 26px -12px color-mix(in srgb, var(--app-accent) 50%, transparent) !important;
-    }
-
+    /* Move classification chips/badges: uppercase brutal mono style */
     #analyze-app-host #app .analysis-score,
     #analyze-app-host #app .board-history-eval,
     #analyze-app-host #app .move-eval {
@@ -723,9 +749,16 @@ function ensureOverrideStyle() {
 
     #analyze-app-host #app .chip,
     #analyze-app-host #app .badge {
+      font-weight: 700;
       letter-spacing: 0.14em;
       text-transform: uppercase;
-      border-radius: 3px !important;
+      border-radius: 4px !important;
+      border: 1px solid color-mix(in srgb, var(--app-text) 32%, transparent) !important;
+    }
+
+    /* Remove old classification icon borders — train post-mortem doesn't use them */
+    #analyze-app-host #app .board-history-move-icon {
+      border: none !important;
     }
 
   `;
