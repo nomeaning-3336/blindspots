@@ -268,11 +268,19 @@ function buildQueueOverview(mistakes: DashboardMistakeInput[]) {
   for (const m of mistakes) {
     if (m.status === "mastered") { mastered++; continue; }
     if (m.status === "retired") { retired++; continue; }
+
+    const isDue = typeof m.next_review_at === "string" && m.next_review_at <= now;
+
     if (m.status === "review") {
-      if (m.next_review_at && m.next_review_at <= now) reviewDue++;
+      if (isDue) reviewDue++;
       continue;
     }
     if (m.source_type === "lichess_puzzle_filler") { filler++; continue; }
+
+    // Active app-training mistake is always "active" in the queue overview.
+    // If its next_review_at is past, it also counts toward "Review due".
+    if (m.source_type === "app_training" && isDue) reviewDue++;
+
     active++;
   }
 
@@ -300,6 +308,7 @@ function sourceTypeLabel(sourceType: string): string {
     case "imported_pgn": return "Imported PGN";
     case "lichess_puzzle_filler": return "Random puzzle";
     case "legacy_fallback": return "Blindspots mistake";
+    case "app_training": return "Training mistake";
     default: return "Unknown";
   }
 }
