@@ -83,6 +83,7 @@ const ENABLE_CLIENT_STOCKFISH_LINES = true;
 const CLIENT_STOCKFISH_MULTIPV = 5;
 const CLIENT_STOCKFISH_MOVETIME_MS = 800;
 const PRELUDE_SETUP_MOVE_DELAY_MS = 1000;
+const COMPLETION_EVAL_GRACE_MS = 500;
 
 type PostmortemTourStep = {
   target: string;
@@ -726,6 +727,8 @@ export default function TrainPage(props: TrainPageProps) {
     if (!trainOnboardingIntroDone) return;
     if (!hasStartedFirstOnboardingSequenceRef.current) return;
     if (!isPostMortemVisible) return;
+    if (!eloResult) return;
+    if (isCompletingSequence) return;
     if (postmortemOnboardingFinished || postmortemOnboardingActive) return;
 
     setPostmortemOnboardingStep(0);
@@ -734,6 +737,8 @@ export default function TrainPage(props: TrainPageProps) {
     shouldRunPreplayOnboarding,
     trainOnboardingIntroDone,
     isPostMortemVisible,
+    eloResult,
+    isCompletingSequence,
     postmortemOnboardingFinished,
     postmortemOnboardingActive,
   ]);
@@ -1779,7 +1784,7 @@ export default function TrainPage(props: TrainPageProps) {
       const completedEvaluations = await waitForCompletedMoveEvaluations({
         getEvaluations: () => asyncMoveEvaluationsRef.current,
         expectedCount: expectedPrecomputedCount,
-        timeoutMs: 2500,
+        timeoutMs: COMPLETION_EVAL_GRACE_MS,
       });
 
       if (process.env.NODE_ENV !== "production") {
@@ -4529,11 +4534,7 @@ function StatusBanner({
 
 function EloResultCard({ result, isLoading }: { result: EloResult | null; isLoading: boolean }) {
   if (isLoading && !result) {
-    return (
-      <div data-tour="elo-card" className="flex items-center rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-3">
-        <p className="text-sm font-bold text-[var(--app-muted)]">Saving result...</p>
-      </div>
-    );
+    return null;
   }
 
   if (!result) return null;
