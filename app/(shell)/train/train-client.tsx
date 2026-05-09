@@ -247,6 +247,8 @@ const EVAL_GRAPH_RANGE = 14;
 const MIN_EVAL_GRAPH_SPAN = 2;
 const DEFAULT_TRAINING_FEN =
   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+const TRAIN_ONBOARDING_PLACEHOLDER_FEN =
+  "r3k2r/pp1nbppp/2p1pn2/q2p4/3P1B2/2NQPN2/PP3PPP/2KR3R w kq - 0 11";
 // Train audio - managed by lib/train-audio.ts
 import {
   primeTrainAudio,
@@ -421,14 +423,14 @@ const mockRep = {
 
 type TrainPageProps = {
   initialOnboarding?: boolean;
+  forceOnboarding?: boolean;
 };
 
 export default function TrainPage(props: TrainPageProps) {
-  const { initialOnboarding = false } = props;
+  const { initialOnboarding = false, forceOnboarding = false } = props;
   const [state, setState] = useState<TrainingState>("active");
   const [startingFen, setStartingFen] = useState<string>("");
   const initialPreludeRef = useRef<{ previousFen: string; playedMove: string } | null>(null);
-  const [fen, setFen] = useState<string>(DEFAULT_TRAINING_FEN);
   const [moves, setMoves] = useState<TrainingMove[]>(mockRep.moveHistory);
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(null);
   const [sequenceLength, _setSequenceLength] = useState(4);
@@ -511,13 +513,11 @@ export default function TrainPage(props: TrainPageProps) {
   const isPostMortemVisible = state === "complete" || state === "drift";
   const shouldAnimatePieces = state === "active" || isPostMortemVisible;
 
-  const searchParams = useSearchParams();
-  const isForcedOnboarding = searchParams.get("onboarding") === "1";
-  const isOnboardingMode = initialOnboarding || isForcedOnboarding;
+  const shouldRunPreplayOnboarding = initialOnboarding || forceOnboarding;
 
-  const [trainOnboardingIntroStep, setTrainOnboardingIntroStep] = useState(0);
-  const [trainOnboardingIntroDone, setTrainOnboardingIntroDone] = useState(false);
-  const trainOnboardingIntroActive = isOnboardingMode && !trainOnboardingIntroDone;
+  const [fen, setFen] = useState<string>(
+    shouldRunPreplayOnboarding ? TRAIN_ONBOARDING_PLACEHOLDER_FEN : DEFAULT_TRAINING_FEN,
+  );
 
   const PREPLAY_TOUR_STEPS = [
     {
@@ -539,7 +539,9 @@ export default function TrainPage(props: TrainPageProps) {
     },
   ];
 
-  const PLACEHOLDER_FEN = "r3k2r/pp1nbppp/2p1pn2/q2p4/3P1B2/2NQPN2/PP3PPP/2KR3R w kq - 0 11";
+  const [trainOnboardingIntroStep, setTrainOnboardingIntroStep] = useState(0);
+  const [trainOnboardingIntroDone, setTrainOnboardingIntroDone] = useState(false);
+  const trainOnboardingIntroActive = shouldRunPreplayOnboarding && !trainOnboardingIntroDone;
   const [moveAnnotations, setMoveAnnotations] = useState<Record<string, AnnotatedMove>>({});
   const seededMoveKeysRef = useRef<Set<string>>(new Set());
   const [selectedMoveKey, setSelectedMoveKey] = useState<string | null>(null);
@@ -627,7 +629,7 @@ export default function TrainPage(props: TrainPageProps) {
 
         if (trainOnboardingIntroActive) {
           // Seed placeholder FEN for onboarding intro — do not load a real position yet
-          const placeholderFen = PLACEHOLDER_FEN;
+          const placeholderFen = TRAIN_ONBOARDING_PLACEHOLDER_FEN;
           setStartingFen(placeholderFen);
           setDisplayStartingFen(placeholderFen);
           setFen(placeholderFen);
@@ -640,7 +642,7 @@ export default function TrainPage(props: TrainPageProps) {
         if (!alive) return;
         setOnboardingScreen("done");
         if (trainOnboardingIntroActive) {
-          const placeholderFen = PLACEHOLDER_FEN;
+          const placeholderFen = TRAIN_ONBOARDING_PLACEHOLDER_FEN;
           setStartingFen(placeholderFen);
           setDisplayStartingFen(placeholderFen);
           setFen(placeholderFen);
