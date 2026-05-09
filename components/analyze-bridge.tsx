@@ -1076,6 +1076,247 @@ function ensureOverrideStyle() {
       border: none !important;
     }
 
+    /* ANALYZE POSTMORTEM PARITY OVERRIDE */
+    #analyze-app-host #app .board-analysis,
+    #analyze-app-host #app .board-history-panel {
+      background: var(--app-panel-solid) !important;
+      border: 1px solid var(--app-border) !important;
+      border-radius: 8px !important;
+      box-shadow: none !important;
+      overflow: hidden !important;
+    }
+
+    #analyze-app-host #app .board-analysis-head,
+    #analyze-app-host #app .board-history-head,
+    #analyze-app-host #app .theme-analysis-head,
+    #analyze-app-host #app .head,
+    #analyze-app-host #app .export-head,
+    #analyze-app-host #app .settings-head {
+      min-height: 32px !important;
+      border-bottom: 1px solid var(--app-border-soft) !important;
+      padding: 0 12px !important;
+    }
+
+    #analyze-app-host #app .board-analysis-head h2,
+    #analyze-app-host #app .board-history-head h2,
+    #analyze-app-host #app .theme-analysis-head h2,
+    #analyze-app-host #app .head h2,
+    #analyze-app-host #app .export-head h2,
+    #analyze-app-host #app .settings-head h2 {
+      font-size: 0.625rem !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.12em !important;
+      color: var(--app-muted) !important;
+    }
+
+    #analyze-app-host #app .board-analysis-head span,
+    #analyze-app-host #app .board-history-head span,
+    #analyze-app-host #app .theme-analysis-head span,
+    #analyze-app-host #app .head span,
+    #analyze-app-host #app .export-head span,
+    #analyze-app-host #app .settings-head span {
+      font-size: 0.625rem !important;
+      letter-spacing: 0.1em !important;
+      color: var(--app-muted-soft) !important;
+    }
+
+    #analyze-app-host #app .analysis-list {
+      display: grid !important;
+      gap: 0 !important;
+      padding: 0 !important;
+      background: transparent !important;
+    }
+
+    #analyze-app-host #app .analysis-row {
+      min-height: 36px !important;
+      border: 0 !important;
+      border-bottom: 1px solid var(--app-border-soft) !important;
+      border-radius: 0 !important;
+      background: transparent !important;
+      box-shadow: none !important;
+      padding: 0 12px !important;
+    }
+
+    #analyze-app-host #app .analysis-row:last-child {
+      border-bottom: 0 !important;
+    }
+
+    #analyze-app-host #app .analysis-row:hover {
+      background: var(--app-surface-hover) !important;
+      border-color: var(--app-border-soft) !important;
+    }
+
+    #analyze-app-host #app .analysis-row.is-active,
+    #analyze-app-host #app .analysis-row[aria-selected="true"] {
+      background: var(--app-highlight-soft) !important;
+      border-color: var(--app-border-soft) !important;
+      box-shadow: inset 3px 0 0 var(--app-accent) !important;
+    }
+
+    #analyze-app-host #app .analysis-san {
+      font-size: 0.8rem !important;
+      font-weight: 700 !important;
+      letter-spacing: 0 !important;
+    }
+
+    #analyze-app-host #app .analysis-rank,
+    #analyze-app-host #app .analysis-stats,
+    #analyze-app-host #app .analysis-score {
+      font-size: 0.68rem !important;
+      font-weight: 700 !important;
+      color: var(--app-muted) !important;
+      font-variant-numeric: tabular-nums !important;
+    }
+
+    #analyze-app-host #app .analysis-class {
+      min-height: 0 !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      background: transparent !important;
+      padding: 0 !important;
+      box-shadow: none !important;
+      font-size: 0.625rem !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.08em !important;
+      text-transform: uppercase !important;
+    }
+
+    #analyze-app-host #app .analysis-class-icon {
+      width: 16px !important;
+      height: 16px !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }
+
+    #analyze-app-host #app .analysis-pv {
+      margin-top: 2px !important;
+      color: var(--app-muted-soft) !important;
+      font-size: 0.68rem !important;
+      line-height: 1.35 !important;
+    }
+
+    #analyze-app-host #app .board-history-list {
+      padding: 0 !important;
+      background: transparent !important;
+    }
+
+    #analyze-app-host #app .board-history-move {
+      min-height: 32px !important;
+      border: 0 !important;
+      border-bottom: 1px solid var(--app-border-soft) !important;
+      border-radius: 0 !important;
+      background: transparent !important;
+      padding: 0 10px !important;
+      box-shadow: none !important;
+    }
+
+    #analyze-app-host #app .board-history-move:hover {
+      background: var(--app-surface-hover) !important;
+      border-color: var(--app-border-soft) !important;
+    }
+
+    #analyze-app-host #app .board-history-move.current,
+    #analyze-app-host #app .board-history-move.is-active,
+    #analyze-app-host #app .board-history-move[aria-selected="true"] {
+      background: var(--app-highlight-soft) !important;
+      border-color: var(--app-border-soft) !important;
+      box-shadow: inset 3px 0 0 var(--app-accent) !important;
+    }
+
+    #analyze-app-host #app .board-options {
+      margin-top: 8px !important;
+      border: 1px solid var(--app-border) !important;
+      border-radius: 8px !important;
+      background: var(--app-panel-solid) !important;
+      box-shadow: none !important;
+      padding: 8px !important;
+    }
+
+    #analyze-app-host #app .options-toolbar {
+      gap: 6px !important;
+    }
+
+    #analyze-app-host #app .board-options .btn,
+    #analyze-app-host #app .settings-trigger {
+      border: 1px solid var(--app-border) !important;
+      border-radius: 6px !important;
+      background: transparent !important;
+      box-shadow: none !important;
+      color: var(--app-text) !important;
+      transform: none !important;
+    }
+
+    #analyze-app-host #app .board-options .btn:hover,
+    #analyze-app-host #app .board-options .btn:focus-visible,
+    #analyze-app-host #app .board-options .btn[data-visual-hover="true"],
+    #analyze-app-host #app .settings-trigger:hover,
+    #analyze-app-host #app .settings-trigger:focus-visible,
+    #analyze-app-host #app .settings-trigger[data-visual-hover="true"] {
+      border-color: var(--app-accent) !important;
+      background: transparent !important;
+      box-shadow: none !important;
+      color: var(--app-accent) !important;
+      transform: none !important;
+    }
+
+    @media (min-width: 1024px) {
+      #analyze-app-host #app .workspace {
+        grid-template-columns: minmax(0, 1fr) !important;
+        justify-items: center !important;
+        align-items: center !important;
+        padding: 12px !important;
+        overflow: hidden !important;
+      }
+
+      #analyze-app-host #app .left {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) !important;
+        justify-items: center !important;
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+
+      #analyze-app-host #app .board-stage {
+        --analysis-panel-width: clamp(28rem, 30vw, 34rem) !important;
+        --board-shell-width: min(
+          calc(var(--analyze-viewport-room, 100dvh) - var(--board-options-height, 0px) - var(--board-stack-gap, 10px) - 32px),
+          calc(100vw - var(--analysis-panel-width) - 96px),
+          760px
+        ) !important;
+        width: min(100%, 100rem) !important;
+        max-width: 100% !important;
+        height: min-content !important;
+        min-height: 0 !important;
+        align-items: stretch !important;
+        gap: 16px !important;
+        grid-template-columns:
+          minmax(0, auto)
+          minmax(28rem, 0.92fr) !important;
+      }
+
+      #analyze-app-host #app .board-history-panel {
+        display: none !important;
+      }
+
+      #analyze-app-host #app .board-stack {
+        width: auto !important;
+        max-width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+      }
+
+      #analyze-app-host #app .board-analysis {
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        height: var(--board-shell-width) !important;
+        min-height: 0 !important;
+        align-self: start !important;
+        grid-template-rows: minmax(32px, auto) minmax(0, 1fr) !important;
+      }
+    }
+
   `;
   if (!existing) {
     document.head.appendChild(style);

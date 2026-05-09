@@ -429,7 +429,12 @@ const mockRep = {
   ] satisfies TrainingMove[],
 };
 
-export default function TrainPage() {
+type TrainPageProps = {
+  initialOnboarding?: boolean;
+};
+
+export default function TrainPage(props: TrainPageProps) {
+  const { initialOnboarding = false } = props;
   const [state, setState] = useState<TrainingState>("active");
   const [startingFen, setStartingFen] = useState<string>("");
   const initialPreludeRef = useRef<{ previousFen: string; playedMove: string } | null>(null);
@@ -517,7 +522,8 @@ export default function TrainPage() {
   const shouldAnimatePieces = state === "active" || isPostMortemVisible;
 
   const searchParams = useSearchParams();
-  const isOnboardingMode = searchParams.get("onboarding") === "1";
+  const isForcedOnboarding = searchParams.get("onboarding") === "1";
+  const isOnboardingMode = initialOnboarding || isForcedOnboarding;
 
   const [trainOnboardingIntroStep, setTrainOnboardingIntroStep] = useState(0);
   const [trainOnboardingIntroDone, setTrainOnboardingIntroDone] = useState(false);
