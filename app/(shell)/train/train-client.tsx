@@ -2742,8 +2742,10 @@ export default function TrainPage(props: TrainPageProps) {
             if (trainOnboardingIntroStep < PREPLAY_TOUR_STEPS.length - 1) {
               setTrainOnboardingIntroStep((s) => s + 1);
             } else {
+              startTrainingGestureConsumedRef.current = true;
               setTrainOnboardingIntroDone(true);
               setIsPositionLoading(true);
+              void unlockTrainAudio();
               void loadNextPosition();
             }
           }}
@@ -2753,8 +2755,10 @@ export default function TrainPage(props: TrainPageProps) {
             }
           }}
           onSkip={() => {
+            startTrainingGestureConsumedRef.current = true;
             setTrainOnboardingIntroDone(true);
             setIsPositionLoading(true);
+            void unlockTrainAudio();
             void loadNextPosition();
           }}
         />
