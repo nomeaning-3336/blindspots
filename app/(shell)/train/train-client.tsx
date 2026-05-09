@@ -584,7 +584,9 @@ export default function TrainPage(props: TrainPageProps) {
 
   const [trainOnboardingIntroStep, setTrainOnboardingIntroStep] = useState(0);
   const [trainOnboardingIntroDone, setTrainOnboardingIntroDone] = useState(false);
-  const trainOnboardingIntroActive = shouldRunPreplayOnboarding && !trainOnboardingIntroDone;
+  const [isStartingPreplayPosition, setIsStartingPreplayPosition] = useState(false);
+  const trainOnboardingIntroActive =
+    shouldRunPreplayOnboarding && onboardingScreen === "done" && !trainOnboardingIntroDone;
   const [moveAnnotations, setMoveAnnotations] = useState<Record<string, AnnotatedMove>>({});
   const seededMoveKeysRef = useRef<Set<string>>(new Set());
   const [selectedMoveKey, setSelectedMoveKey] = useState<string | null>(null);
@@ -753,6 +755,21 @@ export default function TrainPage(props: TrainPageProps) {
       setPostmortemSidePanel("analysis");
     }
   }, [postmortemOnboardingActive, postmortemOnboardingStep]);
+
+  async function startPreplayOnboardingPosition() {
+    if (hasStartedFirstOnboardingSequenceRef.current) return;
+    hasStartedFirstOnboardingSequenceRef.current = true;
+    startTrainingGestureConsumedRef.current = true;
+    setIsStartingPreplayPosition(true);
+
+    try {
+      await unlockTrainAudio();
+      await loadNextPosition({ autoStart: true });
+      setTrainOnboardingIntroDone(true);
+    } finally {
+      setIsStartingPreplayPosition(false);
+    }
+  }
 
   useLayoutEffect(() => {
     let alive = true;
@@ -987,7 +1004,8 @@ export default function TrainPage(props: TrainPageProps) {
     const cachedPosition = cachedNextPosition;
     if (cachedPosition?.fen) {
       const skipPreludeAnimation =
-        Boolean(options.autoStart) && introPreviewedPositionRef.current === cachedPosition;
+        Boolean(options.autoStart) &&
+        (introPreviewedPositionRef.current === cachedPosition || shouldRunPreplayOnboarding);
       setCachedNextPosition(null);
       introPreviewedPositionRef.current = null;
       nextPositionPrefetchRef.current = null;
@@ -1012,6 +1030,9 @@ export default function TrainPage(props: TrainPageProps) {
       const payload = pendingPrefetch
         ? await pendingPrefetch
         : await fetchNextPosition();
+      const skipPreludeAnimation =
+        Boolean(options.autoStart) &&
+        (introPreviewedPositionRef.current === payload || shouldRunPreplayOnboarding);
       nextPositionPrefetchRef.current = null;
       introPreviewedPositionRef.current = null;
       setCachedNextPosition(null);
@@ -1030,7 +1051,10 @@ export default function TrainPage(props: TrainPageProps) {
         return;
       }
 
-      applyNextPosition(payload, { autoStart: options.autoStart });
+      applyNextPosition(payload, {
+        autoStart: options.autoStart,
+        skipPreludeAnimation,
+      });
     } finally {
       setIsPositionLoading(false);
     }
@@ -2985,30 +3009,24 @@ export default function TrainPage(props: TrainPageProps) {
           step={trainOnboardingIntroStep}
           totalSteps={PREPLAY_TOUR_STEPS.length}
           steps={PREPLAY_TOUR_STEPS}
+          isLoadingFinalStep={isStartingPreplayPosition}
           onNext={() => {
+            if (isStartingPreplayPosition) return;
             if (trainOnboardingIntroStep < PREPLAY_TOUR_STEPS.length - 1) {
               setTrainOnboardingIntroStep((s) => s + 1);
             } else {
-              if (hasStartedFirstOnboardingSequenceRef.current) return;
-              hasStartedFirstOnboardingSequenceRef.current = true;
-              startTrainingGestureConsumedRef.current = true;
-              setTrainOnboardingIntroDone(true);
-              void unlockTrainAudio();
-              void loadNextPosition({ autoStart: true });
+              void startPreplayOnboardingPosition();
             }
           }}
           onBack={() => {
+            if (isStartingPreplayPosition) return;
             if (trainOnboardingIntroStep > 0) {
               setTrainOnboardingIntroStep((s) => s - 1);
             }
           }}
           onSkip={() => {
-            if (hasStartedFirstOnboardingSequenceRef.current) return;
-            hasStartedFirstOnboardingSequenceRef.current = true;
-            startTrainingGestureConsumedRef.current = true;
-            setTrainOnboardingIntroDone(true);
-            void unlockTrainAudio();
-            void loadNextPosition({ autoStart: true });
+            if (isStartingPreplayPosition) return;
+            void startPreplayOnboardingPosition();
           }}
         />
       </>
@@ -3139,11 +3157,11 @@ export default function TrainPage(props: TrainPageProps) {
                       </p>
                     </div>
                   ) : null}
-                  {isPositionLoading || state === "resolving" ? (
+                  {state === "resolving" ? (
                     <div className="pointer-events-none absolute inset-0 z-50 grid place-items-center bg-black/20">
                       <div className="app-brutal-section-soft flex flex-col items-center gap-2 px-4 py-3 text-center">
                         <span className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
-                          {state === "resolving" ? "Sequence complete" : <LoadingPositionText />}
+                          Sequence complete
                         </span>
                       </div>
                     </div>
@@ -3154,7 +3172,7 @@ export default function TrainPage(props: TrainPageProps) {
                   className="grid aspect-square w-full place-items-center rounded-[10px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] text-sm font-bold text-[var(--app-muted)]"
                   aria-live="polite"
                 >
-                  Finding something you mishandle...
+                  No position available
                 </div>
               )}
             </div>
@@ -3396,9 +3414,6 @@ function TrainPostmortemTourOverlay({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="grid gap-2">
-          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--app-muted)]">
-            {step + 1} / {steps.length}
-          </div>
           <h2 className="text-lg font-bold leading-tight">{current.headline}</h2>
           <p className="text-sm leading-6 text-[var(--app-muted)]">{missingTarget ? "Finding the section..." : current.body}</p>
         </div>
@@ -4090,19 +4105,6 @@ function LinearProgress({ completedSteps }: { completedSteps: number }) {
         style={{ width: `${progressPercent}%` }}
       />
     </div>
-  );
-}
-
-function LoadingPositionText() {
-  return (
-    <span aria-label="Loading position">
-      Loading position
-      <span className="train-loading-dots" aria-hidden="true">
-        <span className="train-loading-dot" />
-        <span className="train-loading-dot" />
-        <span className="train-loading-dot" />
-      </span>
-    </span>
   );
 }
 
@@ -5044,6 +5046,7 @@ function TrainOnboardingIntroOverlay({
   step,
   totalSteps,
   steps,
+  isLoadingFinalStep,
   onNext,
   onBack,
   onSkip,
@@ -5051,6 +5054,7 @@ function TrainOnboardingIntroOverlay({
   step: number;
   totalSteps: number;
   steps: TrainOnboardingIntroStep[];
+  isLoadingFinalStep: boolean;
   onNext: () => void;
   onBack: () => void;
   onSkip: () => void;
@@ -5103,7 +5107,7 @@ function TrainOnboardingIntroOverlay({
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); if (!isFirst) onBack(); }}
-            aria-disabled={isFirst}
+            aria-disabled={isFirst || isLoadingFinalStep}
             className="min-h-11 border border-[var(--app-border)] px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)] aria-disabled:cursor-not-allowed aria-disabled:opacity-40"
           >
             Back
@@ -5114,6 +5118,7 @@ function TrainOnboardingIntroOverlay({
               type="button"
               onClick={(e) => { e.stopPropagation(); onNext(); }}
               className="app-brutal-button min-h-11 px-6 text-xs"
+              disabled={isLoadingFinalStep}
             >
               {current.cta}
             </button>
@@ -5122,6 +5127,7 @@ function TrainOnboardingIntroOverlay({
               type="button"
               onClick={(e) => { e.stopPropagation(); onNext(); }}
               className="app-brutal-button min-h-11 px-6 text-xs"
+              disabled={isLoadingFinalStep}
             >
               Next
             </button>

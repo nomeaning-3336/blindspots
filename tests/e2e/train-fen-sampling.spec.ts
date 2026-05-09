@@ -170,7 +170,7 @@ async function isOverlayVisible(page: Page): Promise<boolean> {
 }
 
 async function isPlaceholderVisible(page: Page): Promise<boolean> {
-  const count = await page.locator("text=Finding something you mishandle...").count();
+  const count = await page.locator("text=No position available").count();
   return count > 0;
 }
 
