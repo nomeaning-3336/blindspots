@@ -2,6 +2,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database";
 import { nextIntervalDays, shouldMasterMistake, addDays, type TrainingOutcome } from "./mistake-srs";
 import { inferLegalMoveBetweenFens } from "./fen-transition";
+import { normalizeSetupPrelude } from "./setup-prelude";
 
 type UserMistakeUpdate = Database["public"]["Tables"]["user_mistakes"]["Update"];
 
@@ -48,6 +49,115 @@ export interface UserMistakeRow {
 export interface NextMistakeResult {
   mistake: UserMistakeRow | null;
   queueSource: "review" | "active" | "filler" | null;
+}
+
+/**
+ * App-training active mistake with pre-validated setup prelude fields.
+ */
+export interface ActiveAppMistake {
+  id: string;
+  decisionFen: string;
+  actualMoveUci: string;
+  actualMoveSan: string | null;
+  cpLoss: number | null;
+  classification: string | null;
+  severity: string | null;
+  setupPreviousFen: string;
+  setupPlayedMoveUci: string;
+  setupPlayedMoveSan: string | null;
+  sourceType: string;
+  sourceProvider: string | null;
+}
+
+/**
+ * Fetch the next due active app-training mistake that has a valid setup prelude.
+ *
+ * Queries user_mistakes for source_type = 'app_training', status = 'active',
+ * next_review_at <= now. Validates setup prelude fields before returning.
+ * Invalid rows (missing or broken preludes) are skipped and counted.
+ */
+export async function getNextActiveAppMistake(
+  userId: string,
+  now: Date = new Date(),
+): Promise<{ mistake: ActiveAppMistake | null; rejectedNoPreludeCount: number; candidateCount: number }> {
+  const supabase = getSupabaseAdminClient();
+  const nowISO = now.toISOString();
+
+  const batchSize = 20;
+  const { data: candidates, error } = await supabase
+    .from("user_mistakes" as any)
+    .select("*")
+    .eq("user_id", userId)
+    .eq("source_type", "app_training")
+    .eq("status", "active")
+    .is("retired_at", null)
+    .is("mastered_at", null)
+    .lte("next_review_at", nowISO)
+    .order("next_review_at", { ascending: true })
+    .order("cp_loss", { ascending: false, nullsFirst: false })
+    .limit(batchSize);
+
+  if (error) {
+    console.error("[mistake-store] active app mistake query failed", error);
+    return { mistake: null, rejectedNoPreludeCount: 0, candidateCount: 0 };
+  }
+
+  const rows = Array.isArray(candidates) ? candidates : [];
+  let rejectedNoPreludeCount = 0;
+
+  for (const row of rows as any[]) {
+    const decisionFen = typeof row.decision_fen === "string" ? row.decision_fen : "";
+    const setupPreviousFen = typeof row.setup_previous_fen === "string" ? row.setup_previous_fen : "";
+    const setupPlayedMoveUci = typeof row.setup_played_move_uci === "string" ? row.setup_played_move_uci : "";
+
+    if (!decisionFen || !setupPreviousFen || !setupPlayedMoveUci) {
+      rejectedNoPreludeCount++;
+      continue;
+    }
+
+    // Validate the stored prelude. We do NOT infer — only use stored fields.
+    const prelude = normalizeSetupPrelude({
+      fen: decisionFen,
+      previousFen: setupPreviousFen,
+      playedMove: setupPlayedMoveUci,
+    });
+
+    if (!prelude) {
+      rejectedNoPreludeCount++;
+      continue;
+    }
+
+    // Update served_count / last_served_at
+    await supabase
+      .from("user_mistakes" as any)
+      .update({
+        served_count: ((row.served_count ?? 0) + 1),
+        last_served_at: nowISO,
+      })
+      .eq("id", row.id)
+      .eq("user_id", userId);
+
+    return {
+      mistake: {
+        id: row.id,
+        decisionFen,
+        actualMoveUci: typeof row.actual_move_uci === "string" ? row.actual_move_uci : "",
+        actualMoveSan: typeof row.actual_move_san === "string" ? row.actual_move_san : null,
+        cpLoss: typeof row.cp_loss === "number" ? row.cp_loss : null,
+        classification: typeof row.classification === "string" ? row.classification : null,
+        severity: typeof row.severity === "string" ? row.severity : null,
+        setupPreviousFen,
+        setupPlayedMoveUci,
+        setupPlayedMoveSan: typeof row.setup_played_move_san === "string" ? row.setup_played_move_san : null,
+        sourceType: "app_training",
+        sourceProvider: "blindspots",
+      },
+      rejectedNoPreludeCount,
+      candidateCount: rows.length,
+    };
+  }
+
+  return { mistake: null, rejectedNoPreludeCount, candidateCount: rows.length };
 }
 
 export async function getNextMistakeForTraining(

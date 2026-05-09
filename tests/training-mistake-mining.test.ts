@@ -372,3 +372,134 @@ describe("extraction input contract", () => {
     assert.equal(isMineableUserMistake(input.classification), true);
   });
 });
+
+// ── Active mistake serving prelude validation ──────────────────────
+// Simulates the candidate-validation loop in getNextActiveAppMistake:
+// for each candidate, normalizeSetupPrelude is called with stored fields.
+
+const { normalizeSetupPrelude } = require("../lib/training/setup-prelude.ts");
+
+describe("active mistake prelude validation", () => {
+  it("accepts a valid stored prelude (previousFen + playedMove → decisionFen)", () => {
+    const prelude = normalizeSetupPrelude({
+      fen: AFTER_E4,
+      previousFen: START,
+      playedMove: "e2e4",
+    });
+    assert.notEqual(prelude, null);
+    assert.equal(prelude!.previousFen, START);
+    assert.equal(prelude!.playedMove, "e2e4");
+  });
+
+  it("rejects a stored prelude where playedMove is illegal", () => {
+    const prelude = normalizeSetupPrelude({
+      fen: AFTER_E4,
+      previousFen: START,
+      playedMove: "e2e5", // illegal from start
+    });
+    assert.equal(prelude, null);
+  });
+
+  it("rejects a stored prelude where previousFen is invalid", () => {
+    const prelude = normalizeSetupPrelude({
+      fen: AFTER_E4,
+      previousFen: "invalid_fen",
+      playedMove: "e2e4",
+    });
+    assert.equal(prelude, null);
+  });
+
+  it("rejects missing previousFen", () => {
+    const prelude = normalizeSetupPrelude({
+      fen: AFTER_E4,
+      previousFen: "",
+      playedMove: "e2e4",
+    });
+    assert.equal(prelude, null);
+  });
+
+  it("rejects missing playedMove", () => {
+    const prelude = normalizeSetupPrelude({
+      fen: AFTER_E4,
+      previousFen: START,
+      playedMove: "",
+    });
+    assert.equal(prelude, null);
+  });
+
+  it("rejects a stored prelude that does not reach decisionFen", () => {
+    // e2e4 from start reaches AFTER_E4, not AFTER_E4_NF6
+    const prelude = normalizeSetupPrelude({
+      fen: AFTER_E4_NF6,
+      previousFen: START,
+      playedMove: "e2e4",
+    });
+    assert.equal(prelude, null);
+  });
+});
+
+describe("active mistake candidate filtering (simulated loop)", () => {
+  it("returns first valid candidate, counts rejected invalid ones", () => {
+    const candidates = [
+      // Invalid: wrong move
+      { decisionFen: AFTER_E4, setupPreviousFen: START, setupPlayedMoveUci: "e2e5" },
+      // Valid: e2e4 from start → AFTER_E4
+      { decisionFen: AFTER_E4, setupPreviousFen: START, setupPlayedMoveUci: "e2e4" },
+      // Would be valid but first valid already found
+      { decisionFen: AFTER_E4, setupPreviousFen: START, setupPlayedMoveUci: "e2e4" },
+      // Missing prelude
+      { decisionFen: AFTER_E4, setupPreviousFen: "", setupPlayedMoveUci: "" },
+    ];
+
+    let rejected = 0;
+    let foundValid: typeof candidates[number] | null = null;
+
+    for (const row of candidates) {
+      const prelude = normalizeSetupPrelude({
+        fen: row.decisionFen,
+        previousFen: row.setupPreviousFen,
+        playedMove: row.setupPlayedMoveUci,
+      });
+      if (!prelude) {
+        rejected++;
+        continue;
+      }
+      foundValid = row;
+      break;
+    }
+
+    assert.equal(rejected, 1); // only the first (invalid) was rejected
+    assert.notEqual(foundValid, null);
+    assert.equal(foundValid!.setupPlayedMoveUci, "e2e4");
+  });
+
+  it("returns null when no candidate has a valid prelude", () => {
+    const candidates = [
+      { decisionFen: AFTER_E4, setupPreviousFen: START, setupPlayedMoveUci: "e2e5" },
+      { decisionFen: AFTER_E4_NF6, setupPreviousFen: START, setupPlayedMoveUci: "e2e4" },
+    ];
+
+    let rejected = 0;
+
+    for (const row of candidates) {
+      const prelude = normalizeSetupPrelude({
+        fen: row.decisionFen,
+        previousFen: row.setupPreviousFen,
+        playedMove: row.setupPlayedMoveUci,
+      });
+      if (!prelude) { rejected++; continue; }
+      break;
+    }
+
+    assert.equal(rejected, 2);
+  });
+
+  it("rejects missing decisionFen even if other fields exist", () => {
+    const prelude = normalizeSetupPrelude({
+      fen: "",
+      previousFen: START,
+      playedMove: "e2e4",
+    });
+    assert.equal(prelude, null);
+  });
+});
