@@ -16,7 +16,7 @@ import { normalizeBucketStats, recordBucketResult } from "@/lib/training/bandit-
 import { classifyTrainingBucket, classifyTrainingPhase } from "@/lib/training/position-metadata";
 import type { TrainingBucket, TrainingPhase } from "@/lib/training/queue-core";
 import { classifyTrainingOutcome } from "@/lib/training/mistake-srs";
-import { updateMistakeAfterTraining } from "@/lib/training/mistake-store";
+import { updateMistakeAfterTraining, updateActiveMistakeAfterTraining } from "@/lib/training/mistake-store";
 import { mineMistakesFromSequence } from "@/lib/training/mistake-mining-persistence";
 import type { MineableMoveInput } from "@/lib/training/mistake-mining";
 
@@ -288,19 +288,31 @@ export async function POST(request: Request) {
   });
 
   if (selectedMistakeId) {
-    // Row-based mistake path: update SRS state first (session insert succeeded), then Elo
     try {
       const srsUpdateStartedAt = Date.now();
-      await updateMistakeAfterTraining({
-        userId,
-        mistakeId: selectedMistakeId,
-        outcome: trainingOutcome,
-        averageCpLoss,
-        maxSingleCpLoss,
-      });
+
+      if (queueSource === "active_mistake") {
+        // Active app-training mistake: simple reschedule, no status change.
+        await updateActiveMistakeAfterTraining({
+          userId,
+          mistakeId: selectedMistakeId,
+          wasCorrect: trainingOutcome === "pass",
+        });
+      } else {
+        // Legacy row-based / imported / puzzle-filler mistake: full SRS path.
+        await updateMistakeAfterTraining({
+          userId,
+          mistakeId: selectedMistakeId,
+          outcome: trainingOutcome,
+          averageCpLoss,
+          maxSingleCpLoss,
+        });
+      }
+
       if (process.env.NODE_ENV !== "production") {
         console.log("[complete-sequence:srs]", {
           srsUpdateMs: Date.now() - srsUpdateStartedAt,
+          activeMistake: queueSource === "active_mistake",
         });
       }
     } catch (mistakeUpdateError) {
