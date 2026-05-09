@@ -105,13 +105,13 @@ const POSTMORTEM_TOUR_STEPS = [
   },
   {
     target: "eval-graph",
-    headline: "The crime scene, in line-chart form.",
-    body: "Each kink is one of your decisions. Flat lines mean you held the position. A cliff means something briefly forgot it was on the board.",
+    headline: "Eval chart.",
+    body: "We really don't have to explain this one.",
   },
   {
     target: "move-table",
-    headline: "Receipts.",
-    body: "Every move you played: eval before, eval after, cp lost, verdict. Click a row to send the board back to that moment so you can stare at it like a detective.",
+    headline: "Your played moves.",
+    body: "Every move you played during the sequence: eval before, eval after, cp lost, verdict. Click a row to send the board back to that moment so you can stare at it like a detective. Or you can use the left and right arrow keys like a normal human would.",
   },
   {
     target: "notes-panel",
