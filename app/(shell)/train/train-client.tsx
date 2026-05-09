@@ -522,7 +522,7 @@ export default function TrainPage(props: TrainPageProps) {
   const PREPLAY_TOUR_STEPS = [
     {
       eyebrow: "01 / Welcome",
-      headline: "No import ceremony.",
+      headline: "Welcome.",
       body: "You play here, we learn here. Blindspots starts with generated positions, then slowly replaces the filler with your own mistakes.",
     },
     {
