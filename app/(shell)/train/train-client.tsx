@@ -95,8 +95,8 @@ type PostmortemTourStep = {
 const POSTMORTEM_TOUR_STEPS = [
   {
     target: "elo-card",
-    headline: "A number, doing its best.",
-    body: "This is your Blindspots-only rating, not your Lichess one or whatever you tell people at the club. It wobbles early, then settles into something honest. Sorry.",
+    headline: "Your blindspots ELO.",
+    body: "This is pretty self explanatory. This ELO will be used to tune the difficulty of your opponent engine. Play well and it will go up, play badly and expect it to go down.",
   },
   {
     target: "engine-lines",
