@@ -503,3 +503,87 @@ describe("active mistake candidate filtering (simulated loop)", () => {
     assert.equal(prelude, null);
   });
 });
+
+// ── Active mistake scheduling tests ────────────────────────────────
+
+const schedMod: typeof import("../lib/training/active-mistake-schedule") =
+  require("../lib/training/active-mistake-schedule.ts");
+const { getNextReviewAtForActiveMistake, nextConsecutiveCorrectCount } = schedMod;
+
+describe("getNextReviewAtForActiveMistake", () => {
+  const now = new Date("2026-01-15T12:00:00Z");
+
+  it("failure → 10 minutes", () => {
+    const d = getNextReviewAtForActiveMistake({
+      wasCorrect: false,
+      consecutiveCorrectCountBefore: 0,
+      now,
+    });
+    const diff = d.getTime() - now.getTime();
+    assert.ok(diff >= 9.9 * 60 * 1000 && diff <= 10.1 * 60 * 1000, `diff=${diff}ms`);
+  });
+
+  it("failure resets regardless of previous streak", () => {
+    const d = getNextReviewAtForActiveMistake({
+      wasCorrect: false,
+      consecutiveCorrectCountBefore: 5,
+      now,
+    });
+    const diff = d.getTime() - now.getTime();
+    assert.ok(diff >= 9.9 * 60 * 1000 && diff <= 10.1 * 60 * 1000);
+  });
+
+  it("0 correct → 1 day", () => {
+    const d = getNextReviewAtForActiveMistake({
+      wasCorrect: true,
+      consecutiveCorrectCountBefore: 0,
+      now,
+    });
+    const diff = d.getTime() - now.getTime();
+    assert.ok(diff >= 0.99 * 24 * 60 * 60 * 1000 && diff <= 1.01 * 24 * 60 * 60 * 1000);
+  });
+
+  it("1 correct → 3 days", () => {
+    const d = getNextReviewAtForActiveMistake({
+      wasCorrect: true,
+      consecutiveCorrectCountBefore: 1,
+      now,
+    });
+    const diff = d.getTime() - now.getTime();
+    assert.ok(diff >= 2.99 * 24 * 60 * 60 * 1000 && diff <= 3.01 * 24 * 60 * 60 * 1000);
+  });
+
+  it("2 correct → 7 days", () => {
+    const d = getNextReviewAtForActiveMistake({
+      wasCorrect: true,
+      consecutiveCorrectCountBefore: 2,
+      now,
+    });
+    const diff = d.getTime() - now.getTime();
+    assert.ok(diff >= 6.99 * 24 * 60 * 60 * 1000 && diff <= 7.01 * 24 * 60 * 60 * 1000);
+  });
+
+  it("3+ correct → 7 days (capped)", () => {
+    const d = getNextReviewAtForActiveMistake({
+      wasCorrect: true,
+      consecutiveCorrectCountBefore: 10,
+      now,
+    });
+    const diff = d.getTime() - now.getTime();
+    assert.ok(diff >= 6.99 * 24 * 60 * 60 * 1000 && diff <= 7.01 * 24 * 60 * 60 * 1000);
+  });
+});
+
+describe("nextConsecutiveCorrectCount", () => {
+  it("increments on correct", () => {
+    assert.equal(nextConsecutiveCorrectCount(true, 0), 1);
+    assert.equal(nextConsecutiveCorrectCount(true, 1), 2);
+    assert.equal(nextConsecutiveCorrectCount(true, 5), 6);
+  });
+
+  it("resets to 0 on failure", () => {
+    assert.equal(nextConsecutiveCorrectCount(false, 0), 0);
+    assert.equal(nextConsecutiveCorrectCount(false, 3), 0);
+    assert.equal(nextConsecutiveCorrectCount(false, 10), 0);
+  });
+});

@@ -3,6 +3,7 @@ import type { Database } from "@/lib/supabase/database";
 import { nextIntervalDays, shouldMasterMistake, addDays, type TrainingOutcome } from "./mistake-srs";
 import { inferLegalMoveBetweenFens } from "./fen-transition";
 import { normalizeSetupPrelude } from "./setup-prelude";
+import { getNextReviewAtForActiveMistake, nextConsecutiveCorrectCount } from "./active-mistake-schedule";
 
 type UserMistakeUpdate = Database["public"]["Tables"]["user_mistakes"]["Update"];
 
@@ -373,4 +374,78 @@ export function normalizeUserMistakeForTraining(row: UserMistakeRow): {
     source: row.source_type,
     queueSource: row.status === "review" ? "review" : row.source_type,
   };
+}
+
+// ── Active mistake rescheduling ────────────────────────────────────
+
+/**
+ * Update an active app-training mistake after the user completes a training
+ * sequence that was served from this mistake.
+ *
+ * Only reschedules and tracks consecutive_correct_count.
+ * Does NOT change status (stays "active") — intermediary/graduated come later.
+ */
+export async function updateActiveMistakeAfterTraining(input: {
+  userId: string;
+  mistakeId: string;
+  wasCorrect: boolean;
+  now?: Date;
+}): Promise<UserMistakeRow> {
+  const supabase = getSupabaseAdminClient();
+  const now = input.now ?? new Date();
+
+  // Load current row
+  const { data: row, error } = await supabase
+    .from("user_mistakes" as any)
+    .select("id, consecutive_correct_count, review_count, fail_count, pass_count")
+    .eq("id", input.mistakeId)
+    .eq("user_id", input.userId)
+    .maybeSingle();
+
+  if (error || !row) {
+    throw new Error(
+      `[mistake-store] Failed to load active mistake ${input.mistakeId}: ${error?.message ?? "not found"}`,
+    );
+  }
+
+  const existingRow = row as any;
+  const prevStreak = typeof existingRow.consecutive_correct_count === "number"
+    ? existingRow.consecutive_correct_count
+    : 0;
+
+  const nextStreak = input.wasCorrect ? prevStreak + 1 : 0;
+  const nextReviewAt = getNextReviewAtForActiveMistake({
+    wasCorrect: input.wasCorrect,
+    consecutiveCorrectCountBefore: prevStreak,
+    now,
+  }).toISOString();
+
+  const updates: Record<string, unknown> = {
+    consecutive_correct_count: nextStreak,
+    next_review_at: nextReviewAt,
+    last_attempt_at: now.toISOString(),
+    review_count: ((existingRow.review_count ?? 0) + 1),
+  };
+
+  if (input.wasCorrect) {
+    updates.pass_count = ((existingRow.pass_count ?? 0) + 1);
+  } else {
+    updates.fail_count = ((existingRow.fail_count ?? 0) + 1);
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from("user_mistakes" as any)
+    .update(updates)
+    .eq("id", input.mistakeId)
+    .eq("user_id", input.userId)
+    .select("*")
+    .single();
+
+  if (updateError || !updated) {
+    throw new Error(
+      `[mistake-store] Failed to update active mistake ${input.mistakeId}: ${updateError?.message ?? "no row returned"}`,
+    );
+  }
+
+  return updated as unknown as UserMistakeRow;
 }
