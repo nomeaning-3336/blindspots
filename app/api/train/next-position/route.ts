@@ -24,7 +24,7 @@ import { selectAndReserveNextTrainingPositionCore, type TrainingBucket } from "@
 import { normalizeBucketStats, thompsonSample, type BucketStats } from "@/lib/training/bandit-stats";
 import { getPositionMateStatus } from "@/lib/engines/dispatcher";
 import { getOpponentElo } from "@/lib/training/elo";
-import { getNextMistakeForTraining, normalizeUserMistakeForTraining } from "@/lib/training/mistake-store";
+import { getNextMistakeForTraining, getNextActiveAppMistake, normalizeUserMistakeForTraining } from "@/lib/training/mistake-store";
 import { getPreviousPosition } from "@/lib/training/position-index";
 import { normalizeSetupPrelude } from "@/lib/training/setup-prelude";
 
@@ -126,7 +126,47 @@ if (!optionalError && optionalData) {
     : Number(profile?.blindspots_elo ?? 500);
   const challengeElo = getOpponentElo(userElo);
 
-  // Row-based mistake training — priority path
+  // ── App-training active mistakes — priority path ──────────────────
+  const activeAppResult = await getNextActiveAppMistake(userId);
+  if (activeAppResult.mistake) {
+    const row = activeAppResult.mistake;
+    const response: NextPositionResponse = {
+      mistakeId: row.id,
+      fen: row.decisionFen,
+      decisionFen: row.decisionFen,
+      previousFen: row.setupPreviousFen,
+      playedMove: row.setupPlayedMoveUci,
+      actualMoveUci: row.actualMoveUci || undefined,
+      actualMoveSan: row.actualMoveSan ?? undefined,
+      source: "app_training",
+      queueSource: "active_mistake",
+      selectedServeMode: "active_mistake",
+      cpLoss: row.cpLoss ?? undefined,
+      sequenceLength,
+      challengeElo,
+    };
+
+    if (process.env.NODE_ENV !== "production") {
+      response.debug = {
+        queueSource: "active_mistake",
+        mistakeId: row.id,
+        sourceType: row.sourceType,
+        sourceProvider: row.sourceProvider,
+        cpLoss: row.cpLoss,
+        classification: row.classification,
+        severity: row.severity,
+        selectedQueueKind: "active_mistake",
+        showMoveNotesHelper: true,
+        reviewStatus: "active",
+        activeMistakeCandidateCount: activeAppResult.candidateCount,
+        rejectedActiveMistakeNoPreludeCount: activeAppResult.rejectedNoPreludeCount,
+      };
+    }
+
+    return NextResponse.json(response);
+  }
+
+  // Row-based mistake training — imported/legacy path
   const mistakeResult = await getNextMistakeForTraining(userId);
   if (mistakeResult.mistake) {
     const normalized = normalizeUserMistakeForTraining(mistakeResult.mistake);
