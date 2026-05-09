@@ -597,6 +597,13 @@ export default function TrainPage(props: TrainPageProps) {
     };
   }, []);
 
+  // Use a ref to track whether onboarding intro was ever activated.
+  // This avoids the effect re-triggering when trainOnboardingIntroActive flips to false.
+  const onboardingIntroWasActiveRef = useRef(false);
+  if (shouldRunPreplayOnboarding && !onboardingIntroWasActiveRef.current) {
+    onboardingIntroWasActiveRef.current = true;
+  }
+
   useEffect(() => {
     let alive = true;
 
@@ -626,28 +633,29 @@ export default function TrainPage(props: TrainPageProps) {
 
         setOnboardingScreen("done");
 
-        if (trainOnboardingIntroActive) {
-          // Seed placeholder FEN for onboarding intro — do not load a real position yet
+        // Only seed onboarding intro if it hasn't been shown yet.
+        // Do not call loadNextPosition here — onboarding intro CTA handles it.
+        if (shouldRunPreplayOnboarding && !trainOnboardingIntroDone) {
           const placeholderFen = TRAIN_ONBOARDING_PLACEHOLDER_FEN;
           setStartingFen(placeholderFen);
           setDisplayStartingFen(placeholderFen);
           setFen(placeholderFen);
           setMoves([]);
           setIsPositionLoading(false);
-        } else {
+        } else if (!shouldRunPreplayOnboarding) {
           void loadNextPosition();
         }
       } catch {
         if (!alive) return;
         setOnboardingScreen("done");
-        if (trainOnboardingIntroActive) {
+        if (shouldRunPreplayOnboarding && !trainOnboardingIntroDone) {
           const placeholderFen = TRAIN_ONBOARDING_PLACEHOLDER_FEN;
           setStartingFen(placeholderFen);
           setDisplayStartingFen(placeholderFen);
           setFen(placeholderFen);
           setMoves([]);
           setIsPositionLoading(false);
-        } else {
+        } else if (!shouldRunPreplayOnboarding) {
           void loadNextPosition();
         }
       }
@@ -658,7 +666,7 @@ export default function TrainPage(props: TrainPageProps) {
     return () => {
       alive = false;
     };
-  }, [trainOnboardingIntroActive]);
+  }, [shouldRunPreplayOnboarding, trainOnboardingIntroDone]);
 
   useLayoutEffect(() => {
     let alive = true;
