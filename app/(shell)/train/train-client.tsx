@@ -2747,6 +2747,11 @@ export default function TrainPage(props: TrainPageProps) {
               void loadNextPosition();
             }
           }}
+          onBack={() => {
+            if (trainOnboardingIntroStep > 0) {
+              setTrainOnboardingIntroStep((s) => s - 1);
+            }
+          }}
           onSkip={() => {
             setTrainOnboardingIntroDone(true);
             setIsPositionLoading(true);
@@ -4602,12 +4607,14 @@ function TrainOnboardingIntroOverlay({
   totalSteps,
   steps,
   onNext,
+  onBack,
   onSkip,
 }: {
   step: number;
   totalSteps: number;
   steps: TrainOnboardingIntroStep[];
   onNext: () => void;
+  onBack: () => void;
   onSkip: () => void;
 }) {
   const current = steps[step];
@@ -4653,7 +4660,15 @@ function TrainOnboardingIntroOverlay({
           {current.body}
         </p>
 
-        <div className="flex items-center justify-end gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onBack(); }}
+            className="min-h-11 border border-[var(--app-border)] px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)]"
+          >
+            Back
+          </button>
+
           {isLast && current.cta ? (
             <button
               type="button"
