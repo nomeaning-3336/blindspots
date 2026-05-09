@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { Chess, type Square } from "chess.js";
 import { AnalysisBoard, type BoardMove, type EngineArrow } from "@/components/chess/analysis-board";
 import {
@@ -514,6 +515,39 @@ export default function TrainPage() {
   const startTrainingGestureConsumedRef = useRef(false);
   const isPostMortemVisible = state === "complete" || state === "drift";
   const shouldAnimatePieces = state === "active" || isPostMortemVisible;
+
+  const searchParams = useSearchParams();
+  const isOnboardingMode = searchParams.get("onboarding") === "1";
+
+  const [trainOnboardingIntroStep, setTrainOnboardingIntroStep] = useState(0);
+  const [trainOnboardingIntroDone, setTrainOnboardingIntroDone] = useState(false);
+  const trainOnboardingIntroActive = isOnboardingMode && !trainOnboardingIntroDone;
+
+  const PREPLAY_TOUR_STEPS = [
+    {
+      eyebrow: "01 / Welcome",
+      headline: "No import ceremony.",
+      body: "You play here, we learn here. Blindspots starts with generated positions, then slowly replaces the filler with your own mistakes.",
+    },
+    {
+      eyebrow: "02 / The board",
+      headline: "This is not a one-move puzzle vending machine.",
+      body: "You will play a short sequence. The goal is to keep the position alive across multiple decisions, not just find one shiny engine move.",
+    },
+    {
+      eyebrow: "03 / Eval preservation",
+      headline: "The engine watches the whole line.",
+      body: "Every move is checked for how much eval you preserve or bleed. Small leaks matter. Giant leaks get bottled for later.",
+    },
+    {
+      eyebrow: "04 / Your first run",
+      headline: "Go play a sequence.",
+      body: "After you finish, we will show the postmortem: eval swings, move grades, notes, and the mistakes that come back to haunt you productively.",
+      cta: "Click to load your first position",
+    },
+  ];
+
+  const PLACEHOLDER_FEN = "r3k2r/pp1nbppp/2p1pn2/q2p4/3P1B2/2NQPN2/PP3PPP/2KR3R w kq - 0 11";
   const [moveAnnotations, setMoveAnnotations] = useState<Record<string, AnnotatedMove>>({});
   const seededMoveKeysRef = useRef<Set<string>>(new Set());
   const [selectedMoveKey, setSelectedMoveKey] = useState<string | null>(null);
@@ -598,11 +632,31 @@ export default function TrainPage() {
         }
 
         setOnboardingScreen("done");
-        void loadNextPosition();
+
+        if (trainOnboardingIntroActive) {
+          // Seed placeholder FEN for onboarding intro — do not load a real position yet
+          const placeholderFen = PLACEHOLDER_FEN;
+          setStartingFen(placeholderFen);
+          setDisplayStartingFen(placeholderFen);
+          setFen(placeholderFen);
+          setMoves([]);
+          setIsPositionLoading(false);
+        } else {
+          void loadNextPosition();
+        }
       } catch {
         if (!alive) return;
         setOnboardingScreen("done");
-        void loadNextPosition();
+        if (trainOnboardingIntroActive) {
+          const placeholderFen = PLACEHOLDER_FEN;
+          setStartingFen(placeholderFen);
+          setDisplayStartingFen(placeholderFen);
+          setFen(placeholderFen);
+          setMoves([]);
+          setIsPositionLoading(false);
+        } else {
+          void loadNextPosition();
+        }
       }
     }
 
@@ -611,7 +665,7 @@ export default function TrainPage() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [trainOnboardingIntroActive]);
 
   useLayoutEffect(() => {
     let alive = true;
@@ -2675,6 +2729,66 @@ export default function TrainPage() {
     );
   }
 
+  if (trainOnboardingIntroActive) {
+    return (
+      <>
+        <div className="-mx-4 -mb-4 flex h-full min-h-0 w-[calc(100%+2rem)] flex-1 overflow-hidden px-3 py-3 md:-mx-6 md:w-[calc(100%+3rem)]">
+          <div className="mx-auto grid h-full min-h-0 w-full max-w-[100rem] min-w-0 gap-4 lg:grid-cols-1 lg:items-center lg:justify-items-center">
+            <section className="app-brutal-section flex min-h-0 min-w-0 items-center justify-center overflow-hidden p-3 sm:p-4 lg:p-4 lg:w-fit lg:justify-self-center">
+              <div className="flex min-h-0 min-w-0 items-center justify-center">
+                <div ref={boardContainerRef} className={boardFrameClassName}>
+                  <BoardWithPlayerStrips
+                    userSide={userMoveSide}
+                    boardFen={fen}
+                    isOpponentThinking={false}
+                    isTrainingActive={false}
+                    isExploring={false}
+                  >
+                    <BoardWithEvalBar
+                      isLoading={false}
+                      orientation={boardOrientation}
+                    >
+                      <AnalysisBoard
+                        fen={fen}
+                        mode="training"
+                        pieceAnimation={false}
+                        orientation={boardOrientation}
+                        coordinates
+                        showLegalTargets={false}
+                        boardTheme={visualPreferences.boardTheme}
+                        pieceTheme={visualPreferences.pieceTheme}
+                        disabled
+                      />
+                    </BoardWithEvalBar>
+                  </BoardWithPlayerStrips>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+        <TrainOnboardingIntroOverlay
+          step={trainOnboardingIntroStep}
+          totalSteps={PREPLAY_TOUR_STEPS.length}
+          steps={PREPLAY_TOUR_STEPS}
+          onNext={() => {
+            if (trainOnboardingIntroStep < PREPLAY_TOUR_STEPS.length - 1) {
+              setTrainOnboardingIntroStep((s) => s + 1);
+            } else {
+              setTrainOnboardingIntroDone(true);
+              setIsPositionLoading(true);
+              void loadNextPosition();
+            }
+          }}
+          onSkip={() => {
+            setTrainOnboardingIntroDone(true);
+            setIsPositionLoading(true);
+            void loadNextPosition();
+          }}
+        />
+      </>
+    );
+  }
+
   return (
     <div className="-mx-4 -mb-4 flex h-full min-h-0 w-[calc(100%+2rem)] flex-1 overflow-hidden px-3 py-3 md:-mx-6 md:w-[calc(100%+3rem)]">
       <div
@@ -4687,6 +4801,101 @@ function MoveList({
           <span className="pl-8 font-bold text-[var(--app-muted)]">Opponent thinking...</span>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+type TrainOnboardingIntroStep = {
+  eyebrow: string;
+  headline: string;
+  body: string;
+  cta?: string;
+};
+
+function TrainOnboardingIntroOverlay({
+  step,
+  totalSteps,
+  steps,
+  onNext,
+  onSkip,
+}: {
+  step: number;
+  totalSteps: number;
+  steps: TrainOnboardingIntroStep[];
+  onNext: () => void;
+  onSkip: () => void;
+}) {
+  const current = steps[step];
+  const isLast = step === totalSteps - 1;
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onNext();
+    }
+  }
+
+  return (
+    <div
+      className="absolute inset-0 z-50 flex items-center justify-center"
+      style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(2px)" }}
+      onClick={onNext}
+      onKeyDown={handleKeyDown}
+      role="button"
+      tabIndex={0}
+      aria-label="Click to continue"
+    >
+      <div
+        className="app-brutal-card mx-4 max-w-lg border-2 p-8"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Onboarding step ${step + 1} of ${totalSteps}`}
+      >
+        <div className="mb-6 flex items-center justify-between">
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--app-muted)]">
+            {current.eyebrow}
+          </div>
+          <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--app-muted)]">
+            {step + 1} / {totalSteps}
+          </div>
+        </div>
+
+        <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
+          {current.headline}
+        </h2>
+        <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
+          {current.body}
+        </p>
+
+        <div className="flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onSkip(); }}
+            className="min-h-11 border border-[var(--app-border)] px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)]"
+          >
+            Skip tour
+          </button>
+
+          {isLast && current.cta ? (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onNext(); }}
+              className="app-brutal-button min-h-11 px-6 text-xs"
+            >
+              {current.cta}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onNext(); }}
+              className="app-brutal-button min-h-11 px-6 text-xs"
+            >
+              Next
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
