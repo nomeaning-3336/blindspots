@@ -35,6 +35,13 @@ export type EloHistoryPoint = {
   ts: string;
 };
 
+export type DashboardCluster = {
+  id: string;
+  label: string;
+  attempts: number;
+  failures: number;
+};
+
 export type DashboardSummary = {
   totalSequences: number;
   movesEvaluated: number;
@@ -59,6 +66,7 @@ export type DashboardSummary = {
   recentPassRate: number | null;
   avgEvalLossCp: number | null;
   classifications: DashboardClassifications | null;
+  clusters: DashboardCluster[];
   recentPositions: DashboardPosition[];
   positions: DashboardPosition[];
   recentSessions: Array<{
@@ -167,6 +175,7 @@ export function buildDashboardSummary({
   const evaluationsBySession = sessions.map((session) => normalizePositionEvaluations(session.position_evaluations));
   const evaluations = evaluationsBySession.flat();
   const classifications = buildClassificationCounts(evaluations);
+  const clusters = buildDashboardClusters(evaluations);
 
   const exploitCount = jsonArrayLength(profile?.exploit_queue);
   const exploreCount = jsonArrayLength(profile?.explore_queue);
@@ -198,6 +207,7 @@ export function buildDashboardSummary({
     recentPassRate,
     avgEvalLossCp: avgCpLoss,
     classifications,
+    clusters,
     recentPositions,
     positions,
     eloHistory: buildEloHistory(sessions),
@@ -358,6 +368,98 @@ function buildClassificationCounts(evaluations: PositionEvaluationInput[]) {
     counts[evaluation.classification] += 1;
   }
   return counts;
+}
+
+function buildDashboardClusters(evaluations: PositionEvaluationInput[]): DashboardCluster[] {
+  const byId = new Map<string, DashboardCluster>();
+
+  for (const evaluation of evaluations) {
+    const id = evaluation.clusterId;
+    if (!id || isSparseDashboardCluster(id)) continue;
+
+    const existing = byId.get(id) ?? {
+      id,
+      label: clusterLabel(id, evaluation),
+      attempts: 0,
+      failures: 0,
+    };
+
+    existing.attempts += 1;
+    if (CLASSIFICATION_SEVERITY[evaluation.classification] >= CLASSIFICATION_SEVERITY.inaccuracy) {
+      existing.failures += 1;
+    }
+    byId.set(id, existing);
+  }
+
+  return [...byId.values()]
+    .filter((cluster) => cluster.attempts >= 5 && cluster.failures > 0)
+    .sort((left, right) => {
+      if (right.failures !== left.failures) return right.failures - left.failures;
+      if (right.attempts !== left.attempts) return right.attempts - left.attempts;
+      return left.label.localeCompare(right.label);
+    });
+}
+
+function isSparseDashboardCluster(id: string) {
+  return id === "app:v1:unknown:wildcard" || id === "app:v1:opening:wildcard";
+}
+
+function clusterLabel(id: string, evaluation: PositionEvaluationInput) {
+  const parts = id.split(":");
+  const version = parts[1];
+  const phase = normalizePhase(parts[2] ?? evaluation.phase);
+  const bucket = parts[3] ?? evaluation.bucket ?? "";
+  const detail = parts[4] ?? "";
+
+  if (version === "v0") return phaseLabel(phase);
+
+  if (phase === "tactic") return "Tactical Positions";
+  if (phase === "opening") {
+    const openingDetail = normalizeDisplayName(detail.toUpperCase()) ?? normalizeDisplayName(evaluation.eco);
+    return openingDetail ? `Opening — ${openingDetail}` : "Opening";
+  }
+  if (phase === "middlegame") {
+    const label = detailLabel(detail) ?? bucketDetailLabel(bucket);
+    return label ? `Middlegame — ${label}` : "Middlegame";
+  }
+  if (phase === "endgame") {
+    const label = detailLabel(detail) ?? bucketDetailLabel(bucket);
+    return label ? `Endgame — ${label}` : "Endgame";
+  }
+
+  return phaseLabel(phase);
+}
+
+function phaseLabel(phase: ReturnType<typeof normalizePhase>) {
+  switch (phase) {
+    case "opening": return "Opening";
+    case "middlegame": return "Middlegame";
+    case "endgame": return "Endgame";
+    case "tactic": return "Tactical Positions";
+    default: return "Training Positions";
+  }
+}
+
+function bucketDetailLabel(bucket: string) {
+  switch (bucket) {
+    case "middlegame_attack": return "Attack";
+    case "middlegame_positional": return "Positional";
+    case "endgame_rook": return "Rook Endgame";
+    case "endgame_pawn": return "Pawn Endgame";
+    case "opening_gambit": return "Gambit";
+    case "opening_development": return "Development";
+    default: return null;
+  }
+}
+
+function detailLabel(detail: string) {
+  if (!detail) return null;
+  if (/^[a-e][0-9]{2}$/i.test(detail)) return detail.toUpperCase();
+  return detail
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function buildRecentSession(

@@ -27,6 +27,10 @@ import { getOpponentElo } from "@/lib/training/elo";
 import { getNextMistakeForTraining, getNextActiveAppMistake, normalizeUserMistakeForTraining } from "@/lib/training/mistake-store";
 import { getPreviousPosition } from "@/lib/training/position-index";
 import { normalizeSetupPrelude } from "@/lib/training/setup-prelude";
+import {
+  DEFAULT_BLINDSPOTS_ELO,
+  buildDefaultBlindspotProfile,
+} from "@/lib/training/default-profile";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -123,7 +127,7 @@ if (!optionalError && optionalData) {
   const sequenceLength = 4;
   const userElo = typeof profile?.blindspots_elo === "number"
     ? profile.blindspots_elo
-    : Number(profile?.blindspots_elo ?? 500);
+    : Number(profile?.blindspots_elo ?? DEFAULT_BLINDSPOTS_ELO);
   const challengeElo = getOpponentElo(userElo);
 
   // ── App-training active mistakes — priority path ──────────────────
@@ -814,9 +818,7 @@ async function persistQueues(
 
   const { error } = await supabase.from("user_blindspot_profile").upsert(
     {
-      user_id: userId,
-      initialization_status: "skipped",
-      profile_initialized: false,
+      ...buildDefaultBlindspotProfile(userId),
       ...values,
     },
     { onConflict: "user_id" },
