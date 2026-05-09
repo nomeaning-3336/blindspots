@@ -761,6 +761,321 @@ function ensureOverrideStyle() {
       border: none !important;
     }
 
+    /* ============================================================
+       TRAIN POST-MORTEM PARITY LAYER.
+       Matches /train post-mortem brutal/neobrutalist visual language.
+       Replaces the prior "sensual analyze surface" polish layer.
+       ============================================================ */
+
+    /* Host: no decorative glow */
+    #analyze-app-host::before { display: none !important; }
+    #analyze-app-host > * { position: relative; z-index: 1; }
+
+    /* ---- A. Normalize all analyzer headings ---- */
+    #analyze-app-host #app .board-analysis-head,
+    #analyze-app-host #app .board-history-head,
+    #analyze-app-host #app .theme-analysis-head,
+    #analyze-app-host #app .head,
+    #analyze-app-host #app .export-head,
+    #analyze-app-host #app .settings-head {
+      border-bottom: 1px solid var(--app-border) !important;
+      background: transparent !important;
+      box-shadow: none !important;
+      border-radius: 0 !important;
+      padding: 10px 12px !important;
+    }
+
+    #analyze-app-host #app .board-analysis-head h2,
+    #analyze-app-host #app .board-history-head h2,
+    #analyze-app-host #app .theme-analysis-head h2,
+    #analyze-app-host #app .head h2,
+    #analyze-app-host #app .export-head h2,
+    #analyze-app-host #app .settings-head h2 {
+      color: var(--app-text) !important;
+      font-size: 0.72rem !important;
+      font-weight: 800 !important;
+      letter-spacing: 0.14em !important;
+      text-transform: uppercase !important;
+      line-height: 1.1 !important;
+    }
+
+    #analyze-app-host #app .board-analysis-head span,
+    #analyze-app-host #app .board-history-head span,
+    #analyze-app-host #app .theme-analysis-head span,
+    #analyze-app-host #app .head span,
+    #analyze-app-host #app .export-head span,
+    #analyze-app-host #app .settings-head span {
+      color: var(--app-muted) !important;
+      font-size: 0.6rem !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.12em !important;
+      text-transform: uppercase !important;
+    }
+
+    /* ---- B. Restyle engine lines to match train post-mortem rows ---- */
+    #analyze-app-host #app .board-analysis {
+      background: var(--app-panel-solid) !important;
+      border: 1px solid #050505 !important;
+      box-shadow: 5px 5px 0 #050505 !important;
+      border-radius: 10px !important;
+      overflow: hidden !important;
+    }
+
+    #analyze-app-host #app .analysis-list {
+      background: transparent !important;
+      padding: 8px !important;
+      gap: 8px !important;
+    }
+
+    #analyze-app-host #app .analysis-row {
+      background: var(--app-panel-deep) !important;
+      border: 1px solid var(--app-border) !important;
+      border-radius: 8px !important;
+      box-shadow: none !important;
+      padding: 9px 10px !important;
+      color: var(--app-text) !important;
+    }
+
+    #analyze-app-host #app .analysis-row:hover {
+      background: var(--app-panel-solid) !important;
+      border-color: var(--app-text) !important;
+    }
+
+    #analyze-app-host #app .analysis-row.is-active,
+    #analyze-app-host #app .analysis-row[aria-selected="true"] {
+      background: var(--app-panel-solid) !important;
+      border-color: var(--app-accent) !important;
+      box-shadow: inset 4px 0 0 var(--app-accent) !important;
+    }
+
+    #analyze-app-host #app .analysis-san {
+      color: var(--app-text) !important;
+      font-weight: 800 !important;
+      font-size: 0.95rem !important;
+      letter-spacing: 0.01em !important;
+    }
+
+    #analyze-app-host #app .analysis-rank,
+    #analyze-app-host #app .analysis-stats,
+    #analyze-app-host #app .analysis-score {
+      color: var(--app-muted) !important;
+      font-weight: 700 !important;
+      font-variant-numeric: tabular-nums !important;
+    }
+
+    #analyze-app-host #app .analysis-pv {
+      color: var(--app-muted-soft) !important;
+      font-size: 0.68rem !important;
+      line-height: 1.4 !important;
+    }
+
+    #analyze-app-host #app .analysis-class {
+      background: transparent !important;
+      border: 1px solid currentColor !important;
+      border-radius: 999px !important;
+      box-shadow: none !important;
+      font-size: 0.56rem !important;
+      font-weight: 800 !important;
+      letter-spacing: 0.08em !important;
+      text-transform: uppercase !important;
+    }
+
+    /* ---- C. Remove purple gradient/soft backgrounds from move history ---- */
+    #analyze-app-host #app .board-history-opening {
+      background: var(--app-panel-deep) !important;
+      border-bottom: 1px solid var(--app-border) !important;
+    }
+
+    #analyze-app-host #app .board-history-list {
+      background: transparent !important;
+      padding: 8px !important;
+    }
+
+    #analyze-app-host #app .board-history-move {
+      background: transparent !important;
+      border: 1px solid transparent !important;
+      border-radius: 6px !important;
+      box-shadow: none !important;
+      color: var(--app-muted) !important;
+    }
+
+    #analyze-app-host #app .board-history-move:hover {
+      background: var(--app-panel-deep) !important;
+      border-color: var(--app-border) !important;
+      color: var(--app-text) !important;
+    }
+
+    #analyze-app-host #app .board-history-move.current,
+    #analyze-app-host #app .board-history-move.is-active,
+    #analyze-app-host #app .board-history-move[aria-selected="true"] {
+      background: var(--app-panel-solid) !important;
+      border-color: var(--app-accent) !important;
+      color: var(--app-text) !important;
+      box-shadow: inset 3px 0 0 var(--app-accent) !important;
+    }
+
+    #analyze-app-host #app .board-history-move.future {
+      opacity: 0.62 !important;
+    }
+
+    /* Kill --move-soft purple source inline style from standalone.js */
+    #analyze-app-host #app .board-history-move[style*="--move-soft"] {
+      --move-soft: transparent !important;
+    }
+
+    /* ---- D. Restore Black/White labels via CSS pseudo-elements ---- */
+    #analyze-app-host #app .board-shell-wrap {
+      position: relative !important;
+    }
+
+    #analyze-app-host #app .board-shell-wrap[data-orientation="white"]::before,
+    #analyze-app-host #app .board-shell-wrap[data-orientation="white"]::after,
+    #analyze-app-host #app .board-shell-wrap[data-orientation="black"]::before,
+    #analyze-app-host #app .board-shell-wrap[data-orientation="black"]::after {
+      position: absolute;
+      z-index: 30;
+      left: 10px;
+      padding: 2px 6px;
+      border: 1px solid var(--app-border);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--app-bg) 82%, transparent);
+      color: var(--app-muted);
+      font-size: 0.58rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+
+    #analyze-app-host #app .board-shell-wrap[data-orientation="white"]::before {
+      content: "Black";
+      top: 8px;
+    }
+
+    #analyze-app-host #app .board-shell-wrap[data-orientation="white"]::after {
+      content: "White";
+      bottom: 8px;
+    }
+
+    #analyze-app-host #app .board-shell-wrap[data-orientation="black"]::before {
+      content: "White";
+      top: 8px;
+    }
+
+    #analyze-app-host #app .board-shell-wrap[data-orientation="black"]::after {
+      content: "Black";
+      bottom: 8px;
+    }
+
+    /* ---- E. Board keeps modern train shadow (not brutal outer shadow) ---- */
+    #analyze-app-host #app .board-shell-wrap {
+      box-shadow: var(--app-shadow) !important;
+    }
+
+    /* Container panels: brutal card language for outer shells */
+    #analyze-app-host #app .board-analysis,
+    #analyze-app-host #app .board-history-panel,
+    #analyze-app-host #app .section-head {
+      background: var(--app-panel-solid) !important;
+      border: 1px solid color-mix(in srgb, var(--app-text) 72%, transparent) !important;
+      box-shadow: 5px 5px 0 #050505 !important;
+      border-radius: 10px !important;
+      transition: transform 120ms ease, box-shadow 120ms ease !important;
+    }
+
+    /* ---- Buttons: match train post-mortem brutal button treatment ---- */
+    #analyze-app-host #app .board-options .btn,
+    #analyze-app-host #app .settings-trigger {
+      border: 1px solid #050505 !important;
+      background: var(--app-panel-solid) !important;
+      color: var(--app-text) !important;
+      box-shadow: 4px 4px 0 #050505 !important;
+      border-radius: 8px !important;
+      font-weight: 700 !important;
+      text-transform: uppercase !important;
+      letter-spacing: 0.04em !important;
+      transition:
+        transform 120ms ease,
+        box-shadow 120ms ease,
+        background 120ms ease,
+        color 120ms ease !important;
+    }
+
+    #analyze-app-host #app .board-options .btn:hover,
+    #analyze-app-host #app .board-options .btn:focus-visible,
+    #analyze-app-host #app .board-options .btn[data-visual-hover="true"] {
+      transform: translate(2px, 2px) !important;
+      box-shadow: 2px 2px 0 #050505 !important;
+      background: color-mix(in srgb, var(--app-text) 92%, transparent) !important;
+      color: var(--app-bg) !important;
+    }
+
+    #analyze-app-host #app .board-options .btn.primary,
+    #analyze-app-host #app .board-options .btn[data-primary="true"] {
+      background: var(--app-accent) !important;
+      color: var(--app-accent-contrast) !important;
+      border-color: var(--app-accent) !important;
+      box-shadow: 5px 5px 0 #050505 !important;
+    }
+
+    #analyze-app-host #app .board-options .btn.primary:hover,
+    #analyze-app-host #app .board-options .btn.primary:focus-visible,
+    #analyze-app-host #app .board-options .btn[data-primary="true"][data-visual-hover="true"] {
+      background: #fff !important;
+      box-shadow: 3px 3px 0 #050505 !important;
+      transform: translate(2px, 2px) !important;
+    }
+
+    #analyze-app-host #app .settings-trigger:hover,
+    #analyze-app-host #app .settings-trigger[data-visual-hover="true"] {
+      transform: translate(2px, 2px) !important;
+      box-shadow: 2px 2px 0 #050505 !important;
+    }
+
+    /* ---- Eval bar: match train brutal treatment ---- */
+    #analyze-app-host #app .eval-bar {
+      border: 1px solid #050505 !important;
+      border-radius: 4px !important;
+      box-shadow: 3px 3px 0 #050505 !important;
+    }
+
+    /* ---- Focus states for inputs ---- */
+    #analyze-app-host #app #coachPill input:focus,
+    #analyze-app-host #app #assistantInput:focus {
+      outline: none !important;
+      border-color: var(--app-accent) !important;
+      box-shadow: 4px 4px 0 #050505 !important;
+    }
+
+    /* ---- Scrollbar: consistent brutal styling ---- */
+    #analyze-app-host #app ::-webkit-scrollbar { width: 8px; height: 8px; }
+    #analyze-app-host #app ::-webkit-scrollbar-track { background: transparent; }
+    #analyze-app-host #app ::-webkit-scrollbar-thumb {
+      background: var(--app-border-strong) !important;
+      border-radius: 8px !important;
+      border: 2px solid transparent !important;
+      background-clip: padding-box !important;
+    }
+    #analyze-app-host #app ::-webkit-scrollbar-thumb:hover {
+      background: color-mix(in srgb, var(--app-text) 60%, transparent) !important;
+      background-clip: padding-box !important;
+    }
+
+    /* ---- Move classification chips/badges: uppercase brutal mono style ---- */
+    #analyze-app-host #app .chip,
+    #analyze-app-host #app .badge {
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      border-radius: 4px !important;
+      border: 1px solid color-mix(in srgb, var(--app-text) 32%, transparent) !important;
+    }
+
+    /* Remove old classification icon borders */
+    #analyze-app-host #app .board-history-move-icon {
+      border: none !important;
+    }
+
   `;
   if (!existing) {
     document.head.appendChild(style);
