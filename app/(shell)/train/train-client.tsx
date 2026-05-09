@@ -120,8 +120,8 @@ const POSTMORTEM_TOUR_STEPS = [
   },
   {
     target: "postmortem-actions",
-    headline: "Another one, or call it.",
-    body: "Next position queues another sequence. Your old mistakes get priority over filler, so the queue gets meaner over time. Or hit the dashboard to see what is still haunting you.",
+    headline: "Keep playing, or call it a day.",
+    body: "The next position might be sampled from a random position to see how you play, or one of your already played positions that you didn't perform very well so you can try to fix your past mistake. Or you can go back to the main dashboard.",
     cta: "Finish onboarding",
   },
 ] as const satisfies readonly PostmortemTourStep[];
