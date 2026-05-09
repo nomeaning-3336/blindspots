@@ -3457,7 +3457,7 @@ function TrainPostmortemTourOverlay({
         height: Math.min(viewportHeight - margin * 2, targetRect.height + 12),
       }
     : null;
-  const cardWidth = Math.min(360, viewportWidth - margin * 2);
+  const cardWidth = Math.min(440, viewportWidth - margin * 2);
   const canPlaceRight = spotlight ? spotlight.left + spotlight.width + cardWidth + margin * 2 <= viewportWidth : false;
   const canPlaceLeft = spotlight ? spotlight.left - cardWidth - margin * 2 >= 0 : false;
   const cardLeft = !spotlight
@@ -3492,47 +3492,50 @@ function TrainPostmortemTourOverlay({
         />
       ) : null}
       <div
-        className="fixed grid gap-4 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-4 text-[var(--app-text)] shadow-[4px_4px_0_#050505]"
+        className="fixed grid gap-4 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_#050505]"
         style={{ top: cardTop, left: cardLeft, width: cardWidth }}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="grid gap-2">
-          <h2 className="text-lg font-bold leading-tight">{current.headline}</h2>
-          <p className="text-sm leading-6 text-[var(--app-muted)]">{missingTarget ? "Finding the section..." : current.body}</p>
-        </div>
-        <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onSkip(); }}
+          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center text-[var(--app-muted)] transition hover:text-[var(--app-text)]"
+          aria-label="Close postmortem tour"
+          disabled={completionInFlight}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+
+        <div className="mb-6" />
+
+        <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
+          {current.headline}
+        </h2>
+        <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
+          {missingTarget ? "Finding the section..." : current.body}
+        </p>
+
+        <div className="flex items-center justify-between gap-3">
           <button
             type="button"
+            onClick={(e) => { e.stopPropagation(); if (!isFirst) onBack(); }}
             aria-disabled={isFirst}
-            className={[
-              "inline-flex min-h-9 items-center justify-center rounded-[8px] border border-[var(--app-border)] px-3 text-xs font-bold uppercase tracking-[0.04em]",
-              isFirst ? "cursor-default opacity-40" : "hover:border-[var(--app-accent)] hover:text-[var(--app-accent)]",
-            ].join(" ")}
-            onClick={() => {
-              if (isFirst) return;
-              onBack();
-            }}
+            className="min-h-11 border border-[var(--app-border)] px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)] aria-disabled:cursor-not-allowed aria-disabled:opacity-40"
           >
             Back
           </button>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="inline-flex min-h-9 items-center justify-center rounded-[8px] border border-[var(--app-border)] px-3 text-xs font-bold uppercase tracking-[0.04em] hover:border-[var(--app-accent)] hover:text-[var(--app-accent)]"
-              onClick={onSkip}
-              disabled={completionInFlight}
-            >
-              Skip tour
-            </button>
-            <button
-              type="button"
-              className="app-brutal-button inline-flex min-h-9 min-w-0 items-center justify-center px-3 py-2 text-xs"
-              onClick={onNext}
-              disabled={completionInFlight}
-            >
-              {completionInFlight ? "Saving..." : current.cta ?? "Next"}
-            </button>
-          </div>
+
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onNext(); }}
+            className="app-brutal-button min-h-11 px-6 text-xs"
+            disabled={completionInFlight}
+          >
+            {completionInFlight ? "Saving..." : current.cta ?? "Next"}
+          </button>
         </div>
       </div>
     </div>
