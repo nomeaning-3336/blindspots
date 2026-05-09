@@ -3,12 +3,22 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const bridgeSource = readFileSync("components/analyze-bridge.tsx", "utf8");
+const trainSource = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
 
 test("analyze bridge uses one final postmortem parity override layer", () => {
   assert.equal(
     bridgeSource.match(/ANALYZE POSTMORTEM PARITY OVERRIDE/g)?.length ?? 0,
     1,
   );
+});
+
+test("analysis and train use the same React postmortem board and engine line components", () => {
+  assert.match(bridgeSource, /from "@\/components\/train\/postmortem-shared"/);
+  assert.match(trainSource, /from "@\/components\/train\/postmortem-shared"/);
+  assert.match(bridgeSource, /<AnalysisBoard[\s\S]*dataTestId="analyze-react-board"/);
+  assert.match(bridgeSource, /<EngineLinesSection[\s\S]*lines=\{runtimeSnapshot\.lines\}/);
+  assert.match(bridgeSource, /#analyze-app-host #app \.board-stack > \.board-frame \{[\s\S]*display: none !important;/);
+  assert.match(bridgeSource, /#analyze-app-host #app \.board-analysis > :not\(#analyze-react-lines-slot\) \{[\s\S]*display: none !important;/);
 });
 
 test("analysis engine rows are table-like instead of card-like", () => {
