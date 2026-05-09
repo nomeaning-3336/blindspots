@@ -288,13 +288,20 @@ const EVAL_GRAPH_RANGE = 14;
 const MIN_EVAL_GRAPH_SPAN = 2;
 const DEFAULT_TRAINING_FEN =
   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-const ONBOARDING_PREVIEW_POSITION: NextPositionResponse = {
-  previousFen: "r2qk2r/3bbp2/p1np3p/2p1p3/1p2P3/2PP2Pp/PPB1QP1B/RN2K2R w KQkq - 0 18",
+const ONBOARDING_PREVIEW_POSITION = {
+  previousFen:
+    "r2qk2r/3bbp2/p1np3p/2p1p3/1p2P3/2PP2Pp/PPB1QP1B/RN2K2R w KQkq - 0 18",
   playedMove: "e1g1",
-  actualMoveSan: "O-O",
-  fen: "r2qk2r/3bbp2/p1np3p/2p1p3/1p2P3/2PP2Pp/PPB1QP1B/RN3RK1 b kq - 1 18",
+  playedMoveSan: "O-O",
+  fen:
+    "r2qk2r/3bbp2/p1np3p/2p1p3/1p2P3/2PP2Pp/PPB1QP1B/RN3RK1 b kq - 1 18",
   sequenceLength: 4,
   source: "onboarding",
+} satisfies NextPositionResponse & {
+  previousFen: string;
+  playedMove: string;
+  playedMoveSan: string;
+  fen: string;
 };
 // Train audio - managed by lib/train-audio.ts
 import {
@@ -564,7 +571,7 @@ export default function TrainPage(props: TrainPageProps) {
   const shouldRunPreplayOnboarding = initialOnboarding || forceOnboarding;
 
   const [fen, setFen] = useState<string>(
-    shouldRunPreplayOnboarding ? ONBOARDING_PREVIEW_POSITION.previousFen!! : DEFAULT_TRAINING_FEN,
+    shouldRunPreplayOnboarding ? ONBOARDING_PREVIEW_POSITION.previousFen : DEFAULT_TRAINING_FEN,
   );
 
   const PREPLAY_TOUR_STEPS = [
@@ -691,12 +698,22 @@ export default function TrainPage(props: TrainPageProps) {
         // Only seed onboarding intro if it hasn't been shown yet.
         // Do not call loadNextPosition here — onboarding intro CTA handles it.
         if (shouldRunPreplayOnboarding && !trainOnboardingIntroDone) {
-          const placeholderFen = ONBOARDING_PREVIEW_POSITION.previousFen!;
-          setStartingFen(placeholderFen);
-          setDisplayStartingFen(placeholderFen);
-          setFen(placeholderFen);
+          setStartingFen(ONBOARDING_PREVIEW_POSITION.fen);
+          setDisplayStartingFen(ONBOARDING_PREVIEW_POSITION.previousFen);
+          setFen(ONBOARDING_PREVIEW_POSITION.previousFen);
           setMoves([]);
+          setLastMove(null);
+          setInitialOpponentMove(null);
+          initialOpponentMoveRef.current = null;
+          initialPreludeRef.current = {
+            previousFen: ONBOARDING_PREVIEW_POSITION.previousFen,
+            playedMove: ONBOARDING_PREVIEW_POSITION.playedMove,
+          };
           setIsPositionLoading(false);
+          setIsAwaitingStartGesture(false);
+          setPendingInitialEngineMove(null);
+          setHasLoadedPosition(false);
+          setActiveSetupReplayIndex(0);
         } else if (!shouldRunPreplayOnboarding) {
           void loadNextPosition();
         }
@@ -704,12 +721,22 @@ export default function TrainPage(props: TrainPageProps) {
         if (!alive) return;
         setOnboardingScreen("done");
         if (shouldRunPreplayOnboarding && !trainOnboardingIntroDone) {
-          const placeholderFen = ONBOARDING_PREVIEW_POSITION.previousFen!;
-          setStartingFen(placeholderFen);
-          setDisplayStartingFen(placeholderFen);
-          setFen(placeholderFen);
+          setStartingFen(ONBOARDING_PREVIEW_POSITION.fen);
+          setDisplayStartingFen(ONBOARDING_PREVIEW_POSITION.previousFen);
+          setFen(ONBOARDING_PREVIEW_POSITION.previousFen);
           setMoves([]);
+          setLastMove(null);
+          setInitialOpponentMove(null);
+          initialOpponentMoveRef.current = null;
+          initialPreludeRef.current = {
+            previousFen: ONBOARDING_PREVIEW_POSITION.previousFen,
+            playedMove: ONBOARDING_PREVIEW_POSITION.playedMove,
+          };
           setIsPositionLoading(false);
+          setIsAwaitingStartGesture(false);
+          setPendingInitialEngineMove(null);
+          setHasLoadedPosition(false);
+          setActiveSetupReplayIndex(0);
         } else if (!shouldRunPreplayOnboarding) {
           void loadNextPosition();
         }
@@ -762,9 +789,75 @@ export default function TrainPage(props: TrainPageProps) {
     setIsStartingPreplayPosition(true);
 
     try {
-      await startPendingInitialEngineMove(ONBOARDING_PREVIEW_POSITION);
+      await unlockTrainAudio();
+      await primeTrainAudio();
+
       setTrainOnboardingIntroDone(true);
+
+      setState("active");
+      setResultMode("results");
+      setPositionLoadError(null);
+      setIsPositionLoading(false);
+      setIsAwaitingStartGesture(false);
+      setPendingInitialEngineMove(null);
+      setHasLoadedPosition(true);
+      setIsOpponentThinking(true);
+      setIsCompletingSequence(false);
+
+      setMoves([]);
+      setLastMove(null);
+      setInitialOpponentMove(null);
+      initialOpponentMoveRef.current = null;
+
+      initialPreludeRef.current = {
+        previousFen: ONBOARDING_PREVIEW_POSITION.previousFen,
+        playedMove: ONBOARDING_PREVIEW_POSITION.playedMove,
+      };
+
+      setStartingFen(ONBOARDING_PREVIEW_POSITION.fen);
+      setDisplayStartingFen(ONBOARDING_PREVIEW_POSITION.previousFen);
+      setActiveSetupReplayIndex(0);
+      setFen(ONBOARDING_PREVIEW_POSITION.previousFen);
+
+      await delayMs(PRELUDE_SETUP_MOVE_DELAY_MS);
+
+      const applied = applyIndexedMove(
+        ONBOARDING_PREVIEW_POSITION.previousFen,
+        ONBOARDING_PREVIEW_POSITION.playedMove,
+      );
+
+      if (!applied) {
+        throw new Error("Invalid static onboarding prelude: e1g1 did not apply.");
+      }
+
+      const initialMove: TrainingMove = {
+        san: applied.move.san,
+        uci: applied.move.uci,
+        side: "white",
+        fenBefore: ONBOARDING_PREVIEW_POSITION.previousFen,
+        fenAfter: ONBOARDING_PREVIEW_POSITION.fen,
+      };
+
+      initialOpponentMoveRef.current = initialMove;
+      setInitialOpponentMove(initialMove);
+      setLastMove(applied.lastMove);
+      setActiveSetupReplayIndex(1);
+      setFen(ONBOARDING_PREVIEW_POSITION.fen);
+
+      playTrainMoveSound({
+        move: applied.move,
+        plyRef: moveSoundPlyRef,
+        source: "initial-engine",
+        advanceLivePitch: false,
+      });
+    } catch (error) {
+      console.error("[train-onboarding] failed to start static prelude", error);
+      setPositionLoadError("Could not start the onboarding position.");
     } finally {
+      setIsOpponentThinking(false);
+      setIsPositionLoading(false);
+      setIsAwaitingStartGesture(false);
+      setPendingInitialEngineMove(null);
       setIsStartingPreplayPosition(false);
     }
   }
@@ -808,9 +901,13 @@ export default function TrainPage(props: TrainPageProps) {
       fen,
       boardFen: fen,
       currentFen: fen,
+      startingFen,
+      displayStartingFen,
+      boardOrientation,
       hasLoadedPosition,
       isPositionLoading,
       isAwaitingStartGesture,
+      isStartingPreplayPosition,
       trainOnboardingIntroActive,
       trainOnboardingIntroDone,
       isPostMortemVisible,
@@ -2049,7 +2146,11 @@ export default function TrainPage(props: TrainPageProps) {
 
   const rating = state === "complete" ? (eloResult?.eloAfter ?? blindspotsElo) : blindspotsElo;
   const userMoveSide = getFenTurnSide(startingFen);
-  const boardOrientation = userMoveSide;
+  const isStaticOnboardingPosition =
+    shouldRunPreplayOnboarding &&
+    hasStartedFirstOnboardingSequenceRef.current &&
+    !postmortemOnboardingFinished;
+  const boardOrientation = isStaticOnboardingPosition ? "black" : userMoveSide;
   const userMoveCount = moves.filter((move) => move.side === userMoveSide).length;
   const moveProgress = Math.min(userMoveCount + 1, sequenceLength);
   const displayMoves = useMemo(
