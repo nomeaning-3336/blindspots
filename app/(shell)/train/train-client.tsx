@@ -2094,26 +2094,23 @@ export default function TrainPage(props: TrainPageProps) {
     }
   }
 
-  async function completeTrainingOnboarding() {
+  function completeTrainingOnboarding() {
     if (onboardingCompletionInFlight) return;
     setOnboardingCompletionInFlight(true);
-    try {
-      const response = await fetch("/api/onboarding/complete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+    setPostmortemOnboardingFinished(true);
+    setPostmortemOnboardingActive(false);
+    fetch("/api/onboarding/complete", { method: "POST", headers: { "Content-Type": "application/json" } })
+      .then((response) => {
+        if (!response.ok) throw new Error(`Onboarding completion failed with ${response.status}`);
+      })
+      .catch((error) => {
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[train-postmortem-tour] completion failed", error);
+        }
+      })
+      .finally(() => {
+        setOnboardingCompletionInFlight(false);
       });
-      if (!response.ok) {
-        throw new Error(`Onboarding completion failed with ${response.status}`);
-      }
-      setPostmortemOnboardingFinished(true);
-      setPostmortemOnboardingActive(false);
-    } catch (error) {
-      if (process.env.NODE_ENV !== "production") {
-        console.warn("[train-postmortem-tour] completion failed", error);
-      }
-    } finally {
-      setOnboardingCompletionInFlight(false);
-    }
   }
 
   const handlePostmortemTourBack = useCallback(() => {
