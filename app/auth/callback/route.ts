@@ -6,6 +6,7 @@ import {
   SUPABASE_AUTH_COOKIE_DELETE_PATHS,
   isSupabaseAuthFlowCookie,
 } from "@/lib/supabase/auth-cookies";
+import { getOnboardingStateForUser } from "@/lib/onboarding-state";
 
 function getCookieNamesFromHeader(cookieHeader: string | null) {
   if (!cookieHeader) return [];
@@ -66,7 +67,20 @@ export async function GET(request: Request) {
     );
   }
 
+  // Get the authenticated user to check onboarding state
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+
+  let redirectPath = nextPath;
+  if (userId) {
+    const onboarding = await getOnboardingStateForUser(userId);
+    if (!onboarding.trainingOnboardingCompleted) {
+      // User has not completed onboarding — send them there instead
+      redirectPath = "/onboarding";
+    }
+  }
+
   return applyCookies(
-    NextResponse.redirect(publicUrl(request, nextPath), 303),
+    NextResponse.redirect(publicUrl(request, redirectPath), 303),
   );
 }
