@@ -748,7 +748,7 @@ function ensureOverrideStyle() {
     #analyze-app-host #app .section-head {
       background: var(--app-panel-solid) !important;
       border: 1px solid color-mix(in srgb, var(--app-text) 72%, transparent) !important;
-      box-shadow: 5px 5px 0 #050505 !important;
+      box-shadow: 5px 5px 0 var(--app-brutal-edge) !important;
       border-radius: 10px !important;
       transition: transform 120ms ease, box-shadow 120ms ease !important;
     }
@@ -792,10 +792,10 @@ function ensureOverrideStyle() {
     /* Buttons: match train post-mortem brutal button treatment */
     #analyze-app-host #app .board-options .btn,
     #analyze-app-host #app .settings-trigger {
-      border: 1px solid #050505 !important;
+      border: 1px solid var(--app-brutal-edge) !important;
       background: var(--app-panel-solid) !important;
       color: var(--app-text) !important;
-      box-shadow: 4px 4px 0 #050505 !important;
+      box-shadow: 4px 4px 0 var(--app-brutal-edge) !important;
       border-radius: 8px !important;
       font-weight: 700 !important;
       text-transform: uppercase !important;
@@ -811,7 +811,7 @@ function ensureOverrideStyle() {
     #analyze-app-host #app .board-options .btn:focus-visible,
     #analyze-app-host #app .board-options .btn[data-visual-hover="true"] {
       transform: translate(2px, 2px) !important;
-      box-shadow: 2px 2px 0 #050505 !important;
+      box-shadow: 2px 2px 0 var(--app-brutal-edge) !important;
       background: color-mix(in srgb, var(--app-text) 92%, transparent) !important;
       color: var(--app-bg) !important;
     }
@@ -821,21 +821,21 @@ function ensureOverrideStyle() {
       background: var(--app-accent) !important;
       color: var(--app-accent-contrast) !important;
       border-color: var(--app-accent) !important;
-      box-shadow: 5px 5px 0 #050505 !important;
+      box-shadow: 5px 5px 0 var(--app-brutal-edge) !important;
     }
 
     #analyze-app-host #app .board-options .btn.primary:hover,
     #analyze-app-host #app .board-options .btn.primary:focus-visible,
     #analyze-app-host #app .board-options .btn[data-primary="true"][data-visual-hover="true"] {
       background: #fff !important;
-      box-shadow: 3px 3px 0 #050505 !important;
+      box-shadow: 3px 3px 0 var(--app-brutal-edge) !important;
       transform: translate(2px, 2px) !important;
     }
 
     #analyze-app-host #app .settings-trigger:hover,
     #analyze-app-host #app .settings-trigger[data-visual-hover="true"] {
       transform: translate(2px, 2px) !important;
-      box-shadow: 2px 2px 0 #050505 !important;
+      box-shadow: 2px 2px 0 var(--app-brutal-edge) !important;
     }
 
     /* Active rows: match train post-mortem classification accent */
@@ -848,9 +848,9 @@ function ensureOverrideStyle() {
 
     /* Eval bar: match train brutal treatment — thin border, brutal shadow, aligned to board */
     #analyze-app-host #app .eval-bar {
-      border: 1px solid #050505 !important;
+      border: 1px solid var(--app-brutal-edge) !important;
       border-radius: 4px !important;
-      box-shadow: 3px 3px 0 #050505 !important;
+      box-shadow: 3px 3px 0 var(--app-brutal-edge) !important;
     }
 
     /* Focus states for inputs */
@@ -858,7 +858,7 @@ function ensureOverrideStyle() {
     #analyze-app-host #app #assistantInput:focus {
       outline: none !important;
       border-color: var(--app-accent) !important;
-      box-shadow: 4px 4px 0 #050505 !important;
+      box-shadow: 4px 4px 0 var(--app-brutal-edge) !important;
     }
 
     /* Scrollbar: consistent brutal styling */
@@ -951,8 +951,8 @@ function ensureOverrideStyle() {
     /* ---- B. Restyle engine lines to match train post-mortem rows ---- */
     #analyze-app-host #app .board-analysis {
       background: var(--app-panel-solid) !important;
-      border: 1px solid #050505 !important;
-      box-shadow: 5px 5px 0 #050505 !important;
+      border: 1px solid var(--app-brutal-edge) !important;
+      box-shadow: 5px 5px 0 var(--app-brutal-edge) !important;
       border-radius: 10px !important;
       overflow: hidden !important;
     }
@@ -1114,7 +1114,7 @@ function ensureOverrideStyle() {
     #analyze-app-host #app .section-head {
       background: var(--app-panel-solid) !important;
       border: 1px solid color-mix(in srgb, var(--app-text) 72%, transparent) !important;
-      box-shadow: 5px 5px 0 #050505 !important;
+      box-shadow: 5px 5px 0 var(--app-brutal-edge) !important;
       border-radius: 10px !important;
       transition: transform 120ms ease, box-shadow 120ms ease !important;
     }
@@ -1122,10 +1122,10 @@ function ensureOverrideStyle() {
     /* ---- Buttons: match train post-mortem brutal button treatment ---- */
     #analyze-app-host #app .board-options .btn,
     #analyze-app-host #app .settings-trigger {
-      border: 1px solid #050505 !important;
+      border: 1px solid var(--app-brutal-edge) !important;
       background: var(--app-panel-solid) !important;
       color: var(--app-text) !important;
-      box-shadow: 4px 4px 0 #050505 !important;
+      box-shadow: 4px 4px 0 var(--app-brutal-edge) !important;
       border-radius: 8px !important;
       font-weight: 700 !important;
       text-transform: uppercase !important;
@@ -1141,7 +1141,7 @@ function ensureOverrideStyle() {
     #analyze-app-host #app .board-options .btn:focus-visible,
     #analyze-app-host #app .board-options .btn[data-visual-hover="true"] {
       transform: translate(2px, 2px) !important;
-      box-shadow: 2px 2px 0 #050505 !important;
+      box-shadow: 2px 2px 0 var(--app-brutal-edge) !important;
       background: color-mix(in srgb, var(--app-text) 92%, transparent) !important;
       color: var(--app-bg) !important;
     }
@@ -1151,28 +1151,28 @@ function ensureOverrideStyle() {
       background: var(--app-accent) !important;
       color: var(--app-accent-contrast) !important;
       border-color: var(--app-accent) !important;
-      box-shadow: 5px 5px 0 #050505 !important;
+      box-shadow: 5px 5px 0 var(--app-brutal-edge) !important;
     }
 
     #analyze-app-host #app .board-options .btn.primary:hover,
     #analyze-app-host #app .board-options .btn.primary:focus-visible,
     #analyze-app-host #app .board-options .btn[data-primary="true"][data-visual-hover="true"] {
       background: #fff !important;
-      box-shadow: 3px 3px 0 #050505 !important;
+      box-shadow: 3px 3px 0 var(--app-brutal-edge) !important;
       transform: translate(2px, 2px) !important;
     }
 
     #analyze-app-host #app .settings-trigger:hover,
     #analyze-app-host #app .settings-trigger[data-visual-hover="true"] {
       transform: translate(2px, 2px) !important;
-      box-shadow: 2px 2px 0 #050505 !important;
+      box-shadow: 2px 2px 0 var(--app-brutal-edge) !important;
     }
 
     /* ---- Eval bar: match train brutal treatment ---- */
     #analyze-app-host #app .eval-bar {
-      border: 1px solid #050505 !important;
+      border: 1px solid var(--app-brutal-edge) !important;
       border-radius: 4px !important;
-      box-shadow: 3px 3px 0 #050505 !important;
+      box-shadow: 3px 3px 0 var(--app-brutal-edge) !important;
     }
 
     /* ---- Focus states for inputs ---- */
@@ -1180,7 +1180,7 @@ function ensureOverrideStyle() {
     #analyze-app-host #app #assistantInput:focus {
       outline: none !important;
       border-color: var(--app-accent) !important;
-      box-shadow: 4px 4px 0 #050505 !important;
+      box-shadow: 4px 4px 0 var(--app-brutal-edge) !important;
     }
 
     /* ---- Scrollbar: consistent brutal styling ---- */
@@ -1399,7 +1399,7 @@ function ensureOverrideStyle() {
     #analyze-app-host #app .board-stack {
       border: 1px solid color-mix(in srgb, var(--app-text) 72%, transparent) !important;
       background: var(--app-panel-solid) !important;
-      box-shadow: 4px 4px 0 #050505 !important;
+      box-shadow: 4px 4px 0 var(--app-brutal-edge) !important;
       border-radius: 12px !important;
       padding: 12px !important;
       overflow: hidden !important;
@@ -1420,9 +1420,9 @@ function ensureOverrideStyle() {
 
     #analyze-app-host #app .board-frame,
     #analyze-react-board-slot .app-brutal-board-frame {
-      border: 1px solid #050505 !important;
+      border: 1px solid var(--app-brutal-edge) !important;
       background: var(--app-panel-solid) !important;
-      box-shadow: 3px 3px 0 #050505 !important;
+      box-shadow: 3px 3px 0 var(--app-brutal-edge) !important;
       border-radius: 10px !important;
       overflow: hidden !important;
     }
@@ -1436,7 +1436,7 @@ function ensureOverrideStyle() {
 
     #analyze-app-host #app .eval-bar {
       border: 0 !important;
-      border-right: 1px solid #050505 !important;
+      border-right: 1px solid var(--app-brutal-edge) !important;
       border-radius: 0 !important;
       box-shadow: none !important;
     }

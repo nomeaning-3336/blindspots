@@ -232,7 +232,7 @@ function InfoTooltip({
         onMouseLeave={scheduleHide}
         onFocus={show}
         onBlur={scheduleHide}
-        className="inline-flex h-9 items-center gap-2 rounded-none border border-[var(--app-border)] bg-[var(--app-panel-solid)] px-3 font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[var(--app-muted)] shadow-[3px_3px_0_#050505] transition hover:-translate-x-[1px] hover:-translate-y-[1px] hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] hover:shadow-[4px_4px_0_#050505] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"
+        className="inline-flex h-9 items-center gap-2 rounded-none border border-[var(--app-border)] bg-[var(--app-panel-solid)] px-3 font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[var(--app-muted)] shadow-[3px_3px_0_var(--app-brutal-edge)] transition hover:-translate-x-[1px] hover:-translate-y-[1px] hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] hover:shadow-[4px_4px_0_var(--app-brutal-edge)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"
       >
         <span>Queue types</span>
         <span
@@ -247,7 +247,7 @@ function InfoTooltip({
           ref={tooltipRef}
           role="tooltip"
           id={id}
-          className="fixed z-[90] w-[500px] max-w-[calc(100vw-32px)] border border-[var(--app-border)] bg-[var(--app-panel-solid)] px-5 py-4 text-xs leading-5 shadow-[4px_4px_0_#050505]"
+          className="fixed z-[90] w-[500px] max-w-[calc(100vw-32px)] border border-[var(--app-border)] bg-[var(--app-panel-solid)] px-5 py-4 text-xs leading-5 shadow-[4px_4px_0_var(--app-brutal-edge)]"
           style={pos ? { left: pos.left, top: pos.top } : { left: -9999, top: -9999 }}
           onMouseEnter={show}
           onMouseLeave={scheduleHide}
@@ -541,7 +541,7 @@ function QueuePositionRow({
   const streak = Math.min(position.consecutiveCorrectCount ?? 0, 3);
 
   return (
-    <div className="app-brutal-row grid grid-cols-1 gap-4 rounded-lg border border-[var(--app-border)] p-5 md:grid-cols-[420px_24px_1px_24px_480px_1fr_1px_24px_220px] md:gap-0 md:items-stretch">
+    <div className="app-brutal-row grid grid-cols-1 gap-4 rounded-lg border border-[var(--app-border)] p-5 md:grid-cols-[420px_32px_1px_32px_minmax(340px,max-content)_16px_1px_16px_minmax(280px,1fr)] md:gap-0 md:items-stretch">
       {/* Thumbnail column */}
       <div className="flex flex-col items-center gap-2">
         <ReplayThumbnail
@@ -625,7 +625,7 @@ function QueuePositionRow({
           </Link>
           <Link
             href={`/analysis?fen=${encodeURIComponent(position.startingFen)}`}
-            className="inline-flex min-h-12 min-w-0 items-center justify-center rounded-[8px] border border-[#3a3a3f] bg-[var(--app-panel-solid)] px-6 py-3 text-sm font-bold uppercase tracking-[0.04em] text-[var(--app-text)] shadow-[3px_3px_0_#050505] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#050505]"
+            className="app-brutal-button-secondary inline-flex min-h-12 min-w-0 items-center justify-center px-6 py-3 text-sm"
           >
             Analyze
           </Link>

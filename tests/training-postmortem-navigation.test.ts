@@ -59,3 +59,17 @@ test("Home and End leave exploratory branches and address the original sequence"
     { type: "sequence", index: 4, boundary: "end" },
   );
 });
+
+test("post-mortem branch navigation does not advance the original sequence at branch end", () => {
+  assert.deepEqual(
+    postMortemNavigationAction({
+      key: "ArrowRight",
+      resultMode: "explore",
+      activeExploreIndex: 2,
+      visibleSequenceLength: 5,
+      exploratoryHistoryLength: 1,
+      exploratoryHistoryIndex: 0,
+    }),
+    { type: "none" },
+  );
+});

@@ -165,6 +165,15 @@ export async function getNextMistakeForTraining(
   userId: string,
   now: Date = new Date(),
 ): Promise<NextMistakeResult> {
+  const review = await getNextReviewMistakeForTraining(userId, now);
+  if (review.mistake) return review;
+  return getNextActiveOrFillerMistakeForTraining(userId, now);
+}
+
+export async function getNextReviewMistakeForTraining(
+  userId: string,
+  now: Date = new Date(),
+): Promise<NextMistakeResult> {
   const supabase = getSupabaseAdminClient();
   const nowISO = now.toISOString();
 
@@ -198,6 +207,16 @@ export async function getNextMistakeForTraining(
 
     return { mistake: review as unknown as UserMistakeRow, queueSource: "review" };
   }
+
+  return { mistake: null, queueSource: null };
+}
+
+export async function getNextActiveOrFillerMistakeForTraining(
+  userId: string,
+  now: Date = new Date(),
+): Promise<NextMistakeResult> {
+  const supabase = getSupabaseAdminClient();
+  const nowISO = now.toISOString();
 
   const { data: active, error: activeError } = await supabase
     .from("user_mistakes")

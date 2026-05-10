@@ -7,8 +7,10 @@
 
 :root {
   color-scheme: dark;
-  --app-bg: #050505;
-  --app-bg-2: #101010;
+  --app-brutal-edge: color-mix(in srgb, var(--app-border-strong) 18%, var(--app-bg-2) 82%);
+  --app-brutal-shadow: #000;
+  --app-bg: #0a0a0a;
+  --app-bg-2: #141414;
   --app-panel: rgba(13, 13, 13, 0.92);
   --app-panel-strong: rgba(17, 17, 17, 0.96);
   --app-panel-solid: #111;
@@ -87,11 +89,13 @@
 
 html[data-theme="midnight"] {
   color-scheme: dark;
+  --app-brutal-edge: color-mix(in srgb, var(--app-border-strong) 22%, var(--app-bg-2) 78%);
   --app-page-glow: rgba(192, 132, 252, 0.1);
 }
 
 html[data-theme="light"] {
   color-scheme: light;
+  --app-brutal-shadow: #050505;
   --app-bg: #f6f1e8;
   --app-bg-2: #e8dfd0;
   --app-panel: rgba(255, 252, 245, 0.96);
@@ -120,6 +124,7 @@ html[data-theme="light"] {
 
 html[data-theme="solarized"] {
   color-scheme: light;
+  --app-brutal-shadow: #073642;
   --app-bg: #fdf6e3;
   --app-bg-2: #eee8d5;
   --app-panel: rgba(253, 246, 227, 0.96);
@@ -148,6 +153,7 @@ html[data-theme="solarized"] {
 
 html[data-theme="forest"] {
   color-scheme: dark;
+  --app-brutal-edge: color-mix(in srgb, var(--app-border-strong) 22%, var(--app-bg-2) 78%);
   --app-bg: #07110d;
   --app-bg-2: #102019;
   --app-panel: rgba(11, 24, 19, 0.94);
@@ -176,6 +182,7 @@ html[data-theme="forest"] {
 
 html[data-theme="ocean"] {
   color-scheme: dark;
+  --app-brutal-edge: color-mix(in srgb, var(--app-border-strong) 22%, var(--app-bg-2) 78%);
   --app-bg: #040b13;
   --app-bg-2: #0b1a25;
   --app-panel: rgba(8, 18, 28, 0.94);
@@ -204,6 +211,7 @@ html[data-theme="ocean"] {
 
 html[data-theme="crimson"] {
   color-scheme: dark;
+  --app-brutal-edge: color-mix(in srgb, var(--app-border-strong) 22%, var(--app-bg-2) 78%);
   --app-bg: #0a0507;
   --app-bg-2: #170a0e;
   --app-panel: rgba(20, 10, 14, 0.95);
@@ -318,7 +326,7 @@ body {
 
 /* Eyebrow label — mono, wide-tracked, accent tint. */
 .app-eyebrow {
-  font-family: var(--font-mono), monospace;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.26em;
@@ -387,37 +395,37 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   .app-brutal-card {
     border: 1px solid color-mix(in srgb, var(--app-text) 72%, transparent);
     background: var(--app-panel-solid);
-    box-shadow: 5px 5px 0 #050505;
+    box-shadow: 5px 5px 0 var(--app-brutal-shadow);
     border-radius: 10px;
   }
 
   .app-brutal-card-strong {
     border: 1px solid color-mix(in srgb, var(--app-text) 72%, transparent);
     background: var(--app-panel-solid);
-    box-shadow: 5px 5px 0 #050505;
+    box-shadow: 5px 5px 0 var(--app-brutal-shadow);
     border-radius: 10px;
   }
 
   .app-brutal-inset {
     border: 2px solid color-mix(in srgb, var(--app-border-strong) 28%, transparent);
     background: var(--app-surface-subtle);
-    box-shadow: 4px 4px 0 #050505;
+    box-shadow: 4px 4px 0 var(--app-brutal-shadow);
     border-radius: 8px;
   }
 
   .app-brutal-input {
     border: 2px solid color-mix(in srgb, var(--app-text) 72%, transparent);
     background: var(--app-surface-input);
-    box-shadow: 4px 4px 0 #050505;
+    box-shadow: 4px 4px 0 var(--app-brutal-shadow);
     color: var(--app-text);
     border-radius: 8px;
   }
 
   .app-brutal-button {
-    border: 1px solid #050505;
+    border: 1px solid var(--app-brutal-edge);
     background: var(--app-accent);
-    color: #050505 !important;
-    box-shadow: 5px 5px 0 #050505;
+    color: var(--app-brutal-edge) !important;
+    box-shadow: 5px 5px 0 var(--app-brutal-shadow);
     border-radius: 8px;
     font-weight: 800;
     text-transform: uppercase;
@@ -432,14 +440,33 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   .app-brutal-button:hover,
   .app-brutal-button:focus-visible {
     transform: translate(2px, 2px);
-    box-shadow: 3px 3px 0 #050505;
+    box-shadow: 3px 3px 0 var(--app-brutal-shadow);
     background: #ffffff;
     color: #050505;
   }
 
   .app-brutal-button:active {
     transform: translate(4px, 4px);
-    box-shadow: 0 0 0 #050505;
+    box-shadow: 0 0 0 var(--app-brutal-shadow);
+  }
+
+  .app-brutal-button-secondary {
+    border: 1px solid var(--app-brutal-edge);
+    background: var(--app-panel-solid);
+    color: var(--app-text);
+    box-shadow: 3px 3px 0 var(--app-brutal-shadow);
+    border-radius: 8px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    transition:
+      transform 120ms ease,
+      box-shadow 120ms ease;
+  }
+
+  .app-brutal-button-secondary:hover {
+    transform: translate(1px, 1px);
+    box-shadow: 2px 2px 0 var(--app-brutal-shadow);
   }
 
   .app-paper-shell {
@@ -450,21 +477,21 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   .app-brutal-section {
     border: 1px solid color-mix(in srgb, var(--app-text) 72%, transparent);
     background: var(--app-panel-solid);
-    box-shadow: 4px 4px 0 #050505;
+    box-shadow: 4px 4px 0 var(--app-brutal-shadow);
     border-radius: 12px;
   }
 
   .app-brutal-section-soft {
     border: 1px solid color-mix(in srgb, var(--app-text) 32%, transparent);
     background: color-mix(in srgb, var(--app-panel-solid) 88%, var(--app-bg) 12%);
-    box-shadow: 2px 2px 0 #050505;
+    box-shadow: 2px 2px 0 var(--app-brutal-shadow);
     border-radius: 10px;
   }
 
   .app-brutal-board-frame {
-    border: 1px solid #050505;
+    border: 1px solid var(--app-brutal-edge);
     background: var(--app-panel-solid);
-    box-shadow: 3px 3px 0 #050505;
+    box-shadow: 3px 3px 0 var(--app-brutal-shadow);
     border-radius: 10px;
     overflow: hidden;
   }

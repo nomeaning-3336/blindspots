@@ -9,6 +9,7 @@ const {
   chooseServeMode,
   normalizeRecentServedModes,
   prependRecentServeMode,
+  randomExplorationProbability,
 } = policy;
 
 test("revisit priority: due revisit always wins", () => {
@@ -107,4 +108,12 @@ test("recent history below tactic floor forces tactic", () => {
     rng: () => 0.5,
   });
   assert.equal(result, "tactic", `expected tactic when below tactic floor, got ${result}`);
+});
+
+test("randomExplorationProbability starts high and settles to long-term floor", () => {
+  assert.equal(randomExplorationProbability(0), 0.75);
+  assert.ok(randomExplorationProbability(20) < 0.75);
+  assert.ok(randomExplorationProbability(20) > 0.30);
+  assert.ok(randomExplorationProbability(200) >= 0.30);
+  assert.ok(randomExplorationProbability(200) < 0.31);
 });
