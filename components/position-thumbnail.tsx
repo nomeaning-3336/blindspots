@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnalysisBoard } from "@/components/chess/analysis-board";
 
-export function PositionThumbnail({ fen, size = 88 }: { fen: string; size?: number }) {
+export function PositionThumbnail({ fen, orientation = "white", size = 88 }: { fen: string; orientation?: "white" | "black"; size?: number }) {
   return (
     <div
       className="app-brutal-board-frame shrink-0 overflow-hidden"
@@ -12,7 +12,7 @@ export function PositionThumbnail({ fen, size = 88 }: { fen: string; size?: numb
       <AnalysisBoard
         fen={fen}
         mode="training"
-        orientation="white"
+        orientation={orientation}
         coordinates={false}
         disabled
         showLegalTargets={false}
@@ -32,11 +32,13 @@ export function ReplayThumbnail({
   previousFen,
   finalFen,
   playedMove,
+  orientation = "white",
   size = 112,
 }: {
   previousFen?: string | null;
   finalFen: string;
   playedMove?: string | null;
+  orientation?: "white" | "black";
   size?: number;
 }) {
   const canReplay = Boolean(previousFen && playedMove);
@@ -89,7 +91,7 @@ export function ReplayThumbnail({
       className="relative inline-flex cursor-pointer rounded-lg border border-[var(--app-border-soft)] bg-[var(--app-panel-deep)] p-1 transition hover:border-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)]"
       aria-label={canReplay ? "Replay setup move preview" : "Position preview"}
     >
-      <PositionThumbnail fen={shownFen} size={size} />
+      <PositionThumbnail fen={shownFen} orientation={orientation} size={size} />
     </div>
   );
 }
