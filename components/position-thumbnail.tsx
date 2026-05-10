@@ -1,9 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnalysisBoard } from "@/components/chess/analysis-board";
 
-export function PositionThumbnail({ fen, orientation = "white", size = 88 }: { fen: string; orientation?: "white" | "black"; size?: number }) {
+export function PositionThumbnail({
+  fen,
+  orientation = "white",
+  size = 88,
+  lastMove,
+  pieceAnimation = false,
+}: {
+  fen: string;
+  orientation?: "white" | "black";
+  size?: number;
+  lastMove?: { from: string; to: string } | null;
+  pieceAnimation?: boolean;
+}) {
   return (
     <div
       className="app-brutal-board-frame shrink-0 overflow-hidden"
@@ -20,8 +32,9 @@ export function PositionThumbnail({ fen, orientation = "white", size = 88 }: { f
         selectedSquare={null}
         legalTargets={[]}
         engineArrows={[]}
-        lastMove={null}
+        lastMove={lastMove ?? null}
         lastMoveBadge={null}
+        pieceAnimation={pieceAnimation}
         className="!rounded-none"
       />
     </div>
@@ -43,7 +56,15 @@ export function ReplayThumbnail({
 }) {
   const canReplay = Boolean(previousFen && playedMove);
   const [shownFen, setShownFen] = useState(previousFen ?? finalFen);
+  const [previewLastMove, setPreviewLastMove] = useState<{ from: string; to: string } | null>(null);
+  const [animating, setAnimating] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Compute the from/to squares from the UCI move
+  const moveCoords = useMemo(() => {
+    if (!playedMove || playedMove.length < 4) return null;
+    return { from: playedMove.slice(0, 2), to: playedMove.slice(2, 4) };
+  }, [playedMove]);
 
   function clearTimer() {
     if (timerRef.current != null) {
@@ -54,30 +75,36 @@ export function ReplayThumbnail({
 
   function previewForward() {
     clearTimer();
-    if (!canReplay || !previousFen) {
+    if (!canReplay || !previousFen || !moveCoords) {
       setShownFen(finalFen);
+      setPreviewLastMove(null);
       return;
     }
+    setAnimating(true);
     setShownFen(previousFen);
+    setPreviewLastMove(null);
+
     timerRef.current = setTimeout(() => {
       setShownFen(finalFen);
-    }, 180);
+      setPreviewLastMove(moveCoords);
+    }, 800);
   }
 
   function previewBackward() {
     clearTimer();
     if (!canReplay || !previousFen) {
       setShownFen(finalFen);
+      setPreviewLastMove(null);
       return;
     }
-    setShownFen(finalFen);
-    timerRef.current = setTimeout(() => {
-      setShownFen(previousFen);
-    }, 180);
+    setAnimating(false);
+    setShownFen(previousFen);
+    setPreviewLastMove(null);
   }
 
   useEffect(() => {
     setShownFen(previousFen ?? finalFen);
+    setPreviewLastMove(null);
     return clearTimer;
   }, [previousFen, finalFen]);
 
@@ -92,7 +119,13 @@ export function ReplayThumbnail({
       style={{ width: size + 8, height: size + 8 }}
       aria-label={canReplay ? "Replay setup move preview" : "Position preview"}
     >
-      <PositionThumbnail fen={shownFen} orientation={orientation} size={size} />
+      <PositionThumbnail
+        fen={shownFen}
+        orientation={orientation}
+        size={size}
+        lastMove={previewLastMove}
+        pieceAnimation={animating && canReplay}
+      />
     </div>
   );
 }
