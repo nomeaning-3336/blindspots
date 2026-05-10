@@ -61,9 +61,9 @@ export function EngineLinesSection({
   const displayRows: Array<EngineLineResult | null> = Array.from({ length: 5 }, (_, index) => lines[index] ?? null);
 
   return (
-    <section className="grid gap-1.5" aria-live="polite">
+    <section className="grid gap-2" aria-live="polite">
       <div className="flex items-center gap-3">
-        <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">
+        <h2 className="text-[13px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted-soft)] min-[1500px]:text-sm">
           Engine lines
         </h2>
       </div>
@@ -76,9 +76,9 @@ export function EngineLinesSection({
                 key={`engine-placeholder-${index}`}
                 aria-hidden="true"
                 className={[
-                  "min-h-8 rounded-none border border-dashed border-[var(--app-border-soft)] bg-transparent",
+                  "min-h-10 rounded-none border border-dashed border-[var(--app-border-soft)] bg-transparent",
                   shouldShowEmptyMessage
-                    ? "flex items-center px-3 text-xs font-bold text-[var(--app-muted)] opacity-100"
+                    ? "flex items-center px-3 text-sm font-bold text-[var(--app-muted-soft)] opacity-100"
                     : "opacity-45",
                 ].join(" ")}
               >
@@ -100,7 +100,7 @@ export function EngineLinesSection({
           return (
             <div
               key={`${line.rank}-${line.bestMove}-${index}`}
-              className="relative min-h-8 cursor-pointer overflow-hidden rounded-none border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] py-1.5 pl-2.5 pr-3 transition-colors duration-100"
+              className="relative min-h-10 cursor-pointer overflow-hidden rounded-none border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] py-2 pl-3 pr-3 transition-colors duration-100"
               style={{
                 borderLeftColor: lineColor,
                 borderLeftWidth: 3,
@@ -112,32 +112,32 @@ export function EngineLinesSection({
               onPointerLeave={() => onHoverLine?.(null)}
               onClick={() => onSelectLine?.({ from: line.bestMove.slice(0, 2), to: line.bestMove.slice(2, 4) })}
             >
-              <div className="grid grid-cols-[22px_auto_auto_auto_minmax(0,1fr)_auto_auto] items-center gap-2">
-                <span className="text-right text-xs font-black leading-none text-[var(--app-text)]">
+              <div className="grid grid-cols-[26px_auto_auto_auto_minmax(0,1fr)_auto_auto] items-center gap-2.5">
+                <span className="text-right text-sm font-black leading-none text-[var(--app-text)]">
                   #{index + 1}
                 </span>
                 {cls && !isSelectedUserMove ? (
                   <ClassificationBadge classification={cls} />
                 ) : <span />}
-                <span className="text-xs font-black tabular-nums text-[var(--app-text)]">
+                <span className="text-sm font-black tabular-nums text-[var(--app-text)]">
                   {formatPostmortemEvalLabel(line.cp, line.mate)}
                 </span>
-                <strong className="min-w-0 truncate text-sm font-black leading-none text-[var(--app-text)]">
+                <strong className="min-w-0 truncate text-base font-black leading-none text-[var(--app-text)]">
                   {lead}
                 </strong>
-                <span className="min-w-0 truncate text-xs font-bold text-[var(--app-muted)]">
+                <span className="min-w-0 truncate text-sm font-bold text-[var(--app-muted-soft)]">
                   {pv}
                 </span>
                 {isSelectedUserMove ? (
-                  <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--app-accent)]">
+                  <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--app-accent)]">
                     Your move
                   </span>
                 ) : line.source === "candidate" ? (
-                  <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--app-muted-soft)]">
+                  <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--app-muted-soft)]">
                     candidate
                   </span>
                 ) : null}
-                <span className="justify-self-end text-[10px] font-bold tabular-nums text-[var(--app-muted-soft)]">
+                <span className="justify-self-end text-xs font-bold tabular-nums text-[var(--app-muted-soft)]">
                   {line.depth || 18}
                 </span>
               </div>
@@ -234,14 +234,14 @@ export function ClassificationBadge({ classification }: { classification: MoveCl
   const label = classificationLabel(classification);
   return (
     <span
-      className="grid h-4 w-4 shrink-0 place-items-center"
+      className="grid h-5 w-5 shrink-0 place-items-center"
       title={label}
       aria-label={label}
     >
       <img
         src={classificationIcon(classification)}
         alt=""
-        className="h-4 w-4"
+        className="h-5 w-5"
         draggable={false}
       />
     </span>

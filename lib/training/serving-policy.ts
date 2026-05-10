@@ -48,6 +48,15 @@ const MIN_COUNTS: ServeModeCount = {
   wildcard: 0,
 };
 
+export function randomExplorationProbability(totalSequences: number): number {
+  const initial = 0.75;
+  const floor = 0.30;
+  const halfLife = 20;
+  const normalizedTotal = Math.max(0, Number.isFinite(totalSequences) ? totalSequences : 0);
+
+  return floor + (initial - floor) * Math.exp(-normalizedTotal / halfLife);
+}
+
 export type RecentModeEntry = {
   mode: ServeMode;
   servedAt: string;

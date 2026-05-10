@@ -52,6 +52,10 @@ export function postMortemNavigationAction({
       return { type: "branch", index: exploratoryHistoryIndex + 1 };
     }
 
+    if (!isBackward && exploratoryHistoryIndex >= 0) {
+      return { type: "none" };
+    }
+
     if (isBackward) {
       return {
         type: "sequence",

@@ -15,6 +15,7 @@ import {
   chooseServeMode,
   normalizeRecentServedModes,
   prependRecentServeMode,
+  randomExplorationProbability,
   type ServeMode,
 } from "@/lib/training/serving-policy";
 import { validateTrainingQueueItem } from "@/lib/training/position-validity";
@@ -24,7 +25,7 @@ import { selectAndReserveNextTrainingPositionCore, type TrainingBucket } from "@
 import { normalizeBucketStats, thompsonSample, type BucketStats } from "@/lib/training/bandit-stats";
 import { getPositionMateStatus } from "@/lib/engines/dispatcher";
 import { getOpponentElo } from "@/lib/training/elo";
-import { getNextMistakeForTraining, getNextActiveAppMistake, normalizeUserMistakeForTraining } from "@/lib/training/mistake-store";
+import { getNextActiveOrFillerMistakeForTraining, getNextReviewMistakeForTraining, getNextActiveAppMistake, normalizeUserMistakeForTraining, type NextMistakeResult } from "@/lib/training/mistake-store";
 import { getPreviousPosition } from "@/lib/training/position-index";
 import { normalizeSetupPrelude, validateSetupPrelude } from "@/lib/training/setup-prelude";
 import {
@@ -57,6 +58,8 @@ type NextPositionResponse = {
   challengeElo?: number;
   mistakeId?: string;
   queueSource?: string;
+  randomExplorationProbability?: number;
+  selectedByRandomExploration?: boolean;
   cpLoss?: number;
   error?: string;
   debug?: Record<string, unknown>;
@@ -129,6 +132,8 @@ if (!optionalError && optionalData) {
     ? profile.blindspots_elo
     : Number(profile?.blindspots_elo ?? DEFAULT_BLINDSPOTS_ELO);
   const challengeElo = getOpponentElo(userElo);
+  const randomProbability = randomExplorationProbability(completedSequenceCount);
+  const selectedByRandomExploration = Math.random() < randomProbability;
 
   // ── App-training active mistakes — priority path ──────────────────
   const activeAppResult = await getNextActiveAppMistake(userId);
@@ -165,6 +170,8 @@ if (!optionalError && optionalData) {
         source: "app_training",
         queueSource: "active_mistake",
         selectedServeMode: "active_mistake",
+        randomExplorationProbability: randomProbability,
+        selectedByRandomExploration: false,
         cpLoss: row.cpLoss ?? undefined,
         sequenceLength,
         challengeElo,
@@ -184,6 +191,9 @@ if (!optionalError && optionalData) {
           reviewStatus: "active",
           activeMistakeCandidateCount: activeAppResult.candidateCount,
           rejectedActiveMistakeNoPreludeCount: activeAppResult.rejectedNoPreludeCount,
+          randomExplorationProbability: randomProbability,
+          selectedByRandomExploration: false,
+          coldStartReviewOverride: true,
         };
       }
 
@@ -192,7 +202,7 @@ if (!optionalError && optionalData) {
   }
 
   // Row-based mistake training — imported/legacy path
-  const mistakeResult = await getNextMistakeForTraining(userId);
+  const mistakeResult = await getNextReviewMistakeForTraining(userId);
   if (mistakeResult.mistake) {
     const normalized = normalizeUserMistakeForTraining(mistakeResult.mistake);
     const mistake = mistakeResult.mistake;
@@ -238,6 +248,8 @@ if (!optionalError && optionalData) {
           source: normalized.source,
           queueSource: mistakeResult.queueSource ?? undefined,
           selectedServeMode: mistakeResult.queueSource ?? undefined,
+          randomExplorationProbability: randomProbability,
+          selectedByRandomExploration: false,
           tags,
           openingName: mistake.opening_name ?? undefined,
           eco: mistake.eco ?? undefined,
@@ -257,6 +269,9 @@ if (!optionalError && optionalData) {
             nextReviewAt: mistake.next_review_at ?? undefined,
             servedCount: mistake.served_count,
             rowBased: true,
+            randomExplorationProbability: randomProbability,
+            selectedByRandomExploration: false,
+            coldStartReviewOverride: true,
           };
         }
 
@@ -269,6 +284,20 @@ if (!optionalError && optionalData) {
   // This endpoint must stay fast and only serve an already-available position.
   // Profile/game syncing belongs in onboarding, explicit account sync, or a background job.
   // If no row-based mistake is ready, fall through to seeded/legacy queue selection.
+  if (!selectedByRandomExploration) {
+    const personalMistakeResult = await getNextActiveOrFillerMistakeForTraining(userId);
+    const personalResponse = buildRowMistakeResponse({
+      mistakeResult: personalMistakeResult,
+      sequenceLength,
+      challengeElo,
+      randomProbability,
+      selectedByRandomExploration,
+    });
+
+    if (personalResponse) {
+      return NextResponse.json(personalResponse);
+    }
+  }
 
   const queues = await ensureTrainingQueuesHavePositions({
     ...queuesBeforeRefill,
@@ -292,6 +321,25 @@ if (!optionalError && optionalData) {
   const nextPosition = selection.item;
 
   if (!nextPosition) {
+    if (selectedByRandomExploration) {
+      const personalMistakeResult = await getNextActiveOrFillerMistakeForTraining(userId);
+      const personalResponse = buildRowMistakeResponse({
+        mistakeResult: personalMistakeResult,
+        sequenceLength,
+        challengeElo,
+        randomProbability,
+        selectedByRandomExploration,
+      });
+
+      if (personalResponse) {
+        personalResponse.debug = {
+          ...(personalResponse.debug ?? {}),
+          randomBucketFallbackUsed: true,
+        };
+        return NextResponse.json(personalResponse);
+      }
+    }
+
     await persistQueues(
       userId,
       selection.queues,
@@ -302,6 +350,8 @@ if (!optionalError && optionalData) {
 
     const response: NextPositionResponse = {
       error: "No playable training positions available.",
+      randomExplorationProbability: randomProbability,
+      selectedByRandomExploration,
     };
     if (process.env.NODE_ENV !== "production") {
       response.debug = {
@@ -309,6 +359,8 @@ if (!optionalError && optionalData) {
         queueCountsAfter: getQueueCounts(selection.queues),
         rejectedInvalidCount: selection.rejectedInvalidCount,
         rejectedInvalidReasons: selection.rejectedInvalidReasons,
+        randomExplorationProbability: randomProbability,
+        selectedByRandomExploration,
       };
     }
     return NextResponse.json(response, { status: 404 });
@@ -344,6 +396,8 @@ if (!optionalError && optionalData) {
     selectedServeMode: selection.selectedServeMode,
     selectedPhase: enriched.phase ?? selection.selectedPhase,
     selectedBucket: enriched.bucket ?? selection.selectedBucket,
+    randomExplorationProbability: randomProbability,
+    selectedByRandomExploration,
     tags: nextPosition.tags,
     isTactic: nextPosition.isTactic,
     tacticRating: nextPosition.tacticRating,
@@ -370,6 +424,9 @@ if (!optionalError && optionalData) {
       selectedServeMode: selection.selectedServeMode,
       selectedPhase: enriched.phase ?? selection.selectedPhase,
       selectedBucket: enriched.bucket ?? selection.selectedBucket,
+      randomExplorationProbability: randomProbability,
+      selectedByRandomExploration,
+      personalBucketFallbackUsed: !selectedByRandomExploration,
       phaseFallbackUsed: selection.phaseFallbackUsed,
       banditPreferredBucket: selection.banditPreferredBucket,
       banditCandidateBuckets: selection.banditCandidateBuckets,
@@ -397,6 +454,93 @@ if (!optionalError && optionalData) {
 }
 
 type RecentEntry = { fen: string; gameId?: string; ply?: number };
+
+function buildRowMistakeResponse({
+  mistakeResult,
+  sequenceLength,
+  challengeElo,
+  randomProbability,
+  selectedByRandomExploration,
+}: {
+  mistakeResult: NextMistakeResult;
+  sequenceLength: number;
+  challengeElo: number;
+  randomProbability: number;
+  selectedByRandomExploration: boolean;
+}): NextPositionResponse | null {
+  if (!mistakeResult.mistake) return null;
+
+  const normalized = normalizeUserMistakeForTraining(mistakeResult.mistake);
+  const mistake = mistakeResult.mistake;
+
+  if (!isValidFen(mistake.starting_fen)) {
+    console.error(
+      `[next-position] Invalid FEN in row-based mistake ${mistake.id}: ${mistake.starting_fen.slice(0, 60)}`,
+    );
+    return null;
+  }
+
+  const setupPrelude = normalizeSetupPrelude({
+    fen: normalized.fen,
+    previousFen: normalized.previousFen,
+    playedMove: normalized.playedMove,
+  });
+
+  if (!setupPrelude) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[next-position] row-based mistake rejected — no valid prelude", {
+        mistakeId: normalized.id,
+        sourceType: mistake.source_type,
+        fen: normalized.fen,
+        previousFen: normalized.previousFen,
+        playedMove: normalized.playedMove,
+      });
+    }
+    return null;
+  }
+
+  const response: NextPositionResponse = {
+    mistakeId: normalized.id,
+    fen: normalized.fen,
+    decisionFen: normalized.decisionFen ?? undefined,
+    previousFen: setupPrelude.previousFen,
+    playedMove: setupPrelude.playedMove,
+    actualMoveUci: normalized.actualMoveUci ?? undefined,
+    actualMoveSan: normalized.actualMoveSan ?? undefined,
+    bestMoveUci: normalized.bestMoveUci ?? undefined,
+    bestMoveSan: normalized.bestMoveSan ?? undefined,
+    source: normalized.source,
+    queueSource: mistakeResult.queueSource ?? undefined,
+    selectedServeMode: mistakeResult.queueSource ?? undefined,
+    randomExplorationProbability: randomProbability,
+    selectedByRandomExploration,
+    tags: normalizeThemeTags(mistake.theme_tags),
+    openingName: mistake.opening_name ?? undefined,
+    eco: mistake.eco ?? undefined,
+    cpLoss: mistake.cp_loss ?? undefined,
+    sequenceLength,
+    challengeElo,
+  };
+
+  if (process.env.NODE_ENV !== "production") {
+    response.debug = {
+      queueSource: mistakeResult.queueSource,
+      mistakeId: normalized.id,
+      sourceType: mistake.source_type,
+      cpLoss: mistake.cp_loss,
+      reviewCount: mistake.review_count,
+      intervalDays: mistake.interval_days,
+      nextReviewAt: mistake.next_review_at ?? undefined,
+      servedCount: mistake.served_count,
+      rowBased: true,
+      randomExplorationProbability: randomProbability,
+      selectedByRandomExploration,
+      coldStartReviewOverride: mistakeResult.queueSource === "review",
+    };
+  }
+
+  return response;
+}
 
 async function validateEngineServeability(
   fen: string,

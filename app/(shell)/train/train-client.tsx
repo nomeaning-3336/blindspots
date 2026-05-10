@@ -315,11 +315,11 @@ import {
   type PlayTrainSoundOptions,
 } from "@/lib/train-audio";
 
-const postmortemActionTextClassName = "text-center text-xs font-bold uppercase leading-none tracking-[0.12em]";
+const postmortemActionTextClassName = "text-center text-sm font-bold uppercase leading-none tracking-[0.1em]";
 const primaryActionClassName =
-  `app-brutal-button inline-flex min-h-9 min-w-0 items-center justify-center px-3 py-2 text-xs`;
+  `app-brutal-button inline-flex min-h-10 min-w-0 items-center justify-center px-3 py-2 text-sm`;
 const secondaryActionClassName =
-  `inline-flex min-h-9 min-w-0 items-center justify-center rounded-[8px] border border-[#3a3a3f] bg-[var(--app-panel-solid)] px-3 py-2 text-xs font-bold uppercase tracking-[0.04em] text-[var(--app-text)] shadow-[3px_3px_0_#050505] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#050505]`;
+  `app-brutal-button-secondary inline-flex min-h-10 min-w-0 items-center justify-center px-3 py-2 text-sm`;
 
 function readVisualPreferences() {
   let storedPreferences: Partial<AnalyzePreferences> | null = null;
@@ -3283,7 +3283,7 @@ export default function TrainPage(props: TrainPageProps) {
                     </div>
                   ) : isPositionLoading && !trainOnboardingIntroActive ? (
                     <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-[10px] bg-black/20">
-                      <div className="border border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-3 shadow-[4px_4px_0_#050505]">
+                      <div className="border border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-3 shadow-[4px_4px_0_var(--app-brutal-edge)]">
                         <span className="font-mono text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-text)]">
                           Loading position
                           <span className="inline-flex w-5 justify-start">
@@ -3334,7 +3334,7 @@ export default function TrainPage(props: TrainPageProps) {
                     key={item}
                     type="button"
                     className={[
-                      "inline-flex items-center border px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-[0.18em] transition",
+                      "inline-flex items-center border px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] transition min-[1500px]:text-sm",
                       active
                         ? "relative z-10 border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
                         : "cursor-pointer border-[var(--app-border)] bg-transparent text-[var(--app-muted)] hover:border-[var(--app-accent)] hover:text-[var(--app-text)]",
@@ -3626,7 +3626,7 @@ function TrainPostmortemTourOverlay({
         />
       ) : null}
       <div
-        className="fixed grid gap-4 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_#050505]"
+        className="fixed grid gap-4 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)]"
         ref={cardRef}
         style={cardStyle}
         onClick={(event) => event.stopPropagation()}
@@ -4765,25 +4765,25 @@ function EloResultCard({ result, isLoading, hideDelta, subtext }: { result: EloR
   const signedDelta = result.eloDelta > 0 ? `+${result.eloDelta}` : String(result.eloDelta);
 
   return (
-    <div data-tour="elo-card" className="rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-3">
+    <div data-tour="elo-card" className="rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-3.5">
       <div className="flex items-center">
         <div className="flex flex-wrap items-center gap-2">
           {hideDelta ? (
             <>
-              <span className="text-2xl font-bold text-[var(--app-text)]">{result.eloAfter}</span>
+              <span className="text-3xl font-bold text-[var(--app-text)] min-[1500px]:text-4xl">{result.eloAfter}</span>
             </>
           ) : (
             <>
-              <span className="text-base font-bold text-[var(--app-muted)]">{result.eloBefore}</span>
-              <span className="text-sm font-bold text-[var(--app-muted)]">→</span>
-              <span className="text-2xl font-bold text-[var(--app-text)]">{result.eloAfter}</span>
-              <span className={`text-base font-bold ${deltaTone}`}>{signedDelta}</span>
+              <span className="text-lg font-bold text-[var(--app-muted-soft)] min-[1500px]:text-xl">{result.eloBefore}</span>
+              <span className="text-base font-bold text-[var(--app-muted-soft)] min-[1500px]:text-lg">→</span>
+              <span className="text-3xl font-bold text-[var(--app-text)] min-[1500px]:text-4xl">{result.eloAfter}</span>
+              <span className={`text-lg font-bold min-[1500px]:text-xl ${deltaTone}`}>{signedDelta}</span>
             </>
           )}
         </div>
       </div>
       {subtext ? (
-        <div className="mt-1 text-xs font-bold text-[var(--app-muted)]">{subtext}</div>
+        <div className="mt-1.5 text-sm font-bold text-[var(--app-muted-soft)]">{subtext}</div>
       ) : null}
     </div>
   );
@@ -4967,7 +4967,7 @@ function EvalGraph({
   const graphMinValue = graphMidpoint - graphSpan / 2;
   const graphMaxValue = graphMidpoint + graphSpan / 2;
   const width = 520;
-  const height = compact ? 140 : 160;
+  const height = compact ? 180 : 180;
   const padding = 28;
   const usableWidth = width - padding * 2;
   const usableHeight = height - padding * 2;
@@ -4985,7 +4985,7 @@ function EvalGraph({
         </div>
       ) : null}
       <div data-tour="eval-graph" className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)]">
-        <div className={compact ? "h-20 min-[1500px]:h-24" : "h-28 min-[1500px]:h-36"}>
+        <div className={compact ? "h-28 min-[1500px]:h-32" : "h-32 min-[1500px]:h-40"}>
           {points.length >= 2 ? (
             <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" role="img" aria-label="Sequence eval graph">
               {[padding, height / 2, height - padding].map((lineY) => (
@@ -5050,7 +5050,7 @@ function EvalGraph({
                     x={point.x}
                     y={point.y - 9}
                     textAnchor="middle"
-                    className="pointer-events-none fill-[var(--app-muted)] text-[9px] font-bold"
+                    className="pointer-events-none fill-[var(--app-muted-soft)] text-[11px] font-bold min-[1500px]:text-xs"
                   >
                     {formatEvalLabel(point.value, point.mate)}
                   </text>
@@ -5095,7 +5095,7 @@ function AnalysisMoveTable({
 }) {
   return (
     <div data-tour="move-table" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[8px] border border-[var(--app-border-soft)]">
-      <div className="grid min-h-7 grid-cols-[minmax(0,1.1fr)_58px_58px_64px] items-center border-b border-[var(--app-border-soft)] px-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
+      <div className="grid min-h-8 grid-cols-[minmax(0,1.1fr)_66px_66px_76px] items-center border-b border-[var(--app-border-soft)] px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted-soft)] min-[1500px]:grid-cols-[minmax(0,1.1fr)_76px_76px_88px] min-[1500px]:text-xs">
         <span>Move</span>
         <span className="text-left">Before</span>
         <span className="text-left">After</span>
@@ -5131,8 +5131,8 @@ function AnalysisMoveTable({
           type="button"
           key={`${move.uci}-${index}`}
           className={[
-            "grid w-full grid-cols-[minmax(0,1.1fr)_58px_58px_64px] items-center border-b border-[var(--app-border-soft)] px-2.5 text-left last:border-b-0",
-            compact ? "min-h-8 text-[11px]" : "min-h-9 text-xs",
+            "grid w-full grid-cols-[minmax(0,1.1fr)_66px_66px_76px] items-center border-b border-[var(--app-border-soft)] px-3 text-left last:border-b-0 min-[1500px]:grid-cols-[minmax(0,1.1fr)_76px_76px_88px]",
+            compact ? "min-h-10 text-sm min-[1500px]:text-base" : "min-h-10 text-sm",
             onSelectPosition ? "cursor-pointer transition" : "cursor-default",
             isCurrentPosition || isSelected ? "bg-[var(--app-highlight-soft)]" : "",
           ].join(" ")}
@@ -5153,13 +5153,13 @@ function AnalysisMoveTable({
               {move.san}
             </span>
           </span>
-          <span className="overflow-hidden whitespace-nowrap text-left tabular-nums text-[var(--app-muted)]">
+          <span className="overflow-hidden whitespace-nowrap text-left tabular-nums text-[var(--app-muted-soft)]">
             {typeof evalBefore === "number" ? formatEvalLabel(evalBefore, mateBefore) : pendingValue}
           </span>
-          <span className="overflow-hidden whitespace-nowrap text-left tabular-nums text-[var(--app-muted)]">
+          <span className="overflow-hidden whitespace-nowrap text-left tabular-nums text-[var(--app-muted-soft)]">
             {typeof evalAfter === "number" ? formatEvalLabel(evalAfter, mateAfter) : pendingValue}
           </span>
-          <span className="overflow-hidden whitespace-nowrap text-left tabular-nums text-[var(--app-muted)]">
+          <span className="overflow-hidden whitespace-nowrap text-left tabular-nums text-[var(--app-muted-soft)]">
             {showEvaluations ? formatLossLabel(cpLoss, mateAfter) : pendingValue}
           </span>
         </button>
