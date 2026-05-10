@@ -31,6 +31,19 @@ export type DashboardPosition = {
   previousFen: string | null;
   playedMoveUci: string | null;
   decisionEvalCp: number | null;
+  consecutiveCorrectCount: number;
+  moveKey: string | null;
+  moveNotes: DashboardMoveNote[];
+};
+
+export type DashboardMoveNote = {
+  moveKey: string;
+  note: string;
+  classification: string | null;
+  evalBeforeCp: number | null;
+  evalAfterCp: number | null;
+  moveSan: string | null;
+  moveUci: string | null;
 };
 
 export type EloHistoryPoint = {
@@ -127,6 +140,8 @@ type DashboardMistakeInput = {
   setup_previous_fen: string | null;
   setup_played_move_uci: string | null;
   eval_before_cp: number | null;
+  consecutive_correct_count: number;
+  move_key: string | null;
 };
 
 type BuildDashboardSummaryInput = {
@@ -134,6 +149,15 @@ type BuildDashboardSummaryInput = {
   sessions: DashboardSessionInput[];
   mistakes: DashboardMistakeInput[];
   avgCpLoss: number | null;
+  notes: Array<{
+    move_key: string;
+    note_text: string;
+    classification: string | null;
+    eval_before_cp: number | null;
+    eval_after_cp: number | null;
+    move_san: string | null;
+    move_uci: string | null;
+  }>;
 };
 
 const CLASSIFICATION_KEYS = [
@@ -177,6 +201,7 @@ export function buildDashboardSummary({
   sessions,
   mistakes,
   avgCpLoss,
+  notes,
 }: BuildDashboardSummaryInput): DashboardSummary {
   const evaluationsBySession = sessions.map((session) => normalizePositionEvaluations(session.position_evaluations));
   const evaluations = evaluationsBySession.flat();
@@ -188,7 +213,22 @@ export function buildDashboardSummary({
   const revisitCount = jsonArrayLength(profile?.revisit_queue);
   const masteredCount = jsonArrayLength(profile?.mastered_queue);
 
-  const mistakePositions = buildPositionRows(mistakes);
+  const notesByKey = new Map<string, DashboardMoveNote>();
+  for (const n of notes) {
+    if (n.move_key) {
+      notesByKey.set(n.move_key, {
+        moveKey: n.move_key,
+        note: n.note_text,
+        classification: n.classification,
+        evalBeforeCp: n.eval_before_cp,
+        evalAfterCp: n.eval_after_cp,
+        moveSan: n.move_san,
+        moveUci: n.move_uci,
+      });
+    }
+  }
+
+  const mistakePositions = buildPositionRows(mistakes, notesByKey);
   const sessionPositions = buildSessionPositionRows(sessions);
   const positions = sortDashboardPositions([...mistakePositions, ...sessionPositions]);
   const recentPositions = positions.slice(0, 8);
@@ -223,27 +263,40 @@ export function buildDashboardSummary({
   };
 }
 
-function buildPositionRows(mistakes: DashboardMistakeInput[]): DashboardPosition[] {
-  return mistakes.map((m) => ({
-    id: m.id,
-    startingFen: m.starting_fen,
-    sourceType: m.source_type,
-    sourceLabel: sourceTypeLabel(m.source_type),
-    status: m.status,
-    statusLabel: statusLabel(m.status),
-    queueLabel: queueLabel(m.status, m.source_type),
-    openingName: m.opening_name,
-    lastResult: inferLastResult(m),
-    lastAttemptAt: m.last_attempt_at,
-    nextReviewAt: m.next_review_at,
-    attempts: m.review_count,
-    cpLoss: m.cp_loss,
-    worstMoveLossCp: m.cp_loss,
-    servedCount: m.served_count,
-    previousFen: m.setup_previous_fen,
-    playedMoveUci: m.setup_played_move_uci,
-    decisionEvalCp: m.eval_before_cp,
-  }));
+function buildPositionRows(
+  mistakes: DashboardMistakeInput[],
+  notesByKey: Map<string, DashboardMoveNote>,
+): DashboardPosition[] {
+  return mistakes.map((m) => {
+    const moveNotes: DashboardMoveNote[] = [];
+    if (m.move_key) {
+      const note = notesByKey.get(m.move_key);
+      if (note) moveNotes.push(note);
+    }
+    return {
+      id: m.id,
+      startingFen: m.starting_fen,
+      sourceType: m.source_type,
+      sourceLabel: sourceTypeLabel(m.source_type),
+      status: m.status,
+      statusLabel: statusLabel(m.status),
+      queueLabel: queueLabel(m.status, m.source_type),
+      openingName: m.opening_name,
+      lastResult: inferLastResult(m),
+      lastAttemptAt: m.last_attempt_at,
+      nextReviewAt: m.next_review_at,
+      attempts: m.review_count,
+      cpLoss: m.cp_loss,
+      worstMoveLossCp: m.cp_loss,
+      servedCount: m.served_count,
+      previousFen: m.setup_previous_fen,
+      playedMoveUci: m.setup_played_move_uci,
+      decisionEvalCp: m.eval_before_cp,
+      consecutiveCorrectCount: m.consecutive_correct_count,
+      moveKey: m.move_key,
+      moveNotes,
+    };
+  });
 }
 
 function buildSessionPositionRows(sessions: DashboardSessionInput[]): DashboardPosition[] {
@@ -266,6 +319,9 @@ function buildSessionPositionRows(sessions: DashboardSessionInput[]): DashboardP
     previousFen: null,
     playedMoveUci: null,
     decisionEvalCp: null,
+    consecutiveCorrectCount: 0,
+    moveKey: null,
+    moveNotes: [],
   }));
 }
 
