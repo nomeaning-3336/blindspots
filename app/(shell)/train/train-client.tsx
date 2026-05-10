@@ -319,7 +319,7 @@ const postmortemActionTextClassName = "text-center text-xs font-bold uppercase l
 const primaryActionClassName =
   `app-brutal-button inline-flex min-h-9 min-w-0 items-center justify-center px-3 py-2 text-xs`;
 const secondaryActionClassName =
-  `inline-flex min-h-9 min-w-0 items-center justify-center rounded-[8px] border border-[#050505] bg-[var(--app-panel-solid)] px-3 py-2 text-xs font-bold uppercase tracking-[0.04em] text-[var(--app-text)] shadow-[3px_3px_0_#050505] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#050505]`;
+  `inline-flex min-h-9 min-w-0 items-center justify-center rounded-[8px] border border-[#3a3a3f] bg-[var(--app-panel-solid)] px-3 py-2 text-xs font-bold uppercase tracking-[0.04em] text-[var(--app-text)] shadow-[3px_3px_0_#050505] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#050505]`;
 
 function readVisualPreferences() {
   let storedPreferences: Partial<AnalyzePreferences> | null = null;
