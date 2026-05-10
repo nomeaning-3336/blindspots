@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { PageTransition } from "@/components/navigation/page-transition";
 import { getCookieAppThemeOnly } from "@/lib/app-theme-store";
 import { PostHogProvider } from "./providers";
+import SmoothScrollWrapper from "@/components/smooth-scroll-wrapper";
 import "./globals.css";
 
 const sans = Space_Grotesk({
@@ -63,7 +64,9 @@ export default async function RootLayout({
     >
       <body>
         <PostHogProvider>
-          <PageTransition>{children}</PageTransition>
+          <SmoothScrollWrapper>
+            <PageTransition>{children}</PageTransition>
+          </SmoothScrollWrapper>
         </PostHogProvider>
       </body>
     </html>

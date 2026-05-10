@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { Chess, type Square } from "chess.js";
 import { AnalysisBoard, type BoardMove, type EngineArrow } from "@/components/chess/analysis-board";
 import {
@@ -484,6 +485,7 @@ export default function TrainPage(props: TrainPageProps) {
   const { initialOnboarding = false, forceOnboarding = false } = props;
   const [state, setState] = useState<TrainingState>("active");
   const [startingFen, setStartingFen] = useState<string>("");
+  const searchParams = useSearchParams();
   const initialPreludeRef = useRef<{ previousFen: string; playedMove: string } | null>(null);
   const [moves, setMoves] = useState<TrainingMove[]>(mockRep.moveHistory);
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(null);
@@ -1121,6 +1123,50 @@ export default function TrainPage(props: TrainPageProps) {
     }, RESOLUTION_DWELL_MS);
     return () => window.clearTimeout(timer);
   }, [state]);
+
+  const mistakeIdParam = searchParams?.get("mistakeId");
+  const modeParam = searchParams?.get("mode"); // "play" | "postmortem"
+
+  async function loadSpecificPosition(mistakeId: string, mode: string) {
+    setIsPositionLoading(true);
+    setPositionLoadError(null);
+    const res = await fetch(`/api/train/position?mistakeId=${encodeURIComponent(mistakeId)}`);
+    if (!res.ok) {
+      setPositionLoadError("That queue position could not be loaded.");
+      setIsPositionLoading(false);
+      return;
+    }
+    const payload = await res.json();
+    setStartingFen(payload.fen);
+    setDisplayStartingFen(payload.previousFen ?? payload.fen);
+    setFen(payload.previousFen ?? payload.fen);
+    setMoves([]);
+    setLastMove(null);
+    setInitialOpponentMove(null);
+    initialOpponentMoveRef.current = null;
+    setActiveSetupReplayIndex(0);
+    setState(mode === "postmortem" ? "complete" : "active");
+    setIsPositionLoading(false);
+    setIsAwaitingStartGesture(false);
+    setPendingInitialEngineMove(null);
+    setHasLoadedPosition(true);
+    setIsOpponentThinking(false);
+
+    if (payload.previousFen && payload.playedMove) {
+      initialPreludeRef.current = {
+        previousFen: payload.previousFen,
+        playedMove: payload.playedMove,
+      };
+    }
+  }
+
+  useEffect(() => {
+    if (!onboardingScreen) return;
+    if (onboardingScreen === "loading") return;
+    if (mistakeIdParam && !trainOnboardingIntroActive) {
+      void loadSpecificPosition(mistakeIdParam, modeParam ?? "play");
+    }
+  }, [onboardingScreen, mistakeIdParam, modeParam, trainOnboardingIntroActive]);
 
   async function loadNextPosition(options: { autoStart?: boolean } = {}) {
     const cachedPosition = cachedNextPosition;

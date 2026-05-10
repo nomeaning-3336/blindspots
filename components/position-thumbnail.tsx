@@ -52,6 +52,7 @@ export function PositionThumbnail({
 }
 
 const PIECE_GLIDE_MS = 240;
+const NOTE_BADGE_REVEAL_MS = 160;
 const NOTE_HOVER_START_DELAY_MS = 200;
 const BETWEEN_SEQUENCE_DELAY_MS = 180;
 const HOVER_PREVIEW_DELAY_MS = 200;
@@ -147,24 +148,35 @@ export function ReplayThumbnail({
         setPreviewLastMove(null);
         setPreviewBadge(null);
 
-        // Reverse stage 2: prelude engine move backwards (if different from note before)
-        if (finalFen !== preview.fenBefore) {
-          setShownFen(finalFen);
+        // Reverse stage 2: prelude engine move backwards
+        const preludeBefore = previousFen ?? idleFen;
+        const preludeAfter = preview.fenBefore;
+        const needsPreludeReverse = Boolean(previousFen) && preludeBefore !== preludeAfter;
+
+        if (!needsPreludeReverse) {
+          schedule(() => {
+            if (!isCurrent(id)) return;
+            setAnimating(false);
+            setShownFen(preludeBefore);
+            activePreviewRef.current = null;
+          }, 0);
+        } else {
+          setShownFen(preludeAfter);
 
           requestAnimationFrame(() => {
             if (!isCurrent(id)) return;
-            setShownFen(previousFen ?? idleFen);
+            setShownFen(preludeBefore);
           });
-        }
 
-        schedule(() => {
-          if (!isCurrent(id)) return;
-          setAnimating(false);
-          setPreviewLastMove(null);
-          setPreviewBadge(null);
-          setShownFen(previousFen ?? idleFen);
-          activePreviewRef.current = null;
-        }, PIECE_GLIDE_MS);
+          schedule(() => {
+            if (!isCurrent(id)) return;
+            setAnimating(false);
+            setPreviewLastMove(null);
+            setPreviewBadge(null);
+            setShownFen(preludeBefore);
+            activePreviewRef.current = null;
+          }, PIECE_GLIDE_MS);
+        }
       }, PIECE_GLIDE_MS + BETWEEN_SEQUENCE_DELAY_MS);
 
       return;
@@ -198,7 +210,7 @@ export function ReplayThumbnail({
           if (!isCurrent(id)) return;
           setPreviewLastMove(movePreview.move);
           setPreviewBadge(movePreview.badge ?? null);
-        }, PIECE_GLIDE_MS);
+        }, NOTE_BADGE_REVEAL_MS);
       }, NOTE_HOVER_START_DELAY_MS);
 
       return;
@@ -234,7 +246,7 @@ export function ReplayThumbnail({
           if (!isCurrent(id)) return;
           setPreviewLastMove(movePreview.move);
           setPreviewBadge(movePreview.badge ?? null);
-        }, PIECE_GLIDE_MS);
+        }, NOTE_BADGE_REVEAL_MS);
       }, PIECE_GLIDE_MS + BETWEEN_SEQUENCE_DELAY_MS);
     }, NOTE_HOVER_START_DELAY_MS);
   }, [movePreview, previousFen, finalFen, idleFen]);

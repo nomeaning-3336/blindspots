@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 
 export default function SmoothScrollWrapper({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
   const [reducedMotion, setReducedMotion] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const spacerRef = useRef<HTMLDivElement>(null);
@@ -26,7 +28,6 @@ export default function SmoothScrollWrapper({
     }
   }, []);
 
-  // Lerp loop
   const lerp = useCallback(() => {
     const diff = targetY.current - currentY.current;
     const speed = 0.08;
@@ -45,32 +46,33 @@ export default function SmoothScrollWrapper({
     }
   }, []);
 
-  // Start lerp on scroll
   useEffect(() => {
     if (reducedMotion) return;
 
-    const onWheel = (e: WheelEvent) => {
+    function handleWheel(e: WheelEvent) {
+      // Skip if target is inside a native-scroll container
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("[data-native-scroll]")) return;
+
       e.preventDefault();
       targetY.current = Math.max(
         0,
         Math.min(
           targetY.current + e.deltaY,
-          (spacerRef.current?.offsetHeight ?? 0) -
-            (window.innerHeight),
+          (spacerRef.current?.offsetHeight ?? 0) - window.innerHeight,
         ),
       );
       cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(lerp);
-    };
+    }
 
-    window.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("wheel", handleWheel, { passive: false });
     return () => {
-      window.removeEventListener("wheel", onWheel);
+      window.removeEventListener("wheel", handleWheel);
       cancelAnimationFrame(rafRef.current);
     };
   }, [lerp, reducedMotion]);
 
-  // Update spacer on resize/content change
   useEffect(() => {
     updateSpacerHeight();
     const observer = new ResizeObserver(updateSpacerHeight);
@@ -82,7 +84,21 @@ export default function SmoothScrollWrapper({
     };
   }, [updateSpacerHeight]);
 
-  if (reducedMotion) {
+  // Reset scroll on route change
+  useEffect(() => {
+    targetY.current = 0;
+    currentY.current = 0;
+    if (contentRef.current) {
+      contentRef.current.style.transform = "translate3d(0, 0, 0)";
+    }
+  }, [pathname]);
+
+  const scrollDisabled =
+    reducedMotion ||
+    pathname.startsWith("/train") ||
+    pathname.startsWith("/analysis");
+
+  if (scrollDisabled) {
     return <>{children}</>;
   }
 
