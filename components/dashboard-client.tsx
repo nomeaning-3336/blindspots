@@ -92,7 +92,7 @@ function DashboardHero({
           <div className="flex flex-wrap items-center gap-3">
             <Link
               href="/train"
-              className="app-brutal-button inline-flex min-h-11 items-center justify-center px-5 py-3 text-xs"
+              className="app-brutal-button inline-flex min-h-12 items-center justify-center px-6 py-3 text-sm"
             >
               {hasData ? "Continue training" : "Start training"}
             </Link>
@@ -237,7 +237,7 @@ function InfoTooltip({
         <span>Queue types</span>
         <span
           aria-hidden="true"
-          className="inline-flex h-5 w-5 items-center justify-center border border-current text-[11px] leading-none"
+          className="inline-flex h-5 w-5 items-center justify-center text-[11px] leading-none"
         >
           ?
         </span>
@@ -541,15 +541,15 @@ function QueuePositionRow({
   const streak = Math.min(position.consecutiveCorrectCount ?? 0, 3);
 
   return (
-    <div className="app-brutal-row grid gap-6 rounded-lg border border-[var(--app-border)] p-5 md:grid-cols-[328px_minmax(0,1fr)_minmax(200px,320px)] md:items-stretch">
+    <div className="app-brutal-row grid gap-6 rounded-lg border border-[var(--app-border)] p-5 md:grid-cols-[420px_minmax(0,1fr)_220px] md:items-stretch">
       {/* Thumbnail column */}
-      <div className="flex shrink-0 flex-col items-center gap-2">
+      <div className="flex flex-col items-center gap-2 border-r border-[var(--app-border)] pr-6">
         <ReplayThumbnail
           previousFen={position.previousFen}
           finalFen={position.startingFen}
           playedMove={position.playedMoveUci}
           orientation={userOrientation}
-          size={320}
+          size={400}
         />
         <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
           {sideLabel}
@@ -609,16 +609,16 @@ function QueuePositionRow({
         )}
 
         {/* Actions */}
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4 flex flex-wrap gap-3">
           <Link
             href="/train"
-            className="inline-flex min-h-8 items-center border border-[var(--app-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)]"
+            className="app-brutal-button inline-flex min-h-11 min-w-0 items-center justify-center px-5 py-2.5 text-sm"
           >
             {position.attempts > 0 ? "Retry" : "Start"}
           </Link>
           <Link
             href={`/analysis?fen=${encodeURIComponent(position.startingFen)}`}
-            className="inline-flex min-h-8 items-center border border-[var(--app-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)]"
+            className="inline-flex min-h-11 min-w-0 items-center justify-center rounded-[8px] border border-[#3a3a3f] bg-[var(--app-panel-solid)] px-5 py-2.5 text-sm font-bold uppercase tracking-[0.04em] text-[var(--app-text)] shadow-[3px_3px_0_#050505] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#050505]"
           >
             Analyze
           </Link>
@@ -627,9 +627,9 @@ function QueuePositionRow({
 
       {/* Notes column */}
       <div className="min-w-0 border-l border-[var(--app-border)] pl-6">
-        <h4 className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted-soft)]">
+        <h3 className="text-lg font-semibold tracking-tight text-[var(--app-text)]">
           Notes
-        </h4>
+        </h3>
 
         {position.moveNotes.length === 0 ? (
           <div className="mt-2 text-sm text-[var(--app-muted)]">N/A</div>
