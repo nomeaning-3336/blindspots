@@ -721,13 +721,13 @@ function QueuePositionRow({
         {/* Actions */}
         <div className="mt-5 flex flex-wrap gap-4">
           <Link
-            href="/train"
+            href={`/train?mistakeId=${encodeURIComponent(position.id)}&mode=play`}
             className="app-brutal-button inline-flex min-h-12 min-w-0 items-center justify-center px-6 py-3 text-sm"
           >
             {position.attempts > 0 ? "Retry" : "Start"}
           </Link>
           <Link
-            href={`/analysis?fen=${encodeURIComponent(position.startingFen)}`}
+            href={`/train?mistakeId=${encodeURIComponent(position.id)}&mode=postmortem`}
             className="app-brutal-button-secondary inline-flex min-h-12 min-w-0 items-center justify-center px-6 py-3 text-sm"
           >
             Analyze
