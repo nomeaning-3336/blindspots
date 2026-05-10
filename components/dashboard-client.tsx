@@ -4,10 +4,8 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import Link from "next/link";
 import type { DashboardClassifications, DashboardPosition, DashboardSummary, EloHistoryPoint } from "@/lib/dashboard";
 import { classificationColor } from "@/lib/training-board-ui";
-import { PositionThumbnail, ReplayThumbnail } from "@/components/position-thumbnail";
+import { ReplayThumbnail } from "@/components/position-thumbnail";
 
-type DashboardView = "summary" | "history";
-type PositionFilter = "all" | "review" | "new" | "learning" | "mastered" | "failed";
 
 const CLASS_ROWS: Array<{
   id: keyof DashboardClassifications;
@@ -38,17 +36,7 @@ const CLASS_COLORS: Record<string, string> = {
   blunder: classificationColor("blunder"),
 };
 
-const FILTER_OPTIONS: Array<{ value: PositionFilter; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "review", label: "Review due" },
-  { value: "new", label: "New" },
-  { value: "learning", label: "Learning" },
-  { value: "mastered", label: "Mastered" },
-  { value: "failed", label: "Failed recently" },
-];
-
 export function DashboardClient({ summary }: { summary: DashboardSummary }) {
-  const [view, setView] = useState<DashboardView>("summary");
   const hasData = summary.totalSequences > 0 || summary.recentSessions.length > 0;
 
   return (
@@ -59,18 +47,7 @@ export function DashboardClient({ summary }: { summary: DashboardSummary }) {
           hasData={hasData}
         />
 
-        <div className="mt-2 flex justify-center">
-          <ViewToggle view={view} setView={setView} />
-        </div>
-
-        {view === "summary" ? (
-          <SummaryTab summary={summary} hasData={hasData} />
-        ) : (
-          <section className="app-brutal-section p-5 md:p-6">
-            <PositionsTab positions={summary.positions} />
-          </section>
-        )}
-
+        <SummaryTab summary={summary} hasData={hasData} />
       </div>
     </main>
   );
@@ -87,13 +64,6 @@ function DashboardHero({
 }) {
   const elo = summary.blindspotsElo;
   const delta = summary.eloDeltaSession;
-  const reviewDue = summary.queueOverview.reviewDue;
-  const lastSession = formatDate(summary.lastSessionAt).text;
-
-  const meta = [
-    reviewDue > 0 ? `${formatNumber(reviewDue)} due for review` : "No reviews due",
-    summary.lastSessionAt ? `Last trained ${lastSession}` : "No sessions yet",
-  ];
 
   return (
     <section className="app-brutal-section p-5 md:p-6">
@@ -111,11 +81,6 @@ function DashboardHero({
               </div>
             )}
 
-            <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
-              {meta.map((item) => (
-                <span key={item}>{item}</span>
-              ))}
-            </div>
 
             {!hasData && (
               <p className="mt-3 max-w-sm text-xs leading-6 text-[var(--app-muted)]">
@@ -343,9 +308,10 @@ function formatReviewCountdown(nextReviewAt: string | null, nowMs: number) {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
 
-  const pad = (n: number) => String(n).padStart(2, "0");
-
-  return `${pad(days)}d ${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
 }
 
 function formatReviewAbsolute(nextReviewAt: string | null): string {
@@ -473,20 +439,6 @@ function QueueOverviewSection({
       {/* Selected queue position list */}
       {selectedBucket && (
         <div className="mt-4 border-t border-[var(--app-border-soft)] pt-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <span className="text-[13px] font-bold uppercase tracking-[0.2em] text-[var(--app-muted)]">
-                {QUEUE_DEFS.find((d) => d.bucket === selectedBucket)?.label} positions
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setSelectedBucket(null)}
-              className="border border-[var(--app-accent)] bg-[var(--app-accent-soft)] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--app-accent)] transition hover:border-[var(--app-border-strong)] hover:text-[var(--app-text)]"
-            >
-              Collapse
-            </button>
-          </div>
 
           {filteredPositions.length === 0 ? (
             <div className="py-8 text-center text-xs leading-6 text-[var(--app-muted)]">
@@ -517,6 +469,60 @@ const QUEUE_DESCRIPTIONS: Record<QueueBucket, React.ReactNode> = {
 
 /* ─── Queue Position Row ─── */
 
+/* ─── Queue position display helpers ─── */
+
+function getFenTurnSide(fen: string): "white" | "black" {
+  const parts = fen.trim().split(/\s+/);
+  return parts[1] === "b" ? "black" : "white";
+}
+
+function sourceContextLabel(position: DashboardPosition) {
+  switch (position.sourceType) {
+    case "app_training":
+      return "Blindspots";
+    case "own_game":
+    case "imported_pgn":
+      return "User games";
+    case "lichess_puzzle_filler":
+      return "Puzzle";
+    case "master_game":
+    case "master_games":
+      return "Master games";
+    default:
+      return position.sourceLabel || "Training";
+  }
+}
+
+function queuePositionTitle(position: DashboardPosition) {
+  const context = sourceContextLabel(position);
+  return `Player vs Engine (${context})`;
+}
+
+function lastAttemptLabel(position: DashboardPosition) {
+  if (!position.attempts || position.attempts <= 0) return "Not attempted";
+  switch (position.lastResult) {
+    case "pass": return "Pass";
+    case "fail": return "Fail";
+    case "acceptable": return "Acceptable";
+    default: return "Not attempted";
+  }
+}
+
+function lastAttemptClass(position: DashboardPosition) {
+  const label = lastAttemptLabel(position);
+  if (label === "Pass") return "text-[var(--app-class-good)]";
+  if (label === "Fail") return "text-[var(--app-class-blunder)]";
+  if (label === "Acceptable") return "text-[var(--app-class-inaccuracy)]";
+  return "text-[var(--app-muted-soft)]";
+}
+
+function formatEvalCp(cp: number | null | undefined) {
+  if (typeof cp !== "number") return null;
+  const pawns = cp / 100;
+  if (Math.abs(pawns) < 0.05) return "0.0";
+  return `${pawns > 0 ? "+" : ""}${pawns.toFixed(1)}`;
+}
+
 function QueuePositionRow({
   position,
   nowMs,
@@ -525,62 +531,90 @@ function QueuePositionRow({
   nowMs: number;
 }) {
   const countdown = formatReviewCountdown(position.nextReviewAt, nowMs);
-  const isOverdue = countdown === null ? false : countdown === "00d 00h 00m 00s" && Date.parse(position.nextReviewAt ?? "") <= nowMs;
+  const isOverdue = isDueNow(position, nowMs);
+  const userOrientation = getFenTurnSide(position.startingFen);
+  const sideLabel = userOrientation === "black" ? "Black to move" : "White to move";
 
   return (
-    <div className="app-brutal-row grid grid-cols-[1fr] items-center gap-4 rounded-lg px-4 py-4 sm:grid-cols-[320px_minmax(0,1fr)_auto]">
+    <div className="app-brutal-row grid gap-5 rounded-lg p-5 md:grid-cols-[180px_minmax(360px,1fr)] md:items-start">
       {/* Thumbnail */}
-      <div className="shrink-0 self-center sm:row-span-1 row-span-2">
+      <div className="shrink-0 self-start">
         <ReplayThumbnail
           previousFen={position.previousFen}
           finalFen={position.startingFen}
           playedMove={position.playedMoveUci}
+          orientation={userOrientation}
           size={320}
         />
       </div>
 
-      {/* Info */}
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+      {/* Content */}
+      <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="min-w-0 truncate text-sm font-bold leading-6 text-[var(--app-text)]">
-            {position.openingName ?? position.sourceLabel}
-          </span>
+          <h3 className="min-w-0 truncate text-lg font-semibold tracking-tight text-[var(--app-text)]">
+            {queuePositionTitle(position)}
+          </h3>
           <StatusTag status={position.status} label={position.statusLabel} />
-          <ResultTag result={position.lastResult} />
+          {position.lastResult && <ResultTag result={position.lastResult} />}
         </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs leading-5 text-[var(--app-muted)]">
-          <span>{position.sourceLabel}</span>
-          {position.attempts > 0 && <span>{position.attempts} attempt{position.attempts !== 1 ? "s" : ""}</span>}
-          {position.cpLoss != null && (
-            <span className={position.cpLoss > 100 ? "font-bold text-[var(--app-class-blunder)]" : "font-bold text-[var(--app-text)]"}>
-              {position.cpLoss}cp
-            </span>
-          )}
-          <span>
-            {formatReviewAbsolute(position.nextReviewAt)}
-            {countdown && (
-              <span className={isOverdue ? "font-bold text-[var(--app-class-blunder)]" : "font-mono tabular-nums text-[var(--app-muted)]"}>
-                , {isOverdue ? "Due now" : countdown}
-              </span>
-            )}
-          </span>
-        </div>
-      </div>
 
-      {/* Actions */}
-      <div className="flex shrink-0 gap-2 self-end sm:self-center">
-        <Link
-          href="/train"
-          className="inline-flex min-h-8 items-center border border-[var(--app-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)]"
-        >
-          Retry
-        </Link>
-        <Link
-          href={`/analysis?fen=${encodeURIComponent(position.startingFen)}`}
-          className="inline-flex min-h-8 items-center border border-[var(--app-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)]"
-        >
-          Analyze
-        </Link>
+        <div className="mt-2 grid gap-1.5">
+          <div className="text-sm leading-5 text-[var(--app-muted)]">
+            {formatEvalCp(position.decisionEvalCp) != null && (
+              <span>Eval: {formatEvalCp(position.decisionEvalCp)}</span>
+            )}
+            {formatEvalCp(position.decisionEvalCp) != null && position.attempts > 0 && (
+              <span className="mx-2 text-[var(--app-border-soft)]">·</span>
+            )}
+            {position.attempts > 0 && <span>{position.attempts} attempt{position.attempts !== 1 ? "s" : ""}</span>}
+            {(formatEvalCp(position.decisionEvalCp) != null || position.attempts > 0) && (
+              <span className="mx-2 text-[var(--app-border-soft)]">·</span>
+            )}
+            <span className="text-[var(--app-text)]">{sideLabel}</span>
+          </div>
+
+          <div className="text-sm leading-5">
+            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
+              Last attempt:
+            </span>{" "}
+            <span className={lastAttemptClass(position)}>{lastAttemptLabel(position)}</span>
+          </div>
+
+          <div className="text-sm leading-5">
+            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
+              Next review:
+            </span>{" "}
+            <span className={isOverdue ? "font-semibold text-[var(--app-class-blunder)]" : "text-[var(--app-text)]"}>
+              {isOverdue ? "Due now" : formatReviewAbsolute(position.nextReviewAt)}
+            </span>
+          </div>
+
+          {countdown && !isOverdue && (
+            <div className="text-sm leading-5">
+              <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
+                Time remaining:
+              </span>{" "}
+              <span className="tabular-nums text-[var(--app-text)]">
+                {countdown}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link
+            href="/train"
+            className="inline-flex min-h-8 items-center border border-[var(--app-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)]"
+          >
+            Retry
+          </Link>
+          <Link
+            href={`/analysis?fen=${encodeURIComponent(position.startingFen)}`}
+            className="inline-flex min-h-8 items-center border border-[var(--app-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)]"
+          >
+            Analyze
+          </Link>
+        </div>
       </div>
     </div>
   );
@@ -653,165 +687,6 @@ function EloChart({ points }: { points: EloHistoryPoint[] }) {
   );
 }
 
-/* ─── Positions Tab ─── */
-
-function PositionsTab({ positions }: { positions: DashboardPosition[] }) {
-  const [filter, setFilter] = useState<PositionFilter>("all");
-
-  const filtered = useMemo(() => {
-    if (filter === "all") return positions;
-    return positions.filter((p) => {
-      switch (filter) {
-        case "review": return p.status === "review";
-        case "new": return p.status === "active";
-        case "learning": return p.status === "review" && p.attempts > 0 && p.attempts < 5;
-        case "mastered": return p.status === "mastered";
-        case "failed": return p.lastResult === "fail";
-        default: return true;
-      }
-    });
-  }, [positions, filter]);
-
-  if (!positions.length) {
-    return (
-      <div className="flex flex-col items-center gap-3 py-8 text-center">
-        <div className="text-sm font-bold text-[var(--app-text)]">No archived positions.</div>
-        <p className="max-w-sm text-xs leading-6 text-[var(--app-muted)]">
-          Complete a training sequence and positions will show up here with their eval trace, result, and review schedule.
-        </p>
-        <Link href="/train" className="app-brutal-button inline-flex items-center px-4 py-2 text-xs">
-          Start training
-        </Link>
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid gap-4">
-      <FilterBar filter={filter} setFilter={setFilter} />
-      <PositionList positions={filtered} />
-    </div>
-  );
-}
-
-function FilterBar({ filter, setFilter }: { filter: PositionFilter; setFilter: (f: PositionFilter) => void }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {FILTER_OPTIONS.map((opt) => (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => setFilter(opt.value)}
-          className={[
-            "min-h-9 border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition",
-            filter === opt.value
-              ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
-              : "cursor-pointer border-[var(--app-border)] text-[var(--app-muted)] hover:border-[var(--app-accent)] hover:text-[var(--app-text)]",
-          ].join(" ")}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function PositionList({ positions }: { positions: DashboardPosition[] }) {
-  if (!positions.length) {
-    return (
-      <div className="py-6 text-center text-xs text-[var(--app-muted)]">
-        No positions match this filter.
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid gap-3">
-      {/* Desktop header */}
-      <div className="hidden grid-cols-[8.5rem_minmax(0,1.5fr)_auto_auto_auto_auto_auto] items-center gap-4 border-b border-[var(--app-border-soft)] px-4 pb-3 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)] lg:grid">
-        <span>Board</span>
-        <span>Source</span>
-        <span>Status</span>
-        <span>Result</span>
-        <span>Attempts</span>
-        <span className="text-right">Eval loss</span>
-        <span className="text-right">Actions</span>
-      </div>
-      {positions.map((pos) => (
-        <PositionRow key={pos.id} position={pos} />
-      ))}
-    </div>
-  );
-}
-
-function PositionRow({ position }: { position: DashboardPosition }) {
-  return (
-    <div className="app-brutal-row grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg px-4 py-4 sm:grid-cols-[7.5rem_1fr_auto_auto_auto_auto] sm:gap-4 lg:grid-cols-[8.5rem_minmax(0,1.5fr)_auto_auto_auto_auto_auto]">
-      {/* Thumbnail */}
-      <div className="hidden sm:block" aria-label={`Position: ${position.sourceLabel}, ${position.statusLabel}`}>
-        <PositionThumbnail fen={position.startingFen} size={108} />
-      </div>
-
-      {/* Source info */}
-      <div className="min-w-0">
-        <div className="truncate text-sm font-bold leading-6 text-[var(--app-text)]">
-          {position.openingName ?? position.sourceLabel}
-        </div>
-        <div className="mt-1 text-xs leading-5 text-[var(--app-muted-soft)]">
-          {position.sourceLabel}
-          {position.queueLabel && (
-            <span className="ml-1.5 border-l border-[var(--app-border-soft)] pl-1.5">{position.queueLabel}</span>
-          )}
-        </div>
-      </div>
-
-      {/* Status */}
-      <div className="hidden sm:block">
-        <StatusTag status={position.status} label={position.statusLabel} />
-      </div>
-
-      {/* Result */}
-      <div className="hidden sm:block">
-        <ResultTag result={position.lastResult} />
-      </div>
-
-      {/* Attempts */}
-      <div className="hidden text-right text-sm font-bold text-[var(--app-text)] sm:block">
-        {position.attempts > 0 ? position.attempts : "-"}
-      </div>
-
-      {/* Eval loss */}
-      <div className="hidden text-right text-sm sm:block">
-        {position.cpLoss != null ? (
-          <span className={position.cpLoss > 100 ? "font-bold text-[var(--app-class-blunder)]" : "font-bold text-[var(--app-text)]"}>
-            {position.cpLoss}cp
-          </span>
-        ) : (
-          <span className="text-[var(--app-muted-soft)]">-</span>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-        <Link
-          href="/train"
-          className="inline-flex min-h-8 items-center border border-[var(--app-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]"
-          title="Retry route not wired yet"
-          aria-label={`Retry position ${position.id}`}
-        >
-          Retry
-        </Link>
-        <Link
-          href={`/analysis?fen=${encodeURIComponent(position.startingFen)}`}
-          className="inline-flex min-h-8 items-center border border-[var(--app-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]"
-          aria-label={`Analyze position ${position.id}`}
-        >
-          Analyze
-        </Link>
-      </div>
-    </div>
-  );
-}
 
 /* ─── Shared sections from original dashboard ─── */
 
@@ -895,38 +770,6 @@ function MoveClassifications({ classifications }: { classifications: DashboardCl
 }
 
 /* ─── Primitives ─── */
-
-function ViewToggle({
-  view,
-  setView,
-}: {
-  view: DashboardView;
-  setView: (view: DashboardView) => void;
-}) {
-  return (
-    <div className="inline-flex">
-      {(["summary", "history"] as const).map((item) => {
-        const active = view === item;
-        return (
-          <button
-            key={item}
-            type="button"
-            onClick={() => setView(item)}
-            className={[
-              "-ml-px first:ml-0 border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] transition",
-              active
-                ? "relative z-10 border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
-                : "cursor-pointer border-[var(--app-border)] bg-transparent text-[var(--app-muted)] hover:border-[var(--app-accent)] hover:text-[var(--app-text)]",
-              "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]",
-            ].join(" ")}
-          >
-            {item}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 function StatusTag({ status, label }: { status: string; label: string }) {
   const colorMap: Record<string, string> = {

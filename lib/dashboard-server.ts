@@ -27,7 +27,7 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
     supabase
       .from("user_mistakes")
       .select(
-        "id,source_type,starting_fen,status,opening_name,review_count,pass_count,acceptable_count,fail_count,last_attempt_at,next_review_at,cp_loss,served_count,setup_previous_fen,setup_played_move_uci",
+        "id,source_type,starting_fen,status,opening_name,review_count,pass_count,acceptable_count,fail_count,last_attempt_at,next_review_at,cp_loss,served_count,setup_previous_fen,setup_played_move_uci,eval_before_cp",
       )
       .eq("user_id", userId)
       .order("last_attempt_at", { ascending: false, nullsFirst: false })
@@ -63,6 +63,7 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
     served_count: number;
     setup_previous_fen: string | null;
     setup_played_move_uci: string | null;
+    eval_before_cp: number | null;
   }>;
   const attemptedMistakes = mistakes.filter((m) => m.cp_loss != null);
   const avgCpLoss =

@@ -30,6 +30,7 @@ export type DashboardPosition = {
   servedCount: number;
   previousFen: string | null;
   playedMoveUci: string | null;
+  decisionEvalCp: number | null;
 };
 
 export type EloHistoryPoint = {
@@ -125,6 +126,7 @@ type DashboardMistakeInput = {
   served_count: number;
   setup_previous_fen: string | null;
   setup_played_move_uci: string | null;
+  eval_before_cp: number | null;
 };
 
 type BuildDashboardSummaryInput = {
@@ -240,6 +242,7 @@ function buildPositionRows(mistakes: DashboardMistakeInput[]): DashboardPosition
     servedCount: m.served_count,
     previousFen: m.setup_previous_fen,
     playedMoveUci: m.setup_played_move_uci,
+    decisionEvalCp: m.eval_before_cp,
   }));
 }
 
@@ -262,6 +265,7 @@ function buildSessionPositionRows(sessions: DashboardSessionInput[]): DashboardP
     servedCount: 1,
     previousFen: null,
     playedMoveUci: null,
+    decisionEvalCp: null,
   }));
 }
 
