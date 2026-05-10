@@ -28,6 +28,8 @@ export type DashboardPosition = {
   cpLoss: number | null;
   worstMoveLossCp: number | null;
   servedCount: number;
+  previousFen: string | null;
+  playedMoveUci: string | null;
 };
 
 export type EloHistoryPoint = {
@@ -121,6 +123,8 @@ type DashboardMistakeInput = {
   next_review_at: string | null;
   cp_loss: number | null;
   served_count: number;
+  setup_previous_fen: string | null;
+  setup_played_move_uci: string | null;
 };
 
 type BuildDashboardSummaryInput = {
@@ -234,6 +238,8 @@ function buildPositionRows(mistakes: DashboardMistakeInput[]): DashboardPosition
     cpLoss: m.cp_loss,
     worstMoveLossCp: m.cp_loss,
     servedCount: m.served_count,
+    previousFen: m.setup_previous_fen,
+    playedMoveUci: m.setup_played_move_uci,
   }));
 }
 
@@ -254,6 +260,8 @@ function buildSessionPositionRows(sessions: DashboardSessionInput[]): DashboardP
     cpLoss: session.average_cp_loss,
     worstMoveLossCp: session.average_cp_loss,
     servedCount: 1,
+    previousFen: null,
+    playedMoveUci: null,
   }));
 }
 

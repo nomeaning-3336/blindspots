@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
 :root {
   color-scheme: dark;
   --app-bg: #050505;
@@ -247,7 +252,7 @@ body {
   margin: 0;
   overflow: hidden;
   color: var(--app-text);
-  font-family: var(--font-mono), monospace;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;

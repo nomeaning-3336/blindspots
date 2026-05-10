@@ -758,22 +758,43 @@ export default function TrainPage(props: TrainPageProps) {
     isPostMortemVisible;
 
   useEffect(() => {
-    if (!shouldRunPreplayOnboarding) return;
-    if (!trainOnboardingIntroDone) return;
-    if (!hasStartedFirstOnboardingSequenceRef.current) return;
-    if (!isPostMortemVisible) return;
-    if (isCompletingSequence) return;
-    if (postmortemOnboardingFinished || postmortemOnboardingActive) return;
+    if (!isOnboardingFirstPostmortem) return;
+    if (postmortemOnboardingActive) return;
 
-    setPostmortemOnboardingStep(0);
-    setPostmortemOnboardingActive(true);
+    let cancelled = false;
+
+    async function startWhenFirstTargetExists() {
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        if (cancelled) return;
+
+        const target = document.querySelector('[data-tour="elo-card"]');
+        if (target) {
+          if (!cancelled) {
+            if (process.env.NODE_ENV !== "production") {
+              console.debug("[train-onboarding]", "elo-card found, starting tour");
+            }
+            setPostmortemOnboardingStep(0);
+            setPostmortemOnboardingActive(true);
+          }
+          return;
+        }
+
+        await delayMs(50);
+      }
+
+      if (!cancelled) {
+        setPostmortemOnboardingStep(0);
+        setPostmortemOnboardingActive(true);
+      }
+    }
+
+    void startWhenFirstTargetExists();
+
+    return () => {
+      cancelled = true;
+    };
   }, [
-    shouldRunPreplayOnboarding,
-    trainOnboardingIntroDone,
-    isPostMortemVisible,
-    eloResult,
-    isCompletingSequence,
-    postmortemOnboardingFinished,
+    isOnboardingFirstPostmortem,
     postmortemOnboardingActive,
   ]);
 
@@ -3409,13 +3430,16 @@ function TrainPostmortemTourOverlay({
   onSkip: () => void;
   onMissingTarget: () => void;
 }) {
-  const current = steps[step] ?? steps[0];
+  const [resolvedStepIndex, setResolvedStepIndex] = useState(step);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [missingTarget, setMissingTarget] = useState(false);
+  const [isPositioningSpotlight, setIsPositioningSpotlight] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const [cardSize, setCardSize] = useState<{ width: number; height: number } | null>(null);
-  const isFirst = step <= 0;
-  const isLast = step >= steps.length - 1;
+  const transitionTokenRef = useRef(0);
+  const resolvedStep = steps[resolvedStepIndex] ?? steps[0];
+  const isFirst = resolvedStepIndex <= 0;
+  const isLast = resolvedStepIndex >= steps.length - 1;
 
   const VIEWPORT_PAD = 16;
   const GAP = 16;
@@ -3424,57 +3448,64 @@ function TrainPostmortemTourOverlay({
     return Math.max(min, Math.min(max, value));
   }
 
+  // ── Resolve step: find target, scroll, measure, then update copy ──
   useLayoutEffect(() => {
-    if (!current) return;
-    let frame = 0;
-    let timeout = 0;
-    let retry = 0;
-    let observer: ResizeObserver | null = null;
-    let update: (() => void) | null = null;
+    if (step === resolvedStepIndex && targetRect) return;
 
-    function measure() {
-      const target = document.querySelector(`[data-tour="${current.target}"]`);
+    let cancelled = false;
+    const token = ++transitionTokenRef.current;
+
+    async function resolveStep() {
+      setIsPositioningSpotlight(true);
+
+      const currentStep = steps[step];
+      if (!currentStep) {
+        setIsPositioningSpotlight(false);
+        return;
+      }
+
+      const selector = `[data-tour="${currentStep.target}"]`;
+
+      let target: HTMLElement | null = null;
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        target = document.querySelector<HTMLElement>(selector);
+        if (target) break;
+        await delayMs(50);
+        if (cancelled || token !== transitionTokenRef.current) return;
+      }
+
       if (!target) {
-        retry += 1;
-        if (retry >= 8) {
-          setMissingTarget(true);
-          if (process.env.NODE_ENV !== "production") {
-            console.warn(`[train-postmortem-tour] missing target: ${current.target}`);
-          }
-          timeout = window.setTimeout(onMissingTarget, 120);
-          return;
+        setMissingTarget(true);
+        if (process.env.NODE_ENV !== "production") {
+          console.warn(`[train-postmortem-tour] missing target: ${currentStep.target}`);
         }
-        timeout = window.setTimeout(measure, 120);
+        setIsPositioningSpotlight(false);
+        onMissingTarget();
         return;
       }
 
       setMissingTarget(false);
       target.scrollIntoView({ block: "center", inline: "nearest" });
-      update = () => {
-        frame = window.requestAnimationFrame(() => {
-          setTargetRect(target.getBoundingClientRect());
-        });
-      };
 
-      update();
-      observer = new ResizeObserver(update);
-      observer.observe(target);
-      window.addEventListener("resize", update);
-      window.addEventListener("scroll", update, true);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+      if (cancelled || token !== transitionTokenRef.current) return;
+
+      const rect = target.getBoundingClientRect();
+      setTargetRect(rect);
+      setResolvedStepIndex(step);
+      setIsPositioningSpotlight(false);
     }
 
-    timeout = window.setTimeout(measure, 60);
-    return () => {
-      window.clearTimeout(timeout);
-      window.cancelAnimationFrame(frame);
-      observer?.disconnect();
-      if (update) {
-        window.removeEventListener("resize", update);
-        window.removeEventListener("scroll", update, true);
-      }
-    };
-  }, [current, onMissingTarget]);
+    void resolveStep();
 
+    return () => {
+      cancelled = true;
+    };
+  }, [step, steps, onMissingTarget]);
+
+  // ── Measure card size (re-measure when resolved step changes) ──
   useLayoutEffect(() => {
     const el = cardRef.current;
     if (!el) return;
@@ -3496,9 +3527,9 @@ function TrainPostmortemTourOverlay({
       cardObserver?.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [step, current]);
+  }, [resolvedStepIndex]);
 
-  if (!current) return null;
+  if (!resolvedStep) return null;
 
   const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
   const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
@@ -3567,7 +3598,7 @@ function TrainPostmortemTourOverlay({
         type="button"
         aria-label="Next tour step"
         className={["absolute inset-0 cursor-default", spotlight ? "bg-transparent" : "bg-black/68"].join(" ")}
-        onClick={onNext}
+        onClick={() => { if (!isPositioningSpotlight) onNext(); }}
       />
       {spotlight ? (
         <div
@@ -3603,17 +3634,17 @@ function TrainPostmortemTourOverlay({
         <div className="mb-6" />
 
         <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
-          {current.headline}
+          {resolvedStep.headline}
         </h2>
         <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
-          {missingTarget ? "Finding the section..." : current.body}
+          {missingTarget ? "Finding the section..." : resolvedStep.body}
         </p>
 
         <div className="flex items-center justify-between gap-3">
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); if (!isFirst) onBack(); }}
-            aria-disabled={isFirst}
+            onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight && !isFirst) onBack(); }}
+            aria-disabled={isFirst || isPositioningSpotlight}
             className="min-h-11 border border-[var(--app-border)] px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)] aria-disabled:cursor-not-allowed aria-disabled:opacity-40"
           >
             Back
@@ -3621,11 +3652,11 @@ function TrainPostmortemTourOverlay({
 
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); onNext(); }}
+            onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight) onNext(); }}
             className="app-brutal-button min-h-11 px-6 text-xs"
-            disabled={completionInFlight}
+            disabled={completionInFlight || isPositioningSpotlight}
           >
-            {completionInFlight ? "Saving..." : current.cta ?? "Next"}
+            {completionInFlight ? "Saving..." : resolvedStep.cta ?? "Next"}
           </button>
         </div>
       </div>
