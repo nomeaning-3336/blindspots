@@ -9,7 +9,7 @@ const MISTAKE_LIMIT = 200;
 export async function getDashboardSummary(userId: string): Promise<DashboardSummary> {
   const supabase = await getSupabaseServerClient();
 
-  const [profileResult, sessionsResult, mistakesResult] = await Promise.all([
+  const [profileResult, sessionsResult, mistakesResult, notesResult] = await Promise.all([
     supabase
       .from("user_blindspot_profile")
       .select(
@@ -27,12 +27,17 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
     supabase
       .from("user_mistakes")
       .select(
-        "id,source_type,starting_fen,status,opening_name,review_count,pass_count,acceptable_count,fail_count,last_attempt_at,next_review_at,cp_loss,served_count,setup_previous_fen,setup_played_move_uci,eval_before_cp",
+        "id,source_type,starting_fen,status,opening_name,review_count,pass_count,acceptable_count,fail_count,last_attempt_at,next_review_at,cp_loss,served_count,setup_previous_fen,setup_played_move_uci,eval_before_cp,consecutive_correct_count,move_key",
       )
       .eq("user_id", userId)
       .order("last_attempt_at", { ascending: false, nullsFirst: false })
       .order("first_ingested_at", { ascending: false })
       .limit(MISTAKE_LIMIT),
+    supabase
+      .from("training_move_notes")
+      .select("move_key,note_text,classification,eval_before_cp,eval_after_cp,move_san,move_uci")
+      .eq("user_id", userId)
+      .order("last_attempted_at", { ascending: false }),
   ]);
 
   if (profileResult.error) {
@@ -45,6 +50,10 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
 
   if (mistakesResult.error) {
     throw new Error(`Failed to load dashboard positions: ${mistakesResult.error.message}`);
+  }
+
+  if (notesResult.error) {
+    throw new Error(`Failed to load move notes: ${notesResult.error.message}`);
   }
 
   const mistakes = (mistakesResult.data ?? []) as unknown as Array<{
@@ -64,6 +73,18 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
     setup_previous_fen: string | null;
     setup_played_move_uci: string | null;
     eval_before_cp: number | null;
+    consecutive_correct_count: number;
+    move_key: string | null;
+  }>;
+
+  const notes = (notesResult.data ?? []) as unknown as Array<{
+    move_key: string;
+    note_text: string;
+    classification: string | null;
+    eval_before_cp: number | null;
+    eval_after_cp: number | null;
+    move_san: string | null;
+    move_uci: string | null;
   }>;
   const attemptedMistakes = mistakes.filter((m) => m.cp_loss != null);
   const avgCpLoss =
@@ -76,5 +97,6 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
     sessions: sessionsResult.data ?? [],
     mistakes,
     avgCpLoss,
+    notes,
   });
 }

@@ -88,7 +88,7 @@ export function ReplayThumbnail({
       onPointerLeave={previewBackward}
       onFocus={previewForward}
       onBlur={previewBackward}
-      className="relative inline-flex cursor-pointer overflow-hidden rounded-lg border border-[var(--app-border-soft)] bg-[var(--app-panel-deep)] p-1 transition hover:border-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)]"
+      className="relative inline-flex cursor-pointer overflow-hidden rounded-lg border border-[var(--app-border-soft)] bg-[var(--app-panel-deep)] p-1 transition hover:scale-105 hover:border-[var(--app-accent)]"
       style={{ width: size + 8, height: size + 8 }}
       aria-label={canReplay ? "Replay setup move preview" : "Position preview"}
     >

@@ -3281,6 +3281,19 @@ export default function TrainPage(props: TrainPageProps) {
                         Press any key or click the board to start
                       </p>
                     </div>
+                  ) : isPositionLoading && !trainOnboardingIntroActive ? (
+                    <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-[10px] bg-black/20">
+                      <div className="border border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-3 shadow-[4px_4px_0_#050505]">
+                        <span className="font-mono text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-text)]">
+                          Loading position
+                          <span className="inline-flex w-5 justify-start">
+                            <span className="app-loading-dot">.</span>
+                            <span className="app-loading-dot">.</span>
+                            <span className="app-loading-dot">.</span>
+                          </span>
+                        </span>
+                      </div>
+                    </div>
                   ) : null}
                   {state === "resolving" ? (
                     <div className="pointer-events-none absolute inset-0 z-50 grid place-items-center bg-black/20">
@@ -3966,13 +3979,7 @@ function TrainOnboarding({
               type="button"
               disabled={isStartingTraining}
               onClick={onStartTraining}
-              className={[
-                "mx-auto min-h-12 cursor-pointer rounded-[8px] border border-[var(--app-accent)] bg-[var(--app-accent)] px-6 text-sm font-bold uppercase tracking-[0.12em] !text-black transition",
-                "hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]",
-                isStartingTraining
-                  ? "cursor-wait opacity-70"
-                  : "",
-              ].join(" ")}
+              className={primaryActionClassName}
             >
               {isStartingTraining ? "Starting..." : "Start training"}
             </button>

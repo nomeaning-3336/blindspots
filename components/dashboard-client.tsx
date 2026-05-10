@@ -376,7 +376,7 @@ function QueueOverviewSection({
   };
 
   return (
-    <section className="app-brutal-section p-5 md:p-6">
+    <section className="app-brutal-section px-5 pb-5 pt-3 md:px-6 md:pb-6 md:pt-4">
       <SectionLabel right={
         <InfoTooltip>
           <div className="grid gap-3 text-left">
@@ -499,20 +499,20 @@ function queuePositionTitle(position: DashboardPosition) {
 }
 
 function lastAttemptLabel(position: DashboardPosition) {
-  if (!position.attempts || position.attempts <= 0) return "Not attempted";
+  if (!position.attempts || position.attempts <= 0) return "—";
   switch (position.lastResult) {
-    case "pass": return "Pass";
-    case "fail": return "Fail";
-    case "acceptable": return "Acceptable";
-    default: return "Not attempted";
+    case "pass": return "passed";
+    case "fail": return "failed";
+    case "acceptable": return "acceptable";
+    default: return "—";
   }
 }
 
 function lastAttemptClass(position: DashboardPosition) {
   const label = lastAttemptLabel(position);
-  if (label === "Pass") return "text-[var(--app-class-good)]";
-  if (label === "Fail") return "text-[var(--app-class-blunder)]";
-  if (label === "Acceptable") return "text-[var(--app-class-inaccuracy)]";
+  if (label === "passed") return "text-[var(--app-class-good)]";
+  if (label === "failed") return "text-[var(--app-class-blunder)]";
+  if (label === "acceptable") return "text-[var(--app-class-inaccuracy)]";
   return "text-[var(--app-muted-soft)]";
 }
 
@@ -534,79 +534,87 @@ function QueuePositionRow({
   const isOverdue = isDueNow(position, nowMs);
   const userOrientation = getFenTurnSide(position.startingFen);
   const sideLabel = userOrientation === "black" ? "Black to move" : "White to move";
+  const evalDisplay = formatEvalCp(position.decisionEvalCp);
+  const attemptLabel = position.attempts === 0 ? "First attempt" : `${position.attempts} attempt${position.attempts !== 1 ? "s" : ""}`;
+  const lastResultText = lastAttemptLabel(position);
+  const hasResult = position.attempts > 0 && lastResultText !== "—";
+  const streak = Math.min(position.consecutiveCorrectCount ?? 0, 3);
 
   return (
-    <div className="app-brutal-row grid gap-6 rounded-lg p-5 md:grid-cols-[288px_minmax(0,1fr)] md:items-start">
-      {/* Thumbnail */}
-      <div className="shrink-0 self-start">
+    <div className="app-brutal-row grid gap-6 rounded-lg border border-[var(--app-border)] p-5 md:grid-cols-[328px_minmax(0,1fr)_minmax(200px,320px)] md:items-stretch">
+      {/* Thumbnail column */}
+      <div className="flex shrink-0 flex-col items-center gap-2">
         <ReplayThumbnail
           previousFen={position.previousFen}
           finalFen={position.startingFen}
           playedMove={position.playedMoveUci}
           orientation={userOrientation}
-          size={280}
+          size={320}
         />
+        <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
+          {sideLabel}
+        </span>
       </div>
 
-      {/* Content */}
+      {/* Content column */}
       <div className="min-w-0">
+        {/* Title row */}
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="min-w-0 truncate text-lg font-semibold tracking-tight text-[var(--app-text)]">
             {queuePositionTitle(position)}
           </h3>
           <StatusTag status={position.status} label={position.statusLabel} />
-          {position.lastResult && <ResultTag result={position.lastResult} />}
         </div>
 
-        <div className="mt-2 grid gap-1.5">
-          <div className="text-sm leading-5 text-[var(--app-muted)]">
-            {formatEvalCp(position.decisionEvalCp) != null && (
-              <span>Eval: {formatEvalCp(position.decisionEvalCp)}</span>
-            )}
-            {formatEvalCp(position.decisionEvalCp) != null && position.attempts > 0 && (
-              <span className="mx-2 text-[var(--app-border-soft)]">·</span>
-            )}
-            {position.attempts > 0 && <span>{position.attempts} attempt{position.attempts !== 1 ? "s" : ""}</span>}
-            {(formatEvalCp(position.decisionEvalCp) != null || position.attempts > 0) && (
-              <span className="mx-2 text-[var(--app-border-soft)]">·</span>
-            )}
-            <span className="text-[var(--app-text)]">{sideLabel}</span>
-          </div>
-
-          <div className="text-sm leading-5">
-            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
-              Last attempt:
-            </span>{" "}
-            <span className={lastAttemptClass(position)}>{lastAttemptLabel(position)}</span>
-          </div>
-
-          <div className="text-sm leading-5">
-            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
-              Next review:
-            </span>{" "}
-            <span className={isOverdue ? "font-semibold text-[var(--app-class-blunder)]" : "text-[var(--app-text)]"}>
-              {isOverdue ? "Due now" : formatReviewAbsolute(position.nextReviewAt)}
-            </span>
-          </div>
-
-          {countdown && !isOverdue && (
-            <div className="text-sm leading-5">
-              <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
-                Time remaining:
-              </span>{" "}
-              <span className="tabular-nums text-[var(--app-text)]">
-                {countdown}
-              </span>
-            </div>
+        {/* Eval + attempt summary */}
+        <div className="mt-1 text-sm leading-6 text-[var(--app-muted)]">
+          {evalDisplay != null && <span>Eval {evalDisplay}</span>}
+          {evalDisplay != null && <span className="mx-1.5 text-[var(--app-border-soft)]">·</span>}
+          <span>{attemptLabel}</span>
+          {hasResult && (
+            <>
+              <span className="mx-1.5 text-[var(--app-border-soft)]">·</span>
+              <span className={lastAttemptClass(position)}>{lastResultText}</span>
+            </>
           )}
         </div>
 
+        {/* Progress dots (non-due, attempted, not mastered/retired) */}
+        {!isOverdue && position.attempts > 0 && position.status !== "mastered" && position.status !== "retired" && (
+          <div className="mt-1 text-sm leading-5 text-[var(--app-muted)]">
+            {Array.from({ length: 3 }, (_, i) => (
+              <span key={i} className={i < streak ? "text-[var(--app-accent)]" : "text-[var(--app-muted-soft)]"}>
+                {i < streak ? "●" : "○"}{i < 2 ? " " : ""}
+              </span>
+            ))}
+            <span className="ml-1.5">{streak} of 3 to graduate</span>
+          </div>
+        )}
+
+        {/* Due now status */}
+        {isOverdue && (
+          <div className="mt-1 text-sm leading-5 font-semibold text-[var(--app-class-blunder)]">
+            Due now
+          </div>
+        )}
+
+        {/* Next review (future only) */}
+        {!isOverdue && (
+          <div className="mt-1 text-sm leading-5 text-[var(--app-muted)]">
+            {formatReviewAbsolute(position.nextReviewAt)}
+            {countdown && (
+              <span className="tabular-nums"> · in {countdown}</span>
+            )}
+          </div>
+        )}
+
+        {/* Actions */}
         <div className="mt-4 flex flex-wrap gap-2">
           <Link
             href="/train"
             className="inline-flex min-h-8 items-center border border-[var(--app-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)]"
           >
-            Retry
+            {position.attempts > 0 ? "Retry" : "Start"}
           </Link>
           <Link
             href={`/analysis?fen=${encodeURIComponent(position.startingFen)}`}
@@ -616,8 +624,79 @@ function QueuePositionRow({
           </Link>
         </div>
       </div>
+
+      {/* Notes column */}
+      <div className="min-w-0 border-l border-[var(--app-border)] pl-6">
+        <h4 className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted-soft)]">
+          Notes
+        </h4>
+
+        {position.moveNotes.length === 0 ? (
+          <div className="mt-2 text-sm text-[var(--app-muted)]">N/A</div>
+        ) : (
+          <div className="mt-3 grid gap-2">
+            {position.moveNotes.map((note) => {
+              const evalDeltaCp =
+                note.evalBeforeCp != null && note.evalAfterCp != null
+                  ? note.evalAfterCp - note.evalBeforeCp
+                  : null;
+
+              return (
+                <div key={note.moveKey} className="grid gap-1 border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-3 py-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-sans text-sm font-semibold text-[var(--app-text)]">
+                      {note.moveSan || note.moveUci}
+                    </span>
+                    {note.classification && (
+                      <span className={[
+                        "font-mono text-[10px] font-bold uppercase tracking-[0.12em]",
+                        classificationTextClass(note.classification),
+                      ].join(" ")}>
+                        {note.classification}
+                      </span>
+                    )}
+                  </div>
+
+                  {(note.evalBeforeCp != null || note.evalAfterCp != null || evalDeltaCp != null) && (
+                    <div className="font-sans text-xs text-[var(--app-muted)]">
+                      {note.evalBeforeCp != null && <span>Before: {formatEvalCp(note.evalBeforeCp)}</span>}
+                      {note.evalBeforeCp != null && note.evalAfterCp != null && <span> · </span>}
+                      {note.evalAfterCp != null && <span>After: {formatEvalCp(note.evalAfterCp)}</span>}
+                      {(note.evalBeforeCp != null || note.evalAfterCp != null) && evalDeltaCp != null && <span> · </span>}
+                      {evalDeltaCp != null && (
+                        <span className={evalDeltaCp > 0 ? "text-[var(--app-class-good)]" : "text-[var(--app-class-blunder)]"}>
+                          Δ {evalDeltaCp > 0 ? "+" : ""}{formatEvalCp(evalDeltaCp)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  <p className="font-sans text-sm leading-5 text-[var(--app-text)]">
+                    {note.note}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
+}
+
+function classificationTextClass(c: string) {
+  const map: Record<string, string> = {
+    brilliant: "text-[var(--app-class-brilliant)]",
+    best: "text-[var(--app-class-best)]",
+    excellent: "text-[var(--app-class-excellent)]",
+    good: "text-[var(--app-class-good)]",
+    okay: "text-[var(--app-class-okay)]",
+    inaccuracy: "text-[var(--app-class-inaccuracy)]",
+    mistake: "text-[var(--app-class-mistake)]",
+    blunder: "text-[var(--app-class-blunder)]",
+    critical: "text-[var(--app-class-critical)]",
+  };
+  return map[c.toLowerCase()] ?? "text-[var(--app-muted)]";
 }
 
 function EloChart({ points }: { points: EloHistoryPoint[] }) {
@@ -736,7 +815,7 @@ function MoveClassifications({ classifications }: { classifications: DashboardCl
   return (
     <section className="app-brutal-section min-h-[230px] min-w-0 p-5 md:min-h-[275px] md:p-6">
       <SectionLabel>Move classifications</SectionLabel>
-      <div>
+      <div className="mt-2">
         <div className="mb-4 flex h-2 overflow-hidden border border-[var(--app-border-soft)] bg-[var(--app-bg)]">
           {rows.map((row) => {
             const count = classifications[row.id];

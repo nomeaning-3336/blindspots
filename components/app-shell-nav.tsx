@@ -34,7 +34,6 @@ const authenticatedAppLinks = [
   { href: "/", label: "Dashboard" },
   { href: "/analysis", label: "Analysis" },
   { href: "/train", label: "Train" },
-  { href: "/performance", label: "Performance" },
   { href: "/account", label: "Account" },
 ];
 
@@ -140,7 +139,6 @@ export function AppShellNav({
     (pathname === "/" ||
       pathname.startsWith("/train") ||
       pathname.startsWith("/analysis") ||
-      pathname.startsWith("/performance") ||
       pathname.startsWith("/account"))
       ? pathname
       : "/train";
