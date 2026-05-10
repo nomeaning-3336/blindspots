@@ -839,27 +839,26 @@ function LastMoveBadgeOverlay({
   const offset = squareGridOffset(square, orientation);
   if (!offset) return null;
 
-  const leftPct = `${(offset.col / 8) * 100}%`;
-  const topPct = `${(offset.row / 8) * 100}%`;
-
   return (
     <div className="pointer-events-none absolute inset-0 z-[80]">
-      <span
-        className="absolute grid h-5 w-5 place-items-center"
+      <div
+        className="absolute"
         style={{
-          left: `calc(${leftPct} + 12.5% - 0.625rem)`,
-          top: `calc(${topPct} + 0.25rem)`,
+          left: `${offset.col * 12.5}%`,
+          top: `${offset.row * 12.5}%`,
+          width: "12.5%",
+          height: "12.5%",
         }}
-        title={badge.label}
-        aria-label={badge.label}
       >
         <img
           src={badge.icon}
           alt=""
-          className="h-5 w-5 drop-shadow-[0_2px_6px_rgba(0,0,0,0.45)]"
+          title={badge.label}
+          aria-label={badge.label}
           draggable={false}
+          className="absolute right-[4%] top-[4%] h-[28%] w-[28%] min-h-[10px] min-w-[10px] max-h-[18px] max-w-[18px] drop-shadow-[0_2px_5px_rgba(0,0,0,0.45)]"
         />
-      </span>
+      </div>
     </div>
   );
 }

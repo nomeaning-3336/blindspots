@@ -52,8 +52,8 @@ export function PositionThumbnail({
 }
 
 const PIECE_GLIDE_MS = 240;
-const NOTE_HOVER_START_DELAY_MS = 120;
-const BETWEEN_SEQUENCE_DELAY_MS = 80;
+const NOTE_HOVER_START_DELAY_MS = 200;
+const BETWEEN_SEQUENCE_DELAY_MS = 180;
 const HOVER_PREVIEW_DELAY_MS = 200;
 
 export function ReplayThumbnail({
@@ -110,26 +110,22 @@ export function ReplayThumbnail({
     return sequenceIdRef.current === id;
   }
 
-  // Reset to idle when props change and no note preview active
-  useEffect(() => {
-    if (movePreview) return;
-    clearTimers();
-    isHoveringRef.current = false;
-    activePreviewRef.current = null;
-    setAnimating(false);
-    setShownFen(idleFen);
-    setPreviewLastMove(null);
-    setPreviewBadge(null);
-  }, [idleFen, movePreview]);
-
-  // Note hover: two-stage animation
+  // Note hover: two-stage animation (handles hover-in, hover-out, and idle reset)
   useEffect(() => {
     if (!movePreview) {
       // Hover out
       const preview = activePreviewRef.current;
-      activePreviewRef.current = null;
 
-      if (!preview) return;
+      if (!preview) {
+        // No active preview — safe to reset to idle
+        clearTimers();
+        isHoveringRef.current = false;
+        setAnimating(false);
+        setShownFen(idleFen);
+        setPreviewLastMove(null);
+        setPreviewBadge(null);
+        return;
+      }
 
       const id = nextSequenceId();
 
@@ -167,6 +163,7 @@ export function ReplayThumbnail({
           setPreviewLastMove(null);
           setPreviewBadge(null);
           setShownFen(previousFen ?? idleFen);
+          activePreviewRef.current = null;
         }, PIECE_GLIDE_MS);
       }, PIECE_GLIDE_MS + BETWEEN_SEQUENCE_DELAY_MS);
 
