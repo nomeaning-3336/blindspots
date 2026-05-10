@@ -102,7 +102,7 @@ export async function getLegalMoveLines(
 export async function getPieceLinesFromSquare(
   fen: string,
   square: string,
-  options: { depthLimit?: number } = {},
+  options: { depthLimit?: number; timeLimitMs?: number } = {},
 ) {
   let legalMoves: { from: string; to: string; promotion?: string }[] = [];
   try {
@@ -117,6 +117,7 @@ export async function getPieceLinesFromSquare(
 
   return stockfishHarness.getLines?.(fen, {
     depthLimit: options.depthLimit ?? 18,
+    timeLimitMs: options.timeLimitMs,
     multiPv: uciMoves.length,
     searchMoves: uciMoves,
   }) ?? [];

@@ -727,20 +727,6 @@ export function AnalysisBoard({
                 />
               ) : null}
 
-              {shouldShowLastMoveBadge && lastMoveBadge ? (
-                <span
-                  className="pointer-events-none absolute right-1 top-1 z-[24] grid h-5 w-5 place-items-center"
-                  title={lastMoveBadge.label}
-                  aria-label={lastMoveBadge.label}
-                >
-                  <img
-                    src={lastMoveBadge.icon}
-                    alt=""
-                    className="h-5 w-5 drop-shadow-[0_2px_6px_rgba(0,0,0,0.45)]"
-                    draggable={false}
-                  />
-                </span>
-              ) : null}
 
               {coordinates ? (
                 <>
@@ -769,6 +755,13 @@ export function AnalysisBoard({
         previewArrow={previewArrow}
         onEngineArrowClick={onEngineArrowClick}
       />
+      {lastMoveBadge && lastMove?.to ? (
+        <LastMoveBadgeOverlay
+          square={lastMove.to}
+          badge={lastMoveBadge}
+          orientation={orientation}
+        />
+      ) : null}
       {pieceGlide ? (
         <PieceGlideOverlay
           animation={pieceGlide}
@@ -830,6 +823,43 @@ function DraggedPiece({
         draggable={false}
         className="h-[86%] w-[86%] object-contain drop-shadow-[0_16px_22px_rgba(0,0,0,0.5)]"
       />
+    </div>
+  );
+}
+
+function LastMoveBadgeOverlay({
+  square,
+  badge,
+  orientation,
+}: {
+  square: string;
+  badge: { label: string; icon: string; color: string };
+  orientation: BoardOrientation;
+}) {
+  const offset = squareGridOffset(square, orientation);
+  if (!offset) return null;
+
+  const leftPct = `${(offset.col / 8) * 100}%`;
+  const topPct = `${(offset.row / 8) * 100}%`;
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[80]">
+      <span
+        className="absolute grid h-5 w-5 place-items-center"
+        style={{
+          left: `calc(${leftPct} + 12.5% - 0.625rem)`,
+          top: `calc(${topPct} + 0.25rem)`,
+        }}
+        title={badge.label}
+        aria-label={badge.label}
+      >
+        <img
+          src={badge.icon}
+          alt=""
+          className="h-5 w-5 drop-shadow-[0_2px_6px_rgba(0,0,0,0.45)]"
+          draggable={false}
+        />
+      </span>
     </div>
   );
 }

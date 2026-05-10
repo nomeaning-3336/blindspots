@@ -602,6 +602,7 @@ export default function TrainPage(props: TrainPageProps) {
   const [moveAnnotations, setMoveAnnotations] = useState<Record<string, AnnotatedMove>>({});
   const seededMoveKeysRef = useRef<Set<string>>(new Set());
   const [selectedMoveKey, setSelectedMoveKey] = useState<string | null>(null);
+  const [savedMoveNoteKey, setSavedMoveNoteKey] = useState<string | null>(null);
   const [postmortemSidePanel, setPostmortemSidePanel] = useState<"analysis" | "memory">("analysis");
   const [postmortemOnboardingActive, setPostmortemOnboardingActive] = useState(false);
   const [postmortemOnboardingStep, setPostmortemOnboardingStep] = useState(0);
@@ -2382,6 +2383,7 @@ export default function TrainPage(props: TrainPageProps) {
     if (process.env.NODE_ENV !== "production") {
       console.log("[move-notes] update-note", moveKey);
     }
+    setSavedMoveNoteKey((current) => (current === moveKey ? null : current));
     setMoveAnnotations((prev) => updateNoteText(prev, moveKey, text));
     dirtyMoveNoteKeysRef.current.add(moveKey);
   }
@@ -2436,10 +2438,14 @@ export default function TrainPage(props: TrainPageProps) {
           attemptCount: entry.attemptCount,
         }),
       })
-        .then(() => {
+        .then((res) => {
+          if (!res.ok) {
+            throw new Error(`move-notes sync failed: ${res.status}`);
+          }
           const currentText = moveAnnotationsRef.current[key]?.noteText ?? "";
           if (currentText === sentNoteText) {
             dirty.delete(key);
+            setSavedMoveNoteKey(key);
           } else if (reason !== "flush") {
             retryLater();
           }
@@ -2675,7 +2681,9 @@ export default function TrainPage(props: TrainPageProps) {
     "app-brutal-board-frame relative max-w-full overflow-visible",
     isExploringResults
       ? "w-[min(88vw,calc(100dvh-10.25rem),836px)]"
-      : "w-[min(82vw,calc(100dvh-12.5rem),800px)]",
+      : state === "active" && !trainOnboardingIntroActive
+        ? "w-[min(82vw,calc(100dvh-16.5rem),800px)]"
+        : "w-[min(82vw,calc(100dvh-12.5rem),800px)]",
   ].join(" ");
   const isEngineLinesLoading = Boolean(
     isExploringResults && engineLineLoadingFen === boardFen,
@@ -3196,11 +3204,12 @@ export default function TrainPage(props: TrainPageProps) {
       >
         <section
           className={[
-            "app-brutal-section flex min-h-0 min-w-0 items-center justify-center overflow-hidden p-3 sm:p-4 lg:p-4",
+            "app-brutal-section relative flex min-h-0 min-w-0 items-center justify-center p-3 sm:p-4 lg:p-4",
+            state === "active" && !trainOnboardingIntroActive ? "overflow-visible" : "overflow-hidden",
             isPostMortemVisible ? "" : "lg:w-fit lg:justify-self-center",
           ].join(" ")}
         >
-          <div className="flex min-h-0 min-w-0 items-center justify-center">
+          <div className="relative flex min-h-0 w-fit max-w-full min-w-0 flex-col items-stretch justify-center">
             <div ref={boardContainerRef} className={boardFrameClassName}>
               {boardFen ? (
                 <>
@@ -3281,10 +3290,11 @@ export default function TrainPage(props: TrainPageProps) {
                         Press any key or click the board to start
                       </p>
                     </div>
-                  ) : isPositionLoading && !trainOnboardingIntroActive ? (
-                    <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-[10px] bg-black/20">
-                      <div className="border border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-3 shadow-[4px_4px_0_var(--app-brutal-edge)]">
-                        <span className="font-mono text-xs font-bold uppercase tracking-[0.18em] text-[var(--app-text)]">
+                  ) : null}
+                  {isPositionLoading && !trainOnboardingIntroActive ? (
+                    <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center">
+                      <div className="rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-2 shadow-[3px_3px_0_var(--app-brutal-edge)]">
+                        <span className="font-mono text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-text)]">
                           Loading position
                           <span className="inline-flex w-5 justify-start">
                             <span className="app-loading-dot">.</span>
@@ -3315,6 +3325,16 @@ export default function TrainPage(props: TrainPageProps) {
               )}
             </div>
           </div>
+          {state === "active" && !trainOnboardingIntroActive ? (
+            <div className="absolute bottom-0 left-[calc(100%+5px)] z-[80] hidden w-[250px] flex-col gap-[5px] xl:flex">
+              <a href="/train" className={primaryActionClassName}>
+                Skip position
+              </a>
+              <a href="/" className={secondaryActionClassName}>
+                Return to Dashboard
+              </a>
+            </div>
+          ) : null}
         </section>
 
         {isPostMortemVisible ? (
@@ -3390,6 +3410,7 @@ export default function TrainPage(props: TrainPageProps) {
                     selectedMoveKey={selectedMoveKey}
                     onSelectMove={handleSelectMove}
                     onUpdateNote={handleUpdateNote}
+                    savedMoveKey={savedMoveNoteKey}
                   />
                 </div>
               )}

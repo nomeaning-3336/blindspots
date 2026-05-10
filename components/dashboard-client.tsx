@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { Chess } from "chess.js";
 import type { DashboardClassifications, DashboardPosition, DashboardSummary, EloHistoryPoint } from "@/lib/dashboard";
-import { classificationColor } from "@/lib/training-board-ui";
-import { ReplayThumbnail } from "@/components/position-thumbnail";
+import { buildLastMoveBadge, classificationColor, type MoveClassification } from "@/lib/training-board-ui";
+import { ReplayThumbnail, type ThumbnailMovePreview } from "@/components/position-thumbnail";
 
 
 const CLASS_ROWS: Array<{
@@ -232,12 +233,14 @@ function InfoTooltip({
         onMouseLeave={scheduleHide}
         onFocus={show}
         onBlur={scheduleHide}
-        className="inline-flex h-9 items-center gap-2 rounded-none border border-[var(--app-border)] bg-[var(--app-panel-solid)] px-3 font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[var(--app-muted)] shadow-[3px_3px_0_var(--app-brutal-edge)] transition hover:-translate-x-[1px] hover:-translate-y-[1px] hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] hover:shadow-[4px_4px_0_var(--app-brutal-edge)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"
+        className="group inline-flex min-h-10 items-center gap-3 rounded-none border border-[var(--app-border)] bg-[var(--app-panel-solid)] px-4 py-2 shadow-[3px_3px_0_var(--app-brutal-edge)] transition hover:border-[var(--app-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"
       >
-        <span>Queue types</span>
+        <span className="text-xs font-black uppercase tracking-[0.22em] text-[var(--app-muted)] group-hover:text-[var(--app-text)]">
+          Queue types
+        </span>
         <span
           aria-hidden="true"
-          className="inline-flex h-5 w-5 items-center justify-center text-[11px] leading-none"
+          className="inline-flex h-5 w-5 items-center justify-center border border-[var(--app-border-strong)] text-[11px] font-black leading-none text-[var(--app-muted)] group-hover:border-[var(--app-accent)] group-hover:text-[var(--app-accent)]"
         >
           ?
         </span>
@@ -252,9 +255,6 @@ function InfoTooltip({
           onMouseEnter={show}
           onMouseLeave={scheduleHide}
         >
-          <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--app-accent)]">
-            Queue types
-          </div>
           {children}
         </div>
       ) : null}
@@ -387,9 +387,6 @@ function QueueOverviewSection({
               </div>
             ))}
           </div>
-          <div className="mt-3 border-t border-[var(--app-border-soft)] pt-2.5 text-[11px] leading-[1.4] text-[var(--app-muted-soft)]">
-            Random/generated training positions are fallback material and are not counted here.
-          </div>
         </InfoTooltip>
       }>
         Queue overview
@@ -460,11 +457,11 @@ function QueueOverviewSection({
 /* ─── Queue tooltip descriptions ─── */
 
 const QUEUE_DESCRIPTIONS: Record<QueueBucket, React.ReactNode> = {
-  dueNow: <><strong>Learning</strong> mistakes ready to review. These are served <strong>before</strong> <strong>new</strong> personal mistakes.</>,
-  learning: "Mistakes from your games that you are actively trying to fix. Notes and previous bad moves may appear at first, then disappear on later reviews.",
-  new: "Newly found mistakes from your games that you have not attempted yet.",
-  mastered: "Mistakes answered correctly at least 3 times in a row.",
-  retired: "Mistakes answered correctly 7+ times in a row. Archived and no longer served.",
+  dueNow: "Positions ready for review.",
+  learning: "Positions you are currently learning, but that are not due for review yet.",
+  new: "Unattempted positions, either sampled from your own mistakes or generated as random training material.",
+  mastered: "Positions from Learning that you played acceptably 3 times in a row without serious mistakes.",
+  retired: "Mastered positions that you played correctly at least 7 times. These are archived and no longer served.",
 };
 
 /* ─── Queue Position Row ─── */
@@ -474,6 +471,40 @@ const QUEUE_DESCRIPTIONS: Record<QueueBucket, React.ReactNode> = {
 function getFenTurnSide(fen: string): "white" | "black" {
   const parts = fen.trim().split(/\s+/);
   return parts[1] === "b" ? "black" : "white";
+}
+
+function buildNoteMovePreview(
+  fenBefore: string,
+  moveUci: string | null | undefined,
+  classification: string | null | undefined,
+): ThumbnailMovePreview | null {
+  if (!moveUci || moveUci.length < 4) return null;
+
+  const from = moveUci.slice(0, 2);
+  const to = moveUci.slice(2, 4);
+  const promotion = moveUci.length > 4 ? moveUci.slice(4, 5) : undefined;
+
+  try {
+    const chess = new Chess(fenBefore);
+    const move = chess.move({ from, to, promotion });
+    if (!move) return null;
+
+    return {
+      fenBefore,
+      fenAfter: chess.fen(),
+      move: { from, to },
+      badge: classificationBadgeFor(classification),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function classificationBadgeFor(classification: string | null | undefined) {
+  if (!classification) return null;
+  const normalized = classification.toLowerCase();
+  if (!(normalized in CLASS_COLORS)) return null;
+  return buildLastMoveBadge(normalized as MoveClassification);
 }
 
 function sourceContextLabel(position: DashboardPosition) {
@@ -530,6 +561,7 @@ function QueuePositionRow({
   position: DashboardPosition;
   nowMs: number;
 }) {
+  const [noteMovePreview, setNoteMovePreview] = useState<ThumbnailMovePreview | null>(null);
   const countdown = formatReviewCountdown(position.nextReviewAt, nowMs);
   const isOverdue = isDueNow(position, nowMs);
   const userOrientation = getFenTurnSide(position.startingFen);
@@ -541,15 +573,16 @@ function QueuePositionRow({
   const streak = Math.min(position.consecutiveCorrectCount ?? 0, 3);
 
   return (
-    <div className="app-brutal-row grid grid-cols-1 gap-4 rounded-lg border border-[var(--app-border)] p-5 md:grid-cols-[420px_32px_1px_32px_minmax(340px,max-content)_16px_1px_16px_minmax(280px,1fr)] md:gap-0 md:items-stretch">
+    <div className="app-brutal-row grid grid-cols-1 gap-4 rounded-lg border border-[var(--app-border)] p-5 md:grid-cols-[380px_24px_1px_24px_minmax(340px,max-content)_16px_1px_16px_minmax(280px,1fr)] md:gap-0 md:items-stretch">
       {/* Thumbnail column */}
       <div className="flex flex-col items-center gap-2">
         <ReplayThumbnail
           previousFen={position.previousFen}
           finalFen={position.startingFen}
           playedMove={position.playedMoveUci}
+          movePreview={noteMovePreview}
           orientation={userOrientation}
-          size={420}
+          size={360}
         />
         <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
           {sideLabel}
@@ -565,7 +598,7 @@ function QueuePositionRow({
       <div className="flex min-w-0 flex-col justify-start py-2">
         {/* Title row */}
         <div className="mb-3 flex flex-wrap items-center gap-3">
-          <h3 className="min-w-0 truncate text-2xl font-black tracking-[-0.03em] text-[var(--app-text)]">
+          <h3 className="min-w-0 text-xl font-black leading-tight tracking-[-0.03em] text-[var(--app-text)]">
             {queuePositionTitle(position)}
           </h3>
           <StatusTag status={position.status} label={position.statusLabel} />
@@ -638,8 +671,8 @@ function QueuePositionRow({
       <div className="hidden md:block" aria-hidden="true" />
 
       {/* Notes column */}
-      <div className="min-w-0">
-        <h3 className="text-lg font-semibold tracking-tight text-[var(--app-text)]">
+      <div className="min-w-0 py-2">
+        <h3 className="text-xl font-black leading-tight tracking-[-0.03em] text-[var(--app-text)]">
           Notes
         </h3>
 
@@ -652,9 +685,27 @@ function QueuePositionRow({
                 note.evalBeforeCp != null && note.evalAfterCp != null
                   ? note.evalAfterCp - note.evalBeforeCp
                   : null;
+              const isMoverImprovement =
+                evalDeltaCp == null
+                  ? null
+                  : note.moverColor === "black"
+                    ? evalDeltaCp < 0
+                    : evalDeltaCp > 0;
 
               return (
-                <div key={note.moveKey} className="grid gap-1 border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-3 py-2">
+                <div
+                  key={note.moveKey}
+                  tabIndex={0}
+                  onPointerEnter={() => {
+                    setNoteMovePreview(buildNoteMovePreview(position.startingFen, note.moveUci, note.classification));
+                  }}
+                  onPointerLeave={() => setNoteMovePreview(null)}
+                  onFocus={() => {
+                    setNoteMovePreview(buildNoteMovePreview(position.startingFen, note.moveUci, note.classification));
+                  }}
+                  onBlur={() => setNoteMovePreview(null)}
+                  className="grid gap-1 border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-3 py-2 transition-colors hover:border-[var(--app-accent)] focus-visible:border-[var(--app-accent)] focus-visible:outline-none"
+                >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-sans text-sm font-semibold text-[var(--app-text)]">
                       {note.moveSan || note.moveUci}
@@ -676,8 +727,8 @@ function QueuePositionRow({
                       {note.evalAfterCp != null && <span>After: {formatEvalCp(note.evalAfterCp)}</span>}
                       {(note.evalBeforeCp != null || note.evalAfterCp != null) && evalDeltaCp != null && <span> · </span>}
                       {evalDeltaCp != null && (
-                        <span className={evalDeltaCp > 0 ? "text-[var(--app-class-good)]" : "text-[var(--app-class-blunder)]"}>
-                          Δ {evalDeltaCp > 0 ? "+" : ""}{formatEvalCp(evalDeltaCp)}
+                        <span className={isMoverImprovement ? "text-[var(--app-class-good)]" : "text-[var(--app-class-blunder)]"}>
+                          Δ {formatEvalCp(evalDeltaCp)}
                         </span>
                       )}
                     </div>

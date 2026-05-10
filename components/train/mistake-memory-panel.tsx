@@ -27,6 +27,7 @@ type MoveNotesPanelProps = {
   selectedMoveKey: string | null;
   onSelectMove: (moveKey: string) => void;
   onUpdateNote: (moveKey: string, text: string) => void;
+  savedMoveKey?: string | null;
 };
 
 export function MoveNotesPanel({
@@ -35,6 +36,7 @@ export function MoveNotesPanel({
   selectedMoveKey,
   onSelectMove,
   onUpdateNote,
+  savedMoveKey = null,
 }: MoveNotesPanelProps) {
   const [localNote, setLocalNote] = useState("");
   const onUpdateNoteRef = useRef(onUpdateNote);
@@ -151,12 +153,17 @@ export function MoveNotesPanel({
       {selectedMoveKey ? (
         <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-3">
           <textarea
-            className="min-h-[72px] w-full resize-none rounded-[6px] border border-[var(--app-border)] bg-[var(--app-surface-input)] px-2.5 py-2 text-xs text-[var(--app-text)] outline-none transition placeholder:text-[var(--app-muted-soft)] focus:border-[var(--app-accent)]"
+            className="min-h-[160px] w-full resize-y rounded-[6px] border border-[var(--app-border)] bg-[var(--app-surface-input)] px-2.5 py-2 text-xs text-[var(--app-text)] outline-none transition placeholder:text-[var(--app-muted-soft)] focus:border-[var(--app-accent)]"
             placeholder="Add a note for this move..."
             value={localNote}
             onChange={(e) => handleNoteChange(e.target.value)}
             data-ignore-train-shortcuts="true"
           />
+          {savedMoveKey === selectedMoveKey ? (
+            <div className="mt-2 text-xs font-bold text-[var(--app-class-good)]">
+              Note saved ✓
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-3">
