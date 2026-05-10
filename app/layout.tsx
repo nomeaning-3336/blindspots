@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import type { ReactNode } from "react";
 import { PageTransition } from "@/components/navigation/page-transition";
 import { getCookieAppThemeOnly } from "@/lib/app-theme-store";
 import { PostHogProvider } from "./providers";
 import "./globals.css";
 
-const plexSans = IBM_Plex_Sans({
+const sans = Space_Grotesk({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-sans",
   display: "swap",
 });
 
-const plexMono = IBM_Plex_Mono({
+const mono = JetBrains_Mono({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-mono",
@@ -58,7 +58,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${plexSans.variable} ${plexMono.variable}`}
+      className={`${sans.variable} ${mono.variable}`}
       data-theme={theme ?? undefined}
     >
       <body>
