@@ -6,6 +6,7 @@ import { Chess } from "chess.js";
 import type { DashboardClassifications, DashboardPosition, DashboardSummary, EloHistoryPoint } from "@/lib/dashboard";
 import { buildLastMoveBadge, classificationColor, type MoveClassification } from "@/lib/training-board-ui";
 import { ReplayThumbnail, type ThumbnailMovePreview } from "@/components/position-thumbnail";
+import { DAILY_TARGET_OPTIONS } from "@/lib/training/training-preferences";
 
 
 const CLASS_ROWS: Array<{
@@ -56,6 +57,77 @@ export function DashboardClient({ summary }: { summary: DashboardSummary }) {
 
 /* ─── Summary Tab ─── */
 
+function DailyGoalSection({
+  summary,
+  hasData,
+}: {
+  summary: DashboardSummary;
+  hasData: boolean;
+}) {
+  const [mounted, setMounted] = useState(false);
+  const prefersReducedMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  useEffect(() => {
+    if (prefersReducedMotion) {
+      setMounted(true);
+      return;
+    }
+    const frame = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(frame);
+  }, [prefersReducedMotion]);
+
+  const target = summary.dailyTargetPositions;
+  const completed = summary.dailyCompletedToday;
+  const remaining = Math.max(0, target - completed);
+  const progressPercent = Math.min(100, Math.max(0, (completed / target) * 100));
+
+  const targetLevel = DAILY_TARGET_OPTIONS.find(
+    (o) => o.positions === target,
+  )?.label ?? `${target}/day`;
+
+  return (
+    <section className="app-brutal-section p-5 md:p-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-[13px] font-bold uppercase tracking-[0.2em] text-[var(--app-muted)]">
+            Today&apos;s training
+          </h2>
+          <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="text-2xl font-black tabular-nums text-[var(--app-text)]">
+              {completed}
+              <span className="text-lg font-bold text-[var(--app-muted)]"> / {target}</span>
+            </span>
+            <span className="text-sm font-medium text-[var(--app-muted)]">
+              positions complete
+            </span>
+          </div>
+          <div className="mt-1 text-xs text-[var(--app-muted-soft)]">
+            {targetLevel} goal{remaining > 0 ? ` · ${remaining} remaining` : " · complete!"}
+          </div>
+        </div>
+
+        {hasData && (
+          <Link
+            href="/train"
+            className="app-brutal-button inline-flex min-h-11 items-center justify-center px-5 py-2.5 text-sm"
+          >
+            Continue training
+          </Link>
+        )}
+      </div>
+
+      <div className="mt-4 h-3 w-full overflow-hidden rounded-full bg-[var(--app-bg-2)]">
+        <div
+          className="h-full rounded-full bg-[var(--app-accent)] transition-[width] duration-700 ease-out"
+          style={{ width: mounted ? `${progressPercent}%` : "0%" }}
+        />
+      </div>
+    </section>
+  );
+}
+
 function DashboardHero({
   summary,
   hasData,
@@ -90,14 +162,6 @@ function DashboardHero({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Link
-              href="/train"
-              className="app-brutal-button inline-flex min-h-12 items-center justify-center px-6 py-3 text-sm"
-            >
-              {hasData ? "Continue training" : "Start training"}
-            </Link>
-          </div>
         </div>
 
         <div className="min-w-0 lg:border-l lg:border-[var(--app-border-soft)] lg:pl-6">
@@ -119,6 +183,8 @@ function DashboardHero({
 function SummaryTab({ summary, hasData }: { summary: DashboardSummary; hasData: boolean }) {
   return (
     <div className="grid gap-5">
+      <DailyGoalSection summary={summary} hasData={hasData} />
+
       <QueueOverviewSection
         positions={summary.positions}
       />
@@ -375,6 +441,8 @@ function QueueOverviewSection({
     setSelectedBucket((prev) => (prev === bucket ? null : bucket));
   };
 
+  const hasItems = (bucket: QueueBucket) => bucketCounts[bucket] > 0;
+
   return (
     <section className="app-brutal-section px-5 pb-5 pt-3 md:px-6 md:pb-6 md:pt-4">
       <SectionLabel right={
@@ -401,12 +469,12 @@ function QueueOverviewSection({
             <button
               key={def.bucket}
               type="button"
-              onClick={() => toggleBucket(def.bucket)}
+              onClick={() => hasItems(def.bucket) && toggleBucket(def.bucket)}
               className={[
                 "app-brutal-row relative rounded-lg p-4 text-left transition",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]",
-                count === 0 && !isSelected ? "opacity-55" : "",
-                isSelected ? "border-[var(--app-accent)] ring-1 ring-[var(--app-accent)]" : "hover:border-[var(--app-border-strong)]",
+                !hasItems(def.bucket) && !isSelected ? "cursor-default opacity-55" : "",
+                isSelected ? "border-[var(--app-accent)] ring-1 ring-[var(--app-accent)]" : hasItems(def.bucket) ? "cursor-pointer hover:border-[var(--app-border-strong)]" : "",
               ].join(" ")}
             >
               <span
@@ -562,6 +630,8 @@ function QueuePositionRow({
   nowMs: number;
 }) {
   const [noteMovePreview, setNoteMovePreview] = useState<ThumbnailMovePreview | null>(null);
+  const noteHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const NOTE_HOVER_DELAY_MS = 100;
   const countdown = formatReviewCountdown(position.nextReviewAt, nowMs);
   const isOverdue = isDueNow(position, nowMs);
   const userOrientation = getFenTurnSide(position.startingFen);
@@ -584,7 +654,7 @@ function QueuePositionRow({
           orientation={userOrientation}
           size={360}
         />
-        <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
+        <span className="text-xs font-medium text-[var(--app-muted)]">
           {sideLabel}
         </span>
       </div>
@@ -697,13 +767,23 @@ function QueuePositionRow({
                   key={note.moveKey}
                   tabIndex={0}
                   onPointerEnter={() => {
-                    setNoteMovePreview(buildNoteMovePreview(position.startingFen, note.moveUci, note.classification));
+                    if (noteHoverTimerRef.current) clearTimeout(noteHoverTimerRef.current);
+                    const preview = buildNoteMovePreview(position.startingFen, note.moveUci, note.classification);
+                    noteHoverTimerRef.current = setTimeout(() => setNoteMovePreview(preview), NOTE_HOVER_DELAY_MS);
                   }}
-                  onPointerLeave={() => setNoteMovePreview(null)}
+                  onPointerLeave={() => {
+                    if (noteHoverTimerRef.current) clearTimeout(noteHoverTimerRef.current);
+                    setNoteMovePreview(null);
+                  }}
                   onFocus={() => {
-                    setNoteMovePreview(buildNoteMovePreview(position.startingFen, note.moveUci, note.classification));
+                    if (noteHoverTimerRef.current) clearTimeout(noteHoverTimerRef.current);
+                    const preview = buildNoteMovePreview(position.startingFen, note.moveUci, note.classification);
+                    noteHoverTimerRef.current = setTimeout(() => setNoteMovePreview(preview), NOTE_HOVER_DELAY_MS);
                   }}
-                  onBlur={() => setNoteMovePreview(null)}
+                  onBlur={() => {
+                    if (noteHoverTimerRef.current) clearTimeout(noteHoverTimerRef.current);
+                    setNoteMovePreview(null);
+                  }}
                   className="grid gap-1 border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-3 py-2 transition-colors hover:border-[var(--app-accent)] focus-visible:border-[var(--app-accent)] focus-visible:outline-none"
                 >
                   <div className="flex flex-wrap items-center gap-2">
