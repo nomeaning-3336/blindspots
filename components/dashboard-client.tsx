@@ -536,7 +536,7 @@ function QueuePositionRow({
   const sideLabel = userOrientation === "black" ? "Black to move" : "White to move";
 
   return (
-    <div className="app-brutal-row grid gap-5 rounded-lg p-5 md:grid-cols-[180px_minmax(360px,1fr)] md:items-start">
+    <div className="app-brutal-row grid gap-6 rounded-lg p-5 md:grid-cols-[288px_minmax(0,1fr)] md:items-start">
       {/* Thumbnail */}
       <div className="shrink-0 self-start">
         <ReplayThumbnail
@@ -544,7 +544,7 @@ function QueuePositionRow({
           finalFen={position.startingFen}
           playedMove={position.playedMoveUci}
           orientation={userOrientation}
-          size={320}
+          size={280}
         />
       </div>
 
