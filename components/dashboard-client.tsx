@@ -541,92 +541,104 @@ function QueuePositionRow({
   const streak = Math.min(position.consecutiveCorrectCount ?? 0, 3);
 
   return (
-    <div className="app-brutal-row grid gap-6 rounded-lg border border-[var(--app-border)] p-5 md:grid-cols-[420px_minmax(0,1fr)_220px] md:items-stretch">
+    <div className="app-brutal-row grid grid-cols-1 gap-4 rounded-lg border border-[var(--app-border)] p-5 md:grid-cols-[420px_24px_1px_24px_480px_1fr_1px_24px_220px] md:gap-0 md:items-stretch">
       {/* Thumbnail column */}
-      <div className="flex flex-col items-center gap-2 border-r border-[var(--app-border)] pr-6">
+      <div className="flex flex-col items-center gap-2">
         <ReplayThumbnail
           previousFen={position.previousFen}
           finalFen={position.startingFen}
           playedMove={position.playedMoveUci}
           orientation={userOrientation}
-          size={400}
+          size={420}
         />
         <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
           {sideLabel}
         </span>
       </div>
 
+      {/* Separator 1 */}
+      <div className="hidden md:block" aria-hidden="true" />
+      <div className="hidden md:block w-px bg-[var(--app-border)]" aria-hidden="true" />
+      <div className="hidden md:block" aria-hidden="true" />
+
       {/* Content column */}
-      <div className="min-w-0">
+      <div className="flex min-w-0 flex-col justify-start py-2">
         {/* Title row */}
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="min-w-0 truncate text-lg font-semibold tracking-tight text-[var(--app-text)]">
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          <h3 className="min-w-0 truncate text-2xl font-black tracking-[-0.03em] text-[var(--app-text)]">
             {queuePositionTitle(position)}
           </h3>
           <StatusTag status={position.status} label={position.statusLabel} />
         </div>
 
         {/* Eval + attempt summary */}
-        <div className="mt-1 text-sm leading-6 text-[var(--app-muted)]">
-          {evalDisplay != null && <span>Eval {evalDisplay}</span>}
-          {evalDisplay != null && <span className="mx-1.5 text-[var(--app-border-soft)]">·</span>}
+        <div className="text-base font-medium leading-6 text-[var(--app-muted)]">
+          {evalDisplay != null && <span className="text-[var(--app-text)] font-bold">Eval {evalDisplay}</span>}
+          {evalDisplay != null && <span className="mx-2 text-[var(--app-border-soft)]">·</span>}
           <span>{attemptLabel}</span>
           {hasResult && (
             <>
-              <span className="mx-1.5 text-[var(--app-border-soft)]">·</span>
-              <span className={lastAttemptClass(position)}>{lastResultText}</span>
+              <span className="mx-2 text-[var(--app-border-soft)]">·</span>
+              <span className={`${lastAttemptClass(position)} font-bold`}>{lastResultText}</span>
             </>
           )}
         </div>
 
         {/* Progress dots (non-due, attempted, not mastered/retired) */}
         {!isOverdue && position.attempts > 0 && position.status !== "mastered" && position.status !== "retired" && (
-          <div className="mt-1 text-sm leading-5 text-[var(--app-muted)]">
-            {Array.from({ length: 3 }, (_, i) => (
-              <span key={i} className={i < streak ? "text-[var(--app-accent)]" : "text-[var(--app-muted-soft)]"}>
-                {i < streak ? "●" : "○"}{i < 2 ? " " : ""}
-              </span>
-            ))}
-            <span className="ml-1.5">{streak} of 3 to graduate</span>
+          <div className="mt-2 text-base font-medium text-[var(--app-muted)]">
+            <span className="text-lg leading-none">
+              {Array.from({ length: 3 }, (_, i) => (
+                <span key={i} className={i < streak ? "text-[var(--app-accent)]" : "text-[var(--app-muted-soft)]"}>
+                  {i < streak ? "●" : "○"}{i < 2 ? " " : ""}
+                </span>
+              ))}
+            </span>
+            <span className="ml-2">{streak} of 3 to graduate</span>
           </div>
         )}
 
         {/* Due now status */}
         {isOverdue && (
-          <div className="mt-1 text-sm leading-5 font-semibold text-[var(--app-class-blunder)]">
+          <div className="mt-2 text-base text-[var(--app-muted)]">
             Due now
           </div>
         )}
 
         {/* Next review (future only) */}
         {!isOverdue && (
-          <div className="mt-1 text-sm leading-5 text-[var(--app-muted)]">
+          <div className="mt-2 text-base text-[var(--app-muted)]">
             {formatReviewAbsolute(position.nextReviewAt)}
             {countdown && (
-              <span className="tabular-nums"> · in {countdown}</span>
+              <span className="tabular-nums font-semibold text-[var(--app-text)]"> · in {countdown}</span>
             )}
           </div>
         )}
 
         {/* Actions */}
-        <div className="mt-4 flex flex-wrap gap-3">
+        <div className="mt-5 flex flex-wrap gap-4">
           <Link
             href="/train"
-            className="app-brutal-button inline-flex min-h-11 min-w-0 items-center justify-center px-5 py-2.5 text-sm"
+            className="app-brutal-button inline-flex min-h-12 min-w-0 items-center justify-center px-6 py-3 text-sm"
           >
             {position.attempts > 0 ? "Retry" : "Start"}
           </Link>
           <Link
             href={`/analysis?fen=${encodeURIComponent(position.startingFen)}`}
-            className="inline-flex min-h-11 min-w-0 items-center justify-center rounded-[8px] border border-[#3a3a3f] bg-[var(--app-panel-solid)] px-5 py-2.5 text-sm font-bold uppercase tracking-[0.04em] text-[var(--app-text)] shadow-[3px_3px_0_#050505] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#050505]"
+            className="inline-flex min-h-12 min-w-0 items-center justify-center rounded-[8px] border border-[#3a3a3f] bg-[var(--app-panel-solid)] px-6 py-3 text-sm font-bold uppercase tracking-[0.04em] text-[var(--app-text)] shadow-[3px_3px_0_#050505] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#050505]"
           >
             Analyze
           </Link>
         </div>
       </div>
 
+      {/* Separator 2 */}
+      <div className="hidden md:block" aria-hidden="true" />
+      <div className="hidden md:block w-px bg-[var(--app-border)]" aria-hidden="true" />
+      <div className="hidden md:block" aria-hidden="true" />
+
       {/* Notes column */}
-      <div className="min-w-0 border-l border-[var(--app-border)] pl-6">
+      <div className="min-w-0">
         <h3 className="text-lg font-semibold tracking-tight text-[var(--app-text)]">
           Notes
         </h3>
@@ -858,7 +870,7 @@ function StatusTag({ status, label }: { status: string; label: string }) {
     retired: "border-[var(--app-border-soft)] text-[var(--app-muted-soft)]",
   };
   return (
-    <span className={["inline-flex min-h-6 items-center border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]", colorMap[status] ?? "border-[var(--app-border)] text-[var(--app-muted)]"].join(" ")}>
+    <span className={["inline-flex min-h-7 items-center border px-2.5 py-1 text-xs font-black uppercase tracking-[0.12em]", colorMap[status] ?? "border-[var(--app-border)] text-[var(--app-muted)]"].join(" ")}>
       {label}
     </span>
   );
