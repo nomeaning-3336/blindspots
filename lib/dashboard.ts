@@ -44,6 +44,7 @@ export type DashboardMoveNote = {
   evalAfterCp: number | null;
   moveSan: string | null;
   moveUci: string | null;
+  moverColor: "white" | "black" | null;
 };
 
 export type EloHistoryPoint = {
@@ -224,6 +225,7 @@ export function buildDashboardSummary({
         evalAfterCp: n.eval_after_cp,
         moveSan: n.move_san,
         moveUci: n.move_uci,
+        moverColor: null,
       });
     }
   }
@@ -271,7 +273,12 @@ function buildPositionRows(
     const moveNotes: DashboardMoveNote[] = [];
     if (m.move_key) {
       const note = notesByKey.get(m.move_key);
-      if (note) moveNotes.push(note);
+      if (note) {
+        moveNotes.push({
+          ...note,
+          moverColor: moveColorFromFen(m.starting_fen),
+        });
+      }
     }
     return {
       id: m.id,
@@ -297,6 +304,13 @@ function buildPositionRows(
       moveNotes,
     };
   });
+}
+
+function moveColorFromFen(fen: string | null | undefined): "white" | "black" | null {
+  const turn = fen?.split(/\s+/)[1];
+  if (turn === "w") return "white";
+  if (turn === "b") return "black";
+  return null;
 }
 
 function buildSessionPositionRows(sessions: DashboardSessionInput[]): DashboardPosition[] {

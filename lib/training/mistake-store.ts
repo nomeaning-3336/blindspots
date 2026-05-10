@@ -4,6 +4,7 @@ import { nextIntervalDays, shouldMasterMistake, addDays, type TrainingOutcome } 
 import { inferLegalMoveBetweenFens } from "./fen-transition";
 import { normalizeSetupPrelude } from "./setup-prelude";
 import { getNextReviewAtForActiveMistake, nextConsecutiveCorrectCount } from "./active-mistake-schedule";
+import { selectRandomPhase, getPhaseFallbackOrder, hasLikelySyzygyTablebaseEntry, inferPhaseFromFen } from "./random-filler-selection";
 
 type UserMistakeUpdate = Database["public"]["Tables"]["user_mistakes"]["Update"];
 
@@ -50,6 +51,7 @@ export interface UserMistakeRow {
 export interface NextMistakeResult {
   mistake: UserMistakeRow | null;
   queueSource: "review" | "active" | "filler" | null;
+  selectedPhase?: string;
 }
 
 /**
@@ -250,7 +252,12 @@ export async function getNextActiveOrFillerMistakeForTraining(
     return { mistake: active as unknown as UserMistakeRow, queueSource: "active" };
   }
 
-  const { data: filler, error: fillerError } = await supabase
+  // Phase-balanced filler selection
+  const preferredPhase = selectRandomPhase();
+  const phaseOrder = getPhaseFallbackOrder(preferredPhase);
+
+  // Fetch a small batch of candidates sorted by least-recently-served
+  const { data: fillerCandidates, error: fillerError } = await supabase
     .from("user_mistakes")
     .select("*")
     .eq("user_id", userId)
@@ -260,11 +267,31 @@ export async function getNextActiveOrFillerMistakeForTraining(
     .is("mastered_at", null)
     .order("last_served_at", { ascending: true, nullsFirst: true })
     .order("first_ingested_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .limit(10);
 
   if (fillerError) {
     console.error("[mistake-store] filler query failed", fillerError);
+  }
+
+  const candidates = (fillerCandidates ?? []) as unknown as UserMistakeRow[];
+
+  // Pick best candidate: prefer target phase, exclude endgame Syzygy
+  let filler: UserMistakeRow | null = null;
+  for (const phase of phaseOrder) {
+    for (const c of candidates) {
+      if (phase === "endgame" && hasLikelySyzygyTablebaseEntry(c.starting_fen)) continue;
+      const candidatePhase = (c as any).phase ?? inferPhaseFromFen(c.starting_fen);
+      if (candidatePhase === phase || !candidatePhase) {
+        filler = c;
+        break;
+      }
+    }
+    if (filler) break;
+  }
+
+  // Fallback: just use the first candidate regardless of phase
+  if (!filler && candidates.length > 0) {
+    filler = candidates[0];
   }
 
   if (filler) {
@@ -277,7 +304,7 @@ export async function getNextActiveOrFillerMistakeForTraining(
       .eq("id", filler.id)
       .eq("user_id", userId);
 
-    return { mistake: filler as unknown as UserMistakeRow, queueSource: "filler" };
+    return { mistake: filler, queueSource: "filler", selectedPhase: preferredPhase };
   }
 
   return { mistake: null, queueSource: null };

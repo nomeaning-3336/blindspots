@@ -542,23 +542,6 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   }
 
-@keyframes app-loading-dot {
-  0%, 20% { opacity: 0.2; transform: translateY(0); }
-  50% { opacity: 1; transform: translateY(-1px); }
-  100% { opacity: 0.2; transform: translateY(0); }
-}
-
-.app-loading-dot {
-  animation: app-loading-dot 1s infinite ease-in-out;
-}
-
-.app-loading-dot:nth-child(2) {
-  animation-delay: 0.15s;
-}
-
-.app-loading-dot:nth-child(3) {
-  animation-delay: 0.3s;
-}
 
   .app-theme-option {
     position: relative;
@@ -1034,3 +1017,17 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
     transform: none;
   }
 }
+
+@keyframes app-loading-dot {
+  0%, 20% { opacity: 0.2; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-1px); }
+  100% { opacity: 0.2; transform: translateY(0); }
+}
+
+.app-loading-dot {
+  display: inline-block;
+  animation: app-loading-dot 1s infinite ease-in-out;
+}
+
+.app-loading-dot:nth-child(2) { animation-delay: 0.15s; }
+.app-loading-dot:nth-child(3) { animation-delay: 0.3s; }
