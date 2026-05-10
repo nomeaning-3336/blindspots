@@ -3,6 +3,7 @@ import { PublicHeaderClient } from "@/components/public-header";
 import { PublicFaq } from "@/components/public-faq";
 import { getOptionalAppUserId } from "@/lib/app-auth";
 import { AnalysisBoard } from "@/components/chess/analysis-board";
+import SmoothScrollWrapper from "@/components/smooth-scroll-wrapper";
 
 const loopSteps = [
   {
@@ -219,8 +220,9 @@ export default async function LandingPage() {
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-transparent">
       <PublicHeaderClient isSignedIn={isSignedIn} />
-      <main className="min-h-0 flex-1 overflow-y-auto overflow-x-clip">
-        <section className="mx-auto grid w-full min-w-0 max-w-full overflow-x-clip gap-12 px-5 py-14 md:max-w-[96rem] md:grid-cols-[1fr_1.3fr] md:items-center md:px-10 md:py-20">
+      <main className="min-h-0 flex-1 overflow-hidden">
+        <SmoothScrollWrapper>
+          <section className="mx-auto grid w-full min-w-0 max-w-full overflow-x-clip gap-12 px-5 py-14 md:max-w-[96rem] md:grid-cols-[1fr_1.3fr] md:items-center md:px-10 md:py-20">
           <div>
             <h1 className="max-w-3xl text-[clamp(2.75rem,4.8vw,4.25rem)] font-black leading-[0.98] tracking-[-0.06em] text-[var(--app-text)]">
               Chess training for the positions you{" "}
@@ -321,6 +323,7 @@ export default async function LandingPage() {
             (c) 2026 / No rooks were sacrificed
           </p>
         </footer>
+        </SmoothScrollWrapper>
       </main>
     </div>
   );

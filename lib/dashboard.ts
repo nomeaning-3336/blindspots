@@ -98,6 +98,11 @@ export type DashboardSummary = {
     outcome: "pass" | "acceptable" | "fail" | null;
     avgCpLoss: number | null;
   }>;
+  dailyTargetLevel: string;
+  dailyTargetPositions: number;
+  dailyCompletedToday: number;
+  mistakeCaptureThresholdLevel: string;
+  mistakeCaptureThresholdCp: number;
 };
 
 type DashboardProfileInput = {
@@ -109,6 +114,12 @@ type DashboardProfileInput = {
   revisit_queue: Json;
   mastered_queue: Json;
   cluster_stats: Json;
+  daily_target_level?: string | null;
+  daily_target_positions?: number | null;
+  daily_completed_today?: number | null;
+  mistake_capture_threshold_level?: string | null;
+  mistake_capture_threshold_cp?: number | null;
+  daily_last_reset_at?: string | null;
 };
 
 type DashboardSessionInput = {
@@ -146,7 +157,7 @@ type DashboardMistakeInput = {
 };
 
 type BuildDashboardSummaryInput = {
-  profile: DashboardProfileInput | null;
+  profile: Record<string, unknown> | null;
   sessions: DashboardSessionInput[];
   mistakes: DashboardMistakeInput[];
   avgCpLoss: number | null;
@@ -159,6 +170,7 @@ type BuildDashboardSummaryInput = {
     move_san: string | null;
     move_uci: string | null;
   }>;
+  completedToday: number;
 };
 
 const CLASSIFICATION_KEYS = [
@@ -203,16 +215,18 @@ export function buildDashboardSummary({
   mistakes,
   avgCpLoss,
   notes,
+  completedToday,
 }: BuildDashboardSummaryInput): DashboardSummary {
+  const p = profile ?? {};
   const evaluationsBySession = sessions.map((session) => normalizePositionEvaluations(session.position_evaluations));
   const evaluations = evaluationsBySession.flat();
   const classifications = buildClassificationCounts(evaluations);
   const clusters = buildDashboardClusters(evaluations);
 
-  const exploitCount = jsonArrayLength(profile?.exploit_queue);
-  const exploreCount = jsonArrayLength(profile?.explore_queue);
-  const revisitCount = jsonArrayLength(profile?.revisit_queue);
-  const masteredCount = jsonArrayLength(profile?.mastered_queue);
+  const exploitCount = jsonArrayLength(p.exploit_queue);
+  const exploreCount = jsonArrayLength(p.explore_queue);
+  const revisitCount = jsonArrayLength(p.revisit_queue);
+  const masteredCount = jsonArrayLength(p.mastered_queue);
 
   const notesByKey = new Map<string, DashboardMoveNote>();
   for (const n of notes) {
@@ -239,11 +253,11 @@ export function buildDashboardSummary({
   const recentPassRate = computePassRate(mistakes);
 
   return {
-    totalSequences: profile?.total_sequences ?? 0,
+    totalSequences: (p.total_sequences as number) ?? 0,
     movesEvaluated: evaluations.length,
-    blindspotsElo: typeof profile?.blindspots_elo === "number" ? profile.blindspots_elo : null,
+    blindspotsElo: typeof p.blindspots_elo === "number" ? (p.blindspots_elo as number) : null,
     eloDeltaSession: typeof sessions[0]?.elo_delta === "number" ? sessions[0].elo_delta : null,
-    lastSessionAt: profile?.last_session_at ?? sessions[0]?.completed_at ?? null,
+    lastSessionAt: (p.last_session_at as string) ?? sessions[0]?.completed_at ?? null,
     queueCounts: {
       mastered: masteredCount,
       revisit: revisitCount,
@@ -262,6 +276,11 @@ export function buildDashboardSummary({
     recentSessions: sessions.map((session, index) =>
       buildRecentSession(session, evaluationsBySession[index] ?? []),
     ),
+    dailyTargetLevel: (p.daily_target_level as string) ?? "balanced",
+    dailyTargetPositions: typeof p.daily_target_positions === "number" ? (p.daily_target_positions as number) : 10,
+    dailyCompletedToday: completedToday,
+    mistakeCaptureThresholdLevel: (p.mistake_capture_threshold_level as string) ?? "balanced",
+    mistakeCaptureThresholdCp: typeof p.mistake_capture_threshold_cp === "number" ? (p.mistake_capture_threshold_cp as number) : 75,
   };
 }
 
@@ -690,6 +709,6 @@ function normalizeLegacyEnCroissantClassification(value: string): DashboardClass
   }
 }
 
-function jsonArrayLength(raw: Json | undefined) {
+function jsonArrayLength(raw: unknown) {
   return Array.isArray(raw) ? raw.length : 0;
 }

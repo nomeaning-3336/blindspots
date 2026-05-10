@@ -13,7 +13,7 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
     supabase
       .from("user_blindspot_profile")
       .select(
-        "total_sequences,blindspots_elo,last_session_at,exploit_queue,explore_queue,revisit_queue,mastered_queue,cluster_stats",
+        "total_sequences,blindspots_elo,last_session_at,exploit_queue,explore_queue,revisit_queue,mastered_queue,cluster_stats,daily_target_level,daily_target_positions,mistake_capture_threshold_level,mistake_capture_threshold_cp",
       )
       .eq("user_id", userId)
       .maybeSingle(),
@@ -92,11 +92,30 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
       ? attemptedMistakes.reduce((sum, m) => sum + (m.cp_loss ?? 0), 0) / attemptedMistakes.length
       : null;
 
+  // Count today's completed sessions for daily goal
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const tomorrowStart = new Date(todayStart);
+  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+
+  const { count: completedToday, error: todayError } = await supabase
+    .from("training_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .not("completed_at", "is", null)
+    .gte("completed_at", todayStart.toISOString())
+    .lt("completed_at", tomorrowStart.toISOString());
+
+  if (todayError && process.env.NODE_ENV !== "production") {
+    console.warn("[dashboard] Failed to count today's sessions:", todayError.message);
+  }
+
   return buildDashboardSummary({
-    profile: profileResult.data,
+    profile: profileResult.data as unknown as Record<string, unknown> | null,
     sessions: sessionsResult.data ?? [],
     mistakes,
     avgCpLoss,
     notes,
+    completedToday: completedToday ?? 0,
   });
 }
