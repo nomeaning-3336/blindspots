@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { AnalysisBoard } from "@/components/chess/analysis-board";
 
 export function PositionThumbnail({ fen, size = 88 }: { fen: string; size?: number }) {
@@ -23,6 +24,72 @@ export function PositionThumbnail({ fen, size = 88 }: { fen: string; size?: numb
         lastMoveBadge={null}
         className="!rounded-none"
       />
+    </div>
+  );
+}
+
+export function ReplayThumbnail({
+  previousFen,
+  finalFen,
+  playedMove,
+  size = 112,
+}: {
+  previousFen?: string | null;
+  finalFen: string;
+  playedMove?: string | null;
+  size?: number;
+}) {
+  const canReplay = Boolean(previousFen && playedMove);
+  const [shownFen, setShownFen] = useState(previousFen ?? finalFen);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function clearTimer() {
+    if (timerRef.current != null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }
+
+  function previewForward() {
+    clearTimer();
+    if (!canReplay || !previousFen) {
+      setShownFen(finalFen);
+      return;
+    }
+    setShownFen(previousFen);
+    timerRef.current = setTimeout(() => {
+      setShownFen(finalFen);
+    }, 180);
+  }
+
+  function previewBackward() {
+    clearTimer();
+    if (!canReplay || !previousFen) {
+      setShownFen(finalFen);
+      return;
+    }
+    setShownFen(finalFen);
+    timerRef.current = setTimeout(() => {
+      setShownFen(previousFen);
+    }, 180);
+  }
+
+  useEffect(() => {
+    setShownFen(previousFen ?? finalFen);
+    return clearTimer;
+  }, [previousFen, finalFen]);
+
+  return (
+    <div
+      tabIndex={0}
+      onPointerEnter={previewForward}
+      onPointerLeave={previewBackward}
+      onFocus={previewForward}
+      onBlur={previewBackward}
+      className="relative inline-flex cursor-pointer rounded-lg border border-[var(--app-border-soft)] bg-[var(--app-panel-deep)] p-1 transition hover:border-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)]"
+      aria-label={canReplay ? "Replay setup move preview" : "Position preview"}
+    >
+      <PositionThumbnail fen={shownFen} size={size} />
     </div>
   );
 }

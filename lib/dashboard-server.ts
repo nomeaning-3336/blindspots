@@ -27,7 +27,7 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
     supabase
       .from("user_mistakes")
       .select(
-        "id,source_type,starting_fen,status,opening_name,review_count,pass_count,acceptable_count,fail_count,last_attempt_at,next_review_at,cp_loss,served_count",
+        "id,source_type,starting_fen,status,opening_name,review_count,pass_count,acceptable_count,fail_count,last_attempt_at,next_review_at,cp_loss,served_count,setup_previous_fen,setup_played_move_uci",
       )
       .eq("user_id", userId)
       .order("last_attempt_at", { ascending: false, nullsFirst: false })
@@ -47,7 +47,23 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
     throw new Error(`Failed to load dashboard positions: ${mistakesResult.error.message}`);
   }
 
-  const mistakes = mistakesResult.data ?? [];
+  const mistakes = (mistakesResult.data ?? []) as unknown as Array<{
+    id: string;
+    source_type: string;
+    starting_fen: string;
+    status: string;
+    opening_name: string | null;
+    review_count: number;
+    pass_count: number;
+    acceptable_count: number;
+    fail_count: number;
+    last_attempt_at: string | null;
+    next_review_at: string | null;
+    cp_loss: number | null;
+    served_count: number;
+    setup_previous_fen: string | null;
+    setup_played_move_uci: string | null;
+  }>;
   const attemptedMistakes = mistakes.filter((m) => m.cp_loss != null);
   const avgCpLoss =
     attemptedMistakes.length > 0

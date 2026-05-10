@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { DashboardClassifications, DashboardPosition, DashboardSummary, EloHistoryPoint } from "@/lib/dashboard";
 import { classificationColor } from "@/lib/training-board-ui";
-import { PositionThumbnail } from "@/components/position-thumbnail";
+import { PositionThumbnail, ReplayThumbnail } from "@/components/position-thumbnail";
 
 type DashboardView = "summary" | "history";
 type PositionFilter = "all" | "review" | "new" | "learning" | "mastered" | "failed";
@@ -71,12 +71,6 @@ export function DashboardClient({ summary }: { summary: DashboardSummary }) {
           </section>
         )}
 
-        {view === "summary" && (
-          <RecentActivitySection
-            sessions={summary.recentSessions}
-            positions={summary.recentPositions}
-          />
-        )}
       </div>
     </main>
   );
@@ -159,7 +153,9 @@ function DashboardHero({
 function SummaryTab({ summary, hasData }: { summary: DashboardSummary; hasData: boolean }) {
   return (
     <div className="grid gap-5">
-      <QueueSummaryCards summary={summary} />
+      <QueueOverviewSection
+        positions={summary.positions}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(260px,0.44fr)_minmax(0,0.56fr)] lg:items-start">
         <ProgressSnapshot summary={summary} hasData={hasData} />
@@ -169,49 +165,424 @@ function SummaryTab({ summary, hasData }: { summary: DashboardSummary; hasData: 
   );
 }
 
-function QueueSummaryCards({ summary }: { summary: DashboardSummary }) {
-  const q = summary.queueOverview;
-  const items = [
-    { key: "reviewDue", label: "Review due", value: q.reviewDue, accent: true },
-    { key: "active", label: "Active", value: q.active },
-    { key: "filler", label: "Random", value: q.filler },
-    { key: "mastered", label: "Mastered", value: q.mastered },
-    { key: "retired", label: "Retired", value: q.retired },
-  ];
+function InfoTooltip({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const id = useId();
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const prominent = items.filter((item) => item.value > 0);
-  const muted = items.filter((item) => item.value === 0);
-  const visible = prominent.length > 0 ? prominent : items;
+  const PAD = 16;
+  const GAP = 8;
+
+  const compute = useCallback(() => {
+    const trigger = triggerRef.current;
+    const tip = tooltipRef.current;
+    if (!trigger || !tip) return;
+    const rect = trigger.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const tipW = tip.offsetWidth;
+    const tipH = tip.offsetHeight;
+
+    let left = rect.left;
+    if (left + tipW > vw - PAD) {
+      left = rect.right - tipW;
+      if (left < PAD) left = PAD;
+    }
+
+    let top = rect.bottom + GAP;
+    if (top + tipH > vh - PAD) {
+      top = rect.top - GAP - tipH;
+      if (top < PAD) top = PAD;
+    }
+
+    setPos({ left, top });
+  }, []);
+
+  const clearLeaveTimer = useCallback(() => {
+    if (leaveTimerRef.current) {
+      clearTimeout(leaveTimerRef.current);
+      leaveTimerRef.current = null;
+    }
+  }, []);
+
+  const show = useCallback(() => {
+    clearLeaveTimer();
+    setOpen(true);
+  }, [clearLeaveTimer]);
+
+  // Once the tooltip DOM node mounts, measure & position it
+  useEffect(() => {
+    if (open && tooltipRef.current) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(compute);
+      });
+    }
+  }, [open, compute]);
+
+  const hide = useCallback(() => {
+    setOpen(false);
+    setPos(null);
+  }, []);
+
+  const scheduleHide = useCallback(() => {
+    leaveTimerRef.current = setTimeout(hide, 100);
+  }, [hide]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKeydown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        hide();
+        triggerRef.current?.focus();
+      }
+    }
+    function onResize() { compute(); }
+    function onScroll() { compute(); }
+    window.addEventListener("keydown", onKeydown);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("scroll", onScroll, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", onKeydown);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onScroll, { capture: true });
+    };
+  }, [open, compute, hide]);
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label="Explain queue types"
+        aria-expanded={open}
+        aria-describedby={open ? id : undefined}
+        onMouseEnter={show}
+        onMouseLeave={scheduleHide}
+        onFocus={show}
+        onBlur={scheduleHide}
+        className="inline-flex h-9 items-center gap-2 rounded-none border border-[var(--app-border)] bg-[var(--app-panel-solid)] px-3 font-mono text-[10px] font-black uppercase tracking-[0.18em] text-[var(--app-muted)] shadow-[3px_3px_0_#050505] transition hover:-translate-x-[1px] hover:-translate-y-[1px] hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] hover:shadow-[4px_4px_0_#050505] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"
+      >
+        <span>Queue types</span>
+        <span
+          aria-hidden="true"
+          className="inline-flex h-5 w-5 items-center justify-center border border-current text-[11px] leading-none"
+        >
+          ?
+        </span>
+      </button>
+      {open ? (
+        <div
+          ref={tooltipRef}
+          role="tooltip"
+          id={id}
+          className="fixed z-[90] w-[500px] max-w-[calc(100vw-32px)] border border-[var(--app-border)] bg-[var(--app-panel-solid)] px-5 py-4 text-xs leading-5 shadow-[4px_4px_0_#050505]"
+          style={pos ? { left: pos.left, top: pos.top } : { left: -9999, top: -9999 }}
+          onMouseEnter={show}
+          onMouseLeave={scheduleHide}
+        >
+          <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--app-accent)]">
+            Queue types
+          </div>
+          {children}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/* ─── Queue helpers ─── */
+
+type QueueBucket = "dueNow" | "new" | "learning" | "mastered" | "retired";
+
+function isPersonalMistakePosition(p: DashboardPosition) {
+  return (
+    !p.id.startsWith("session:") &&
+    p.status !== "session" &&
+    p.sourceType !== "training_session" &&
+    p.sourceType !== "lichess_puzzle_filler"
+  );
+}
+
+function isDueNow(p: DashboardPosition, nowMs: number) {
+  if (!p.nextReviewAt) return false;
+  const reviewMs = Date.parse(p.nextReviewAt);
+  return Number.isFinite(reviewMs) && reviewMs <= nowMs;
+}
+
+function queueBucketForPosition(p: DashboardPosition, nowMs: number): QueueBucket | null {
+  if (!isPersonalMistakePosition(p)) return null;
+
+  if (p.status === "retired") return "retired";
+  if (p.status === "mastered") return "mastered";
+  if (isDueNow(p, nowMs)) return "dueNow";
+
+  if (p.status === "active" && p.attempts === 0) return "new";
+  if (p.status === "active" || p.status === "review" || p.status === "learning") return "learning";
+
+  return null;
+}
+
+function formatReviewCountdown(nextReviewAt: string | null, nowMs: number) {
+  if (!nextReviewAt) return null;
+
+  const targetMs = Date.parse(nextReviewAt);
+  if (!Number.isFinite(targetMs)) return null;
+
+  const diffMs = Math.max(0, targetMs - nowMs);
+  const totalSeconds = Math.floor(diffMs / 1000);
+
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  return `${pad(days)}d ${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`;
+}
+
+function formatReviewAbsolute(nextReviewAt: string | null): string {
+  if (!nextReviewAt) return "Not scheduled";
+  const date = new Date(nextReviewAt);
+  if (Number.isNaN(date.getTime())) return "Not scheduled";
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/* ─── Queue Overview Section ─── */
+
+const QUEUE_DEFS: Array<{
+  bucket: QueueBucket;
+  label: string;
+  accent: boolean;
+  emptyLabel: string;
+}> = [
+  { bucket: "dueNow", label: "Due now", accent: true, emptyLabel: "No reviews due. The queue is behaving, suspiciously." },
+  { bucket: "learning", label: "Learning", accent: false, emptyLabel: "No learning positions yet." },
+  { bucket: "new", label: "New", accent: false, emptyLabel: "No new personal mistakes yet. Generated training still works, but it is not counted here." },
+  { bucket: "mastered", label: "Mastered", accent: false, emptyLabel: "No mastered positions yet." },
+  { bucket: "retired", label: "Retired", accent: false, emptyLabel: "No retired positions yet." },
+];
+
+function QueueOverviewSection({
+  positions,
+}: {
+  positions: DashboardPosition[];
+}) {
+  const [selectedBucket, setSelectedBucket] = useState<QueueBucket | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  // Single global ticker for all countdowns
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Bucket counts from filtered personal positions only
+  const bucketCounts = useMemo(() => {
+    const counts: Record<QueueBucket, number> = { dueNow: 0, new: 0, learning: 0, mastered: 0, retired: 0 };
+    for (const p of positions) {
+      const bucket = queueBucketForPosition(p, nowMs);
+      if (bucket) counts[bucket]++;
+    }
+    return counts;
+  }, [positions, nowMs]);
+
+  // Filtered positions for selected bucket
+  const filteredPositions = useMemo(() => {
+    if (!selectedBucket) return [];
+    return positions.filter((p) => queueBucketForPosition(p, nowMs) === selectedBucket);
+  }, [positions, selectedBucket, nowMs]);
+
+  const toggleBucket = (bucket: QueueBucket) => {
+    setSelectedBucket((prev) => (prev === bucket ? null : bucket));
+  };
 
   return (
     <section className="app-brutal-section p-5 md:p-6">
-      <SectionLabel>Queue overview</SectionLabel>
+      <SectionLabel right={
+        <InfoTooltip>
+          <div className="grid gap-3 text-left">
+            {QUEUE_DEFS.map((def) => (
+              <div key={def.bucket}>
+                <span className="font-bold text-[var(--app-text)]">{def.label}:</span>{" "}
+                <span className="text-[var(--app-muted)]">{QUEUE_DESCRIPTIONS[def.bucket]}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 border-t border-[var(--app-border-soft)] pt-2.5 text-[11px] leading-[1.4] text-[var(--app-muted-soft)]">
+            Random/generated training positions are fallback material and are not counted here.
+          </div>
+        </InfoTooltip>
+      }>
+        Queue overview
+      </SectionLabel>
+
+      {/* Queue count cards */}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
-        {visible.map((item) => (
-          <div
-            key={item.key}
-            className={["app-brutal-row rounded-lg p-4", item.value === 0 ? "opacity-55" : ""].join(" ")}
-          >
-            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
-              {item.label}
-            </div>
-            <div
+        {QUEUE_DEFS.map((def) => {
+          const count = bucketCounts[def.bucket];
+          const isSelected = selectedBucket === def.bucket;
+          return (
+            <button
+              key={def.bucket}
+              type="button"
+              onClick={() => toggleBucket(def.bucket)}
               className={[
-                "mt-2 text-2xl font-bold leading-none",
-                item.accent && item.value > 0 ? "text-[var(--app-accent)]" : "text-[var(--app-text)]",
+                "app-brutal-row relative rounded-lg p-4 text-left transition",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]",
+                count === 0 && !isSelected ? "opacity-55" : "",
+                isSelected ? "border-[var(--app-accent)] ring-1 ring-[var(--app-accent)]" : "hover:border-[var(--app-border-strong)]",
               ].join(" ")}
             >
-              {formatNumber(item.value)}
-            </div>
-          </div>
-        ))}
+              <span
+                className={[
+                  "absolute right-3 top-3 text-[10px] leading-none transition",
+                  isSelected ? "text-[var(--app-accent)]" : "text-[var(--app-muted)]",
+                ].join(" ")}
+              >
+                {isSelected ? "▲" : "▼"}
+              </span>
+              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
+                {def.label}
+              </div>
+              <div
+                className={[
+                  "mt-2 text-2xl font-bold leading-none",
+                  def.accent && count > 0 ? "text-[var(--app-accent)]" : "text-[var(--app-text)]",
+                ].join(" ")}
+              >
+                {formatNumber(count)}
+              </div>
+            </button>
+          );
+        })}
       </div>
-      {prominent.length > 0 && muted.length > 0 && (
-        <div className="mt-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
-          {muted.map((item) => `0 ${item.label.toLowerCase()}`).join(" · ")}
+
+      {/* Selected queue position list */}
+      {selectedBucket && (
+        <div className="mt-4 border-t border-[var(--app-border-soft)] pt-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <span className="text-[13px] font-bold uppercase tracking-[0.2em] text-[var(--app-muted)]">
+                {QUEUE_DEFS.find((d) => d.bucket === selectedBucket)?.label} positions
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedBucket(null)}
+              className="border border-[var(--app-accent)] bg-[var(--app-accent-soft)] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--app-accent)] transition hover:border-[var(--app-border-strong)] hover:text-[var(--app-text)]"
+            >
+              Collapse
+            </button>
+          </div>
+
+          {filteredPositions.length === 0 ? (
+            <div className="py-8 text-center text-xs leading-6 text-[var(--app-muted)]">
+              {QUEUE_DEFS.find((d) => d.bucket === selectedBucket)?.emptyLabel}
+            </div>
+          ) : (
+            <div className="grid gap-2">
+              {filteredPositions.map((pos) => (
+                <QueuePositionRow key={pos.id} position={pos} nowMs={nowMs} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </section>
+  );
+}
+
+/* ─── Queue tooltip descriptions ─── */
+
+const QUEUE_DESCRIPTIONS: Record<QueueBucket, React.ReactNode> = {
+  dueNow: <><strong>Learning</strong> mistakes ready to review. These are served <strong>before</strong> <strong>new</strong> personal mistakes.</>,
+  learning: "Mistakes from your games that you are actively trying to fix. Notes and previous bad moves may appear at first, then disappear on later reviews.",
+  new: "Newly found mistakes from your games that you have not attempted yet.",
+  mastered: "Mistakes answered correctly at least 3 times in a row.",
+  retired: "Mistakes answered correctly 7+ times in a row. Archived and no longer served.",
+};
+
+/* ─── Queue Position Row ─── */
+
+function QueuePositionRow({
+  position,
+  nowMs,
+}: {
+  position: DashboardPosition;
+  nowMs: number;
+}) {
+  const countdown = formatReviewCountdown(position.nextReviewAt, nowMs);
+  const isOverdue = countdown === null ? false : countdown === "00d 00h 00m 00s" && Date.parse(position.nextReviewAt ?? "") <= nowMs;
+
+  return (
+    <div className="app-brutal-row grid grid-cols-[1fr] items-center gap-4 rounded-lg px-4 py-4 sm:grid-cols-[320px_minmax(0,1fr)_auto]">
+      {/* Thumbnail */}
+      <div className="shrink-0 self-center sm:row-span-1 row-span-2">
+        <ReplayThumbnail
+          previousFen={position.previousFen}
+          finalFen={position.startingFen}
+          playedMove={position.playedMoveUci}
+          size={320}
+        />
+      </div>
+
+      {/* Info */}
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="min-w-0 truncate text-sm font-bold leading-6 text-[var(--app-text)]">
+            {position.openingName ?? position.sourceLabel}
+          </span>
+          <StatusTag status={position.status} label={position.statusLabel} />
+          <ResultTag result={position.lastResult} />
+        </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs leading-5 text-[var(--app-muted)]">
+          <span>{position.sourceLabel}</span>
+          {position.attempts > 0 && <span>{position.attempts} attempt{position.attempts !== 1 ? "s" : ""}</span>}
+          {position.cpLoss != null && (
+            <span className={position.cpLoss > 100 ? "font-bold text-[var(--app-class-blunder)]" : "font-bold text-[var(--app-text)]"}>
+              {position.cpLoss}cp
+            </span>
+          )}
+          <span>
+            {formatReviewAbsolute(position.nextReviewAt)}
+            {countdown && (
+              <span className={isOverdue ? "font-bold text-[var(--app-class-blunder)]" : "font-mono tabular-nums text-[var(--app-muted)]"}>
+                , {isOverdue ? "Due now" : countdown}
+              </span>
+            )}
+          </span>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex shrink-0 gap-2 self-end sm:self-center">
+        <Link
+          href="/train"
+          className="inline-flex min-h-8 items-center border border-[var(--app-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)]"
+        >
+          Retry
+        </Link>
+        <Link
+          href={`/analysis?fen=${encodeURIComponent(position.startingFen)}`}
+          className="inline-flex min-h-8 items-center border border-[var(--app-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)]"
+        >
+          Analyze
+        </Link>
+      </div>
+    </div>
   );
 }
 
@@ -277,152 +648,6 @@ function EloChart({ points }: { points: EloHistoryPoint[] }) {
       <div className="mt-1 flex items-center justify-between text-[9px] uppercase tracking-[0.14em] text-[var(--app-muted-soft)]">
         <span>{startLabel}</span>
         <span>{endLabel}</span>
-      </div>
-    </div>
-  );
-}
-
-function RecentActivitySection({
-  sessions,
-  positions,
-}: {
-  sessions: DashboardSummary["recentSessions"];
-  positions: DashboardPosition[];
-}) {
-  const hasAnything = sessions.length > 0 || positions.length > 0;
-
-  if (!hasAnything) {
-    return (
-      <section className="app-brutal-section p-5 md:p-6">
-        <SectionLabel>Recent training</SectionLabel>
-        <div className="flex flex-col items-center gap-3 p-6 text-center">
-          <div className="text-sm font-bold text-[var(--app-text)]">No training history yet.</div>
-        </div>
-      </section>
-    );
-  }
-
-  type ActivityRow = {
-    key: string;
-    ts: string;
-    fen: string;
-    title: string;
-    subtitle: string;
-    outcome: "pass" | "acceptable" | "fail" | null;
-    worst: string | null;
-    delta: number | null;
-    avgCpLoss: number | null;
-    moves: number | null;
-    statusLabel?: string;
-    attempts?: number;
-    nextReviewAt?: string | null;
-  };
-
-  const rows: ActivityRow[] = sessions.map((s) => ({
-    key: s.id,
-    ts: s.ts,
-    fen: s.startingFen,
-    title: s.title,
-    subtitle: `${s.moves} move${s.moves !== 1 ? "s" : ""}`,
-    outcome: s.outcome,
-    worst: s.worst,
-    delta: s.delta,
-    avgCpLoss: s.avgCpLoss,
-    moves: s.moves,
-  }));
-
-  const positionRows: ActivityRow[] = positions
-    .filter((p) => !p.id.startsWith("session:"))
-    .filter((p) => !sessions.some((s) => s.startingFen === p.startingFen && s.ts === p.lastAttemptAt))
-    .map((p) => ({
-      key: p.id,
-      ts: p.lastAttemptAt ?? p.nextReviewAt ?? "",
-      fen: p.startingFen,
-      title: p.openingName ?? p.sourceLabel,
-      subtitle: p.queueLabel ?? p.statusLabel,
-      outcome: p.lastResult,
-      worst: null,
-      delta: null,
-      avgCpLoss: p.cpLoss,
-      moves: null,
-      statusLabel: p.statusLabel,
-      attempts: p.attempts,
-      nextReviewAt: p.nextReviewAt,
-    }));
-
-  const allRows = [...rows, ...positionRows]
-    .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
-    .slice(0, 5);
-
-  return (
-    <section className="app-brutal-section p-5 md:p-6">
-      <SectionLabel>Recent training</SectionLabel>
-      <div className="grid gap-3">
-        {allRows.map((row) => (
-          <ActivityCard key={row.key} row={row} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ActivityCard({ row }: {
-  row: {
-    fen: string;
-    title: string;
-    subtitle: string;
-    outcome: "pass" | "acceptable" | "fail" | null;
-    worst: string | null;
-    delta: number | null;
-    avgCpLoss: number | null;
-    moves: number | null;
-    statusLabel?: string;
-    attempts?: number;
-    nextReviewAt?: string | null;
-  };
-}) {
-  return (
-    <div className="app-brutal-row flex flex-col gap-4 rounded-lg p-4 sm:flex-row sm:items-center sm:gap-5 sm:p-5">
-      <div className="shrink-0 self-center sm:self-auto" aria-label={row.title}>
-        <PositionThumbnail fen={row.fen} size={144} />
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="min-w-0 truncate text-sm font-bold leading-6 text-[var(--app-text)]">{row.title}</span>
-          <ResultTag result={row.outcome} />
-          {row.statusLabel && <StatusTag status={row.statusLabel === "New" ? "active" : row.statusLabel === "Review due" ? "review" : row.statusLabel === "Mastered" ? "mastered" : "retired"} label={row.statusLabel} />}
-        </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs leading-5 text-[var(--app-muted)]">
-          <span>{row.subtitle}</span>
-          {row.moves != null && <span>{row.moves} moves</span>}
-          {row.worst && (
-            <span className="inline-flex items-center gap-1">
-              <span className="h-1.5 w-1.5" style={{ background: CLASS_COLORS[row.worst] ?? "var(--app-muted)" }} />
-              {row.worst}
-            </span>
-          )}
-          {row.delta != null && (
-            <span className={["font-bold", deltaClass(row.delta)].join(" ")}>{signed(row.delta)} Elo</span>
-          )}
-          {row.avgCpLoss != null && <span>{Math.round(row.avgCpLoss)}cp avg loss</span>}
-          {row.attempts != null && row.attempts > 0 && <span>{row.attempts} attempt{row.attempts !== 1 ? "s" : ""}</span>}
-          {row.nextReviewAt && <span>Review {formatDate(row.nextReviewAt).text}</span>}
-        </div>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <Link
-            href="/train"
-            className="inline-flex min-h-8 items-center border border-[var(--app-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]"
-            title="Retry route not wired yet"
-          >
-            Retry
-          </Link>
-          <Link
-            href={`/analysis?fen=${encodeURIComponent(row.fen)}`}
-            className="inline-flex min-h-8 items-center border border-[var(--app-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]"
-          >
-            Analyze
-          </Link>
-        </div>
       </div>
     </div>
   );
