@@ -50,7 +50,6 @@ import {
 import {
   formatPostmortemEvalLabel,
   getPostmortemTerminalDisplay,
-  whitePositiveCpFromSideToMove,
   whitePositiveMateCp,
 } from "@/lib/training/postmortem-terminal-display";
 import {
@@ -481,10 +480,12 @@ const mockRep = {
 type TrainPageProps = {
   initialOnboarding?: boolean;
   forceOnboarding?: boolean;
+  initialMistakeId?: string;
 };
 
 export default function TrainPage(props: TrainPageProps) {
-  const { initialOnboarding = false, forceOnboarding = false } = props;
+  const { initialOnboarding = false, forceOnboarding = false, initialMistakeId } = props;
+  const initialMistakeIdConsumedRef = useRef(false);
   const [state, setState] = useState<TrainingState>("active");
   const [startingFen, setStartingFen] = useState<string>("");
   const searchParams = useSearchParams();
@@ -1187,6 +1188,10 @@ export default function TrainPage(props: TrainPageProps) {
       };
     }
 
+    if (debugMode === "postmortem") {
+      setTimeout(() => { void fetchEngineLinesForFen(finalFen); }, 100);
+    }
+
     return true;
   }
 
@@ -1229,12 +1234,13 @@ export default function TrainPage(props: TrainPageProps) {
     if (!onboardingScreen) return;
     if (onboardingScreen !== "done" && !debugFen) return;
     if (loadDebugFenPosition()) return;
-    if (mistakeIdParam && !trainOnboardingIntroActive) {
-      void loadSpecificPosition(mistakeIdParam, modeParam ?? "play");
+    if (initialMistakeId && !initialMistakeIdConsumedRef.current && !trainOnboardingIntroActive) {
+      initialMistakeIdConsumedRef.current = true;
+      void loadNextPosition({ mistakeId: initialMistakeId, autoStart: true });
     }
-  }, [onboardingScreen, mistakeIdParam, modeParam, trainOnboardingIntroActive]);
+  }, [onboardingScreen, initialMistakeId, trainOnboardingIntroActive]);
 
-  async function loadNextPosition(options: { autoStart?: boolean } = {}) {
+  async function loadNextPosition(options: { autoStart?: boolean; mistakeId?: string } = {}) {
     const cachedPosition = cachedNextPosition;
     if (cachedPosition?.fen) {
       const skipPreludeAnimation =
@@ -1259,9 +1265,11 @@ export default function TrainPage(props: TrainPageProps) {
     }
 
     try {
-      const payload = pendingPrefetch
-        ? await pendingPrefetch
-        : await fetchNextPosition();
+      const payload = options.mistakeId
+        ? await fetchNextPosition(options.mistakeId)
+        : pendingPrefetch
+          ? await pendingPrefetch
+          : await fetchNextPosition();
       const skipPreludeAnimation =
         Boolean(options.autoStart) && shouldRunPreplayOnboarding;
       nextPositionPrefetchRef.current = null;
@@ -1290,8 +1298,11 @@ export default function TrainPage(props: TrainPageProps) {
     }
   }
 
-  async function fetchNextPosition() {
-    const response = await fetch("/api/train/next-position", { cache: "no-store" });
+  async function fetchNextPosition(mistakeId?: string) {
+    const url = mistakeId
+      ? `/api/train/next-position?mistakeId=${encodeURIComponent(mistakeId)}`
+      : "/api/train/next-position";
+    const response = await fetch(url, { cache: "no-store" });
     const payload = (await response.json().catch(() => null)) as NextPositionResponse | null;
     if (!response.ok || !payload?.fen) return null;
     return payload;
@@ -2813,10 +2824,7 @@ export default function TrainPage(props: TrainPageProps) {
     () => getPostmortemTerminalDisplay(boardFen),
     [boardFen],
   );
-  const currentEngineEval = whitePositiveCpFromSideToMove(
-    boardFen,
-    currentEngineLines[0]?.cp ?? terminalBoardDisplay.evalCp ?? undefined,
-  );
+  const currentEngineEval = currentEngineLines[0]?.cp ?? terminalBoardDisplay.evalCp ?? undefined;
   const currentEngineMate = currentEngineLines[0]?.mate ?? terminalBoardDisplay.evalMate ?? null;
   const currentEngineMateCp = whitePositiveMateCp(boardFen, currentEngineMate, currentEngineEval);
   const boardFrameClassName = [
@@ -3558,7 +3566,7 @@ export default function TrainPage(props: TrainPageProps) {
             </div>
 
             {/* ── Action buttons visible below both tabs ────────────────── */}
-            <div data-tour="postmortem-actions" className="grid h-[var(--pm-actions-h)] shrink-0 grid-cols-2 gap-2 border-t border-[var(--app-border-soft)] bg-[var(--app-panel-solid)] pb-2 pt-2">
+            <div data-tour="postmortem-actions" className="grid h-[var(--pm-actions-h)] shrink-0 -translate-y-2 grid-cols-2 gap-2 border-t border-[var(--app-border-soft)] bg-[var(--app-panel-solid)] p-2">
               <button
                 type="button"
                 className={`${primaryActionClassName} h-full min-h-0 w-full`}

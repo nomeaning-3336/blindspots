@@ -54,6 +54,7 @@ export async function upsertMinedActiveMistakes(
 
     if (!m.setupPreviousFen || !m.setupPlayedMoveUci) {
       summary.missingPreludeCount += 1;
+      continue;
     }
 
     // Check if a row already exists for this user + move_key

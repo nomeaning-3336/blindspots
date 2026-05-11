@@ -42,7 +42,7 @@ export function getPostmortemTerminalDisplay(fen: string): PostmortemTerminalDis
 export function formatPostmortemEvalLabel(cp?: number | null, mate?: number | null) {
   if (typeof mate === "number") return `M${Math.abs(mate)}`;
   if (typeof cp !== "number" || !Number.isFinite(cp)) return "--";
-  if (Math.abs(cp) >= 600) return cp > 0 ? "+6.0" : "-6.0";
+  if (Math.abs(cp) >= 3000) return cp > 0 ? ">+30" : "<-30";
   const pawns = cp / 100;
   if (Math.abs(pawns) < 0.05) return "0.0";
   return `${pawns > 0 ? "+" : ""}${pawns.toFixed(1)}`;
@@ -96,11 +96,5 @@ export function whitePositiveMateCp(fen: string, mate?: number | null, cp?: numb
     return null;
   }
 
-  try {
-    const chess = new Chess(fen);
-    const sideToMoveSign = Math.sign(mate);
-    return chess.turn() === "w" ? sideToMoveSign * TERMINAL_MATE_CP : -sideToMoveSign * TERMINAL_MATE_CP;
-  } catch {
-    return Math.sign(mate) * TERMINAL_MATE_CP;
-  }
+  return Math.sign(mate) * TERMINAL_MATE_CP;
 }

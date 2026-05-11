@@ -142,8 +142,29 @@ function applyMoveToFen(fen: string, uci: string) {
 }
 
 function continuationSan(fen: string, bestMove: string, pv: string[]) {
-  const continuation = Array.isArray(pv) && pv[0] === bestMove ? pv.slice(1) : pv;
-  return pvToSan(fen, continuation);
+  if (!Array.isArray(pv) || pv.length === 0) return [];
+
+  const chess = new Chess(fen);
+
+  try {
+    const firstMove = pv[0];
+
+    if (firstMove === bestMove) {
+      const played = chess.move({
+        from: bestMove.slice(0, 2),
+        to: bestMove.slice(2, 4),
+        promotion: bestMove[4],
+      });
+
+      if (!played) return [];
+
+      return pvToSan(chess.fen(), pv.slice(1));
+    }
+
+    return pvToSan(fen, pv);
+  } catch {
+    return [];
+  }
 }
 
 function isValidFen(fen: string) {
@@ -170,16 +191,30 @@ function uciToSan(fen: string, uci: string) {
 }
 
 function pvToSan(fen: string, pv: string[]) {
-  const chess = new Chess(fen);
-  const san: string[] = [];
-  for (const uci of pv.slice(0, 8)) {
-    const move = chess.move({
-      from: uci.slice(0, 2),
-      to: uci.slice(2, 4),
-      promotion: uci[4],
-    });
-    if (!move) break;
-    san.push(move.san);
+  let chess: Chess;
+
+  try {
+    chess = new Chess(fen);
+  } catch {
+    return [];
   }
+
+  const san: string[] = [];
+
+  for (const uci of pv.slice(0, 8)) {
+    try {
+      const move = chess.move({
+        from: uci.slice(0, 2),
+        to: uci.slice(2, 4),
+        promotion: uci[4],
+      });
+
+      if (!move) break;
+      san.push(move.san);
+    } catch {
+      break;
+    }
+  }
+
   return san;
 }

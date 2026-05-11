@@ -1897,7 +1897,7 @@ function AnalyzeReactBoardSurface({
       <BoardWithEvalBar
         evalCp={snapshot.evalCp}
         evalMate={snapshot.evalMate}
-        evalMateCp={whitePositiveMateCp(snapshot.fen, snapshot.evalMate ?? null, snapshot.evalCp)}
+        evalMateCp={whitePositiveMateCp(snapshot.fen, snapshot.evalMate != null && snapshot.fen.split(" ")[1] === "b" ? -snapshot.evalMate : snapshot.evalMate ?? null, snapshot.evalCp)}
         isLoading={snapshot.isLoading}
         orientation={snapshot.orientation}
       >

@@ -75,13 +75,63 @@ const BASE_COLUMNS = "user_id,total_sequences,blindspots_elo,exploit_queue,explo
 // Columns that may not exist before migration is applied
 const OPTIONAL_COLUMNS = "recent_served_modes,bucket_stats";
 
-export async function GET() {
+export async function GET(request: Request) {
   const userId = await getOptionalAppUserId();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const supabase = getSupabaseAdminClient();
+
+  // Retry: serve a specific mistake by id
+  const retryMistakeId = new URL(request.url).searchParams.get("mistakeId");
+  if (retryMistakeId) {
+    const { data: retryRow } = await supabase
+      .from("user_mistakes")
+      .select("*")
+      .eq("id", retryMistakeId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (retryRow) {
+      const normalized = normalizeUserMistakeForTraining(retryRow);
+      const fenValid = isValidFen(retryRow.starting_fen as string);
+      if (fenValid) {
+        const setupPrelude = normalizeSetupPrelude({
+          fen: normalized.fen,
+          previousFen: normalized.previousFen,
+          playedMove: normalized.playedMove,
+        });
+
+        if (setupPrelude) {
+          const tags = normalizeThemeTags(retryRow.theme_tags);
+          const challengeElo = getOpponentElo(DEFAULT_BLINDSPOTS_ELO);
+          const retryResponse: NextPositionResponse = {
+            mistakeId: normalized.id,
+            fen: normalized.fen,
+            decisionFen: normalized.decisionFen ?? undefined,
+            previousFen: setupPrelude.previousFen,
+            playedMove: setupPrelude.playedMove,
+            actualMoveUci: normalized.actualMoveUci ?? undefined,
+            actualMoveSan: normalized.actualMoveSan ?? undefined,
+            bestMoveUci: normalized.bestMoveUci ?? undefined,
+            bestMoveSan: normalized.bestMoveSan ?? undefined,
+            source: normalized.source,
+            queueSource: "retry",
+            selectedServeMode: "retry",
+            tags,
+            openingName: (retryRow.opening_name as string) ?? undefined,
+            eco: (retryRow.eco as string) ?? undefined,
+            cpLoss: (retryRow.cp_loss as number) ?? undefined,
+            sequenceLength: 4,
+            challengeElo,
+          };
+          return NextResponse.json(retryResponse);
+        }
+      }
+    }
+    // Fall through to normal queue selection silently
+  }
 
   // Fetch base columns (always exist post-20260425121000 migration)
   const { data: profile, error: baseError } = await supabase

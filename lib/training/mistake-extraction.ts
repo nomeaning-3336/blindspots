@@ -23,7 +23,8 @@ import type { MineableMove, MineableMoveInput } from "./mistake-mining.ts";
  * 2. Inferred: for i > 0, we infer the opponent's move between
  *    fenAfterUserMove[i-1] and decisionFen[i] via inferLegalMoveBetweenFens.
  *
- * Missing preludes are counted but never block mining.
+ * Missing preludes block app-training mistake mining.
+ * Active app-training mistakes must always be replayable and serveable.
  */
 export function extractMineableMistakesFromSequence(
   positionEvaluations: MineableMoveInput[],
@@ -84,6 +85,10 @@ export function extractMineableMistakesFromSequence(
           }
         }
       }
+    }
+
+    if (!setupPreviousFen || !setupPlayedMoveUci) {
+      continue;
     }
 
     result.push({

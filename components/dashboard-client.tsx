@@ -721,7 +721,7 @@ function QueuePositionRow({
         {/* Actions */}
         <div className="mt-5 flex flex-wrap gap-4">
           <Link
-            href={`/train?mistakeId=${encodeURIComponent(position.id)}&mode=play`}
+            href={`/train?mistakeId=${encodeURIComponent(position.id)}`}
             className="app-brutal-button inline-flex min-h-12 min-w-0 items-center justify-center px-6 py-3 text-sm"
           >
             {position.attempts > 0 ? "Retry" : "Start"}
