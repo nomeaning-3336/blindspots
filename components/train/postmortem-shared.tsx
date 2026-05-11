@@ -191,7 +191,16 @@ export function BoardWithEvalBar({
   const bottomPct = bottomSide === "white" ? whitePct : blackPct;
 
   return (
-    <div className="relative w-full overflow-visible pl-9">
+    <div
+      className="relative w-full overflow-visible pl-9"
+      data-testid="eval-bar"
+      data-white-pct={whitePct}
+      data-black-pct={blackPct}
+      data-decisive-side={decisiveSide ?? "neutral"}
+      data-eval-label={typeof displayEvalCp === "number" || typeof displayEvalMate === "number"
+        ? formatPostmortemEvalLabel(displayEvalCp, displayEvalMate)
+        : isLoading ? "..." : "--"}
+    >
       <div className="pointer-events-none absolute left-0 top-0 h-full w-6 shrink-0">
         <div className="relative h-full overflow-hidden rounded-[4px] border border-[var(--app-border-soft)] bg-black">
           <div

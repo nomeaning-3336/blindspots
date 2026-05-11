@@ -50,6 +50,7 @@ import {
 import {
   formatPostmortemEvalLabel,
   getPostmortemTerminalDisplay,
+  whitePositiveCpFromSideToMove,
   whitePositiveMateCp,
 } from "@/lib/training/postmortem-terminal-display";
 import {
@@ -1132,6 +1133,65 @@ export default function TrainPage(props: TrainPageProps) {
   const mistakeIdParam = searchParams?.get("mistakeId");
   const modeParam = searchParams?.get("mode"); // "play" | "postmortem"
 
+  // ── Dev-only debug FEN injection ──────────────────────────────────
+  const debugFen = searchParams?.get("debugFEN") ?? searchParams?.get("debugFen");
+  const debugMode = searchParams?.get("debugMode") ?? "postmortem";
+  const debugPreludeMove = searchParams?.get("preludeMove");
+  const debugPreviousFen = searchParams?.get("debugPreviousFEN") ?? searchParams?.get("debugPreviousFen");
+
+  function loadDebugFenPosition() {
+    if (process.env.NODE_ENV === "production" || !debugFen) return false;
+
+    // Force onboarding to done for debug mode
+    if (onboardingScreen !== "done") setOnboardingScreen("done");
+
+    let previousFen: string | null = debugPreviousFen ?? null;
+    let finalFen = debugFen;
+
+    // If only debugFEN and preludeMove provided, apply the move to get the final position
+    if (!debugPreviousFen && debugPreludeMove) {
+      try {
+        const chess = new Chess(debugFen);
+        const m = chess.move({
+          from: debugPreludeMove.slice(0, 2),
+          to: debugPreludeMove.slice(2, 4),
+          promotion: debugPreludeMove.length > 4 ? (debugPreludeMove[4] as any) : undefined,
+        });
+        if (m) {
+          previousFen = debugFen;
+          finalFen = chess.fen();
+        }
+      } catch { /* invalid move — skip prelude */ }
+    }
+
+    setStartingFen(finalFen);
+    setDisplayStartingFen(previousFen ?? finalFen);
+    setFen(previousFen ?? finalFen);
+    setMoves([]);
+    setLastMove(null);
+    setInitialOpponentMove(null);
+    initialOpponentMoveRef.current = null;
+    setActiveSetupReplayIndex(0);
+    setState(debugMode === "play" ? "active" : "complete");
+    if (debugMode === "postmortem") setResultMode("explore");
+    setIsPositionLoading(false);
+    setIsAwaitingStartGesture(false);
+    setPendingInitialEngineMove(null);
+    setHasLoadedPosition(true);
+    setIsOpponentThinking(false);
+
+    if (previousFen && debugPreludeMove) {
+      initialPreludeRef.current = {
+        previousFen,
+        playedMove: debugPreludeMove,
+      };
+    }
+
+    return true;
+  }
+
+  // ── Exact-position loading ───────────────────────────────────────
+
   async function loadSpecificPosition(mistakeId: string, mode: string) {
     setIsPositionLoading(true);
     setPositionLoadError(null);
@@ -1167,7 +1227,8 @@ export default function TrainPage(props: TrainPageProps) {
 
   useEffect(() => {
     if (!onboardingScreen) return;
-    if (onboardingScreen === "loading") return;
+    if (onboardingScreen !== "done" && !debugFen) return;
+    if (loadDebugFenPosition()) return;
     if (mistakeIdParam && !trainOnboardingIntroActive) {
       void loadSpecificPosition(mistakeIdParam, modeParam ?? "play");
     }
@@ -2752,7 +2813,10 @@ export default function TrainPage(props: TrainPageProps) {
     () => getPostmortemTerminalDisplay(boardFen),
     [boardFen],
   );
-  const currentEngineEval = currentEngineLines[0]?.cp ?? terminalBoardDisplay.evalCp ?? undefined;
+  const currentEngineEval = whitePositiveCpFromSideToMove(
+    boardFen,
+    currentEngineLines[0]?.cp ?? terminalBoardDisplay.evalCp ?? undefined,
+  );
   const currentEngineMate = currentEngineLines[0]?.mate ?? terminalBoardDisplay.evalMate ?? null;
   const currentEngineMateCp = whitePositiveMateCp(boardFen, currentEngineMate, currentEngineEval);
   const boardFrameClassName = [
@@ -3556,18 +3620,18 @@ function OnboardingPreferencesModal({
       className="absolute inset-0 z-50 flex items-center justify-center"
       style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(2px)" }}
     >
-      <div className="app-brutal-card relative mx-4 max-w-3xl border-2 p-8" role="dialog" aria-modal="true" aria-label="Training preferences">
+      <div className="app-brutal-card relative mx-4 w-[min(calc(100vw-2rem),64rem)] border-2 p-8" role="dialog" aria-modal="true" aria-label="Training preferences">
         <h2 className="mb-2 text-2xl font-bold leading-tight text-[var(--app-text)]">
           Your starting preferences.
         </h2>
         <p className="mb-6 text-sm leading-7 text-[var(--app-muted)]">
-          And let&apos;s finish things by setting up your training rhythm. You can change these later from Account.
+          And let&apos;s finish things by setting up your training rhythm. You can change these later from the <strong>Account</strong> page.
         </p>
 
         {/* Daily target */}
         <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Daily target</h3>
         <p className="mb-3 text-xs text-[var(--app-muted)]">How many positions do you want to complete per day?</p>
-        <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {DAILY_TARGET_OPTIONS.map((opt) => {
             const selected = selectedDailyTarget === opt.level;
             return (
@@ -3576,13 +3640,15 @@ function OnboardingPreferencesModal({
                 type="button"
                 onClick={() => onDailyTargetChange(opt.level)}
                 className={[
-                  "rounded-lg border p-3 text-left transition",
+                  "min-h-[92px] rounded-lg border p-4 text-left transition",
                   selected ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] ring-1 ring-[var(--app-accent)]" : "border-[var(--app-border)] hover:border-[var(--app-border-strong)]",
                 ].join(" ")}
               >
-                <span className="whitespace-nowrap text-sm font-bold text-[var(--app-text)]">
-                  {opt.label}
-                  {(opt as any).recommended && <span className="text-xs font-medium text-[var(--app-muted)]"> (Recommended)</span>}
+                <span className="flex min-w-0 items-baseline gap-1 text-sm font-bold text-[var(--app-text)]">
+                  <span>{opt.label}</span>
+                  {(opt as any).recommended ? (
+                    <span className="whitespace-nowrap text-xs font-medium text-[var(--app-muted)]">(Recommended)</span>
+                  ) : null}
                 </span>
                 <div className="mt-0.5 text-xs text-[var(--app-muted)]">{opt.positions} positions/day</div>
               </button>
@@ -3593,7 +3659,7 @@ function OnboardingPreferencesModal({
         {/* Mistake sensitivity */}
         <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Mistake sensitivity</h3>
         <p className="mb-3 text-xs text-[var(--app-muted)]">How costly should a move be before it enters your New queue?</p>
-        <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {MISTAKE_CAPTURE_THRESHOLD_OPTIONS.map((opt) => {
             const selected = selectedThreshold === opt.level;
             return (
@@ -3602,13 +3668,15 @@ function OnboardingPreferencesModal({
                 type="button"
                 onClick={() => onThresholdChange(opt.level)}
                 className={[
-                  "rounded-lg border p-3 text-left transition",
+                  "min-h-[92px] rounded-lg border p-4 text-left transition",
                   selected ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] ring-1 ring-[var(--app-accent)]" : "border-[var(--app-border)] hover:border-[var(--app-border-strong)]",
                 ].join(" ")}
               >
-                <span className="whitespace-nowrap text-sm font-bold text-[var(--app-text)]">
-                  {opt.label}
-                  {(opt as any).recommended && <span className="text-xs font-medium text-[var(--app-muted)]"> (Recommended)</span>}
+                <span className="flex min-w-0 items-baseline gap-1 text-sm font-bold text-[var(--app-text)]">
+                  <span>{opt.label}</span>
+                  {(opt as any).recommended ? (
+                    <span className="whitespace-nowrap text-xs font-medium text-[var(--app-muted)]">(Recommended)</span>
+                  ) : null}
                 </span>
                 <div className="mt-0.5 text-xs text-[var(--app-muted)]">&gt;{opt.cp}cp loss</div>
               </button>
