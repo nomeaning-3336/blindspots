@@ -123,7 +123,7 @@ const POSTMORTEM_TOUR_STEPS = [
     target: "postmortem-actions",
     headline: "Keep playing, or call it a day.",
     body: "The next position might be sampled from a random position to see how you play, or one of your already played positions that you didn't perform very well so you can try to fix your past mistake. Or you can go back to the main dashboard.",
-    cta: "Finish onboarding",
+    cta: "Set preferences",
   },
 ] as const satisfies readonly PostmortemTourStep[];
 
@@ -315,6 +315,7 @@ import {
   type TrainSoundMove,
   type PlayTrainSoundOptions,
 } from "@/lib/train-audio";
+import { DAILY_TARGET_OPTIONS, MISTAKE_CAPTURE_THRESHOLD_OPTIONS } from "@/lib/training/training-preferences";
 
 const postmortemActionTextClassName = "text-center text-sm font-bold uppercase leading-none tracking-[0.1em]";
 const primaryActionClassName =
@@ -610,6 +611,10 @@ export default function TrainPage(props: TrainPageProps) {
   const [postmortemOnboardingStep, setPostmortemOnboardingStep] = useState(0);
   const [postmortemOnboardingFinished, setPostmortemOnboardingFinished] = useState(false);
   const [onboardingCompletionInFlight, setOnboardingCompletionInFlight] = useState(false);
+  const [showOnboardingPreferencesModal, setShowOnboardingPreferencesModal] = useState(false);
+  const [selectedDailyTargetLevel, setSelectedDailyTargetLevel] = useState<string>("balanced");
+  const [selectedMistakeThresholdLevel, setSelectedMistakeThresholdLevel] = useState<string>("balanced");
+  const [isSavingOnboardingPreferences, setIsSavingOnboardingPreferences] = useState(false);
 
   useEffect(() => {
     engineLineCacheRef.current = engineLineCache;
@@ -2169,9 +2174,36 @@ export default function TrainPage(props: TrainPageProps) {
 
   function completeTrainingOnboarding() {
     if (onboardingCompletionInFlight) return;
-    setOnboardingCompletionInFlight(true);
+    // Show preferences modal after spotlights instead of completing immediately
+    setShowOnboardingPreferencesModal(true);
     setPostmortemOnboardingFinished(true);
     setPostmortemOnboardingActive(false);
+  }
+
+  async function finishOnboardingWithPreferences() {
+    setIsSavingOnboardingPreferences(true);
+    const dailyTarget = DAILY_TARGET_OPTIONS.find((o) => o.level === selectedDailyTargetLevel) ?? DAILY_TARGET_OPTIONS[1];
+    const threshold = MISTAKE_CAPTURE_THRESHOLD_OPTIONS.find((o) => o.level === selectedMistakeThresholdLevel) ?? MISTAKE_CAPTURE_THRESHOLD_OPTIONS[1];
+
+    try {
+      await fetch("/api/train/preferences", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dailyTargetLevel: dailyTarget.level,
+          dailyTargetPositions: dailyTarget.positions,
+          mistakeCaptureThresholdLevel: threshold.level,
+          mistakeCaptureThresholdCp: threshold.cp,
+        }),
+      });
+    } catch { /* continue even if prefs save fails */ }
+
+    setShowOnboardingPreferencesModal(false);
+    setIsSavingOnboardingPreferences(false);
+
+    // Now actually complete onboarding
+    if (onboardingCompletionInFlight) return;
+    setOnboardingCompletionInFlight(true);
     fetch("/api/onboarding/complete", { method: "POST", headers: { "Content-Type": "application/json" } })
       .then((response) => {
         if (!response.ok) throw new Error(`Onboarding completion failed with ${response.status}`);
@@ -3489,6 +3521,112 @@ export default function TrainPage(props: TrainPageProps) {
           onMissingTarget={handleMissingPostmortemTourTarget}
         />
       ) : null}
+
+      {showOnboardingPreferencesModal ? (
+        <OnboardingPreferencesModal
+          selectedDailyTarget={selectedDailyTargetLevel}
+          selectedThreshold={selectedMistakeThresholdLevel}
+          isSaving={isSavingOnboardingPreferences}
+          onDailyTargetChange={setSelectedDailyTargetLevel}
+          onThresholdChange={setSelectedMistakeThresholdLevel}
+          onFinish={finishOnboardingWithPreferences}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function OnboardingPreferencesModal({
+  selectedDailyTarget,
+  selectedThreshold,
+  isSaving,
+  onDailyTargetChange,
+  onThresholdChange,
+  onFinish,
+}: {
+  selectedDailyTarget: string;
+  selectedThreshold: string;
+  isSaving: boolean;
+  onDailyTargetChange: (level: string) => void;
+  onThresholdChange: (level: string) => void;
+  onFinish: () => void;
+}) {
+  return (
+    <div
+      className="absolute inset-0 z-50 flex items-center justify-center"
+      style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(2px)" }}
+    >
+      <div className="app-brutal-card relative mx-4 max-w-3xl border-2 p-8" role="dialog" aria-modal="true" aria-label="Training preferences">
+        <h2 className="mb-2 text-2xl font-bold leading-tight text-[var(--app-text)]">
+          Your starting preferences.
+        </h2>
+        <p className="mb-6 text-sm leading-7 text-[var(--app-muted)]">
+          And let&apos;s finish things by setting up your training rhythm. You can change these later from Account.
+        </p>
+
+        {/* Daily target */}
+        <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Daily target</h3>
+        <p className="mb-3 text-xs text-[var(--app-muted)]">How many positions do you want to complete per day?</p>
+        <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {DAILY_TARGET_OPTIONS.map((opt) => {
+            const selected = selectedDailyTarget === opt.level;
+            return (
+              <button
+                key={opt.level}
+                type="button"
+                onClick={() => onDailyTargetChange(opt.level)}
+                className={[
+                  "rounded-lg border p-3 text-left transition",
+                  selected ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] ring-1 ring-[var(--app-accent)]" : "border-[var(--app-border)] hover:border-[var(--app-border-strong)]",
+                ].join(" ")}
+              >
+                <span className="whitespace-nowrap text-sm font-bold text-[var(--app-text)]">
+                  {opt.label}
+                  {(opt as any).recommended && <span className="text-xs font-medium text-[var(--app-muted)]"> (Recommended)</span>}
+                </span>
+                <div className="mt-0.5 text-xs text-[var(--app-muted)]">{opt.positions} positions/day</div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Mistake sensitivity */}
+        <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Mistake sensitivity</h3>
+        <p className="mb-3 text-xs text-[var(--app-muted)]">How costly should a move be before it enters your New queue?</p>
+        <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {MISTAKE_CAPTURE_THRESHOLD_OPTIONS.map((opt) => {
+            const selected = selectedThreshold === opt.level;
+            return (
+              <button
+                key={opt.level}
+                type="button"
+                onClick={() => onThresholdChange(opt.level)}
+                className={[
+                  "rounded-lg border p-3 text-left transition",
+                  selected ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] ring-1 ring-[var(--app-accent)]" : "border-[var(--app-border)] hover:border-[var(--app-border-strong)]",
+                ].join(" ")}
+              >
+                <span className="whitespace-nowrap text-sm font-bold text-[var(--app-text)]">
+                  {opt.label}
+                  {(opt as any).recommended && <span className="text-xs font-medium text-[var(--app-muted)]"> (Recommended)</span>}
+                </span>
+                <div className="mt-0.5 text-xs text-[var(--app-muted)]">&gt;{opt.cp}cp loss</div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onFinish}
+            disabled={isSaving}
+            className="app-brutal-button inline-flex min-h-11 items-center justify-center px-6 py-2.5 text-sm"
+          >
+            {isSaving ? "Saving..." : "Finish"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
