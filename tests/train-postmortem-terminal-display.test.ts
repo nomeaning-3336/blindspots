@@ -41,11 +41,11 @@ test("mate eval labels preserve mate distance while stepping through postmortem"
   assert.equal(formatPostmortemEvalLabel(-600, -2), "M2");
 });
 
-test("mate bar score normalizes stockfish mate sign to white perspective", () => {
+test("mate bar score treats input as white-positive and clamps to ±TERMINAL_MATE_CP", () => {
   const afterG5CheckFen = "8/2p2Q1p/6pk/2b1N1P1/8/5NKP/2q2r2/8 b - - 0 43";
 
-  assert.equal(whitePositiveMateCp(afterG5CheckFen, -1), 600);
-  assert.equal(whitePositiveMateCp(afterG5CheckFen, 1), -600);
+  assert.equal(whitePositiveMateCp(afterG5CheckFen, 1), 600);
+  assert.equal(whitePositiveMateCp(afterG5CheckFen, -1), -600);
   assert.equal(whitePositiveMateCp(new Chess().fen(), 1), 600);
   assert.equal(whitePositiveMateCp(new Chess().fen(), -1), -600);
 });

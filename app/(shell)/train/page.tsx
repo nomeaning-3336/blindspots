@@ -5,11 +5,12 @@ import TrainPage from "./train-client";
 export default async function TrainPageWrapper({
   searchParams,
 }: {
-  searchParams: Promise<{ onboarding?: string; debugFEN?: string; debugFen?: string }>;
+  searchParams: Promise<{ onboarding?: string; debugFEN?: string; debugFen?: string; mistakeId?: string }>;
 }) {
   const params = await searchParams;
   const forceOnboarding = params?.onboarding === "1";
   const isDebugRequest = Boolean(params?.debugFEN ?? params?.debugFen);
+  const initialMistakeId = typeof params?.mistakeId === "string" ? params.mistakeId : undefined;
 
   // Allow unauthenticated debug access in dev
   if (isDebugRequest && process.env.NODE_ENV !== "production") {
@@ -18,6 +19,7 @@ export default async function TrainPageWrapper({
       <TrainPage
         initialOnboarding={false}
         forceOnboarding={false}
+        initialMistakeId={initialMistakeId}
       />
     );
   }
@@ -29,6 +31,7 @@ export default async function TrainPageWrapper({
     <TrainPage
       initialOnboarding={initialOnboarding}
       forceOnboarding={forceOnboarding}
+      initialMistakeId={initialMistakeId}
     />
   );
 }

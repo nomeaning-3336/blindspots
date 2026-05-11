@@ -155,7 +155,14 @@ function uciToSan(fen: string, uci: string) {
 }
 
 function pvToSan(fen: string, pv: string[]) {
-  const chess = new Chess(fen);
+  let chess: Chess;
+
+  try {
+    chess = new Chess(fen);
+  } catch {
+    return [];
+  }
+
   const san: string[] = [];
 
   for (const uci of pv.slice(0, TRAIN_ENGINE_PV_MOVES_SHOWN)) {

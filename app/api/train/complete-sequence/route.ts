@@ -28,6 +28,11 @@ const DEFAULT_SEQUENCE_LENGTH = 4;
 const MIN_SEQUENCE_LENGTH = 1;
 const MAX_SEQUENCE_LENGTH = 9;
 const COMPLETE_SEQUENCE_MISSING_EVAL_TIME_LIMIT_MS = 500;
+const MAX_CP_DELTA = 600;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
 
 type SequenceMove = {
   san?: unknown;
@@ -94,6 +99,8 @@ type SequenceEvaluationResult = {
   }>;
   totalCpLoss: number;
   positionEvaluations: PositionEvaluation[];
+  averageCpDelta: number | null;
+  worstCpDelta: number | null;
 };
 
 const MATE_VISUAL_CP = 10000;
@@ -213,6 +220,8 @@ export async function POST(request: Request) {
     evalPreservationScore,
     totalCpLoss: sequenceEvaluation.totalCpLoss,
     opponentElo: challengeElo ?? undefined,
+    averageCpDelta: sequenceEvaluation.averageCpDelta,
+    worstCpDelta: sequenceEvaluation.worstCpDelta,
   });
 
   const fallbackOpponentElo = challengeElo ?? eloUpdate?.opponentElo ?? getOpponentElo(profile.blindspots_elo);
@@ -265,6 +274,17 @@ export async function POST(request: Request) {
   // Fire-and-forget mining of app-native active mistakes — never blocks response.
   const initialPreviousFen = typeof payload?.previousFen === "string" ? payload.previousFen : null;
   const initialPlayedMove = typeof payload?.playedMove === "string" ? payload.playedMove : null;
+
+  if (process.env.NODE_ENV !== "production" && (!initialPreviousFen || !initialPlayedMove)) {
+    console.warn("[complete-sequence] missing served-position prelude in completion payload", {
+      hasPreviousFen: Boolean(initialPreviousFen),
+      hasPlayedMove: Boolean(initialPlayedMove),
+      startingFen,
+      selectedMistakeId,
+      queueSource,
+    });
+  }
+
   const minedMistakesInput: MineableMoveInput[] = sequenceEvaluation.positionEvaluations.map((pe, index) => ({
     decisionFen: pe.decisionFen,
     uci: pe.userMove.uci,
@@ -509,6 +529,7 @@ async function calculateSequenceEvaluation({
   const userColor = chess.turn();
   let userMoveCount = 0;
   let totalCpLoss = 0;
+  const cappedCpDeltas: number[] = [];
   const moveScores: Array<{
     userMoveIndex: number;
     cpLoss: number;
@@ -546,6 +567,7 @@ async function calculateSequenceEvaluation({
         totalCpLoss += precomputedEntry.moveScore.cpLoss;
         moveScores.push(precomputedEntry.moveScore);
         positionEvaluations.push(precomputedEntry.positionEvaluation);
+        cappedCpDeltas.push(clamp(precomputedEntry.moveScore.evalBefore - precomputedEntry.moveScore.evalAfter, -MAX_CP_DELTA, MAX_CP_DELTA));
         userMoveCount += 1;
         continue;
       }
@@ -565,6 +587,7 @@ async function calculateSequenceEvaluation({
           mateAfter: 0,
           classification,
         });
+        cappedCpDeltas.push(clamp(evalBeforeCp - mateCpForWinningSide(userColor), -MAX_CP_DELTA, MAX_CP_DELTA));
         const checkmatePhase = selectedPhase ?? classifyTrainingPhase(fenAfterMove);
         positionEvaluations.push({
           index: userMoveCount,
@@ -600,6 +623,7 @@ async function calculateSequenceEvaluation({
       });
       const afterUserEval = userColor === "w" ? evalAfter.cp : -evalAfter.cp;
       const cpLoss = Math.max(0, Math.round(evalBeforeCp - afterUserEval));
+      cappedCpDeltas.push(clamp(Math.round(evalBeforeCp - afterUserEval), -MAX_CP_DELTA, MAX_CP_DELTA));
       totalCpLoss += cpLoss;
       const classification = classifyCpLoss(cpLoss);
       const mateBeforeVal = evalBefore?.mate ?? null;
@@ -648,14 +672,25 @@ async function calculateSequenceEvaluation({
   }
 
   const anyCheckmateDelivered = moveScores.some((s) => s.mateAfter === 0 && s.mateBefore != null);
+  const gated = userMoveCount < 2 && !anyCheckmateDelivered;
   return {
     evalPreservationScore:
-      userMoveCount < 2 && !anyCheckmateDelivered
+      gated
         ? null
         : Math.max(0, Math.min(1, 1 - totalCpLoss / (Math.max(1, userMoveCount) * 100))),
     moveScores,
     totalCpLoss,
     positionEvaluations,
+    averageCpDelta: gated
+      ? null
+      : cappedCpDeltas.length > 0
+        ? cappedCpDeltas.reduce((a, b) => a + b, 0) / cappedCpDeltas.length
+        : 0,
+    worstCpDelta: gated
+      ? null
+      : cappedCpDeltas.length > 0
+        ? Math.max(...cappedCpDeltas)
+        : 0,
   };
 }
 
@@ -718,6 +753,8 @@ function buildPrecomputedSequenceEvaluation({
 
   const totalCpLoss = moveScores.reduce((sum, score) => sum + score.cpLoss, 0);
 
+  const cappedCpDeltasPrecomputed = moveScores.map((ms) => clamp(ms.evalBefore - ms.evalAfter, -MAX_CP_DELTA, MAX_CP_DELTA));
+
   return {
     evalPreservationScore:
       expectedUserMoveCount < 2
@@ -726,6 +763,16 @@ function buildPrecomputedSequenceEvaluation({
     moveScores,
     totalCpLoss,
     positionEvaluations,
+    averageCpDelta: expectedUserMoveCount < 2
+      ? null
+      : cappedCpDeltasPrecomputed.length > 0
+        ? cappedCpDeltasPrecomputed.reduce((a, b) => a + b, 0) / cappedCpDeltasPrecomputed.length
+        : 0,
+    worstCpDelta: expectedUserMoveCount < 2
+      ? null
+      : cappedCpDeltasPrecomputed.length > 0
+        ? Math.max(...cappedCpDeltasPrecomputed)
+        : 0,
   };
 }
 

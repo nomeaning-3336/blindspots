@@ -48,6 +48,8 @@ export interface EloUpdateInput {
   evalPreservationScore: number | null;
   totalCpLoss?: number;
   opponentElo?: number;
+  averageCpDelta?: number | null;
+  worstCpDelta?: number | null;
 }
 
 export interface EloUpdateResult {
@@ -108,17 +110,31 @@ export function calculateExpectedScore(userElo: number, opponentElo: number) {
   return 1 / (1 + Math.pow(10, (opponentElo - userElo) / 400));
 }
 
-function getEloDeltaClamp(totalSequences: number, scoreDelta: number) {
+function getEloDeltaClamp(totalSequences: number, scoreDelta: number, isOutlier: boolean) {
+  const OUTLIER_MULTIPLIER = 2.4;
+
+  let range: { min: number; max: number };
+
   if (totalSequences <= 3) {
-    return scoreDelta >= 0
+    range = scoreDelta >= 0
       ? { min: -220, max: 320 }
       : { min: -220, max: 180 };
+  } else if (totalSequences <= 8) {
+    range = { min: -160, max: 180 };
+  } else if (totalSequences <= 20) {
+    range = { min: -90, max: 90 };
+  } else {
+    range = { min: -35, max: 35 };
   }
 
-  if (totalSequences <= 8) return { min: -160, max: 180 };
-  if (totalSequences <= 20) return { min: -90, max: 90 };
+  if (isOutlier) {
+    range = {
+      min: Math.round(range.min * OUTLIER_MULTIPLIER),
+      max: Math.round(range.max * OUTLIER_MULTIPLIER),
+    };
+  }
 
-  return { min: -35, max: 35 };
+  return range;
 }
 
 export function calculateEloUpdate(input: EloUpdateInput): EloUpdateResult | null {
@@ -131,11 +147,21 @@ export function calculateEloUpdate(input: EloUpdateInput): EloUpdateResult | nul
     ? Math.max(0, Math.round(input.opponentElo!))
     : getOpponentElo(eloBefore);
   const expectedScore = calculateExpectedScore(eloBefore, opponentElo);
-  const actualScore = clamp(input.evalPreservationScore, 0, 1);
+
+  let actualScore: number;
+  if (typeof input.averageCpDelta === "number" && typeof input.worstCpDelta === "number") {
+    const averageScoreComponent = 1 - input.averageCpDelta / 100;
+    const worstMoveComponent = 1 - input.worstCpDelta / 350;
+    actualScore = clamp(0.75 * averageScoreComponent + 0.25 * worstMoveComponent, -0.75, 1.35);
+  } else {
+    actualScore = clamp(input.evalPreservationScore, 0, 1);
+  }
+
   const scoreDelta = actualScore - expectedScore;
   const rawDelta = Math.round(kFactor * scoreDelta);
 
-  const clampRange = getEloDeltaClamp(input.totalSequences, scoreDelta);
+  const isOutlier = actualScore < -0.25 || actualScore > 1.15;
+  const clampRange = getEloDeltaClamp(input.totalSequences, scoreDelta, isOutlier);
   const clampedDelta = clamp(rawDelta, clampRange.min, clampRange.max);
   const eloDelta = Math.round(clampedDelta);
   const eloAfter = Math.max(0, eloBefore + eloDelta);
