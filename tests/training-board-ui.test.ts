@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
 
@@ -227,6 +228,29 @@ test("moveBadgeForPosition omits unclassified and starting positions", () => {
 
 test("active training board has no hard-coded square highlight", () => {
   assert.equal(getTrainingBoardHighlights("active"), undefined);
+});
+
+test("active training board keeps the restored viewport height cap", () => {
+  const trainClientSource = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+
+  assert.match(
+    trainClientSource,
+    /\? "w-\[min\(82vw,calc\(100dvh-12\.5rem\),800px\)\]"/,
+  );
+  assert.doesNotMatch(trainClientSource, /calc\(100dvh-16\.5rem\)/);
+});
+
+test("postmortem panel uses responsive height budget variables", () => {
+  const trainClientSource = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const postmortemSharedSource = readFileSync("components/train/postmortem-shared.tsx", "utf8");
+
+  assert.match(trainClientSource, /var\(--pm-gap\)/);
+  assert.match(trainClientSource, /var\(--pm-card-pad\)/);
+  assert.match(trainClientSource, /var\(--pm-graph-h\)/);
+  assert.match(trainClientSource, /var\(--pm-move-row-h\)/);
+  assert.match(trainClientSource, /var\(--pm-actions-h\)/);
+  assert.match(trainClientSource, /var\(--pm-tab-h\)/);
+  assert.match(postmortemSharedSource, /var\(--pm-engine-row-h\)/);
 });
 
 test("drift training board keeps the drift square highlight", () => {

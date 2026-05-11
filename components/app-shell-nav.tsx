@@ -86,7 +86,7 @@ function AppShellLink({
 function AppShellSignOutButton() {
   return (
     <AuthSignOutButton
-      className="inline-flex min-h-9 items-center justify-center rounded border border-[var(--app-border)] bg-transparent px-4 py-2 text-[10px] font-bold uppercase text-[var(--app-text)] transition"
+      className="inline-flex min-h-9 items-center justify-center rounded border border-[var(--app-border)] bg-transparent px-4 py-2 text-xs font-bold uppercase text-[var(--app-text)] transition"
     />
   );
 }
