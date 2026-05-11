@@ -865,9 +865,11 @@ function EloChart({ points }: { points: EloHistoryPoint[] }) {
   const area = [`${px},${height - py}`, line, `${svgPoints[svgPoints.length - 1].x},${height - py}`].join(" ");
 
   const guideCount = 3;
-  const guides = Array.from({ length: guideCount }, (_, i) =>
-    Math.round(maxElo - (range * i) / (guideCount - 1)),
-  );
+  const guides = Array.from(new Set(
+    Array.from({ length: guideCount }, (_, i) =>
+      Math.round(maxElo - (range * i) / (guideCount - 1)),
+    ),
+  ));
 
   const startLabel = formatShortDate(points[0].ts);
   const endLabel = formatShortDate(points[points.length - 1].ts);
@@ -881,10 +883,10 @@ function EloChart({ points }: { points: EloHistoryPoint[] }) {
         aria-label="Elo progression over time"
         preserveAspectRatio="none"
       >
-        {guides.map((g) => {
+        {guides.map((g, i) => {
           const gy = py + ((maxElo - g) / range) * vSpace;
           return (
-            <line key={g} x1={px} y1={gy} x2={width - px} y2={gy} stroke="var(--app-border-soft)" strokeWidth="1" />
+            <line key={`grid-${i}-${g}`} x1={px} y1={gy} x2={width - px} y2={gy} stroke="var(--app-border-soft)" strokeWidth="1" />
           );
         })}
         <polyline points={area} fill="var(--app-accent-soft)" stroke="none" />

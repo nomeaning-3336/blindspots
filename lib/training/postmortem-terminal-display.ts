@@ -68,6 +68,16 @@ export function getEvalBarFill(cp?: number | null, mate?: number | null, mateCp?
   };
 }
 
+export function whitePositiveCpFromSideToMove(fen: string, cp?: number | null) {
+  if (typeof cp !== "number" || !Number.isFinite(cp)) return undefined;
+  try {
+    const chess = new Chess(fen);
+    return chess.turn() === "w" ? cp : -cp;
+  } catch {
+    return cp;
+  }
+}
+
 export function whitePositiveMateCp(fen: string, mate?: number | null, cp?: number | null) {
   if (typeof mate !== "number") return null;
 

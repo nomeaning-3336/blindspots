@@ -647,11 +647,12 @@ async function calculateSequenceEvaluation({
     }
   }
 
+  const anyCheckmateDelivered = moveScores.some((s) => s.mateAfter === 0 && s.mateBefore != null);
   return {
     evalPreservationScore:
-      userMoveCount < 2
+      userMoveCount < 2 && !anyCheckmateDelivered
         ? null
-        : Math.max(0, Math.min(1, 1 - totalCpLoss / (userMoveCount * 100))),
+        : Math.max(0, Math.min(1, 1 - totalCpLoss / (Math.max(1, userMoveCount) * 100))),
     moveScores,
     totalCpLoss,
     positionEvaluations,
