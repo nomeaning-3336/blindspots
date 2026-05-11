@@ -61,13 +61,13 @@ export function EngineLinesSection({
   const displayRows: Array<EngineLineResult | null> = Array.from({ length: 5 }, (_, index) => lines[index] ?? null);
 
   return (
-    <section className="grid gap-2" aria-live="polite">
+    <section className="grid gap-[var(--pm-gap)]" aria-live="polite">
       <div className="flex items-center gap-3">
         <h2 className="text-[13px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted-soft)] min-[1500px]:text-sm">
           Engine lines
         </h2>
       </div>
-      <div className={["grid gap-1.5", isLoading ? "opacity-60" : ""].join(" ")}>
+      <div className={["grid gap-[calc(var(--pm-gap)*0.7)]", isLoading ? "opacity-60" : ""].join(" ")}>
         {displayRows.map((line, index) => {
           if (!line) {
             const shouldShowEmptyMessage = index === 0 && lines.length === 0 && !isLoading;
@@ -76,7 +76,7 @@ export function EngineLinesSection({
                 key={`engine-placeholder-${index}`}
                 aria-hidden="true"
                 className={[
-                  "min-h-10 rounded-none border border-dashed border-[var(--app-border-soft)] bg-transparent",
+                  "h-[var(--pm-engine-row-h)] rounded-none border border-dashed border-[var(--app-border-soft)] bg-transparent",
                   shouldShowEmptyMessage
                     ? "flex items-center px-3 text-sm font-bold text-[var(--app-muted-soft)] opacity-100"
                     : "opacity-45",
@@ -100,7 +100,7 @@ export function EngineLinesSection({
           return (
             <div
               key={`${line.rank}-${line.bestMove}-${index}`}
-              className="relative min-h-10 cursor-pointer overflow-hidden rounded-none border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] py-2 pl-3 pr-3 transition-colors duration-100"
+              className="relative h-[var(--pm-engine-row-h)] cursor-pointer overflow-hidden rounded-none border border-[var(--app-border-soft)] py-1 pl-3 pr-3 transition-colors duration-100"
               style={{
                 borderLeftColor: lineColor,
                 borderLeftWidth: 3,
@@ -112,7 +112,7 @@ export function EngineLinesSection({
               onPointerLeave={() => onHoverLine?.(null)}
               onClick={() => onSelectLine?.({ from: line.bestMove.slice(0, 2), to: line.bestMove.slice(2, 4) })}
             >
-              <div className="grid grid-cols-[26px_auto_auto_auto_minmax(0,1fr)_auto_auto] items-center gap-2.5">
+              <div className="grid h-full grid-cols-[26px_auto_auto_auto_minmax(0,1fr)_auto_auto] items-center gap-2.5">
                 <span className="text-right text-sm font-black leading-none text-[var(--app-text)]">
                   #{index + 1}
                 </span>

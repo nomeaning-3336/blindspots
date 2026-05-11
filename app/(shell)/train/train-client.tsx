@@ -2824,7 +2824,7 @@ export default function TrainPage(props: TrainPageProps) {
     isExploringResults
       ? "w-[min(88vw,calc(100dvh-10.25rem),836px)]"
       : state === "active" && !trainOnboardingIntroActive
-        ? "w-[min(82vw,calc(100dvh-16.5rem),800px)]"
+        ? "w-[min(82vw,calc(100dvh-12.5rem),800px)]"
         : "w-[min(82vw,calc(100dvh-12.5rem),800px)]",
   ].join(" ");
   const isEngineLinesLoading = Boolean(
@@ -3483,12 +3483,11 @@ export default function TrainPage(props: TrainPageProps) {
           <aside
             data-testid="train-move-panel"
             className={[
-              "app-brutal-section flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden",
-              resultMode === "results" ? "p-2 sm:p-3" : "p-2 sm:p-3",
+              "app-brutal-section flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden p-[var(--pm-card-pad)]",
             ].join(" ")}
           >
             {/* ── Compact toggle: Analysis | Notes ──────────────────────── */}
-            <div className="inline-flex w-full shrink-0 justify-center gap-1">
+            <div className="inline-flex h-[var(--pm-tab-h)] w-full shrink-0 justify-center gap-1">
               {(["analysis", "memory"] as const).map((item) => {
                 const active = postmortemSidePanel === item;
                 return (
@@ -3496,7 +3495,7 @@ export default function TrainPage(props: TrainPageProps) {
                     key={item}
                     type="button"
                     className={[
-                      "inline-flex items-center border px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] transition min-[1500px]:text-sm",
+                      "inline-flex h-full items-center border px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] transition min-[1500px]:text-sm",
                       active
                         ? "relative z-10 border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
                         : "cursor-pointer border-[var(--app-border)] bg-transparent text-[var(--app-muted)] hover:border-[var(--app-accent)] hover:text-[var(--app-text)]",
@@ -3511,7 +3510,7 @@ export default function TrainPage(props: TrainPageProps) {
             </div>
 
             {/* ── Panel content ───────────────────────────────────────────── */}
-            <div className="train-postmortem-panel flex min-h-0 flex-1 flex-col gap-2 pr-1">
+            <div className="train-postmortem-panel flex min-h-0 flex-1 flex-col gap-[var(--pm-gap)] pr-1">
               {postmortemSidePanel === "analysis" ? (
                 <ResultsPanel
                 hideDelta={isOnboardingFirstPostmortem}
@@ -3559,15 +3558,15 @@ export default function TrainPage(props: TrainPageProps) {
             </div>
 
             {/* ── Action buttons visible below both tabs ────────────────── */}
-            <div data-tour="postmortem-actions" className="grid shrink-0 grid-cols-2 gap-2 border-t border-[var(--app-border-soft)] bg-[var(--app-panel-solid)] pt-2">
+            <div data-tour="postmortem-actions" className="grid h-[var(--pm-actions-h)] shrink-0 grid-cols-2 gap-2 border-t border-[var(--app-border-soft)] bg-[var(--app-panel-solid)] pb-2 pt-2">
               <button
                 type="button"
-                className={`${primaryActionClassName} w-full`}
+                className={`${primaryActionClassName} h-full min-h-0 w-full`}
                 onClick={() => switchState("active")}
               >
                 Next position
               </button>
-              <a href="/" className={`${secondaryActionClassName} w-full`}>
+              <a href="/" className={`${secondaryActionClassName} h-full min-h-0 w-full`}>
                 Return to Dashboard
               </a>
             </div>
@@ -5038,25 +5037,25 @@ function EloResultCard({ result, isLoading, hideDelta, subtext }: { result: EloR
   const signedDelta = result.eloDelta > 0 ? `+${result.eloDelta}` : String(result.eloDelta);
 
   return (
-    <div data-tour="elo-card" className="rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-3.5">
+    <div data-tour="elo-card" className="rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-[var(--pm-card-pad)]">
       <div className="flex items-center">
         <div className="flex flex-wrap items-center gap-2">
           {hideDelta ? (
             <>
-              <span className="text-3xl font-bold text-[var(--app-text)] min-[1500px]:text-4xl">{result.eloAfter}</span>
+              <span className="text-2xl font-bold text-[var(--app-text)] min-[1500px]:text-3xl">{result.eloAfter}</span>
             </>
           ) : (
             <>
-              <span className="text-lg font-bold text-[var(--app-muted-soft)] min-[1500px]:text-xl">{result.eloBefore}</span>
+              <span className="text-base font-bold text-[var(--app-muted-soft)] min-[1500px]:text-lg">{result.eloBefore}</span>
               <span className="text-base font-bold text-[var(--app-muted-soft)] min-[1500px]:text-lg">→</span>
-              <span className="text-3xl font-bold text-[var(--app-text)] min-[1500px]:text-4xl">{result.eloAfter}</span>
-              <span className={`text-lg font-bold min-[1500px]:text-xl ${deltaTone}`}>{signedDelta}</span>
+              <span className="text-2xl font-bold text-[var(--app-text)] min-[1500px]:text-3xl">{result.eloAfter}</span>
+              <span className={`text-base font-bold min-[1500px]:text-lg ${deltaTone}`}>{signedDelta}</span>
             </>
           )}
         </div>
       </div>
       {subtext ? (
-        <div className="mt-1.5 text-sm font-bold text-[var(--app-muted-soft)]">{subtext}</div>
+        <div className="mt-1 text-sm font-bold text-[var(--app-muted-soft)]">{subtext}</div>
       ) : null}
     </div>
   );
@@ -5163,7 +5162,7 @@ function ResultsPanel({
 
   if (mode === "explore") {
     return (
-      <div className="flex min-h-0 flex-1 flex-col gap-2 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
+      <div className="flex min-h-0 flex-1 flex-col gap-[var(--pm-gap)] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
         <EloResultCard result={eloResult} isLoading={isSaving} hideDelta={hideDelta} subtext={subtext} />
         <EvalGraph
           points={graphPoints}
@@ -5208,7 +5207,7 @@ function ResultsPanel({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 opacity-80 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
+    <div className="flex min-h-0 flex-1 flex-col gap-[var(--pm-gap)] opacity-80 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
       <EloResultCard result={eloResult} isLoading={isSaving} hideDelta={hideDelta} subtext={subtext} />
       <EvalGraph points={graphPoints} currentIndex={positions.length - 1} compact engineCp={currentEngineEval} />
       <AnalysisMoveTable moves={userMoves} canonicalMoves={canonicalMoves} isAnalyzing={isSaving} compact showEvaluations={true} asyncMoveEvaluations={asyncMoveEvaluations} />
@@ -5251,14 +5250,14 @@ function EvalGraph({
   });
 
   return (
-    <div className="grid shrink-0 gap-1.5">
+    <div className="grid shrink-0 gap-[var(--pm-gap)]">
       {children ? (
-        <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-2">
+        <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-[var(--pm-card-pad)]">
           {children}
         </div>
       ) : null}
       <div data-tour="eval-graph" className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)]">
-        <div className={compact ? "h-28 min-[1500px]:h-32" : "h-32 min-[1500px]:h-40"}>
+        <div className={compact ? "h-[var(--pm-graph-h)]" : "h-32 min-[1500px]:h-40"}>
           {points.length >= 2 ? (
             <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" role="img" aria-label="Sequence eval graph">
               {[padding, height / 2, height - padding].map((lineY) => (
@@ -5366,9 +5365,15 @@ function AnalysisMoveTable({
   asyncMoveEvaluations?: Record<number, { status: "pending" | "done" | "error"; moveScore?: MoveScore; positionEvaluation?: unknown }>;
   isManualPostmortemExploration?: boolean;
 }) {
+  const rowCount = Math.max(1, moves.length);
+
   return (
-    <div data-tour="move-table" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[8px] border border-[var(--app-border-soft)]">
-      <div className="grid min-h-8 grid-cols-[minmax(0,1.1fr)_66px_66px_76px] items-center border-b border-[var(--app-border-soft)] px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted-soft)] min-[1500px]:grid-cols-[minmax(0,1.1fr)_76px_76px_88px] min-[1500px]:text-xs">
+    <div
+      data-tour="move-table"
+      className="flex shrink-0 flex-col overflow-hidden rounded-[8px] border border-[var(--app-border-soft)]"
+      style={{ height: `calc(2rem + ${rowCount} * var(--pm-move-row-h))` }}
+    >
+      <div className="grid h-8 shrink-0 grid-cols-[minmax(0,1.1fr)_66px_66px_76px] items-center border-b border-[var(--app-border-soft)] px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted-soft)] min-[1500px]:grid-cols-[minmax(0,1.1fr)_76px_76px_88px] min-[1500px]:text-xs">
         <span>Move</span>
         <span className="text-left">Before</span>
         <span className="text-left">After</span>
@@ -5405,7 +5410,7 @@ function AnalysisMoveTable({
           key={`${move.uci}-${index}`}
           className={[
             "grid w-full grid-cols-[minmax(0,1.1fr)_66px_66px_76px] items-center border-b border-[var(--app-border-soft)] px-3 text-left last:border-b-0 min-[1500px]:grid-cols-[minmax(0,1.1fr)_76px_76px_88px]",
-            compact ? "min-h-10 text-sm min-[1500px]:text-base" : "min-h-10 text-sm",
+            compact ? "h-[var(--pm-move-row-h)] text-sm min-[1500px]:text-base" : "min-h-10 text-sm",
             onSelectPosition ? "cursor-pointer transition" : "cursor-default",
             isCurrentPosition || isSelected ? "bg-[var(--app-highlight-soft)]" : "",
           ].join(" ")}
