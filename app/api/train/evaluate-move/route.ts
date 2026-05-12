@@ -4,6 +4,7 @@ import { getOptionalAppUserId } from "@/lib/app-auth";
 import { getPositionEval, getLegalMoveLines } from "@/lib/engines/dispatcher";
 import {
   classifyMoveAgainstBest,
+  classifyRankedMove,
   type MoveClassification,
 } from "@/lib/move-classification";
 import { classifyTrainingBucket, classifyTrainingPhase } from "@/lib/training/position-metadata";
@@ -27,6 +28,22 @@ type EvaluateMovePayload = {
 function comparableEval(line: { cp: number }, fen: string) {
   const cp = Math.max(-100000, Math.min(100000, Number(line.cp) || 0));
   return fen.split(/\s+/)[1] === "b" ? -cp : cp;
+}
+
+const CLASSIFICATION_BY_SEVERITY: Record<MoveClassification, number> = {
+  brilliant: 0, critical: 0, best: 0, excellent: 1, good: 2, okay: 3, inaccuracy: 4, mistake: 5, blunder: 6,
+};
+
+function classifyByCpLoss(cpLoss: number): MoveClassification {
+  if (cpLoss <= 25) return "good";
+  if (cpLoss <= 70) return "okay";
+  if (cpLoss <= 150) return "inaccuracy";
+  if (cpLoss <= 300) return "mistake";
+  return "blunder";
+}
+
+function worseClassification(a: MoveClassification, b: MoveClassification): MoveClassification {
+  return (CLASSIFICATION_BY_SEVERITY[b] ?? 0) > (CLASSIFICATION_BY_SEVERITY[a] ?? 0) ? b : a;
 }
 
 function getBanditResult(classification: MoveClassification): "success" | "neutral" | "failure" {
@@ -179,10 +196,17 @@ export async function POST(request: Request) {
       const displayEvalAfter = Math.round(Number(candidateLine.cp) || 0);
       const cpLoss = Math.max(0, Math.round(comparableEvalBefore - comparableEvalAfter));
 
+      const winChanceClassification =
+        candidateLine.bestMove === bestLine.bestMove
+          ? (classifyRankedMove(0, legalLines, decisionFen) ?? "best")
+          : (classifyMoveAgainstBest(bestLine, candidateLine, decisionFen) ?? "good");
+
+      const cpLossClassification = classifyByCpLoss(cpLoss);
+
       const classification =
         candidateLine.bestMove === bestLine.bestMove
-          ? "best"
-          : (classifyMoveAgainstBest(bestLine, candidateLine, decisionFen) ?? "good");
+          ? winChanceClassification
+          : worseClassification(winChanceClassification, cpLossClassification);
 
       return NextResponse.json({
         ok: true,
