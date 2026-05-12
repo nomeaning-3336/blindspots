@@ -35,10 +35,10 @@ export default function BlogPage() {
       <main className="app-scroll min-h-0 flex-1 overflow-y-auto overflow-x-clip">
         <section className="mx-auto w-full max-w-5xl px-6 py-12 md:px-10 md:py-16">
           <div className="max-w-3xl">
-                        <h1 className="mt-4 text-[clamp(2.5rem,5vw,4.75rem)] font-black leading-[0.95] tracking-[-0.04em] text-[var(--app-text)]">
-              Chess training notes for the mistakes that keep coming back.
+            <h1 className="mt-4 text-[clamp(2.5rem,5vw,4.75rem)] font-black leading-[0.95] tracking-[-0.04em] text-[var(--app-text)]">
+              Another chess improvement blog™.
             </h1>
-                      </div>
+          </div>
 
           <div className="mt-12 grid gap-5">
             {blogPosts.map((post) => (
