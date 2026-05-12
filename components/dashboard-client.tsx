@@ -414,6 +414,7 @@ function QueueOverviewSection({
 }) {
   const [selectedBucket, setSelectedBucket] = useState<QueueBucket | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(() => new Set());
 
   // Single global ticker for all countdowns
   useEffect(() => {
@@ -421,21 +422,22 @@ function QueueOverviewSection({
     return () => window.clearInterval(id);
   }, []);
 
-  // Bucket counts from filtered personal positions only
+  // Bucket counts from filtered personal positions, excluding locally-deleted ids
   const bucketCounts = useMemo(() => {
     const counts: Record<QueueBucket, number> = { dueNow: 0, new: 0, learning: 0, mastered: 0, retired: 0 };
     for (const p of positions) {
+      if (deletedIds.has(p.id)) continue;
       const bucket = queueBucketForPosition(p, nowMs);
       if (bucket) counts[bucket]++;
     }
     return counts;
-  }, [positions, nowMs]);
+  }, [positions, nowMs, deletedIds]);
 
-  // Filtered positions for selected bucket
+  // Filtered positions for selected bucket, excluding locally-deleted ids
   const filteredPositions = useMemo(() => {
     if (!selectedBucket) return [];
-    return positions.filter((p) => queueBucketForPosition(p, nowMs) === selectedBucket);
-  }, [positions, selectedBucket, nowMs]);
+    return positions.filter((p) => !deletedIds.has(p.id) && queueBucketForPosition(p, nowMs) === selectedBucket);
+  }, [positions, selectedBucket, nowMs, deletedIds]);
 
   const toggleBucket = (bucket: QueueBucket) => {
     setSelectedBucket((prev) => (prev === bucket ? null : bucket));
@@ -512,7 +514,18 @@ function QueueOverviewSection({
           ) : (
             <div className="grid gap-2">
               {filteredPositions.map((pos) => (
-                <QueuePositionRow key={pos.id} position={pos} nowMs={nowMs} />
+                <QueuePositionRow
+                  key={pos.id}
+                  position={pos}
+                  nowMs={nowMs}
+                  onDelete={(id) =>
+                    setDeletedIds((prev) => {
+                      const next = new Set(prev);
+                      next.add(id);
+                      return next;
+                    })
+                  }
+                />
               ))}
             </div>
           )}
@@ -566,6 +579,48 @@ function buildNoteMovePreview(
   } catch {
     return null;
   }
+}
+
+function parseMoveInputForFen(fen: string, input: string): { uci: string; san: string } | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  // Try SAN first
+  try {
+    const chess = new Chess(fen);
+    const move = chess.move(trimmed);
+    if (move) {
+      return {
+        uci: move.from + move.to + (move.promotion ?? ""),
+        san: move.san,
+      };
+    }
+  } catch {
+    // SAN parse failed — fall through to UCI
+  }
+
+  // Try UCI (4 or 5 chars: from(2) + to(2) + optional promotion(1))
+  if (trimmed.length === 4 || trimmed.length === 5) {
+    const lower = trimmed.toLowerCase();
+    try {
+      const chess = new Chess(fen);
+      const move = chess.move({
+        from: lower.slice(0, 2),
+        to: lower.slice(2, 4),
+        promotion: trimmed.length === 5 ? lower[4] : undefined,
+      });
+      if (move) {
+        return {
+          uci: lower,
+          san: move.san,
+        };
+      }
+    } catch {
+      // UCI parse failed
+    }
+  }
+
+  return null;
 }
 
 function classificationBadgeFor(classification: string | null | undefined) {
@@ -625,20 +680,51 @@ function formatEvalCp(cp: number | null | undefined) {
 function QueuePositionRow({
   position,
   nowMs,
+  onDelete,
 }: {
   position: DashboardPosition;
   nowMs: number;
+  onDelete: (id: string) => void;
 }) {
   const [noteMovePreview, setNoteMovePreview] = useState<ThumbnailMovePreview | null>(null);
   const noteHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const NOTE_HOVER_DELAY_MS = 100;
+  const [notes, setNotes] = useState(position.moveNotes);
+  const [editingMoveKey, setEditingMoveKey] = useState<string | null>(null);
+  const [editingNoteText, setEditingNoteText] = useState<string>("");
+  const [savingNote, setSavingNote] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [newMoveInput, setNewMoveInput] = useState("");
+  const [newNoteText, setNewNoteText] = useState("");
+  const [addError, setAddError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isDeleted, setIsDeleted] = useState(false);
+  const [deletionStage, setDeletionStage] = useState<"idle" | "success" | "collapsing">("idle");
   const [modalOpen, setModalOpen] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
 
-  if (isDeleted) return null;
+  if (deletionStage === "success" || deletionStage === "collapsing") {
+    const collapsing = deletionStage === "collapsing";
+    return (
+      <div
+        className={[
+          "overflow-hidden transition-[max-height,opacity] duration-300 ease-out",
+          collapsing ? "max-h-0 opacity-0" : "max-h-24 opacity-100",
+        ].join(" ")}
+        role="status"
+        aria-live="polite"
+      >
+        <div className="flex items-center justify-center gap-3 rounded-lg border border-[color-mix(in_srgb,var(--app-class-good)_40%,transparent)] bg-[var(--app-panel-solid)] p-5 text-[var(--app-class-good)]">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M5 10 L9 14 L15 6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span className="text-sm font-black uppercase tracking-[0.14em]">
+            Position successfully deleted
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   const DELETE_SKIP_KEY = "blindspots:skipDeleteConfirmation";
 
@@ -687,12 +773,131 @@ function QueuePositionRow({
       if (!res.ok) {
         throw new Error(`Delete failed: ${res.status}`);
       }
-      setIsDeleted(true);
+      setDeletionStage("success");
+      window.setTimeout(() => setDeletionStage("collapsing"), 1200);
+      window.setTimeout(() => onDelete(position.id), 1500);
     } catch (err) {
       console.error("[dashboard] failed to delete position", err);
       window.alert("Could not delete this position. Try again.");
     } finally {
       setIsDeleting(false);
+    }
+  }
+
+  function startEditNote(moveKey: string, currentText: string) {
+    setAdding(false);
+    setAddError(null);
+    setEditingMoveKey(moveKey);
+    setEditingNoteText(currentText);
+  }
+
+  function cancelEditNote() {
+    setEditingMoveKey(null);
+    setEditingNoteText("");
+  }
+
+  async function saveEditedNote() {
+    if (!editingMoveKey || savingNote) return;
+    const target = notes.find((n) => n.moveKey === editingMoveKey);
+    if (!target) return;
+
+    setSavingNote(true);
+    try {
+      const res = await fetch("/api/dashboard/notes/upsert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          decisionFen: position.startingFen,
+          moveUci: target.moveUci,
+          noteText: editingNoteText,
+        }),
+      });
+      if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+      const savedText = editingNoteText;
+      setNotes((prev) =>
+        prev.map((n) => (n.moveKey === editingMoveKey ? { ...n, note: savedText } : n)),
+      );
+      cancelEditNote();
+    } catch (err) {
+      console.error("[dashboard] failed to save note edit", err);
+      window.alert("Could not save the note. Try again.");
+    } finally {
+      setSavingNote(false);
+    }
+  }
+
+  function openAddComposer() {
+    cancelEditNote();
+    setAdding(true);
+    setNewMoveInput("");
+    setNewNoteText("");
+    setAddError(null);
+  }
+
+  function closeAddComposer() {
+    setAdding(false);
+    setNewMoveInput("");
+    setNewNoteText("");
+    setAddError(null);
+  }
+
+  async function saveNewNote() {
+    if (savingNote) return;
+    setAddError(null);
+
+    const parsed = parseMoveInputForFen(position.startingFen, newMoveInput);
+    if (!parsed) {
+      setAddError("Invalid move. Use SAN (e.g. Nxg3) or UCI (e.g. g4g3).");
+      return;
+    }
+    if (!newNoteText.trim()) {
+      setAddError("Note text is required.");
+      return;
+    }
+
+    setSavingNote(true);
+    try {
+      const res = await fetch("/api/dashboard/notes/upsert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          decisionFen: position.startingFen,
+          moveUci: parsed.uci,
+          noteText: newNoteText,
+        }),
+      });
+      if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+      const body = (await res.json().catch(() => null)) as { moveKey?: string } | null;
+      const moveKey = body?.moveKey ?? "";
+
+      setNotes((prev) => {
+        const existingIdx = prev.findIndex((n) => n.moveKey === moveKey);
+        if (existingIdx >= 0) {
+          const next = [...prev];
+          next[existingIdx] = { ...next[existingIdx], note: newNoteText };
+          return next;
+        }
+        return [
+          {
+            moveKey,
+            moveUci: parsed.uci,
+            moveSan: parsed.san,
+            classification: null,
+            evalBeforeCp: null,
+            evalAfterCp: null,
+            note: newNoteText,
+            moverColor: null,
+          } as (typeof prev)[number],
+          ...prev,
+        ];
+      });
+
+      closeAddComposer();
+    } catch (err) {
+      console.error("[dashboard] failed to save new note", err);
+      setAddError("Save failed. Try again.");
+    } finally {
+      setSavingNote(false);
     }
   }
 
@@ -828,15 +1033,76 @@ function QueuePositionRow({
 
       {/* Notes column */}
       <div className="min-w-0 py-2">
-        <h3 className="text-xl font-black leading-tight tracking-[-0.03em] text-[var(--app-text)]">
-          Notes
-        </h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-xl font-black leading-tight tracking-[-0.03em] text-[var(--app-text)]">
+            Notes
+          </h3>
+          <button
+            type="button"
+            onClick={() => (adding ? closeAddComposer() : openAddComposer())}
+            aria-label={adding ? "Close add-note form" : "Add note"}
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-panel-solid)] text-[var(--app-muted)] transition-colors hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:border-[var(--app-accent)] focus-visible:text-[var(--app-accent)] focus-visible:outline-none"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+              {adding ? (
+                <path d="M2 2 L12 12 M12 2 L2 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              ) : (
+                <path d="M7 2 L7 12 M2 7 L12 7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              )}
+            </svg>
+          </button>
+        </div>
 
-        {position.moveNotes.length === 0 ? (
+        {adding && (
+          <div className="mt-3 grid gap-2 rounded-md border border-[var(--app-accent)] bg-[var(--app-panel-deep)] p-3">
+            <label className="grid gap-1 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
+              Move
+              <input
+                type="text"
+                value={newMoveInput}
+                onChange={(e) => setNewMoveInput(e.target.value)}
+                placeholder="e.g. Nxg3 or g4g3"
+                className="rounded border border-[var(--app-border)] bg-[var(--app-panel-solid)] px-2 py-1.5 text-sm font-normal normal-case tracking-normal text-[var(--app-text)] focus-visible:border-[var(--app-accent)] focus-visible:outline-none"
+              />
+            </label>
+            <label className="grid gap-1 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
+              Note
+              <textarea
+                value={newNoteText}
+                onChange={(e) => setNewNoteText(e.target.value)}
+                rows={3}
+                className="rounded border border-[var(--app-border)] bg-[var(--app-panel-solid)] px-2 py-1.5 text-sm font-normal normal-case tracking-normal leading-5 text-[var(--app-text)] focus-visible:border-[var(--app-accent)] focus-visible:outline-none"
+              />
+            </label>
+            {addError && (
+              <div className="text-xs text-[var(--app-class-blunder)]">{addError}</div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeAddComposer}
+                disabled={savingNote}
+                className="app-brutal-button-secondary inline-flex min-h-9 items-center justify-center px-3 py-1.5 text-xs disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveNewNote}
+                disabled={savingNote}
+                className="inline-flex min-h-9 items-center justify-center rounded-lg border border-[var(--app-brutal-edge)] bg-[var(--app-class-good)] px-3 py-1.5 text-xs font-black uppercase tracking-[0.06em] text-[#050505] shadow-[2px_2px_0_var(--app-brutal-shadow)] transition-transform hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_var(--app-brutal-shadow)] disabled:opacity-60"
+              >
+                {savingNote ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {notes.length === 0 ? (
           <div className="mt-2 text-sm text-[var(--app-muted)]">N/A</div>
         ) : (
           <div className="mt-3 grid gap-2">
-            {position.moveNotes.map((note) => {
+            {notes.map((note) => {
               const evalDeltaCp =
                 note.evalBeforeCp != null && note.evalAfterCp != null
                   ? note.evalAfterCp - note.evalBeforeCp
@@ -870,8 +1136,23 @@ function QueuePositionRow({
                     if (noteHoverTimerRef.current) clearTimeout(noteHoverTimerRef.current);
                     setNoteMovePreview(null);
                   }}
-                  className="grid gap-1 border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-3 py-2 transition-colors hover:border-[var(--app-accent)] focus-visible:border-[var(--app-accent)] focus-visible:outline-none"
+                  className="relative grid gap-1 border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-3 py-2 pr-9 transition-colors hover:border-[var(--app-accent)] focus-visible:border-[var(--app-accent)] focus-visible:outline-none"
                 >
+                  {editingMoveKey !== note.moveKey && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startEditNote(note.moveKey, note.note);
+                      }}
+                      aria-label="Edit note"
+                      className="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded text-[var(--app-muted)] transition-colors hover:text-[var(--app-accent)] focus-visible:text-[var(--app-accent)] focus-visible:outline-none"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true">
+                        <path d="M9 2 L12 5 L5 12 L2 12 L2 9 Z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  )}
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-sans text-sm font-semibold text-[var(--app-text)]">
                       {note.moveSan || note.moveUci}
@@ -900,9 +1181,41 @@ function QueuePositionRow({
                     </div>
                   )}
 
-                  <p className="font-sans text-sm leading-5 text-[var(--app-text)]">
-                    {note.note}
-                  </p>
+                  {editingMoveKey === note.moveKey ? (
+                    <>
+                      <textarea
+                        value={editingNoteText}
+                        onChange={(e) => setEditingNoteText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") {
+                            e.preventDefault();
+                            cancelEditNote();
+                          }
+                        }}
+                        rows={3}
+                        autoFocus
+                        className="font-sans text-sm leading-5 text-[var(--app-text)] rounded border border-[var(--app-accent)] bg-[var(--app-panel-solid)] px-2 py-1.5 focus-visible:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void saveEditedNote();
+                        }}
+                        disabled={savingNote}
+                        aria-label="Save note"
+                        className="absolute right-2 bottom-2 z-10 flex h-6 w-6 items-center justify-center rounded bg-[var(--app-class-good)] text-[#050505] shadow-[2px_2px_0_var(--app-brutal-shadow)] transition-transform hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_var(--app-brutal-shadow)] focus-visible:outline-none disabled:opacity-60"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true">
+                          <path d="M3 7 L6 10 L11 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                    </>
+                  ) : (
+                    <p className="font-sans text-sm leading-5 text-[var(--app-text)]">
+                      {note.note}
+                    </p>
+                  )}
                 </div>
               );
             })}

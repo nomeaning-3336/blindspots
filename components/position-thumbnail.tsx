@@ -53,9 +53,10 @@ export function PositionThumbnail({
 
 const PIECE_GLIDE_MS = 240;
 const NOTE_BADGE_REVEAL_MS = 160;
-const NOTE_HOVER_START_DELAY_MS = 200;
-const BETWEEN_SEQUENCE_DELAY_MS = 180;
-const HOVER_PREVIEW_DELAY_MS = 200;
+const NOTE_HOVER_START_DELAY_MS = 50;
+const BETWEEN_SEQUENCE_DELAY_MS = 260;
+const STAGE_SETTLE_MS = 32;
+const HOVER_PREVIEW_DELAY_MS = 50;
 
 export function ReplayThumbnail({
   previousFen,
@@ -111,6 +112,74 @@ export function ReplayThumbnail({
     return sequenceIdRef.current === id;
   }
 
+  function isCastlingMove(move: { from: string; to: string } | null | undefined) {
+    if (!move) return false;
+    return (
+      (move.from === "e1" && (move.to === "g1" || move.to === "c1")) ||
+      (move.from === "e8" && (move.to === "g8" || move.to === "c8"))
+    );
+  }
+
+  function playGlideStage({
+    id,
+    fromFen,
+    toFen,
+    move,
+    badge = null,
+    delay = 0,
+    keepLastMoveBeforeStart = false,
+    onDone,
+  }: {
+    id: number;
+    fromFen: string;
+    toFen: string;
+    move: { from: string; to: string } | null;
+    badge?: LastMoveBadge | null;
+    delay?: number;
+    keepLastMoveBeforeStart?: boolean;
+    onDone?: () => void;
+  }) {
+    schedule(() => {
+      if (!isCurrent(id)) return;
+
+      // Quietly stage the starting board without animating the reset/setup jump.
+      // For hover-out reverse replay, keep the last-move highlight visible until
+      // the reverse animation fully completes.
+      setAnimating(false);
+      setShownFen(fromFen);
+      setPreviewLastMove(keepLastMoveBeforeStart ? move : null);
+      setPreviewBadge(null);
+
+      schedule(() => {
+        if (!isCurrent(id)) return;
+
+        // Highlight immediately when the move starts, Lichess-style.
+        setPreviewLastMove(move);
+        setPreviewBadge(null);
+
+        // Castling moves king + rook. The board glide currently infers one piece,
+        // so thumbnails should avoid the weird half-castle glide.
+        setAnimating(!isCastlingMove(move));
+
+        requestAnimationFrame(() => {
+          if (!isCurrent(id)) return;
+          setShownFen(toFen);
+        });
+
+        schedule(() => {
+          if (!isCurrent(id)) return;
+
+          setAnimating(false);
+          setShownFen(toFen);
+          setPreviewLastMove(move);
+          setPreviewBadge(badge);
+
+          onDone?.();
+        }, PIECE_GLIDE_MS);
+      }, STAGE_SETTLE_MS);
+    }, delay);
+  }
+
   // Note hover: two-stage animation (handles hover-in, hover-out, and idle reset)
   useEffect(() => {
     if (!movePreview) {
@@ -118,7 +187,6 @@ export function ReplayThumbnail({
       const preview = activePreviewRef.current;
 
       if (!preview) {
-        // No active preview — safe to reset to idle
         clearTimers();
         isHoveringRef.current = false;
         setAnimating(false);
@@ -130,131 +198,119 @@ export function ReplayThumbnail({
 
       const id = nextSequenceId();
 
-      setAnimating(true);
-      setPreviewLastMove(null);
-      setPreviewBadge(null);
+      const preludeBefore = previousFen ?? idleFen;
+      const preludeAfter = preview.fenBefore;
+      const needsPreludeReverse = Boolean(previousFen) && preludeBefore !== preludeAfter;
 
-      // Reverse stage 1: user note move backwards
-      setShownFen(preview.fenAfter);
+      // Reverse stage 1: undo the note move.
+      // Keep the note-move highlight visible until the reverse animation completes.
+      playGlideStage({
+        id,
+        fromFen: preview.fenAfter,
+        toFen: preview.fenBefore,
+        move: preview.move,
+        badge: null,
+        delay: 0,
+        keepLastMoveBeforeStart: true,
+        onDone: () => {
+          if (!isCurrent(id)) return;
 
-      requestAnimationFrame(() => {
-        if (!isCurrent(id)) return;
-        setShownFen(preview.fenBefore);
-      });
+          // The note move is now back on its original square.
+          // Remove the second move highlight before waiting for the first reverse stage.
+          setAnimating(false);
+          setShownFen(preview.fenBefore);
+          setPreviewLastMove(null);
+          setPreviewBadge(null);
 
-      schedule(() => {
-        if (!isCurrent(id)) return;
-
-        setPreviewLastMove(null);
-        setPreviewBadge(null);
-
-        // Reverse stage 2: prelude engine move backwards
-        const preludeBefore = previousFen ?? idleFen;
-        const preludeAfter = preview.fenBefore;
-        const needsPreludeReverse = Boolean(previousFen) && preludeBefore !== preludeAfter;
-
-        if (!needsPreludeReverse) {
-          schedule(() => {
-            if (!isCurrent(id)) return;
-            setAnimating(false);
-            setShownFen(preludeBefore);
+          if (!needsPreludeReverse) {
             activePreviewRef.current = null;
-          }, 0);
-        } else {
-          setShownFen(preludeAfter);
+            return;
+          }
 
-          requestAnimationFrame(() => {
-            if (!isCurrent(id)) return;
-            setShownFen(preludeBefore);
+          // Reverse stage 2: undo the setup/prelude move.
+          // After the delay, highlight the prelude move immediately when its reverse starts.
+          playGlideStage({
+            id,
+            fromFen: preludeAfter,
+            toFen: preludeBefore,
+            move: moveCoords,
+            badge: null,
+            delay: BETWEEN_SEQUENCE_DELAY_MS,
+            keepLastMoveBeforeStart: true,
+            onDone: () => {
+              if (!isCurrent(id)) return;
+
+              // The prelude move is now back on its original square.
+              // Remove the first move highlight and return to idle.
+              setAnimating(false);
+              setShownFen(preludeBefore);
+              setPreviewLastMove(null);
+              setPreviewBadge(null);
+              activePreviewRef.current = null;
+            },
           });
-
-          schedule(() => {
-            if (!isCurrent(id)) return;
-            setAnimating(false);
-            setPreviewLastMove(null);
-            setPreviewBadge(null);
-            setShownFen(preludeBefore);
-            activePreviewRef.current = null;
-          }, PIECE_GLIDE_MS);
-        }
-      }, PIECE_GLIDE_MS + BETWEEN_SEQUENCE_DELAY_MS);
+        },
+      });
 
       return;
     }
 
-    // Hover in: two-stage animation
+    // Hover in
     activePreviewRef.current = movePreview;
     const id = nextSequenceId();
 
-    setAnimating(true);
-    setPreviewLastMove(null);
-    setPreviewBadge(null);
-
     const preludeBefore = previousFen ?? movePreview.fenBefore;
     const preludeAfter = finalFen;
-    const needsPreludeStage = preludeBefore !== preludeAfter && preludeAfter !== movePreview.fenBefore;
+    const needsPreludeStage =
+      preludeBefore !== preludeAfter &&
+      preludeAfter !== movePreview.fenBefore;
 
     if (!needsPreludeStage) {
-      // Single-stage: just animate the note move
-      setShownFen(movePreview.fenBefore);
-
-      schedule(() => {
-        if (!isCurrent(id)) return;
-
-        requestAnimationFrame(() => {
-          if (!isCurrent(id)) return;
-          setShownFen(movePreview.fenAfter);
-        });
-
-        schedule(() => {
-          if (!isCurrent(id)) return;
-          setPreviewLastMove(movePreview.move);
-          setPreviewBadge(movePreview.badge ?? null);
-        }, NOTE_BADGE_REVEAL_MS);
-      }, NOTE_HOVER_START_DELAY_MS);
+      // Single-stage note preview.
+      // Highlight appears immediately when the note move starts.
+      playGlideStage({
+        id,
+        fromFen: movePreview.fenBefore,
+        toFen: movePreview.fenAfter,
+        move: movePreview.move,
+        badge: movePreview.badge ?? null,
+        delay: NOTE_HOVER_START_DELAY_MS,
+      });
 
       return;
     }
 
-    // Two-stage: prelude engine move then note move
-    setShownFen(preludeBefore);
-
-    schedule(() => {
-      if (!isCurrent(id)) return;
-
-      // Stage 1: prelude engine move
-      requestAnimationFrame(() => {
-        if (!isCurrent(id)) return;
-        setShownFen(preludeAfter);
-      });
-
-      schedule(() => {
+    // Forward stage 1: setup/prelude move.
+    // Highlight appears immediately when the setup move starts.
+    playGlideStage({
+      id,
+      fromFen: preludeBefore,
+      toFen: preludeAfter,
+      move: moveCoords,
+      badge: null,
+      delay: NOTE_HOVER_START_DELAY_MS,
+      onDone: () => {
         if (!isCurrent(id)) return;
 
-        setPreviewLastMove(null);
-        setPreviewBadge(null);
-
-        // Stage 2: user note move
-        setShownFen(movePreview.fenBefore);
-
-        requestAnimationFrame(() => {
-          if (!isCurrent(id)) return;
-          setShownFen(movePreview.fenAfter);
+        // Keep first highlight during the pause.
+        // Stage 2 will replace it with the note-move highlight as the second animation starts.
+        playGlideStage({
+          id,
+          fromFen: movePreview.fenBefore,
+          toFen: movePreview.fenAfter,
+          move: movePreview.move,
+          badge: movePreview.badge ?? null,
+          delay: BETWEEN_SEQUENCE_DELAY_MS,
         });
-
-        schedule(() => {
-          if (!isCurrent(id)) return;
-          setPreviewLastMove(movePreview.move);
-          setPreviewBadge(movePreview.badge ?? null);
-        }, NOTE_BADGE_REVEAL_MS);
-      }, PIECE_GLIDE_MS + BETWEEN_SEQUENCE_DELAY_MS);
-    }, NOTE_HOVER_START_DELAY_MS);
-  }, [movePreview, previousFen, finalFen, idleFen]);
+      },
+    });
+  }, [movePreview, previousFen, finalFen, idleFen, moveCoords]);
 
   // Direct thumbnail hover
   function previewForward() {
     if (movePreview) return;
-    clearTimers();
+
+    const id = nextSequenceId();
     isHoveringRef.current = true;
 
     if (!canReplay || !previousFen || !moveCoords) {
@@ -265,24 +321,23 @@ export function ReplayThumbnail({
       return;
     }
 
-    setAnimating(true);
-    setShownFen(previousFen);
-    setPreviewLastMove(null);
-    setPreviewBadge(null);
-
-    schedule(() => {
-      requestAnimationFrame(() => {
-        setShownFen(finalFen);
-      });
-    }, HOVER_PREVIEW_DELAY_MS);
+    playGlideStage({
+      id,
+      fromFen: previousFen,
+      toFen: finalFen,
+      move: moveCoords,
+      badge: null,
+      delay: HOVER_PREVIEW_DELAY_MS,
+    });
   }
 
   function previewBackward() {
     if (movePreview) return;
-    clearTimers();
+
+    const id = nextSequenceId();
     isHoveringRef.current = false;
 
-    if (!canReplay || !previousFen) {
+    if (!canReplay || !previousFen || !moveCoords) {
       setShownFen(finalFen);
       setPreviewLastMove(null);
       setPreviewBadge(null);
@@ -290,18 +345,21 @@ export function ReplayThumbnail({
       return;
     }
 
-    setAnimating(true);
-    setShownFen(finalFen);
-    setPreviewLastMove(null);
-    setPreviewBadge(null);
-
-    requestAnimationFrame(() => {
-      setShownFen(previousFen);
-
-      schedule(() => {
+    playGlideStage({
+      id,
+      fromFen: finalFen,
+      toFen: previousFen,
+      move: moveCoords,
+      badge: null,
+      delay: 0,
+      keepLastMoveBeforeStart: true,
+      onDone: () => {
+        if (!isCurrent(id)) return;
         setAnimating(false);
         setShownFen(previousFen);
-      }, PIECE_GLIDE_MS);
+        setPreviewLastMove(null);
+        setPreviewBadge(null);
+      },
     });
   }
 
