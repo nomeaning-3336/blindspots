@@ -38,10 +38,7 @@ export default function BlogPage() {
                         <h1 className="mt-4 text-[clamp(2.5rem,5vw,4.75rem)] font-black leading-[0.95] tracking-[-0.04em] text-[var(--app-text)]">
               Chess training notes for the mistakes that keep coming back.
             </h1>
-            <p className="mt-6 max-w-2xl text-base leading-8 text-[var(--app-muted)]">
-              Just a place were you can read... things™
-            </p>
-          </div>
+                      </div>
 
           <div className="mt-12 grid gap-5">
             {blogPosts.map((post) => (
