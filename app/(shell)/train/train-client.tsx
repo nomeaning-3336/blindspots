@@ -595,6 +595,17 @@ export default function TrainPage(props: TrainPageProps) {
   const isPostMortemVisible = state === "complete" || state === "drift";
   const shouldAnimatePieces = state === "active" || isPostMortemVisible;
 
+  const [fenCopied, setFenCopied] = useState(false);
+  const fenCopyTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (fenCopyTimerRef.current) {
+        window.clearTimeout(fenCopyTimerRef.current);
+      }
+    };
+  }, []);
+
   const shouldRunPreplayOnboarding = initialOnboarding || forceOnboarding;
 
   const [fen, setFen] = useState<string>(
@@ -3377,19 +3388,17 @@ export default function TrainPage(props: TrainPageProps) {
           "mx-auto grid h-full min-h-0 w-full max-w-[100rem] min-w-0 gap-4 transition-opacity duration-200",
           isPostMortemVisible
             ? "lg:grid-cols-[minmax(0,1.22fr)_minmax(28rem,0.92fr)] lg:items-stretch"
-            : attemptRegistry.length > 0
-              ? "lg:grid-cols-[minmax(0,1.22fr)_minmax(20rem,0.5fr)] lg:items-stretch"
-              : "lg:grid-cols-1 lg:items-center lg:justify-items-center",
+            : "mx-auto grid w-fit max-w-[calc(100vw-32px)] grid-cols-1 gap-5 lg:grid-cols-[auto_320px] lg:items-center lg:justify-center lg:translate-x-[5vw]",
         ].join(" ")}
       >
         <section
           className={[
             "app-brutal-section relative flex min-h-0 min-w-0 items-center justify-center p-3 sm:p-4 lg:p-4",
             state === "active" && !trainOnboardingIntroActive ? "overflow-visible" : "overflow-hidden",
-            isPostMortemVisible ? "" : "lg:w-fit lg:justify-self-center",
+            isPostMortemVisible ? "" : "lg:w-fit",
           ].join(" ")}
         >
-          <div className="relative flex min-h-0 w-fit max-w-full min-w-0 flex-col items-stretch justify-center">
+          <div className="relative flex min-h-0 w-fit max-w-full min-w-0 flex-col items-stretch justify-center self-center">
             <div ref={boardContainerRef} className={boardFrameClassName}>
               {boardFen ? (
                 <>
@@ -3515,13 +3524,68 @@ export default function TrainPage(props: TrainPageProps) {
                 prev.map((e) => (e.id === id ? { ...e, note } : e)),
               );
             }}
-            showActions={state === "active" && !trainOnboardingIntroActive}
-            primaryActionClassName={primaryActionClassName}
-            secondaryActionClassName={secondaryActionClassName}
           />
         ) : null}
 
-        {isPostMortemVisible ? (
+        {!isPostMortemVisible ? (
+          <>
+            {(() => {
+              async function copyCurrentFen() {
+                const fenToCopy = boardFen;
+                if (!fenToCopy) return;
+                try {
+                  await navigator.clipboard.writeText(fenToCopy);
+                  setFenCopied(true);
+                  if (fenCopyTimerRef.current) {
+                    window.clearTimeout(fenCopyTimerRef.current);
+                  }
+                  fenCopyTimerRef.current = window.setTimeout(() => {
+                    setFenCopied(false);
+                  }, 1600);
+                } catch (err) {
+                  console.error("[train] failed to copy FEN", err);
+                  window.alert("Could not copy FEN. Try again.");
+                }
+              }
+
+              const copyFenButton = (
+                <button
+                  type="button"
+                  onClick={copyCurrentFen}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--app-text)] shadow-[3px_3px_0_var(--app-brutal-edge)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"
+                >
+                  <span>{fenCopied ? "Copied FEN" : "Copy FEN"}</span>
+                  <svg
+                    aria-hidden="true"
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="shrink-0"
+                  >
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                </button>
+              );
+
+              return (
+                <TrainingNotesRail
+                  notes={attemptRegistry}
+                  copyFenButton={copyFenButton}
+                  skipButton={<a href="/train" className={primaryActionClassName}>Next position</a>}
+                  dashboardButton={<a href="/" className={secondaryActionClassName}>Return to Dashboard</a>}
+                />
+              );
+            })()}
+          </>
+        ) : null}
+
+        {!isPostMortemVisible ? (
           <aside
             data-testid="train-move-panel"
             className={[
@@ -5710,15 +5774,9 @@ function moveFromUci(uci?: string) {
 function AttemptRegistryAside({
   entries,
   onNoteSaved,
-  showActions,
-  primaryActionClassName,
-  secondaryActionClassName,
 }: {
   entries: AttemptRegistryEntry[];
   onNoteSaved: (id: string, note: string) => void;
-  showActions: boolean;
-  primaryActionClassName: string;
-  secondaryActionClassName: string;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
@@ -5811,16 +5869,74 @@ function AttemptRegistryAside({
           </div>
         ))}
       </div>
-      {showActions ? (
-        <div className="mt-auto grid gap-3 border-t border-[var(--app-border-soft)] px-3 py-3">
-          <a href="/train" className={primaryActionClassName}>
-            Skip position
-          </a>
-          <a href="/" className={secondaryActionClassName}>
-            Return to Dashboard
-          </a>
+    </aside>
+  );
+}
+
+function TrainingNotesRail({
+  notes,
+  copyFenButton,
+  skipButton,
+  dashboardButton,
+}: {
+  notes: Array<{
+    moveSan?: string | null;
+    moveUci?: string | null;
+    note?: string | null;
+    noteText?: string | null;
+    classification?: string | null;
+  }>;
+  copyFenButton: ReactNode;
+  skipButton: ReactNode;
+  dashboardButton: ReactNode;
+}) {
+  return (
+    <aside className="flex min-h-[420px] w-full flex-col rounded-xl border border-[var(--app-border-soft)] bg-[var(--app-panel-solid)] p-4 shadow-[var(--app-shadow)] lg:min-h-[520px]">
+      <div>
+        <div className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[var(--app-muted)]">
+          Notes
         </div>
-      ) : null}
+
+        {notes.length === 0 ? (
+          <div className="rounded-lg border border-[var(--app-border-soft)] bg-[var(--app-panel-deep)] p-4 text-sm leading-6 text-[var(--app-muted)]">
+            No resurfaced notes for this position.
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            {notes.map((note, index) => {
+              const moveLabel = note.moveSan ?? note.moveUci ?? "Previous mistake";
+              const text = note.noteText ?? note.note ?? "";
+
+              return (
+                <div
+                  key={`${moveLabel}-${index}`}
+                  className="rounded-lg border border-[var(--app-border-soft)] bg-[var(--app-panel-deep)] p-4"
+                >
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="text-sm font-black text-[var(--app-text)]">
+                      {moveLabel}
+                    </div>
+                    {note.classification ? (
+                      <div className="rounded border border-[var(--app-border)] px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--app-muted)]">
+                        {note.classification}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="text-sm leading-6 text-[var(--app-muted)]">
+                    {text || "No note text."}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-auto grid gap-3 pt-4">
+        {copyFenButton}
+        {skipButton}
+        {dashboardButton}
+      </div>
     </aside>
   );
 }
