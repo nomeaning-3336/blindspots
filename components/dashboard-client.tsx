@@ -632,6 +632,38 @@ function QueuePositionRow({
   const [noteMovePreview, setNoteMovePreview] = useState<ThumbnailMovePreview | null>(null);
   const noteHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const NOTE_HOVER_DELAY_MS = 100;
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [isArchived, setIsArchived] = useState(false);
+
+  if (isArchived) return null;
+
+  async function archivePosition() {
+    if (isArchiving) return;
+
+    const confirmed = window.confirm("Archive this position from your training queue?");
+    if (!confirmed) return;
+
+    setIsArchiving(true);
+
+    try {
+      const res = await fetch(`/api/dashboard/mistakes/${encodeURIComponent(position.id)}/archive`, {
+        method: "POST",
+      });
+
+      if (!res.ok) {
+        throw new Error(`Archive failed: ${res.status}`);
+      }
+
+      setIsArchived(true);
+    } catch (err) {
+      console.error("[dashboard] failed to archive position", err);
+      window.alert("Could not archive this position. Try again.");
+    } finally {
+      setIsArchiving(false);
+    }
+  }
+
+  const showArchive = !position.id.startsWith("session:") && position.sourceType !== "training_session";
   const countdown = formatReviewCountdown(position.nextReviewAt, nowMs);
   const isOverdue = isDueNow(position, nowMs);
   const userOrientation = getFenTurnSide(position.startingFen);
@@ -732,6 +764,16 @@ function QueuePositionRow({
           >
             Analyze
           </Link>
+          {showArchive && (
+            <button
+              type="button"
+              disabled={isArchiving}
+              onClick={archivePosition}
+              className="app-brutal-button-secondary inline-flex min-h-12 min-w-0 items-center justify-center px-6 py-3 text-sm text-[var(--app-class-blunder)] disabled:opacity-60"
+            >
+              {isArchiving ? "Archiving..." : "Archive"}
+            </button>
+          )}
         </div>
       </div>
 
