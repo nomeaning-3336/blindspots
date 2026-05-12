@@ -3505,16 +3505,6 @@ export default function TrainPage(props: TrainPageProps) {
               )}
             </div>
           </div>
-          {state === "active" && !trainOnboardingIntroActive ? (
-            <div className="absolute bottom-0 left-[calc(100%+5px)] z-[80] hidden w-[250px] flex-col gap-[5px] xl:flex">
-              <a href="/train" className={primaryActionClassName}>
-                Skip position
-              </a>
-              <a href="/" className={secondaryActionClassName}>
-                Return to Dashboard
-              </a>
-            </div>
-          ) : null}
         </section>
 
         {!isPostMortemVisible && attemptRegistry.length > 0 ? (
@@ -3525,6 +3515,9 @@ export default function TrainPage(props: TrainPageProps) {
                 prev.map((e) => (e.id === id ? { ...e, note } : e)),
               );
             }}
+            showActions={state === "active" && !trainOnboardingIntroActive}
+            primaryActionClassName={primaryActionClassName}
+            secondaryActionClassName={secondaryActionClassName}
           />
         ) : null}
 
@@ -5717,9 +5710,15 @@ function moveFromUci(uci?: string) {
 function AttemptRegistryAside({
   entries,
   onNoteSaved,
+  showActions,
+  primaryActionClassName,
+  secondaryActionClassName,
 }: {
   entries: AttemptRegistryEntry[];
   onNoteSaved: (id: string, note: string) => void;
+  showActions: boolean;
+  primaryActionClassName: string;
+  secondaryActionClassName: string;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
@@ -5812,6 +5811,16 @@ function AttemptRegistryAside({
           </div>
         ))}
       </div>
+      {showActions ? (
+        <div className="mt-auto grid gap-3 border-t border-[var(--app-border-soft)] px-3 py-3">
+          <a href="/train" className={primaryActionClassName}>
+            Skip position
+          </a>
+          <a href="/" className={secondaryActionClassName}>
+            Return to Dashboard
+          </a>
+        </div>
+      ) : null}
     </aside>
   );
 }

@@ -23,8 +23,33 @@ export async function POST(
   const supabase = getSupabaseAdminClient();
   const now = new Date().toISOString();
 
+  // Before deleting, capture the existing status and scheduling fields so the
+  // client can undo by restoring them.
+  const { data: existing, error: existingError } = await supabase
+    .from("user_mistakes")
+    .select("id,status,next_review_at,retired_at")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (existingError) {
+    console.error("[dashboard] load position before delete failed", {
+      id,
+      userId,
+      message: existingError.message,
+      code: existingError.code,
+      details: existingError.details,
+      hint: existingError.hint,
+    });
+    return NextResponse.json({ error: `Delete failed: ${existingError.message}` }, { status: 500 });
+  }
+
+  if (!existing) {
+    return NextResponse.json({ error: "Mistake not found." }, { status: 404 });
+  }
+
   // Soft delete — status='deleted' hides the row while preserving FK targets in training_sessions.
-  const { data: row, error } = await supabase
+  const { error } = await supabase
     .from("user_mistakes")
     .update({
       status: "deleted",
@@ -33,17 +58,27 @@ export async function POST(
       updated_at: now,
     })
     .eq("id", id)
-    .eq("user_id", userId)
-    .select("id")
-    .maybeSingle();
+    .eq("user_id", userId);
 
   if (error) {
+    console.error("[dashboard] delete position failed", {
+      id,
+      userId,
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
     return NextResponse.json({ error: `Delete failed: ${error.message}` }, { status: 500 });
   }
 
-  if (!row) {
-    return NextResponse.json({ error: "Mistake not found." }, { status: 404 });
-  }
-
-  return NextResponse.json({ ok: true, id });
+  return NextResponse.json({
+    ok: true,
+    id,
+    undo: {
+      status: existing.status,
+      nextReviewAt: existing.next_review_at,
+      retiredAt: existing.retired_at,
+    },
+  });
 }
