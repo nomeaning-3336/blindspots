@@ -125,9 +125,9 @@ export default async function BlogPostPage({ params }: PageProps) {
                 </h2>
 
                 <div className="mt-4 space-y-4">
-                  {section.body.map((paragraph) => (
+                  {section.body.map((paragraph, i) => (
                     <p
-                      key={paragraph}
+                      key={`${paragraph.slice(0, 20)}-${i}`}
                       className="text-base leading-8 text-[var(--app-muted)]"
                     >
                       {paragraph}
