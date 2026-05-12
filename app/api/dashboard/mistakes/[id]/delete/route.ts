@@ -23,6 +23,7 @@ export async function POST(
   const supabase = getSupabaseAdminClient();
   const now = new Date().toISOString();
 
+  // Soft delete — status='retired' preserves FK targets in training_sessions.
   const { data: row, error } = await supabase
     .from("user_mistakes")
     .update({
@@ -37,7 +38,7 @@ export async function POST(
     .maybeSingle();
 
   if (error) {
-    return NextResponse.json({ error: `Archive failed: ${error.message}` }, { status: 500 });
+    return NextResponse.json({ error: `Delete failed: ${error.message}` }, { status: 500 });
   }
 
   if (!row) {

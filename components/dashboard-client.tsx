@@ -632,38 +632,71 @@ function QueuePositionRow({
   const [noteMovePreview, setNoteMovePreview] = useState<ThumbnailMovePreview | null>(null);
   const noteHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const NOTE_HOVER_DELAY_MS = 100;
-  const [isArchiving, setIsArchiving] = useState(false);
-  const [isArchived, setIsArchived] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleted, setIsDeleted] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [dontShowAgain, setDontShowAgain] = useState(false);
 
-  if (isArchived) return null;
+  if (isDeleted) return null;
 
-  async function archivePosition() {
-    if (isArchiving) return;
+  const DELETE_SKIP_KEY = "blindspots:skipDeleteConfirmation";
 
-    const confirmed = window.confirm("Archive this position from your training queue?");
-    if (!confirmed) return;
-
-    setIsArchiving(true);
-
+  function openDeleteFlow() {
+    if (isDeleting) return;
+    let skip = false;
     try {
-      const res = await fetch(`/api/dashboard/mistakes/${encodeURIComponent(position.id)}/archive`, {
-        method: "POST",
-      });
-
-      if (!res.ok) {
-        throw new Error(`Archive failed: ${res.status}`);
-      }
-
-      setIsArchived(true);
-    } catch (err) {
-      console.error("[dashboard] failed to archive position", err);
-      window.alert("Could not archive this position. Try again.");
-    } finally {
-      setIsArchiving(false);
+      skip = window.localStorage.getItem(DELETE_SKIP_KEY) === "true";
+    } catch {
+      skip = false;
+    }
+    if (skip) {
+      void performDelete();
+    } else {
+      setModalOpen(true);
     }
   }
 
-  const showArchive = !position.id.startsWith("session:") && position.sourceType !== "training_session";
+  function closeModal() {
+    setModalVisible(false);
+    window.setTimeout(() => {
+      setModalOpen(false);
+      setDontShowAgain(false);
+    }, 180);
+  }
+
+  async function confirmDelete() {
+    if (dontShowAgain) {
+      try {
+        window.localStorage.setItem(DELETE_SKIP_KEY, "true");
+      } catch {
+        // localStorage unavailable — proceed without persistence
+      }
+    }
+    await performDelete();
+    closeModal();
+  }
+
+  async function performDelete() {
+    if (isDeleting) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/dashboard/mistakes/${encodeURIComponent(position.id)}/delete`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        throw new Error(`Delete failed: ${res.status}`);
+      }
+      setIsDeleted(true);
+    } catch (err) {
+      console.error("[dashboard] failed to delete position", err);
+      window.alert("Could not delete this position. Try again.");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  const showDelete = !position.id.startsWith("session:") && position.sourceType !== "training_session";
   const countdown = formatReviewCountdown(position.nextReviewAt, nowMs);
   const isOverdue = isDueNow(position, nowMs);
   const userOrientation = getFenTurnSide(position.startingFen);
@@ -675,7 +708,25 @@ function QueuePositionRow({
   const streak = Math.min(position.consecutiveCorrectCount ?? 0, 3);
 
   return (
-    <div className="app-brutal-row grid grid-cols-1 gap-4 rounded-lg border border-[var(--app-border)] p-5 md:grid-cols-[380px_24px_1px_24px_minmax(340px,max-content)_16px_1px_16px_minmax(280px,1fr)] md:gap-0 md:items-stretch">
+    <div className="app-brutal-row relative grid grid-cols-1 gap-4 rounded-lg border border-[var(--app-border)] p-5 md:grid-cols-[380px_24px_1px_24px_minmax(340px,max-content)_16px_1px_16px_minmax(280px,1fr)] md:gap-0 md:items-stretch">
+      {showDelete && (
+        <button
+          type="button"
+          onClick={openDeleteFlow}
+          disabled={isDeleting}
+          aria-label="Delete position"
+          className="group/del absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center overflow-hidden rounded-md border border-[var(--app-border)] bg-[var(--app-panel-solid)] text-[var(--app-muted)] shadow-[2px_2px_0_var(--app-brutal-shadow)] transition-[width,color,border-color,background-color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:w-32 hover:border-[var(--app-class-blunder)] hover:text-[var(--app-class-blunder)] focus-visible:w-32 focus-visible:border-[var(--app-class-blunder)] focus-visible:text-[var(--app-class-blunder)] focus-visible:outline-none disabled:opacity-50"
+        >
+          <span className="pointer-events-none absolute inset-0 flex items-center justify-center transition-opacity duration-150 ease-out group-hover/del:opacity-0 group-focus-visible/del:opacity-0">
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+              <path d="M2 2 L12 12 M12 2 L2 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </span>
+          <span className="pointer-events-none absolute inset-0 flex items-center justify-center whitespace-nowrap text-[11px] font-black uppercase tracking-[0.14em] opacity-0 transition-opacity delay-75 duration-150 ease-out group-hover/del:opacity-100 group-focus-visible/del:opacity-100">
+            Delete
+          </span>
+        </button>
+      )}
       {/* Thumbnail column */}
       <div className="flex flex-col items-center gap-2">
         <ReplayThumbnail
@@ -764,16 +815,6 @@ function QueuePositionRow({
           >
             Analyze
           </Link>
-          {showArchive && (
-            <button
-              type="button"
-              disabled={isArchiving}
-              onClick={archivePosition}
-              className="app-brutal-button-secondary inline-flex min-h-12 min-w-0 items-center justify-center px-6 py-3 text-sm text-[var(--app-muted)] hover:text-[var(--app-class-blunder)] disabled:opacity-60"
-            >
-              {isArchiving ? "Archiving..." : "Archive"}
-            </button>
-          )}
         </div>
       </div>
 
@@ -864,6 +905,109 @@ function QueuePositionRow({
             })}
           </div>
         )}
+      </div>
+      {modalOpen && (
+        <DeleteConfirmationModal
+          visible={modalVisible}
+          setVisible={setModalVisible}
+          isDeleting={isDeleting}
+          dontShowAgain={dontShowAgain}
+          setDontShowAgain={setDontShowAgain}
+          onCancel={closeModal}
+          onConfirm={confirmDelete}
+        />
+      )}
+    </div>
+  );
+}
+
+function DeleteConfirmationModal({
+  visible,
+  setVisible,
+  isDeleting,
+  dontShowAgain,
+  setDontShowAgain,
+  onCancel,
+  onConfirm,
+}: {
+  visible: boolean;
+  setVisible: (v: boolean) => void;
+  isDeleting: boolean;
+  dontShowAgain: boolean;
+  setDontShowAgain: (v: boolean) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(id);
+  }, [setVisible]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onCancel();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-modal-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
+      className={[
+        "fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 transition-opacity duration-200 ease-out",
+        visible ? "opacity-100" : "opacity-0",
+      ].join(" ")}
+    >
+      <div
+        className={[
+          "app-brutal-section w-full max-w-md p-6 transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
+          visible ? "opacity-100 scale-100" : "opacity-0 scale-[0.96]",
+        ].join(" ")}
+      >
+        <h2
+          id="delete-modal-title"
+          className="text-lg font-black uppercase tracking-[-0.01em] text-[var(--app-text)]"
+        >
+          Are you sure you want to delete this position?
+        </h2>
+        <p className="mt-2 text-sm text-[var(--app-muted)]">
+          It will be removed from your training queue.
+        </p>
+
+        <label className="mt-5 inline-flex cursor-pointer items-center gap-2 text-sm text-[var(--app-muted)] hover:text-[var(--app-text)]">
+          <input
+            type="checkbox"
+            checked={dontShowAgain}
+            onChange={(e) => setDontShowAgain(e.target.checked)}
+            className="h-4 w-4 cursor-pointer accent-[var(--app-accent)]"
+          />
+          Don&apos;t show this warning again
+        </label>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isDeleting}
+            className="app-brutal-button-secondary inline-flex min-h-11 items-center justify-center px-5 py-2.5 text-sm disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isDeleting}
+            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[var(--app-brutal-edge)] bg-[var(--app-class-blunder)] px-5 py-2.5 text-sm font-black uppercase tracking-[0.04em] text-white shadow-[3px_3px_0_var(--app-brutal-shadow)] transition-transform duration-150 ease-out hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_var(--app-brutal-shadow)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[0_0_0_var(--app-brutal-shadow)] disabled:opacity-60"
+          >
+            {isDeleting ? "Deleting..." : "Delete"}
+          </button>
+        </div>
       </div>
     </div>
   );
