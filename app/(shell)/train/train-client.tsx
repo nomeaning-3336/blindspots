@@ -3548,28 +3548,44 @@ export default function TrainPage(props: TrainPageProps) {
                 }
               }
 
+              const copyFenPreview = boardFen
+                ? boardFen.length > 34
+                  ? `${boardFen.slice(0, 34)}...`
+                  : boardFen
+                : "No FEN available";
+
               const copyFenButton = (
                 <button
                   type="button"
                   onClick={copyCurrentFen}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--app-text)] shadow-[3px_3px_0_var(--app-brutal-edge)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"
+                  className="mb-4 group grid w-full grid-cols-[20px_minmax(0,1fr)] items-center gap-2.5 rounded-lg border border-[var(--app-border-soft)] bg-[color-mix(in_srgb,var(--app-panel-solid)_92%,var(--app-bg)_8%)] px-3 py-2.5 text-left transition hover:border-[var(--app-border)] hover:bg-[var(--app-surface-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-border)]"
                 >
-                  <span>{fenCopied ? "Copied FEN" : "Copy FEN"}</span>
-                  <svg
-                    aria-hidden="true"
-                    width="15"
-                    height="15"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="shrink-0"
-                  >
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                  </svg>
+                  <span className="inline-flex h-5 w-5 items-center justify-center text-[var(--app-muted-soft)] transition group-hover:text-[var(--app-muted)]">
+                    <svg
+                      aria-hidden="true"
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="shrink-0"
+                    >
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                  </span>
+
+                  <span className="min-w-0">
+                    <span className="block text-[10px] font-black uppercase tracking-[0.11em] text-[var(--app-muted)]">
+                      {fenCopied ? "Copied FEN" : "Copy FEN"}
+                    </span>
+                    <span className="mt-1 block truncate font-mono text-[9px] leading-none tracking-normal text-[var(--app-muted-soft)]">
+                      {copyFenPreview}
+                    </span>
+                  </span>
                 </button>
               );
 
@@ -3585,7 +3601,7 @@ export default function TrainPage(props: TrainPageProps) {
           </>
         ) : null}
 
-        {!isPostMortemVisible ? (
+        {isPostMortemVisible ? (
           <aside
             data-testid="train-move-panel"
             className={[
@@ -3663,19 +3679,6 @@ export default function TrainPage(props: TrainPageProps) {
               )}
             </div>
 
-            {/* ── Action buttons visible below both tabs ────────────────── */}
-            <div data-tour="postmortem-actions" className="grid h-[var(--pm-actions-h)] shrink-0 -translate-y-2 grid-cols-2 gap-2 border-t border-[var(--app-border-soft)] bg-[var(--app-panel-solid)] p-2">
-              <button
-                type="button"
-                className={`${primaryActionClassName} h-full min-h-0 w-full`}
-                onClick={() => switchState("active")}
-              >
-                Next position
-              </button>
-              <a href="/" className={`${secondaryActionClassName} h-full min-h-0 w-full`}>
-                Return to Dashboard
-              </a>
-            </div>
           </aside>
         ) : null}
       </div>

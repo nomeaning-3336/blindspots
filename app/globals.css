@@ -424,7 +424,7 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   .app-brutal-button {
     border: 1px solid var(--app-brutal-edge);
     background: var(--app-accent);
-    color: var(--app-brutal-edge) !important;
+    color: var(--app-accent-contrast) !important;
     box-shadow: 5px 5px 0 var(--app-brutal-shadow);
     border-radius: 8px;
     font-weight: 800;
@@ -442,7 +442,7 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
     transform: translate(2px, 2px);
     box-shadow: 3px 3px 0 var(--app-brutal-shadow);
     background: #ffffff;
-    color: #050505;
+    color: #050505 !important;
   }
 
   .app-brutal-button:active {
