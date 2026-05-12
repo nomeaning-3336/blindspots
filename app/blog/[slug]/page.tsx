@@ -104,13 +104,9 @@ export default async function BlogPostPage({ params }: PageProps) {
           </Link>
 
           <header className="mt-8">
-            <div className="flex flex-wrap items-center gap-3 text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
-              <span>{post.category}</span>
-              <span aria-hidden="true">/</span>
-              <time dateTime={post.publishedAt}>{post.publishedAt}</time>
-              <span aria-hidden="true">/</span>
-              <span>{post.readingMinutes} min read</span>
-            </div>
+            <div className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
+                  <time dateTime={post.publishedAt}>{post.publishedAt}</time>
+                </div>
 
             <h1 className="mt-5 text-[clamp(2.25rem,5vw,4.4rem)] font-black leading-[0.98] tracking-[-0.045em] text-[var(--app-text)]">
               {post.title}

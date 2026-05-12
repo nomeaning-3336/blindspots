@@ -46,12 +46,8 @@ export default function BlogPage() {
                 key={post.slug}
                 className="app-brutal-section p-6 transition hover:-translate-y-0.5 md:p-7"
               >
-                <div className="flex flex-wrap items-center gap-3 text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
-                  <span>{post.category}</span>
-                  <span aria-hidden="true">/</span>
+                <div className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
                   <time dateTime={post.publishedAt}>{post.publishedAt}</time>
-                  <span aria-hidden="true">/</span>
-                  <span>{post.readingMinutes} min read</span>
                 </div>
 
                 <h2 className="mt-4 text-2xl font-black tracking-[-0.03em] text-[var(--app-text)] md:text-3xl">
