@@ -708,14 +708,15 @@ function QueuePositionRow({
   const streak = Math.min(position.consecutiveCorrectCount ?? 0, 3);
 
   return (
-    <div className="app-brutal-row relative grid grid-cols-1 gap-4 rounded-lg border border-[var(--app-border)] p-5 md:grid-cols-[380px_24px_1px_24px_minmax(340px,max-content)_16px_1px_16px_minmax(280px,1fr)] md:gap-0 md:items-stretch">
+    <div className="grid gap-2">
       {showDelete && (
-        <button
-          type="button"
-          onClick={openDeleteFlow}
-          disabled={isDeleting}
-          aria-label="Delete position"
-          className="group/del absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center overflow-hidden rounded-md border border-[var(--app-border)] bg-[var(--app-panel-solid)] text-[var(--app-muted)] shadow-[2px_2px_0_var(--app-brutal-shadow)] transition-[width,color,border-color,background-color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:w-32 hover:border-[var(--app-class-blunder)] hover:text-[var(--app-class-blunder)] focus-visible:w-32 focus-visible:border-[var(--app-class-blunder)] focus-visible:text-[var(--app-class-blunder)] focus-visible:outline-none disabled:opacity-50"
+        <div className="flex justify-end px-1">
+          <button
+            type="button"
+            onClick={openDeleteFlow}
+            disabled={isDeleting}
+            aria-label="Delete position"
+            className="group/del relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-md border border-[var(--app-border)] bg-[var(--app-panel-solid)] text-[var(--app-muted)] shadow-[2px_2px_0_var(--app-brutal-shadow)] transition-[width,color,border-color,background-color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:w-32 hover:border-[var(--app-class-blunder)] hover:text-[var(--app-class-blunder)] focus-visible:w-32 focus-visible:border-[var(--app-class-blunder)] focus-visible:text-[var(--app-class-blunder)] focus-visible:outline-none disabled:opacity-50"
         >
           <span className="pointer-events-none absolute inset-0 flex items-center justify-center transition-opacity duration-150 ease-out group-hover/del:opacity-0 group-focus-visible/del:opacity-0">
             <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
@@ -726,7 +727,9 @@ function QueuePositionRow({
             Delete
           </span>
         </button>
+        </div>
       )}
+      <div className="app-brutal-row relative grid grid-cols-1 gap-4 rounded-lg border border-[var(--app-border)] p-5 md:grid-cols-[380px_24px_1px_24px_minmax(340px,max-content)_16px_1px_16px_minmax(280px,1fr)] md:gap-0 md:items-stretch">
       {/* Thumbnail column */}
       <div className="flex flex-col items-center gap-2">
         <ReplayThumbnail
@@ -917,6 +920,7 @@ function QueuePositionRow({
           onConfirm={confirmDelete}
         />
       )}
+      </div>
     </div>
   );
 }
