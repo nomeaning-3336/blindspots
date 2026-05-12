@@ -35,7 +35,7 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
       .limit(MISTAKE_LIMIT),
     supabase
       .from("training_move_notes")
-      .select("move_key,note_text,classification,eval_before_cp,eval_after_cp,move_san,move_uci")
+      .select("move_key,decision_fen,note_text,classification,eval_before_cp,eval_after_cp,move_san,move_uci")
       .eq("user_id", userId)
       .order("last_attempted_at", { ascending: false }),
   ]);
@@ -79,6 +79,7 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
 
   const notes = (notesResult.data ?? []) as unknown as Array<{
     move_key: string;
+    decision_fen: string | null;
     note_text: string;
     classification: string | null;
     eval_before_cp: number | null;
