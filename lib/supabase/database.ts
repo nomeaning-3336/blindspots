@@ -346,7 +346,7 @@ export type Database = {
           theme_tags: Json;
           opening_name: string | null;
           eco: string | null;
-          status: "active" | "review" | "mastered" | "retired";
+          status: "active" | "review" | "mastered" | "retired" | "deleted";
           interval_days: number;
           review_count: number;
           pass_count: number;
@@ -385,7 +385,7 @@ export type Database = {
           theme_tags?: Json;
           opening_name?: string | null;
           eco?: string | null;
-          status?: "active" | "review" | "mastered" | "retired";
+          status?: "active" | "review" | "mastered" | "retired" | "deleted";
           interval_days?: number;
           review_count?: number;
           pass_count?: number;
@@ -424,7 +424,7 @@ export type Database = {
           theme_tags?: Json;
           opening_name?: string | null;
           eco?: string | null;
-          status?: "active" | "review" | "mastered" | "retired";
+          status?: "active" | "review" | "mastered" | "retired" | "deleted";
           interval_days?: number;
           review_count?: number;
           pass_count?: number;

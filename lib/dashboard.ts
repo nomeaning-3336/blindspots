@@ -377,6 +377,7 @@ function buildQueueOverview(mistakes: DashboardMistakeInput[]) {
   const now = new Date().toISOString();
 
   for (const m of mistakes) {
+    if (m.status === "deleted") continue;
     if (m.status === "mastered") { mastered++; continue; }
     if (m.status === "retired") { retired++; continue; }
 
@@ -430,11 +431,13 @@ function statusLabel(status: string): string {
     case "review": return "Review due";
     case "mastered": return "Mastered";
     case "retired": return "Retired";
+    case "deleted": return "Deleted";
     default: return "Unknown";
   }
 }
 
 function queueLabel(status: string, sourceType: string): string | undefined {
+  if (status === "deleted") return undefined;
   if (status === "mastered" || status === "retired") return undefined;
   if (status === "review") return "Review";
   if (sourceType === "lichess_puzzle_filler") return "Random";
