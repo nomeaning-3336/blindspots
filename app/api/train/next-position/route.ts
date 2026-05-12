@@ -28,6 +28,7 @@ import { getOpponentElo } from "@/lib/training/elo";
 import { getNextActiveOrFillerMistakeForTraining, getNextReviewMistakeForTraining, getNextActiveAppMistake, normalizeUserMistakeForTraining, type NextMistakeResult } from "@/lib/training/mistake-store";
 import { getPreviousPosition } from "@/lib/training/position-index";
 import { normalizeSetupPrelude, validateSetupPrelude } from "@/lib/training/setup-prelude";
+import { normalizeDecisionFen, buildMoveKey } from "@/lib/training/mistake-memory";
 import {
   DEFAULT_BLINDSPOTS_ELO,
   buildDefaultBlindspotProfile,
@@ -64,6 +65,16 @@ type NextPositionResponse = {
   cpLoss?: number;
   error?: string;
   debug?: Record<string, unknown>;
+  attemptRegistry?: Array<{
+    id: string;
+    decisionFen: string;
+    moveUci: string;
+    moveSan: string;
+    classification: "inaccuracy" | "mistake" | "blunder";
+    cpLoss: number;
+    playedAt: string;
+    note: string | null;
+  }>;
 };
 const DEFAULT_SEQUENCE_LENGTH = 4;
 const MIN_SEQUENCE_LENGTH = 1;
@@ -126,7 +137,8 @@ export async function GET(request: Request) {
             sequenceLength: 4,
             challengeElo,
           };
-          return NextResponse.json(retryResponse);
+          const enrichedRetry = await enrichAttemptRegistry(retryResponse, userId, supabase);
+          return NextResponse.json(enrichedRetry);
         }
       }
     }
@@ -265,7 +277,8 @@ if (!optionalError && optionalData) {
           };
         }
 
-        return NextResponse.json(response);
+        const enrichedReview = await enrichAttemptRegistry(response, userId, supabase);
+        return NextResponse.json(enrichedReview);
       }
     }
   }
@@ -277,7 +290,7 @@ if (!optionalError && optionalData) {
   // P(random) gating: filler-first when exploration fires, active-first otherwise
   if (selectedByRandomExploration) {
     const personalMistakeResult = await getNextActiveOrFillerMistakeForTraining(userId);
-    const personalResponse = buildRowMistakeResponse({
+    const personalResponse = await enrichIfNonNull(buildRowMistakeResponse({
       mistakeResult: personalMistakeResult,
       sequenceLength,
       challengeElo,
@@ -285,7 +298,7 @@ if (!optionalError && optionalData) {
       randomExplorationRoll,
       selectedByRandomExploration,
       attemptedQueueOrder: ["filler", "active"],
-    });
+    }), userId, supabase);
 
     if (personalResponse) {
       return NextResponse.json(personalResponse);
@@ -293,30 +306,30 @@ if (!optionalError && optionalData) {
 
     // Random succeeded but filler pool empty — fall through to app_training
     const appFallback = await getNextActiveAppMistake(userId);
-    const appResponse = buildAppMistakeResponse({
+    const appFallbackResponse = await enrichIfNonNull(buildAppMistakeResponse({
       activeAppResult: appFallback,
       sequenceLength,
       challengeElo,
       randomProbability,
       randomExplorationRoll,
       selectedByRandomExploration,
-    });
-    if (appResponse) return NextResponse.json(appResponse);
+    }), userId, supabase);
+    if (appFallbackResponse) return NextResponse.json(appFallbackResponse);
   } else {
     // No random exploration — try app_training first
     const appResult = await getNextActiveAppMistake(userId);
-    const appResponse = buildAppMistakeResponse({
+    const appFirstResponse = await enrichIfNonNull(buildAppMistakeResponse({
       activeAppResult: appResult,
       sequenceLength,
       challengeElo,
       randomProbability,
       randomExplorationRoll,
       selectedByRandomExploration,
-    });
-    if (appResponse) return NextResponse.json(appResponse);
+    }), userId, supabase);
+    if (appFirstResponse) return NextResponse.json(appFirstResponse);
 
     const personalMistakeResult = await getNextActiveOrFillerMistakeForTraining(userId);
-    const personalResponse = buildRowMistakeResponse({
+    const personalFallbackResponse = await enrichIfNonNull(buildRowMistakeResponse({
       mistakeResult: personalMistakeResult,
       sequenceLength,
       challengeElo,
@@ -324,8 +337,8 @@ if (!optionalError && optionalData) {
       randomExplorationRoll,
       selectedByRandomExploration,
       attemptedQueueOrder: ["active", "filler"],
-    });
-    if (personalResponse) return NextResponse.json(personalResponse);
+    }), userId, supabase);
+    if (personalFallbackResponse) return NextResponse.json(personalFallbackResponse);
   }
 
   const queues = await ensureTrainingQueuesHavePositions({
@@ -352,7 +365,7 @@ if (!optionalError && optionalData) {
   if (!nextPosition) {
     if (selectedByRandomExploration) {
       const personalMistakeResult = await getNextActiveOrFillerMistakeForTraining(userId);
-      const personalResponse = buildRowMistakeResponse({
+      const personalBucketResponse = await enrichIfNonNull(buildRowMistakeResponse({
         mistakeResult: personalMistakeResult,
         sequenceLength,
         challengeElo,
@@ -360,14 +373,14 @@ if (!optionalError && optionalData) {
         randomExplorationRoll,
         selectedByRandomExploration,
         attemptedQueueOrder: ["random", "personal"],
-      });
+      }), userId, supabase);
 
-      if (personalResponse) {
-        personalResponse.debug = {
-          ...(personalResponse.debug ?? {}),
+      if (personalBucketResponse) {
+        personalBucketResponse.debug = {
+          ...(personalBucketResponse.debug ?? {}),
           randomBucketFallbackUsed: true,
         };
-        return NextResponse.json(personalResponse);
+        return NextResponse.json(personalBucketResponse);
       }
     }
 
@@ -485,7 +498,8 @@ if (!optionalError && optionalData) {
     };
   }
 
-  return NextResponse.json(response);
+  const enrichedResponse = await enrichAttemptRegistry(response, userId, supabase);
+  return NextResponse.json(enrichedResponse);
 }
 
 type RecentEntry = { fen: string; gameId?: string; ply?: number };
@@ -1164,4 +1178,56 @@ function isValidFen(fen: string) {
   } catch {
     return false;
   }
+}
+
+async function enrichIfNonNull(
+  response: NextPositionResponse | null,
+  userId: string,
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+): Promise<NextPositionResponse | null> {
+  if (!response) return null;
+  return enrichAttemptRegistry(response, userId, supabase);
+}
+
+async function enrichAttemptRegistry(
+  response: NextPositionResponse,
+  userId: string,
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+): Promise<NextPositionResponse> {
+  const decisionFen = normalizeDecisionFen(response.decisionFen ?? response.fen ?? "");
+  if (!decisionFen) return response;
+
+  const { data: attempts } = await supabase
+    .from("user_mistake_attempts" as any)
+    .select("id, move_uci, move_san, classification, cp_loss, played_at")
+    .eq("user_id", userId)
+    .eq("decision_fen", decisionFen)
+    .is("resolved_at", null)
+    .order("played_at", { ascending: false });
+
+  if (!attempts || (attempts as any[]).length === 0) return response;
+
+  const registry = await Promise.all(
+    (attempts as any[]).map(async (a: any) => {
+      const moveKey = buildMoveKey(decisionFen, a.move_uci);
+      const { data: noteRow } = await supabase
+        .from("training_move_notes" as any)
+        .select("note_text")
+        .eq("user_id", userId)
+        .eq("move_key", moveKey)
+        .maybeSingle();
+      return {
+        id: a.id,
+        decisionFen,
+        moveUci: a.move_uci,
+        moveSan: a.move_san,
+        classification: a.classification,
+        cpLoss: a.cp_loss,
+        playedAt: a.played_at,
+        note: (noteRow as any)?.note_text || null,
+      };
+    }),
+  );
+
+  return { ...response, attemptRegistry: registry };
 }

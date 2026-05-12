@@ -72,6 +72,17 @@ type OnboardingScreen = "loading" | "connect" | "analysis" | "summary" | "done";
 type ProfileProvider = "chesscom" | "lichess";
 type SkillLevel = "new_to_chess" | "beginner" | "intermediate" | "advanced" | "expert";
 
+type AttemptRegistryEntry = {
+  id: string;
+  decisionFen: string;
+  moveUci: string;
+  moveSan: string;
+  classification: "inaccuracy" | "mistake" | "blunder";
+  cpLoss: number;
+  playedAt: string;
+  note: string | null;
+};
+
 const SKILL_LEVEL_STARTING_ELO: Record<SkillLevel, number> = {
   new_to_chess: 0,
   beginner: 500,
@@ -253,6 +264,16 @@ type NextPositionResponse = {
   queueSource?: string;
   cpLoss?: number;
   error?: string;
+  attemptRegistry?: Array<{
+    id: string;
+    decisionFen: string;
+    moveUci: string;
+    moveSan: string;
+    classification: "inaccuracy" | "mistake" | "blunder";
+    cpLoss: number;
+    playedAt: string;
+    note: string | null;
+  }>;
 };
 
 interface InitializationSummary {
@@ -547,6 +568,7 @@ export default function TrainPage(props: TrainPageProps) {
   const completingRef = useRef(false);
   const completionRequestRef = useRef(0);
   const initialOpponentMoveRef = useRef<TrainingMove | null>(null);
+  const [attemptRegistry, setAttemptRegistry] = useState<AttemptRegistryEntry[]>([]);
   const initialOpponentRequestRef = useRef(0);
   const selectedServeModeRef = useRef<string | null>(null);
   const selectedBucketRef = useRef<string | null>(null);
@@ -1372,6 +1394,12 @@ export default function TrainPage(props: TrainPageProps) {
       typeof payload.mistakeId === "string" ? payload.mistakeId : null;
     currentQueueSourceRef.current =
       typeof payload.queueSource === "string" ? payload.queueSource : null;
+
+    if (Array.isArray(payload.attemptRegistry)) {
+      setAttemptRegistry(payload.attemptRegistry as AttemptRegistryEntry[]);
+    } else {
+      setAttemptRegistry([]);
+    }
 
     completingRef.current = false;
     initialOpponentMoveRef.current = null;
@@ -3349,7 +3377,9 @@ export default function TrainPage(props: TrainPageProps) {
           "mx-auto grid h-full min-h-0 w-full max-w-[100rem] min-w-0 gap-4 transition-opacity duration-200",
           isPostMortemVisible
             ? "lg:grid-cols-[minmax(0,1.22fr)_minmax(28rem,0.92fr)] lg:items-stretch"
-            : "lg:grid-cols-1 lg:items-center lg:justify-items-center",
+            : attemptRegistry.length > 0
+              ? "lg:grid-cols-[minmax(0,1.22fr)_minmax(20rem,0.5fr)] lg:items-stretch"
+              : "lg:grid-cols-1 lg:items-center lg:justify-items-center",
         ].join(" ")}
       >
         <section
@@ -3486,6 +3516,17 @@ export default function TrainPage(props: TrainPageProps) {
             </div>
           ) : null}
         </section>
+
+        {!isPostMortemVisible && attemptRegistry.length > 0 ? (
+          <AttemptRegistryAside
+            entries={attemptRegistry}
+            onNoteSaved={(id, note) => {
+              setAttemptRegistry((prev) =>
+                prev.map((e) => (e.id === id ? { ...e, note } : e)),
+              );
+            }}
+          />
+        ) : null}
 
         {isPostMortemVisible ? (
           <aside
@@ -5671,6 +5712,117 @@ function buildEngineArrows(
 function moveFromUci(uci?: string) {
   if (!uci || uci.length < 4) return null;
   return { from: uci.slice(0, 2), to: uci.slice(2, 4) };
+}
+
+function AttemptRegistryAside({
+  entries,
+  onNoteSaved,
+}: {
+  entries: AttemptRegistryEntry[];
+  onNoteSaved: (id: string, note: string) => void;
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [noteText, setNoteText] = useState("");
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleExpand(id: string, currentNote: string | null) {
+    if (expandedId === id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(id);
+    setNoteText(currentNote ?? "");
+    setSavedId(null);
+  }
+
+  async function handleSave(id: string) {
+    setSavingId(id);
+    try {
+      const entry = entries.find((e) => e.id === id);
+      if (!entry) return;
+      await fetch("/api/train/attempt-note", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          decisionFen: entry.decisionFen,
+          moveUci: entry.moveUci,
+          note: noteText,
+        }),
+      });
+      onNoteSaved(id, noteText);
+      setSavedId(id);
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => setSavedId(null), 2000);
+    } catch {
+      // best-effort save
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  return (
+    <aside className="app-brutal-section flex min-h-0 flex-col overflow-hidden">
+      <h3 className="shrink-0 border-b border-[var(--app-border-soft)] px-3 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-[var(--app-text)]">
+        Previous mistakes here
+      </h3>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {entries.map((entry) => (
+          <div
+            key={entry.id}
+            className="border-b border-[var(--app-border-soft)] last:border-b-0"
+          >
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition hover:bg-[var(--app-surface-hover)]"
+              onClick={() => handleExpand(entry.id, entry.note)}
+            >
+              <span
+                className="font-bold"
+                style={{ color: classificationColor(entry.classification as MoveClassification) }}
+              >
+                {entry.moveSan}
+              </span>
+              <span className="text-[10px] uppercase tracking-[0.1em] text-[var(--app-muted-soft)]">
+                {entry.classification}
+              </span>
+              <span className="tabular-nums text-[var(--app-muted)]">{entry.cpLoss}cp</span>
+              <span className="ml-auto shrink-0 text-[10px] text-[var(--app-muted-soft)]">
+                {formatRelativeTime(entry.playedAt)}
+              </span>
+            </button>
+            {expandedId === entry.id ? (
+              <div className="border-t border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] px-3 py-2">
+                <textarea
+                  className="min-h-[80px] w-full resize-y rounded-[6px] border border-[var(--app-border)] bg-[var(--app-surface-input)] px-2.5 py-2 text-xs text-[var(--app-text)] outline-none transition placeholder:text-[var(--app-muted-soft)] focus:border-[var(--app-accent)]"
+                  placeholder="Add a note..."
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  onBlur={() => handleSave(entry.id)}
+                  data-ignore-train-shortcuts="true"
+                />
+                {savingId === entry.id ? (
+                  <div className="mt-1 text-[10px] text-[var(--app-muted)]">Saving...</div>
+                ) : savedId === entry.id ? (
+                  <div className="mt-1 text-[10px] font-bold text-[var(--app-class-good)]">Note saved ✓</div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
+function formatRelativeTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const days = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  return `${days}d ago`;
 }
 
 function TargetIcon() {

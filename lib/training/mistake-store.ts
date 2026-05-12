@@ -5,6 +5,7 @@ import { inferLegalMoveBetweenFens } from "./fen-transition";
 import { normalizeSetupPrelude } from "./setup-prelude";
 import { getNextReviewAtForActiveMistake, nextConsecutiveCorrectCount } from "./active-mistake-schedule";
 import { selectRandomPhase, getPhaseFallbackOrder, hasLikelySyzygyTablebaseEntry, inferPhaseFromFen } from "./random-filler-selection";
+import { isNonInstructivePosition } from "./non-instructive-position";
 
 type UserMistakeUpdate = Database["public"]["Tables"]["user_mistakes"]["Update"];
 
@@ -275,11 +276,22 @@ export async function getNextActiveOrFillerMistakeForTraining(
 
   const candidates = (fillerCandidates ?? []) as unknown as UserMistakeRow[];
 
-  // Pick best candidate: prefer target phase, exclude endgame Syzygy
+  // Pick best candidate: prefer target phase, exclude resignable, endgame Syzygy
   let filler: UserMistakeRow | null = null;
   for (const phase of phaseOrder) {
     for (const c of candidates) {
       if (phase === "endgame" && hasLikelySyzygyTablebaseEntry(c.starting_fen)) continue;
+      if (isNonInstructivePosition({
+        evalCp: (c as any).eval_before_cp,
+      }).isNonInstructive) {
+        if (process.env.NODE_ENV !== "production") {
+          console.debug("[training-filter] skipped resignable filler position", {
+            id: c.id,
+            fen: c.starting_fen,
+          });
+        }
+        continue;
+      }
       const candidatePhase = (c as any).phase ?? inferPhaseFromFen(c.starting_fen);
       if (candidatePhase === phase || !candidatePhase) {
         filler = c;
@@ -334,11 +346,19 @@ export async function updateMistakeAfterTraining(input: {
     );
   }
 
+  const MASTERED_FAIL_FLOOR_DAYS = 30;
+  // Fail on a mastered mistake shouldn't drop the interval back to 1 day —
+  // it stays at a 30-day floor and the row never leaves mastered.
   const currentInterval = Math.max(1, row.interval_days ?? 1);
-  const newInterval = nextIntervalDays({
+  let newInterval = nextIntervalDays({
     currentIntervalDays: currentInterval,
     outcome: input.outcome,
   });
+
+  const isMasteredFail = row.status === "mastered" && input.outcome === "fail";
+  if (isMasteredFail) {
+    newInterval = Math.max(newInterval, MASTERED_FAIL_FLOOR_DAYS);
+  }
   const nextReviewDate = addDays(now, newInterval);
 
   const updates: UserMistakeUpdate = {
@@ -356,7 +376,9 @@ export async function updateMistakeAfterTraining(input: {
     updates.fail_count = (row.fail_count ?? 0) + 1;
   }
 
-  if (shouldMasterMistake({ intervalDays: newInterval, outcome: input.outcome })) {
+  if (isMasteredFail) {
+    // Stay mastered, just with a floor-bumped interval
+  } else if (shouldMasterMistake({ intervalDays: newInterval, outcome: input.outcome })) {
     updates.status = "mastered";
     updates.mastered_at = now.toISOString();
     updates.next_review_at = null;
