@@ -44,19 +44,23 @@ export default function BlogPage() {
             {blogPosts.map((post) => (
               <article
                 key={post.slug}
-                className="app-brutal-section p-6 transition hover:-translate-y-0.5 md:p-7"
+                className="app-brutal-section relative p-6 transition hover:-translate-y-0.5 md:p-7"
+                style={{
+                  "--hover-border": "var(--app-accent)",
+                } as React.CSSProperties}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.borderColor = "var(--app-accent)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.borderColor = "")
+                }
               >
                 <div className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
                   <time dateTime={post.publishedAt}>{post.publishedAt}</time>
                 </div>
 
                 <h2 className="mt-4 text-2xl font-black tracking-[-0.03em] text-[var(--app-text)] md:text-3xl">
-                  <Link
-                    href={`/blog/${post.slug}`}
-                    className="transition hover:text-[var(--app-accent)]"
-                  >
-                    {post.title}
-                  </Link>
+                  {post.title}
                 </h2>
 
                 <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--app-muted)] md:text-base">
@@ -65,10 +69,9 @@ export default function BlogPage() {
 
                 <Link
                   href={`/blog/${post.slug}`}
-                  className="mt-6 inline-flex text-xs font-black uppercase tracking-[0.16em] text-[var(--app-accent)] transition hover:text-[var(--app-text)]"
-                >
-                  Read article
-                </Link>
+                  className="absolute inset-0 z-10 opacity-0"
+                  aria-label={post.title}
+                />
               </article>
             ))}
           </div>
