@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { PublicHeaderClient } from "@/components/public-header";
 import { blogPosts } from "@/lib/blog-posts";
+import { BlogCard } from "@/components/blog-card";
 
 export const metadata: Metadata = {
   title: "Chess Training Blog",
@@ -42,37 +42,13 @@ export default function BlogPage() {
 
           <div className="mt-12 grid gap-5">
             {blogPosts.map((post) => (
-              <article
+              <BlogCard
                 key={post.slug}
-                className="app-brutal-section relative p-6 transition hover:-translate-y-0.5 md:p-7"
-                style={{
-                  "--hover-border": "var(--app-accent)",
-                } as React.CSSProperties}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.borderColor = "var(--app-accent)")
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.borderColor = "")
-                }
-              >
-                <div className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
-                  <time dateTime={post.publishedAt}>{post.publishedAt}</time>
-                </div>
-
-                <h2 className="mt-4 text-2xl font-black tracking-[-0.03em] text-[var(--app-text)] md:text-3xl">
-                  {post.title}
-                </h2>
-
-                <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--app-muted)] md:text-base">
-                  {post.excerpt}
-                </p>
-
-                <Link
-                  href={`/blog/${post.slug}`}
-                  className="absolute inset-0 z-10 opacity-0"
-                  aria-label={post.title}
-                />
-              </article>
+                slug={post.slug}
+                title={post.title}
+                excerpt={post.excerpt}
+                publishedAt={post.publishedAt}
+              />
             ))}
           </div>
         </section>
