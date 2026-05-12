@@ -700,9 +700,32 @@ function QueuePositionRow({
   const [addError, setAddError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deletionStage, setDeletionStage] = useState<"idle" | "success" | "collapsing">("idle");
+  const [isUndoingDelete, setIsUndoingDelete] = useState(false);
+  const [deleteUndo, setDeleteUndo] = useState<{
+    status: string;
+    nextReviewAt: string | null;
+    retiredAt: string | null;
+  } | null>(null);
+  const deleteCollapseTimerRef = useRef<number | null>(null);
+  const deleteRemoveTimerRef = useRef<number | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
+
+  function clearDeleteTimers() {
+    if (deleteCollapseTimerRef.current) {
+      window.clearTimeout(deleteCollapseTimerRef.current);
+      deleteCollapseTimerRef.current = null;
+    }
+    if (deleteRemoveTimerRef.current) {
+      window.clearTimeout(deleteRemoveTimerRef.current);
+      deleteRemoveTimerRef.current = null;
+    }
+  }
+
+  useEffect(() => {
+    return () => { clearDeleteTimers(); };
+  }, []);
 
   if (deletionStage === "success" || deletionStage === "collapsing") {
     const collapsing = deletionStage === "collapsing";
@@ -710,18 +733,29 @@ function QueuePositionRow({
       <div
         className={[
           "overflow-hidden transition-[max-height,opacity] duration-300 ease-out",
-          collapsing ? "max-h-0 opacity-0" : "max-h-24 opacity-100",
+          collapsing ? "max-h-0 opacity-0" : "max-h-40 opacity-100",
         ].join(" ")}
         role="status"
         aria-live="polite"
       >
-        <div className="flex items-center justify-center gap-3 rounded-lg border border-[color-mix(in_srgb,var(--app-class-good)_40%,transparent)] bg-[var(--app-panel-solid)] p-5 text-[var(--app-class-good)]">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-            <path d="M5 10 L9 14 L15 6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <span className="text-sm font-black uppercase tracking-[0.14em]">
-            Position successfully deleted
-          </span>
+        <div className="flex flex-col gap-4 rounded-lg border border-[color-mix(in_srgb,var(--app-class-good)_40%,transparent)] bg-[var(--app-panel-solid)] p-5 text-[var(--app-class-good)] sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center justify-center gap-3 sm:justify-start">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M5 10 L9 14 L15 6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span className="text-sm font-black uppercase tracking-[0.14em]">
+              Position successfully deleted
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={undoDelete}
+            disabled={isUndoingDelete || collapsing}
+            className="inline-flex min-h-10 items-center justify-center border border-[var(--app-class-good)] bg-transparent px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--app-class-good)] transition hover:bg-[var(--app-class-good)] hover:text-[var(--app-bg)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isUndoingDelete ? "Undoing..." : "Undo"}
+          </button>
         </div>
       </div>
     );
@@ -774,14 +808,62 @@ function QueuePositionRow({
       if (!res.ok) {
         throw new Error(`Delete failed: ${res.status}`);
       }
+      const payload = await res.json().catch(() => null);
+      setDeleteUndo(payload?.undo ?? {
+        status: position.status,
+        nextReviewAt: position.nextReviewAt,
+        retiredAt: null,
+      });
       setDeletionStage("success");
-      window.setTimeout(() => setDeletionStage("collapsing"), 1200);
-      window.setTimeout(() => onDelete(position.id), 1500);
+
+      clearDeleteTimers();
+      deleteCollapseTimerRef.current = window.setTimeout(() => {
+        setDeletionStage("collapsing");
+      }, 8000);
+
+      deleteRemoveTimerRef.current = window.setTimeout(() => {
+        onDelete(position.id);
+      }, 8300);
     } catch (err) {
       console.error("[dashboard] failed to delete position", err);
       window.alert("Could not delete this position. Try again.");
     } finally {
       setIsDeleting(false);
+    }
+  }
+
+  async function undoDelete() {
+    if (isUndoingDelete || !deleteUndo) return;
+
+    clearDeleteTimers();
+    setIsUndoingDelete(true);
+
+    try {
+      const res = await fetch(`/api/dashboard/mistakes/${encodeURIComponent(position.id)}/undo-delete`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(deleteUndo),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Undo failed: ${res.status}`);
+      }
+
+      setDeletionStage("idle");
+      setDeleteUndo(null);
+    } catch (err) {
+      console.error("[dashboard] failed to undo delete position", err);
+      window.alert("Could not undo delete. Try refreshing the dashboard.");
+      deleteCollapseTimerRef.current = window.setTimeout(() => {
+        setDeletionStage("collapsing");
+      }, 8000);
+      deleteRemoveTimerRef.current = window.setTimeout(() => {
+        onDelete(position.id);
+      }, 8300);
+    } finally {
+      setIsUndoingDelete(false);
     }
   }
 
