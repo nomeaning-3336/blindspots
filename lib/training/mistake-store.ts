@@ -5,7 +5,6 @@ import { inferLegalMoveBetweenFens } from "./fen-transition";
 import { normalizeSetupPrelude } from "./setup-prelude";
 import { getNextReviewAtForActiveMistake, nextConsecutiveCorrectCount } from "./active-mistake-schedule";
 import { selectRandomPhase, getPhaseFallbackOrder, hasLikelySyzygyTablebaseEntry, inferPhaseFromFen } from "./random-filler-selection";
-import { isNonInstructivePosition } from "./non-instructive-position";
 
 type UserMistakeUpdate = Database["public"]["Tables"]["user_mistakes"]["Update"];
 
@@ -276,22 +275,11 @@ export async function getNextActiveOrFillerMistakeForTraining(
 
   const candidates = (fillerCandidates ?? []) as unknown as UserMistakeRow[];
 
-  // Pick best candidate: prefer target phase, exclude resignable, endgame Syzygy
+  // Pick best candidate: prefer target phase, exclude endgame Syzygy
   let filler: UserMistakeRow | null = null;
   for (const phase of phaseOrder) {
     for (const c of candidates) {
       if (phase === "endgame" && hasLikelySyzygyTablebaseEntry(c.starting_fen)) continue;
-      if (isNonInstructivePosition({
-        evalCp: (c as any).eval_before_cp,
-      }).isNonInstructive) {
-        if (process.env.NODE_ENV !== "production") {
-          console.debug("[training-filter] skipped resignable filler position", {
-            id: c.id,
-            fen: c.starting_fen,
-          });
-        }
-        continue;
-      }
       const candidatePhase = (c as any).phase ?? inferPhaseFromFen(c.starting_fen);
       if (candidatePhase === phase || !candidatePhase) {
         filler = c;
