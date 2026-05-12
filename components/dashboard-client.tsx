@@ -751,16 +751,16 @@ function QueuePositionRow({
         )}
 
         {/* Actions */}
-        <div className="mt-5 flex flex-wrap gap-4">
+        <div className="mt-5 flex flex-wrap gap-3">
           <Link
             href={`/train?mistakeId=${encodeURIComponent(position.id)}`}
-            className="app-brutal-button inline-flex min-h-12 min-w-0 items-center justify-center px-6 py-3 text-sm"
+            className="app-brutal-button inline-flex min-h-12 min-w-0 items-center justify-center px-4 py-2.5 text-sm"
           >
             {position.attempts > 0 ? "Retry" : "Start"}
           </Link>
           <Link
             href={`/train?mistakeId=${encodeURIComponent(position.id)}&mode=postmortem`}
-            className="app-brutal-button-secondary inline-flex min-h-12 min-w-0 items-center justify-center px-6 py-3 text-sm"
+            className="app-brutal-button-secondary inline-flex min-h-12 min-w-0 items-center justify-center px-4 py-2.5 text-sm"
           >
             Analyze
           </Link>
@@ -769,7 +769,7 @@ function QueuePositionRow({
               type="button"
               disabled={isArchiving}
               onClick={archivePosition}
-              className="app-brutal-button-secondary inline-flex min-h-12 min-w-0 items-center justify-center px-6 py-3 text-sm text-[var(--app-class-blunder)] disabled:opacity-60"
+              className="app-brutal-button-secondary inline-flex min-h-12 min-w-0 items-center justify-center px-4 py-2.5 text-sm disabled:opacity-60"
             >
               {isArchiving ? "Archiving..." : "Archive"}
             </button>
