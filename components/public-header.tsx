@@ -93,7 +93,7 @@ export function PublicHeaderClient({ isSignedIn }: { isSignedIn: boolean }) {
             <>
               <Link
                 href="/blog"
-                className="inline-flex min-h-9 items-center justify-center px-3 py-2 text-xs font-bold uppercase tracking-[0.04em] text-[var(--app-muted)] transition hover:text-[var(--app-text)]"
+                className="app-brutal-button-secondary inline-flex min-h-9 items-center justify-center px-3 py-2 text-xs font-bold uppercase tracking-[0.04em] text-[var(--app-muted)] transition hover:text-[var(--app-text)]"
               >
                 Blog
               </Link>
