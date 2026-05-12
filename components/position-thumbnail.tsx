@@ -11,6 +11,12 @@ export type ThumbnailMovePreview = {
   badge?: LastMoveBadge | null;
 };
 
+export type PersistentHighlightedMove = {
+  from: string;
+  to: string;
+  color?: string | null;
+};
+
 export function PositionThumbnail({
   fen,
   orientation = "white",
@@ -18,6 +24,7 @@ export function PositionThumbnail({
   lastMove,
   lastMoveBadge = null,
   pieceAnimation = false,
+  persistentHighlightedMoves = [],
 }: {
   fen: string;
   orientation?: "white" | "black";
@@ -25,7 +32,24 @@ export function PositionThumbnail({
   lastMove?: { from: string; to: string } | null;
   lastMoveBadge?: LastMoveBadge | null;
   pieceAnimation?: boolean;
+  persistentHighlightedMoves?: PersistentHighlightedMove[];
 }) {
+  const persistentHighlightedSquares =
+    persistentHighlightedMoves.length > 0
+      ? persistentHighlightedMoves.flatMap((move) => {
+          const baseColor = move.color ?? "var(--app-accent)";
+          return [
+            {
+              square: move.from,
+              color: `color-mix(in srgb, ${baseColor} 34%, transparent)`,
+            },
+            {
+              square: move.to,
+              color: `color-mix(in srgb, ${baseColor} 52%, transparent)`,
+            },
+          ];
+        })
+      : undefined;
   return (
     <div
       className="app-brutal-board-frame shrink-0 overflow-hidden"
@@ -45,6 +69,7 @@ export function PositionThumbnail({
         lastMove={lastMove ?? null}
         lastMoveBadge={lastMoveBadge}
         pieceAnimation={pieceAnimation}
+        highlightedSquares={persistentHighlightedSquares}
         className="!rounded-none"
       />
     </div>
@@ -57,6 +82,8 @@ const NOTE_HOVER_START_DELAY_MS = 50;
 const BETWEEN_SEQUENCE_DELAY_MS = 260;
 const STAGE_SETTLE_MS = 32;
 const HOVER_PREVIEW_DELAY_MS = 50;
+const REVERSE_HIGHLIGHT_LINGER_MS = 100;
+const HOVER_HIGHLIGHT_ARM_MS = 100;
 
 export function ReplayThumbnail({
   previousFen,
@@ -78,12 +105,14 @@ export function ReplayThumbnail({
 
   const [shownFen, setShownFen] = useState(idleFen);
   const [previewLastMove, setPreviewLastMove] = useState<{ from: string; to: string } | null>(null);
+  const [persistentHighlightedMoves, setPersistentHighlightedMoves] = useState<PersistentHighlightedMove[]>([]);
   const [previewBadge, setPreviewBadge] = useState<LastMoveBadge | null>(null);
   const [animating, setAnimating] = useState(false);
 
   const isHoveringRef = useRef(false);
   const activePreviewRef = useRef<ThumbnailMovePreview | null>(null);
   const sequenceIdRef = useRef(0);
+  const noteHoverStartedAtRef = useRef<number | null>(null);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const moveCoords = useMemo(() => {
@@ -112,12 +141,24 @@ export function ReplayThumbnail({
     return sequenceIdRef.current === id;
   }
 
-  function isCastlingMove(move: { from: string; to: string } | null | undefined) {
-    if (!move) return false;
-    return (
-      (move.from === "e1" && (move.to === "g1" || move.to === "c1")) ||
-      (move.from === "e8" && (move.to === "g8" || move.to === "c8"))
-    );
+  function isNoteHoverArmed() {
+    const startedAt = noteHoverStartedAtRef.current;
+    return typeof startedAt === "number" && Date.now() - startedAt >= HOVER_HIGHLIGHT_ARM_MS;
+  }
+
+  function sameMove(
+    a: { from: string; to: string } | null | undefined,
+    b: { from: string; to: string } | null | undefined,
+  ) {
+    return Boolean(a && b && a.from === b.from && a.to === b.to);
+  }
+
+  function withoutMove(
+    moves: PersistentHighlightedMove[],
+    move: { from: string; to: string } | null | undefined,
+  ) {
+    if (!move) return moves;
+    return moves.filter((item) => !sameMove(item, move));
   }
 
   function playGlideStage({
@@ -128,6 +169,8 @@ export function ReplayThumbnail({
     badge = null,
     delay = 0,
     keepLastMoveBeforeStart = false,
+    addPersistentHighlightOnStart = false,
+    persistentHighlightColor = null,
     onDone,
   }: {
     id: number;
@@ -137,6 +180,8 @@ export function ReplayThumbnail({
     badge?: LastMoveBadge | null;
     delay?: number;
     keepLastMoveBeforeStart?: boolean;
+    addPersistentHighlightOnStart?: boolean;
+    persistentHighlightColor?: string | null;
     onDone?: () => void;
   }) {
     schedule(() => {
@@ -147,6 +192,7 @@ export function ReplayThumbnail({
       // the reverse animation fully completes.
       setAnimating(false);
       setShownFen(fromFen);
+
       setPreviewLastMove(keepLastMoveBeforeStart ? move : null);
       setPreviewBadge(null);
 
@@ -155,11 +201,21 @@ export function ReplayThumbnail({
 
         // Highlight immediately when the move starts, Lichess-style.
         setPreviewLastMove(move);
+        if (addPersistentHighlightOnStart && move && isNoteHoverArmed()) {
+          setPersistentHighlightedMoves((current) =>
+            current.some((item) => sameMove(item, move))
+              ? current.map((item) =>
+                  sameMove(item, move)
+                    ? { ...item, color: item.color ?? persistentHighlightColor }
+                    : item,
+                )
+              : [...current, { ...move, color: persistentHighlightColor }],
+          );
+        }
         setPreviewBadge(null);
 
-        // Castling moves king + rook. The board glide currently infers one piece,
-        // so thumbnails should avoid the weird half-castle glide.
-        setAnimating(!isCastlingMove(move));
+        // Castling moves king + rook. The board now supports multi-piece glides.
+        setAnimating(true);
 
         requestAnimationFrame(() => {
           if (!isCurrent(id)) return;
@@ -184,6 +240,7 @@ export function ReplayThumbnail({
   useEffect(() => {
     if (!movePreview) {
       // Hover out
+      noteHoverStartedAtRef.current = null;
       const preview = activePreviewRef.current;
 
       if (!preview) {
@@ -192,6 +249,7 @@ export function ReplayThumbnail({
         setAnimating(false);
         setShownFen(idleFen);
         setPreviewLastMove(null);
+        setPersistentHighlightedMoves([]);
         setPreviewBadge(null);
         return;
       }
@@ -216,39 +274,51 @@ export function ReplayThumbnail({
           if (!isCurrent(id)) return;
 
           // The note move is now back on its original square.
-          // Remove the second move highlight before waiting for the first reverse stage.
+          // Keep its highlight visible for 100ms, then remove it.
           setAnimating(false);
           setShownFen(preview.fenBefore);
           setPreviewLastMove(null);
           setPreviewBadge(null);
 
-          if (!needsPreludeReverse) {
-            activePreviewRef.current = null;
-            return;
-          }
+          schedule(() => {
+            if (!isCurrent(id)) return;
 
-          // Reverse stage 2: undo the setup/prelude move.
-          // After the delay, highlight the prelude move immediately when its reverse starts.
-          playGlideStage({
-            id,
-            fromFen: preludeAfter,
-            toFen: preludeBefore,
-            move: moveCoords,
-            badge: null,
-            delay: BETWEEN_SEQUENCE_DELAY_MS,
-            keepLastMoveBeforeStart: true,
-            onDone: () => {
-              if (!isCurrent(id)) return;
+            setPersistentHighlightedMoves((current) => withoutMove(current, preview.move));
 
-              // The prelude move is now back on its original square.
-              // Remove the first move highlight and return to idle.
-              setAnimating(false);
-              setShownFen(preludeBefore);
-              setPreviewLastMove(null);
-              setPreviewBadge(null);
+            if (!needsPreludeReverse) {
+              setPersistentHighlightedMoves([]);
               activePreviewRef.current = null;
-            },
-          });
+              return;
+            }
+
+            // Reverse stage 2: undo the setup/prelude move.
+            // After the delay, highlight the prelude move immediately when its reverse starts.
+            playGlideStage({
+              id,
+              fromFen: preludeAfter,
+              toFen: preludeBefore,
+              move: moveCoords,
+              badge: null,
+              delay: BETWEEN_SEQUENCE_DELAY_MS,
+              keepLastMoveBeforeStart: true,
+              onDone: () => {
+                if (!isCurrent(id)) return;
+
+                // The prelude move is now back on its original square.
+                // Keep its highlight visible for 100ms, then remove it.
+                setAnimating(false);
+                setShownFen(preludeBefore);
+                setPreviewLastMove(null);
+                setPreviewBadge(null);
+
+                schedule(() => {
+                  if (!isCurrent(id)) return;
+                  setPersistentHighlightedMoves((current) => withoutMove(current, moveCoords));
+                  activePreviewRef.current = null;
+                }, REVERSE_HIGHLIGHT_LINGER_MS);
+              },
+            });
+          }, REVERSE_HIGHLIGHT_LINGER_MS);
         },
       });
 
@@ -257,13 +327,29 @@ export function ReplayThumbnail({
 
     // Hover in
     activePreviewRef.current = movePreview;
+    noteHoverStartedAtRef.current = Date.now();
     const id = nextSequenceId();
+    setPersistentHighlightedMoves([]);
+
+    schedule(() => {
+      if (!isCurrent(id) || !movePreview || !isNoteHoverArmed()) return;
+
+      const preludeBefore = previousFen ?? movePreview.fenBefore;
+      const preludeAfter = finalFen;
+      const needsPreludeStage = Boolean(previousFen && moveCoords && preludeBefore !== preludeAfter);
+
+      if (needsPreludeStage && moveCoords) {
+        setPersistentHighlightedMoves((current) =>
+          current.some((item) => sameMove(item, moveCoords))
+            ? current
+            : [...current, { ...moveCoords, color: null }],
+        );
+      }
+    }, HOVER_HIGHLIGHT_ARM_MS);
 
     const preludeBefore = previousFen ?? movePreview.fenBefore;
     const preludeAfter = finalFen;
-    const needsPreludeStage =
-      preludeBefore !== preludeAfter &&
-      preludeAfter !== movePreview.fenBefore;
+    const needsPreludeStage = Boolean(previousFen && moveCoords && preludeBefore !== preludeAfter);
 
     if (!needsPreludeStage) {
       // Single-stage note preview.
@@ -275,6 +361,8 @@ export function ReplayThumbnail({
         move: movePreview.move,
         badge: movePreview.badge ?? null,
         delay: NOTE_HOVER_START_DELAY_MS,
+        addPersistentHighlightOnStart: true,
+        persistentHighlightColor: movePreview.badge?.color ?? null,
       });
 
       return;
@@ -289,6 +377,7 @@ export function ReplayThumbnail({
       move: moveCoords,
       badge: null,
       delay: NOTE_HOVER_START_DELAY_MS,
+      addPersistentHighlightOnStart: true,
       onDone: () => {
         if (!isCurrent(id)) return;
 
@@ -301,6 +390,8 @@ export function ReplayThumbnail({
           move: movePreview.move,
           badge: movePreview.badge ?? null,
           delay: BETWEEN_SEQUENCE_DELAY_MS,
+          addPersistentHighlightOnStart: true,
+          persistentHighlightColor: movePreview.badge?.color ?? null,
         });
       },
     });
@@ -316,6 +407,7 @@ export function ReplayThumbnail({
     if (!canReplay || !previousFen || !moveCoords) {
       setShownFen(finalFen);
       setPreviewLastMove(null);
+      setPersistentHighlightedMoves([]);
       setPreviewBadge(null);
       setAnimating(false);
       return;
@@ -340,6 +432,7 @@ export function ReplayThumbnail({
     if (!canReplay || !previousFen || !moveCoords) {
       setShownFen(finalFen);
       setPreviewLastMove(null);
+      setPersistentHighlightedMoves([]);
       setPreviewBadge(null);
       setAnimating(false);
       return;
@@ -358,6 +451,7 @@ export function ReplayThumbnail({
         setAnimating(false);
         setShownFen(previousFen);
         setPreviewLastMove(null);
+        setPersistentHighlightedMoves([]);
         setPreviewBadge(null);
       },
     });
@@ -381,6 +475,7 @@ export function ReplayThumbnail({
         lastMove={previewLastMove}
         lastMoveBadge={previewBadge}
         pieceAnimation={animating}
+        persistentHighlightedMoves={persistentHighlightedMoves}
       />
     </div>
   );

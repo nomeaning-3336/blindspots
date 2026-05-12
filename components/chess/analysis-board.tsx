@@ -194,7 +194,7 @@ export function AnalysisBoard({
   const [annotationMode, setAnnotationMode] = useState<BoardMode>("analysis");
   const [annotationCircles, setAnnotationCircles] = useState<string[]>([]);
   const [annotationArrows, setAnnotationArrows] = useState<BoardAnnotationArrow[]>([]);
-  const [pieceGlide, setPieceGlide] = useState<PieceGlideAnimation | null>(null);
+  const [pieceGlides, setPieceGlides] = useState<PieceGlideAnimation[]>([]);
   const boardRef = useRef<HTMLDivElement | null>(null);
   const draggedPieceRef = useRef<HTMLDivElement | null>(null);
   const dragPositionRef = useRef<{ x: number; y: number } | null>(null);
@@ -269,50 +269,59 @@ export function AnalysisBoard({
 
     if (!pieceAnimation || !chess || !previousFen || previousFen === fen) {
       dragCompletionAnimationHintRef.current = null;
-      setPieceGlide(null);
+      setPieceGlides([]);
       return;
     }
 
     const previousChess = safeChess(previousFen);
     if (!previousChess) {
       dragCompletionAnimationHintRef.current = null;
-      setPieceGlide(null);
+      setPieceGlides([]);
       return;
     }
 
-    const inferredMove = inferPieceGlideMove(previousChess, chess);
-    if (!inferredMove) {
+    const inferredMoves = inferPieceGlideMoves(previousChess, chess);
+    if (inferredMoves.length === 0) {
       dragCompletionAnimationHintRef.current = null;
-      setPieceGlide(null);
+      setPieceGlides([]);
       return;
     }
 
-    const animationId = `${fen}|${inferredMove.from}-${inferredMove.to}|${inferredMove.pieceCode}`;
     const dragCompletionAnimationHint = dragCompletionAnimationHintRef.current;
-    const initialOffset =
-      dragCompletionAnimationHint?.from === inferredMove.from &&
-      dragCompletionAnimationHint.to === inferredMove.to
-        ? dragCompletionAnimationHint.initialOffset
-        : undefined;
     dragCompletionAnimationHintRef.current = null;
 
-    setPieceGlide({
-      id: animationId,
-      from: inferredMove.from,
-      to: inferredMove.to,
-      pieceCode: inferredMove.pieceCode,
-      started: false,
-      initialOffset,
+    const glides = inferredMoves.map((inferredMove) => {
+      const animationId = `${fen}|${inferredMove.from}-${inferredMove.to}|${inferredMove.pieceCode}`;
+      const initialOffset =
+        dragCompletionAnimationHint?.from === inferredMove.from &&
+        dragCompletionAnimationHint.to === inferredMove.to
+          ? dragCompletionAnimationHint.initialOffset
+          : undefined;
+
+      return {
+        id: animationId,
+        from: inferredMove.from,
+        to: inferredMove.to,
+        pieceCode: inferredMove.pieceCode,
+        started: false,
+        initialOffset,
+      };
     });
 
+    setPieceGlides(glides);
+
+    const glideIds = new Set(glides.map((glide) => glide.id));
+
     const frame = window.requestAnimationFrame(() => {
-      setPieceGlide((current) =>
-        current?.id === animationId ? { ...current, started: true } : current,
+      setPieceGlides((current) =>
+        current.map((glide) =>
+          glideIds.has(glide.id) ? { ...glide, started: true } : glide,
+        ),
       );
     });
 
     const timeout = window.setTimeout(() => {
-      setPieceGlide((current) => (current?.id === animationId ? null : current));
+      setPieceGlides((current) => current.filter((glide) => !glideIds.has(glide.id)));
     }, 240);
 
     return () => {
@@ -722,7 +731,7 @@ export function AnalysisBoard({
                     "relative z-10 h-[86%] w-[86%] object-contain drop-shadow-[0_8px_12px_rgba(0,0,0,0.42)]",
                     mode === "training" && piece?.color === chess?.turn() ? "cursor-grab active:cursor-grabbing" : "",
                     dragFrom === square ? "opacity-20" : "",
-                    pieceGlide?.to === square && pieceGlide.pieceCode === pieceCode ? "opacity-0" : "",
+                    pieceGlides.some((glide) => glide.to === square && glide.pieceCode === pieceCode) ? "opacity-0" : "",
                   ].join(" ")}
                 />
               ) : null}
@@ -762,13 +771,14 @@ export function AnalysisBoard({
           orientation={orientation}
         />
       ) : null}
-      {pieceGlide ? (
+      {pieceGlides.map((glide) => (
         <PieceGlideOverlay
-          animation={pieceGlide}
+          key={glide.id}
+          animation={glide}
           orientation={orientation}
           pieceAssetSet={pieceAssetSet}
         />
-      ) : null}
+      ))}
       {dragFrom && dragPosition ? (
         <DraggedPiece
           nodeRef={draggedPieceRef}
@@ -1161,6 +1171,86 @@ function closestGridOffsetOnSegment(
     col: from.col + dx * t,
     row: from.row + dy * t,
   };
+}
+
+function boardPieceSnapshots(chess: Chess): BoardPieceSnapshot[] {
+  const pieces: BoardPieceSnapshot[] = [];
+  for (const square of allBoardSquares()) {
+    const piece = chess.get(square as Square);
+    if (piece) {
+      pieces.push({ square, color: piece.color, type: piece.type });
+    }
+  }
+  return pieces;
+}
+
+function inferCastlingGlideMoves(previousChess: Chess, nextChess: Chess) {
+  const previousPieces = boardPieceSnapshots(previousChess);
+  const nextPieces = boardPieceSnapshots(nextChess);
+
+  function hasPiece(pieces: BoardPieceSnapshot[], square: string, color: "w" | "b", type: string) {
+    return pieces.some((piece) => piece.square === square && piece.color === color && piece.type === type);
+  }
+
+  function castleGlide(input: {
+    color: "w" | "b";
+    kingFrom: string;
+    kingTo: string;
+    rookFrom: string;
+    rookTo: string;
+  }) {
+    const { color, kingFrom, kingTo, rookFrom, rookTo } = input;
+
+    if (
+      hasPiece(previousPieces, kingFrom, color, "k") &&
+      hasPiece(previousPieces, rookFrom, color, "r") &&
+      hasPiece(nextPieces, kingTo, color, "k") &&
+      hasPiece(nextPieces, rookTo, color, "r")
+    ) {
+      return [
+        {
+          from: kingFrom,
+          to: kingTo,
+          pieceCode: pieceCodeForAsset(color, "k"),
+        },
+        {
+          from: rookFrom,
+          to: rookTo,
+          pieceCode: pieceCodeForAsset(color, "r"),
+        },
+      ];
+    }
+
+    return [];
+  }
+
+  const candidates = [
+    // White king-side castle: forward and reverse
+    castleGlide({ color: "w", kingFrom: "e1", kingTo: "g1", rookFrom: "h1", rookTo: "f1" }),
+    castleGlide({ color: "w", kingFrom: "g1", kingTo: "e1", rookFrom: "f1", rookTo: "h1" }),
+
+    // White queen-side castle: forward and reverse
+    castleGlide({ color: "w", kingFrom: "e1", kingTo: "c1", rookFrom: "a1", rookTo: "d1" }),
+    castleGlide({ color: "w", kingFrom: "c1", kingTo: "e1", rookFrom: "d1", rookTo: "a1" }),
+
+    // Black king-side castle: forward and reverse
+    castleGlide({ color: "b", kingFrom: "e8", kingTo: "g8", rookFrom: "h8", rookTo: "f8" }),
+    castleGlide({ color: "b", kingFrom: "g8", kingTo: "e8", rookFrom: "f8", rookTo: "h8" }),
+
+    // Black queen-side castle: forward and reverse
+    castleGlide({ color: "b", kingFrom: "e8", kingTo: "c8", rookFrom: "a8", rookTo: "d8" }),
+    castleGlide({ color: "b", kingFrom: "c8", kingTo: "e8", rookFrom: "d8", rookTo: "a8" }),
+  ];
+
+  return candidates.find((candidate) => candidate.length > 0) ?? [];
+}
+
+function inferPieceGlideMoves(previousChess: Chess, nextChess: Chess) {
+  const castlingGlides = inferCastlingGlideMoves(previousChess, nextChess);
+  if (castlingGlides.length > 0) return castlingGlides;
+
+  const singleMove = inferPieceGlideMove(previousChess, nextChess);
+  return singleMove ? [singleMove] : [];
 }
 
 function inferPieceGlideMove(previousChess: Chess, currentChess: Chess): {

@@ -23,11 +23,11 @@ export async function POST(
   const supabase = getSupabaseAdminClient();
   const now = new Date().toISOString();
 
-  // Soft delete — status='retired' preserves FK targets in training_sessions.
+  // Soft delete — status='deleted' hides the row while preserving FK targets in training_sessions.
   const { data: row, error } = await supabase
     .from("user_mistakes")
     .update({
-      status: "retired",
+      status: "deleted",
       retired_at: now,
       next_review_at: null,
       updated_at: now,

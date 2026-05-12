@@ -350,6 +350,7 @@ function isDueNow(p: DashboardPosition, nowMs: number) {
 function queueBucketForPosition(p: DashboardPosition, nowMs: number): QueueBucket | null {
   if (!isPersonalMistakePosition(p)) return null;
 
+  if (p.status === "deleted") return null;
   if (p.status === "retired") return "retired";
   if (p.status === "mastered") return "mastered";
   if (isDueNow(p, nowMs)) return "dueNow";
