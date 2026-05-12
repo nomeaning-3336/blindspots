@@ -202,13 +202,13 @@ type SequencePosition = {
   fen: string;
   label: string;
   move?: TrainingMove;
+  surfacedNotes?: unknown;
+  moveNotes?: unknown;
+  move_notes?: unknown;
+  notes?: unknown;
 };
 
-type VisibleSequencePosition = {
-  index: number;
-  fen: string;
-  label: string;
-  move?: TrainingMove;
+type VisibleSequencePosition = SequencePosition & {
   pitchIndex?: number;
   userMoveIndex?: number;
 };
@@ -274,6 +274,7 @@ type NextPositionResponse = {
     playedAt: string;
     note: string | null;
   }>;
+  moveNotes?: unknown;
 };
 
 interface InitializationSummary {
@@ -530,6 +531,7 @@ export default function TrainPage(props: TrainPageProps) {
   const [engineLineErrorFens, setEngineLineErrorFens] = useState<Set<string>>(new Set());
   const [engineLineLoadingFen, setEngineLineLoadingFen] = useState<string | null>(null);
   const [cachedNextPosition, setCachedNextPosition] = useState<NextPositionResponse | null>(null);
+  const [currentPositionNotes, setCurrentPositionNotes] = useState<unknown[]>([]);
   const [currentChallengeElo, setCurrentChallengeElo] = useState<number | null>(null);
   const [isOpponentThinking, setIsOpponentThinking] = useState(false);
   const [isCompletingSequence, setIsCompletingSequence] = useState(false);
@@ -1164,7 +1166,7 @@ export default function TrainPage(props: TrainPageProps) {
     return () => window.clearTimeout(timer);
   }, [state]);
 
-  const mistakeIdParam = searchParams?.get("mistakeId");
+  const mistakeIdParam = searchParams?.get("positionId") ?? searchParams?.get("mistakeId");
   const modeParam = searchParams?.get("mode"); // "play" | "postmortem"
 
   // ── Dev-only debug FEN injection ──────────────────────────────────
@@ -1202,6 +1204,7 @@ export default function TrainPage(props: TrainPageProps) {
     setDisplayStartingFen(previousFen ?? finalFen);
     setFen(previousFen ?? finalFen);
     setMoves([]);
+    setCurrentPositionNotes([]);
     setLastMove(null);
     setInitialOpponentMove(null);
     initialOpponentMoveRef.current = null;
@@ -1233,7 +1236,7 @@ export default function TrainPage(props: TrainPageProps) {
   async function loadSpecificPosition(mistakeId: string, mode: string) {
     setIsPositionLoading(true);
     setPositionLoadError(null);
-    const res = await fetch(`/api/train/position?mistakeId=${encodeURIComponent(mistakeId)}`);
+    const res = await fetch(`/api/train/position?positionId=${encodeURIComponent(mistakeId)}`);
     if (!res.ok) {
       setPositionLoadError("That queue position could not be loaded.");
       setIsPositionLoading(false);
@@ -1244,6 +1247,7 @@ export default function TrainPage(props: TrainPageProps) {
     setDisplayStartingFen(payload.previousFen ?? payload.fen);
     setFen(payload.previousFen ?? payload.fen);
     setMoves([]);
+    setCurrentPositionNotes(normalizeTrainingNotes(payload.moveNotes));
     setLastMove(null);
     setInitialOpponentMove(null);
     initialOpponentMoveRef.current = null;
@@ -1333,7 +1337,7 @@ export default function TrainPage(props: TrainPageProps) {
 
   async function fetchNextPosition(mistakeId?: string) {
     const url = mistakeId
-      ? `/api/train/next-position?mistakeId=${encodeURIComponent(mistakeId)}`
+      ? `/api/train/next-position?positionId=${encodeURIComponent(mistakeId)}`
       : "/api/train/next-position";
     const response = await fetch(url, { cache: "no-store" });
     const payload = (await response.json().catch(() => null)) as NextPositionResponse | null;
@@ -1428,6 +1432,7 @@ export default function TrainPage(props: TrainPageProps) {
     setFen(visibleInitialFen);
     setHasLoadedPosition(true);
     setMoves([]);
+    setCurrentPositionNotes(normalizeTrainingNotes(payload.moveNotes));
     setLastMove(null);
     setResultMode("results");
     setExploreIndex(0);
@@ -2785,17 +2790,16 @@ export default function TrainPage(props: TrainPageProps) {
     [boardRailMoves, userMoveSide],
   );
   const resurfacedNotes = useMemo(() => {
-    const position = activeSequencePosition;
     const raw =
-      position?.surfacedNotes ??
-      position?.moveNotes ??
-      position?.move_notes ??
-      position?.notes ??
-      position?.mistakeNotes ??
-      position?.mistake_notes ??
+      currentPositionNotes.length > 0
+        ? currentPositionNotes
+        : activeSequencePosition?.surfacedNotes ??
+      activeSequencePosition?.moveNotes ??
+      activeSequencePosition?.move_notes ??
+      activeSequencePosition?.notes ??
       [];
     return normalizeTrainingNotes(raw);
-  }, [activeSequencePosition]);
+  }, [activeSequencePosition, currentPositionNotes]);
 
   if (process.env.NODE_ENV === "development") {
     console.log("[train] current position notes", {
@@ -2803,8 +2807,6 @@ export default function TrainPage(props: TrainPageProps) {
       moveNotes: activeSequencePosition?.moveNotes,
       move_notes: activeSequencePosition?.move_notes,
       notes: activeSequencePosition?.notes,
-      mistakeNotes: activeSequencePosition?.mistakeNotes,
-      mistake_notes: activeSequencePosition?.mistake_notes,
       normalized: resurfacedNotes,
     });
   }
@@ -5932,18 +5934,18 @@ function TrainingNotesRail({
   dashboardButton: ReactNode;
 }) {
   return (
-    <aside className="flex min-h-[420px] w-full flex-col rounded-xl border border-[var(--app-border-soft)] bg-[var(--app-panel-solid)] p-4 shadow-[var(--app-shadow)] lg:min-h-[520px]">
+    <aside className="flex min-h-[420px] w-full flex-col border-l border-[var(--app-border)] bg-[var(--app-panel-solid)] p-4 lg:min-h-[520px]">
       <div>
-        <div className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[var(--app-muted)]">
+        <div className="mb-4 text-xl font-black leading-tight tracking-[-0.03em] text-[var(--app-text)]">
           Notes
         </div>
 
         {notes.length === 0 ? (
-          <div className="rounded-lg border border-[var(--app-border-soft)] bg-[var(--app-panel-deep)] p-4 text-sm leading-6 text-[var(--app-muted)]">
-            No resurfaced notes for this position.
+          <div className="mt-2 text-sm text-[var(--app-muted)]">
+            N/A
           </div>
         ) : (
-          <div className="grid gap-3">
+          <div className="grid gap-2">
             {notes.map((note, index) => {
               const moveLabel = note.moveSan ?? note.moveUci ?? "Previous mistake";
               const text = note.noteText ?? note.note ?? "";
@@ -5951,19 +5953,22 @@ function TrainingNotesRail({
               return (
                 <div
                   key={`${moveLabel}-${index}`}
-                  className="rounded-lg border border-[var(--app-border-soft)] bg-[var(--app-panel-deep)] p-4"
+                  className="grid gap-1 border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-3 py-2"
                 >
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <div className="text-sm font-black text-[var(--app-text)]">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="font-sans text-sm font-semibold text-[var(--app-text)]">
                       {moveLabel}
                     </div>
                     {note.classification ? (
-                      <div className="rounded border border-[var(--app-border)] px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--app-muted)]">
+                      <div
+                        className="font-mono text-[10px] font-bold uppercase tracking-[0.12em]"
+                        style={{ color: classificationColor(note.classification as MoveClassification) }}
+                      >
                         {note.classification}
                       </div>
                     ) : null}
                   </div>
-                  <div className="text-sm leading-6 text-[var(--app-muted)]">
+                  <div className="font-sans text-sm leading-5 text-[var(--app-text)]">
                     {text || "No note text."}
                   </div>
                 </div>

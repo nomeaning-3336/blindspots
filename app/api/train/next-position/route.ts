@@ -75,6 +75,13 @@ type NextPositionResponse = {
     playedAt: string;
     note: string | null;
   }>;
+  moveNotes?: Array<{
+    moveKey: string;
+    moveSan: string | null;
+    moveUci: string | null;
+    classification: string | null;
+    noteText: string;
+  }>;
 };
 const DEFAULT_SEQUENCE_LENGTH = 4;
 const MIN_SEQUENCE_LENGTH = 1;
@@ -95,7 +102,8 @@ export async function GET(request: Request) {
   const supabase = getSupabaseAdminClient();
 
   // Retry: serve a specific mistake by id
-  const retryMistakeId = new URL(request.url).searchParams.get("mistakeId");
+  const requestUrl = new URL(request.url);
+  const retryMistakeId = requestUrl.searchParams.get("positionId") ?? requestUrl.searchParams.get("mistakeId");
   if (retryMistakeId) {
     const { data: retryRow } = await supabase
       .from("user_mistakes")
@@ -1197,6 +1205,8 @@ async function enrichAttemptRegistry(
   const decisionFen = normalizeDecisionFen(response.decisionFen ?? response.fen ?? "");
   if (!decisionFen) return response;
 
+  const moveNotes = await loadMoveNotesForDecisionFen(decisionFen, userId, supabase);
+
   const { data: attempts } = await supabase
     .from("user_mistake_attempts" as any)
     .select("id, move_uci, move_san, classification, cp_loss, played_at")
@@ -1205,7 +1215,9 @@ async function enrichAttemptRegistry(
     .is("resolved_at", null)
     .order("played_at", { ascending: false });
 
-  if (!attempts || (attempts as any[]).length === 0) return response;
+  if (!attempts || (attempts as any[]).length === 0) {
+    return moveNotes.length > 0 ? { ...response, moveNotes } : response;
+  }
 
   const registry = await Promise.all(
     (attempts as any[]).map(async (a: any) => {
@@ -1229,5 +1241,32 @@ async function enrichAttemptRegistry(
     }),
   );
 
-  return { ...response, attemptRegistry: registry };
+  return {
+    ...response,
+    attemptRegistry: registry,
+    ...(moveNotes.length > 0 ? { moveNotes } : {}),
+  };
+}
+
+async function loadMoveNotesForDecisionFen(
+  decisionFen: string,
+  userId: string,
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+) {
+  const moveKeyPrefix = `${decisionFen}::`;
+  const { data } = await supabase
+    .from("training_move_notes" as any)
+    .select("move_key, move_san, move_uci, classification, note_text")
+    .eq("user_id", userId)
+    .like("move_key", `${moveKeyPrefix}%`)
+    .neq("note_text", "")
+    .order("last_attempted_at", { ascending: false });
+
+  return ((data as any[] | null) ?? []).map((row) => ({
+    moveKey: row.move_key,
+    moveSan: row.move_san ?? null,
+    moveUci: row.move_uci ?? null,
+    classification: row.classification ?? null,
+    noteText: row.note_text ?? "",
+  }));
 }

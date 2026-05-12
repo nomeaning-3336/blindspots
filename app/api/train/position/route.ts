@@ -6,9 +6,9 @@ import { isValidFen } from "@/lib/training/corpus-helpers";
 export async function GET(request: NextRequest) {
   const userId = await requireAppAuth("/train");
 
-  const mistakeId = request.nextUrl.searchParams.get("mistakeId");
+  const mistakeId = request.nextUrl.searchParams.get("positionId") ?? request.nextUrl.searchParams.get("mistakeId");
   if (!mistakeId) {
-    return NextResponse.json({ error: "Missing mistakeId parameter" }, { status: 400 });
+    return NextResponse.json({ error: "Missing positionId parameter" }, { status: 400 });
   }
 
   const supabase = await getSupabaseServerClient();

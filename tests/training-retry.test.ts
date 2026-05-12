@@ -4,26 +4,27 @@ import test from "node:test";
 
 const require = createRequire(import.meta.url);
 
-test("dashboard Retry link includes mistakeId in href", () => {
-  // Verify the dashboard client renders Retry links with ?mistakeId=
+test("dashboard Retry link includes positionId in href", () => {
+  // Verify the dashboard client renders Retry links with ?positionId=
   const fs = require("node:fs");
   const source = fs.readFileSync("components/dashboard-client.tsx", "utf8");
 
-  // The Retry button must link to /train?mistakeId=... (no mode param)
-  const retryMatches = source.match(/href=\{`\/train\?mistakeId=\$\{encodeURIComponent\(position\.id\)\}`\}/g);
-  assert.ok(retryMatches, "Retry link must use /train?mistakeId=<id>");
+  // The Retry button must link to /train?positionId=... (no mode param)
+  const retryMatches = source.match(/href=\{`\/train\?positionId=\$\{encodeURIComponent\(position\.id\)\}`\}/g);
+  assert.ok(retryMatches, "Retry link must use /train?positionId=<id>");
   assert.equal(retryMatches.length, 1, "exactly one Retry link expected");
 
   // The Analyze button must still use mode=postmortem
-  const analyzeMatch = source.match(/href=\{`\/train\?mistakeId=\$\{encodeURIComponent\(position\.id\)\}&mode=postmortem`\}/);
+  const analyzeMatch = source.match(/href=\{`\/train\?positionId=\$\{encodeURIComponent\(position\.id\)\}&mode=postmortem`\}/);
   assert.ok(analyzeMatch, "Analyze link must still include mode=postmortem");
 });
 
-test("page.tsx forwards mistakeId to TrainPage", () => {
+test("page.tsx forwards positionId to TrainPage", () => {
   const fs = require("node:fs");
   const source = fs.readFileSync("app/(shell)/train/page.tsx", "utf8");
 
-  // searchParams type must include mistakeId
+  // searchParams type must include positionId and legacy mistakeId fallback
+  assert.match(source, /positionId\?/);
   assert.match(source, /mistakeId\?/);
 
   // initialMistakeId must be passed to <TrainPage>
@@ -31,15 +32,15 @@ test("page.tsx forwards mistakeId to TrainPage", () => {
   assert.match(source, /<TrainPage[\s\S]*initialMistakeId/);
 });
 
-test("train-client fetches next-position with ?mistakeId= on retry", () => {
+test("train-client fetches next-position with ?positionId= on retry", () => {
   const fs = require("node:fs");
   const source = fs.readFileSync("app/(shell)/train/train-client.tsx", "utf8");
 
   // fetchNextPosition must accept optional mistakeId
   assert.match(source, /fetchNextPosition\(mistakeId/);
 
-  // URL must include ?mistakeId= when provided
-  assert.match(source, /\?mistakeId=\$\{encodeURIComponent\(mistakeId\)\}/);
+  // URL must include ?positionId= when provided
+  assert.match(source, /\?positionId=\$\{encodeURIComponent\(mistakeId\)\}/);
 
   // autoStart must be true when initialMistakeId is used
   assert.match(source, /autoStart:\s*true/);
@@ -48,14 +49,15 @@ test("train-client fetches next-position with ?mistakeId= on retry", () => {
   assert.match(source, /initialMistakeIdConsumedRef/);
 });
 
-test("next-position API accepts ?mistakeId= and returns retry-shaped response shape", () => {
+test("next-position API accepts ?positionId= and returns retry-shaped response shape", () => {
   const fs = require("node:fs");
   const source = fs.readFileSync("app/api/train/next-position/route.ts", "utf8");
 
   // GET must accept Request
   assert.match(source, /export async function GET\(request:\s*Request\)/);
 
-  // Must extract mistakeId from searchParams
+  // Must extract positionId from searchParams with legacy fallback
+  assert.match(source, /searchParams\.get\("positionId"\)/);
   assert.match(source, /searchParams\.get\("mistakeId"\)/);
 
   // Must set queueSource to "retry"
