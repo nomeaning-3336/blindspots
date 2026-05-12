@@ -2736,6 +2736,20 @@ export default function TrainPage(props: TrainPageProps) {
     (window as unknown as { __blindspotsTrainAudioStats?: unknown }).__blindspotsTrainAudioStats = getTrainAudioStats();
   });
 
+  function normalizeTrainingNotes(input: unknown) {
+    if (!Array.isArray(input)) return [];
+
+    return input
+      .map((note: any) => ({
+        moveKey: note.moveKey ?? note.move_key ?? null,
+        moveSan: note.moveSan ?? note.move_san ?? note.san ?? null,
+        moveUci: note.moveUci ?? note.move_uci ?? note.uci ?? null,
+        classification: note.classification ?? note.moveClassification ?? note.move_classification ?? null,
+        noteText: note.noteText ?? note.note_text ?? note.note ?? note.text ?? null,
+      }))
+      .filter((note) => Boolean(note.noteText || note.moveSan || note.moveUci));
+  }
+
   const isExploringResults = state === "complete" && resultMode === "explore";
   const isActiveSetupReplay =
     state === "active" &&
@@ -2770,6 +2784,30 @@ export default function TrainPage(props: TrainPageProps) {
     () => boardRailMoves.filter(({ move }) => move.side === userMoveSide),
     [boardRailMoves, userMoveSide],
   );
+  const resurfacedNotes = useMemo(() => {
+    const position = activeSequencePosition;
+    const raw =
+      position?.surfacedNotes ??
+      position?.moveNotes ??
+      position?.move_notes ??
+      position?.notes ??
+      position?.mistakeNotes ??
+      position?.mistake_notes ??
+      [];
+    return normalizeTrainingNotes(raw);
+  }, [activeSequencePosition]);
+
+  if (process.env.NODE_ENV === "development") {
+    console.log("[train] current position notes", {
+      surfacedNotes: activeSequencePosition?.surfacedNotes,
+      moveNotes: activeSequencePosition?.moveNotes,
+      move_notes: activeSequencePosition?.move_notes,
+      notes: activeSequencePosition?.notes,
+      mistakeNotes: activeSequencePosition?.mistakeNotes,
+      mistake_notes: activeSequencePosition?.mistake_notes,
+      normalized: resurfacedNotes,
+    });
+  }
   const replayLastMove = isExploringResults
     ? (activeExploratoryPosition?.lastMove ?? exploratoryLastMove ?? lastMoveFromTrainingMove(activeSequencePosition?.move))
     : isActiveSetupReplay
@@ -3591,7 +3629,7 @@ export default function TrainPage(props: TrainPageProps) {
 
               return (
                 <TrainingNotesRail
-                  notes={attemptRegistry}
+                  notes={resurfacedNotes}
                   copyFenButton={copyFenButton}
                   skipButton={<a href="/train" className={primaryActionClassName}>Next position</a>}
                   dashboardButton={<a href="/" className={secondaryActionClassName}>Return to Dashboard</a>}
