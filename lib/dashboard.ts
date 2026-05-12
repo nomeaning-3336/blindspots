@@ -1,4 +1,5 @@
 import type { Json } from "@/lib/supabase/database";
+import { normalizeNotes, type NormalizedNote } from "@/lib/notes";
 
 export type DashboardClassifications = {
   brilliant: number;
@@ -163,6 +164,7 @@ type BuildDashboardSummaryInput = {
   avgCpLoss: number | null;
   notes: Array<{
     move_key: string;
+    decision_fen?: string | null;
     note_text: string;
     classification: string | null;
     eval_before_cp: number | null;
@@ -228,23 +230,19 @@ export function buildDashboardSummary({
   const revisitCount = jsonArrayLength(p.revisit_queue);
   const masteredCount = jsonArrayLength(p.mastered_queue);
 
-  const notesByKey = new Map<string, DashboardMoveNote>();
-  for (const n of notes) {
-    if (n.move_key) {
-      notesByKey.set(n.move_key, {
-        moveKey: n.move_key,
-        note: n.note_text,
-        classification: n.classification,
-        evalBeforeCp: n.eval_before_cp,
-        evalAfterCp: n.eval_after_cp,
-        moveSan: n.move_san,
-        moveUci: n.move_uci,
-        moverColor: null,
-      });
+  const normalizedNotes = normalizeNotes(notes);
+  const notesByFen = new Map<string, NormalizedNote[]>();
+  for (const n of normalizedNotes) {
+    if (!n.decisionFen) continue;
+    const bucket = notesByFen.get(n.decisionFen);
+    if (bucket) {
+      bucket.push(n);
+    } else {
+      notesByFen.set(n.decisionFen, [n]);
     }
   }
 
-  const mistakePositions = buildPositionRows(mistakes, notesByKey);
+  const mistakePositions = buildPositionRows(mistakes, notesByFen);
   const sessionPositions = buildSessionPositionRows(sessions);
   const positions = sortDashboardPositions([...mistakePositions, ...sessionPositions]);
   const recentPositions = positions.slice(0, 8);
@@ -286,19 +284,21 @@ export function buildDashboardSummary({
 
 function buildPositionRows(
   mistakes: DashboardMistakeInput[],
-  notesByKey: Map<string, DashboardMoveNote>,
+  notesByFen: Map<string, NormalizedNote[]>,
 ): DashboardPosition[] {
   return mistakes.map((m) => {
-    const moveNotes: DashboardMoveNote[] = [];
-    if (m.move_key) {
-      const note = notesByKey.get(m.move_key);
-      if (note) {
-        moveNotes.push({
-          ...note,
-          moverColor: moveColorFromFen(m.starting_fen),
-        });
-      }
-    }
+    const fenMatches = notesByFen.get(m.starting_fen) ?? [];
+    const moverColor = moveColorFromFen(m.starting_fen);
+    const moveNotes: DashboardMoveNote[] = fenMatches.map((n) => ({
+      moveKey: n.moveKey,
+      note: n.noteText,
+      classification: n.classification,
+      evalBeforeCp: n.evalBeforeCp,
+      evalAfterCp: n.evalAfterCp,
+      moveSan: n.moveSan,
+      moveUci: n.moveUci,
+      moverColor,
+    }));
     return {
       id: m.id,
       startingFen: m.starting_fen,
