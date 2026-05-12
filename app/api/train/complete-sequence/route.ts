@@ -20,6 +20,7 @@ import { updateMistakeAfterTraining, updateActiveMistakeAfterTraining } from "@/
 import { mineMistakesFromSequence } from "@/lib/training/mistake-mining-persistence";
 import type { MineableMoveInput } from "@/lib/training/mistake-mining";
 import { buildDefaultBlindspotProfile } from "@/lib/training/default-profile";
+import { normalizeDecisionFen } from "@/lib/training/mistake-memory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -306,6 +307,11 @@ export async function POST(request: Request) {
     positionEvaluations: minedMistakesInput,
   }).catch(() => {
     // Mining is best-effort; never fail the sequence completion.
+  });
+
+  // Persist mistake attempts — best-effort, never blocks the response.
+  persistMistakeAttempts(userId, sequenceEvaluation.positionEvaluations).catch((err) => {
+    console.error("[complete-sequence] attempt persistence failed", err);
   });
 
   if (selectedMistakeId) {
@@ -1262,5 +1268,79 @@ function isValidFen(fen: string) {
     return true;
   } catch {
     return false;
+  }
+}
+
+const BAD_CLASSIFICATIONS = new Set(["inaccuracy", "mistake", "blunder"]);
+
+const CLASSIFICATION_SEVERITY: Record<string, number> = {
+  inaccuracy: 1,
+  mistake: 2,
+  blunder: 3,
+};
+
+function worseClassification(a: string, b: string): string {
+  return (CLASSIFICATION_SEVERITY[a] ?? 0) >= (CLASSIFICATION_SEVERITY[b] ?? 0) ? a : b;
+}
+
+async function persistMistakeAttempts(
+  userId: string,
+  positionEvaluations: PositionEvaluation[],
+) {
+  const supabase = getSupabaseAdminClient();
+
+  for (const pe of positionEvaluations) {
+    const decisionFen = normalizeDecisionFen(pe.decisionFen);
+    if (!decisionFen) continue;
+    const moveUci = pe.userMove.uci;
+    const classification = pe.classification as string;
+
+    if (BAD_CLASSIFICATIONS.has(classification)) {
+      // Un-resolve all prior rows at this FEN so old mistakes re-surface
+      await supabase
+        .from("user_mistake_attempts" as any)
+        .update({ resolved_at: null })
+        .eq("user_id", userId)
+        .eq("decision_fen", decisionFen)
+        .not("resolved_at", "is", null);
+
+      const { data: existingRow } = await supabase
+        .from("user_mistake_attempts" as any)
+        .select("id, cp_loss, classification")
+        .eq("user_id", userId)
+        .eq("decision_fen", decisionFen)
+        .eq("move_uci", moveUci)
+        .maybeSingle();
+
+      const existing = existingRow as any;
+
+      await supabase
+        .from("user_mistake_attempts" as any)
+        .upsert(
+          {
+            user_id: userId,
+            decision_fen: decisionFen,
+            move_uci: moveUci,
+            move_san: pe.userMove.san,
+            classification: existing
+              ? worseClassification(existing.classification, classification)
+              : classification,
+            cp_loss: existing
+              ? Math.max(existing.cp_loss ?? 0, pe.cpLoss)
+              : pe.cpLoss,
+            played_at: new Date().toISOString(),
+            resolved_at: null,
+          },
+          { onConflict: "user_id, decision_fen, move_uci" },
+        );
+    } else {
+      // Good move — resolve all open entries at this FEN
+      await supabase
+        .from("user_mistake_attempts" as any)
+        .update({ resolved_at: new Date().toISOString() })
+        .eq("user_id", userId)
+        .eq("decision_fen", decisionFen)
+        .is("resolved_at", null);
+    }
   }
 }
