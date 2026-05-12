@@ -66,6 +66,7 @@ import {
   type AnnotatedMove,
 } from "@/lib/training/mistake-memory";
 import { MoveNotesPanel } from "@/components/train/mistake-memory-panel";
+import { normalizeNotes, formatEvalCp, type NormalizedNote, type RawNoteRow } from "@/lib/notes";
 
 type TrainingState = "active" | "complete" | "drift" | "resolving";
 type OnboardingScreen = "loading" | "connect" | "analysis" | "summary" | "done";
@@ -531,6 +532,7 @@ export default function TrainPage(props: TrainPageProps) {
   const [engineLineErrorFens, setEngineLineErrorFens] = useState<Set<string>>(new Set());
   const [engineLineLoadingFen, setEngineLineLoadingFen] = useState<string | null>(null);
   const [cachedNextPosition, setCachedNextPosition] = useState<NextPositionResponse | null>(null);
+  const [surfacedNotesForFen, setSurfacedNotesForFen] = useState<{ fen: string; notes: RawNoteRow[] }>({ fen: "", notes: [] });
   const [currentPositionNotes, setCurrentPositionNotes] = useState<unknown[]>([]);
   const [currentChallengeElo, setCurrentChallengeElo] = useState<number | null>(null);
   const [isOpponentThinking, setIsOpponentThinking] = useState(false);
@@ -2674,6 +2676,34 @@ export default function TrainPage(props: TrainPageProps) {
     syncDirtyMoveNoteKeys("flush");
   }, [isPostMortemVisible]);
 
+  // Load surfaced notes for the current decision position so the
+  // training "Notes" rail can show what the user has previously noted
+  // about this exact FEN, matching the dashboard view.
+  useEffect(() => {
+    const fen = startingFen;
+    if (!fen) {
+      setSurfacedNotesForFen({ fen: "", notes: [] });
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/train/move-notes?decisionFen=${encodeURIComponent(fen)}`)
+      .then((res) => (res.ok ? res.json() : { notes: [] }))
+      .then((data: { notes?: RawNoteRow[] }) => {
+        if (cancelled) return;
+        setSurfacedNotesForFen({ fen, notes: Array.isArray(data.notes) ? data.notes : [] });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[train] surfaced notes load failed", err);
+        }
+        setSurfacedNotesForFen({ fen, notes: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [startingFen]);
+
   // Load existing notes from Supabase when postmortem opens.
   useEffect(() => {
     if (!isPostMortemVisible) return;
@@ -2741,18 +2771,19 @@ export default function TrainPage(props: TrainPageProps) {
     (window as unknown as { __blindspotsTrainAudioStats?: unknown }).__blindspotsTrainAudioStats = getTrainAudioStats();
   });
 
-  function normalizeTrainingNotes(input: unknown) {
+  function normalizeTrainingNotes(input: unknown): NormalizedNote[] {
     if (!Array.isArray(input)) return [];
-
-    return input
-      .map((note: any) => ({
-        moveKey: note.moveKey ?? note.move_key ?? null,
-        moveSan: note.moveSan ?? note.move_san ?? note.san ?? null,
-        moveUci: note.moveUci ?? note.move_uci ?? note.uci ?? null,
-        classification: note.classification ?? note.moveClassification ?? note.move_classification ?? null,
-        noteText: note.noteText ?? note.note_text ?? note.note ?? note.text ?? null,
-      }))
-      .filter((note) => Boolean(note.noteText || note.moveSan || note.moveUci));
+    const rows: RawNoteRow[] = input.map((note: any) => ({
+      move_key: note.moveKey ?? note.move_key ?? null,
+      decision_fen: note.decisionFen ?? note.decision_fen ?? null,
+      move_uci: note.moveUci ?? note.move_uci ?? note.uci ?? null,
+      move_san: note.moveSan ?? note.move_san ?? note.san ?? null,
+      classification: note.classification ?? note.moveClassification ?? note.move_classification ?? null,
+      note_text: note.noteText ?? note.note_text ?? note.note ?? note.text ?? null,
+      eval_before_cp: note.evalBeforeCp ?? note.eval_before_cp ?? null,
+      eval_after_cp: note.evalAfterCp ?? note.eval_after_cp ?? null,
+    }));
+    return normalizeNotes(rows);
   }
 
   const isExploringResults = state === "complete" && resultMode === "explore";
@@ -2790,23 +2821,43 @@ export default function TrainPage(props: TrainPageProps) {
     [boardRailMoves, userMoveSide],
   );
   const resurfacedNotes = useMemo(() => {
-    const raw =
-      currentPositionNotes.length > 0
-        ? currentPositionNotes
-        : activeSequencePosition?.surfacedNotes ??
-      activeSequencePosition?.moveNotes ??
-      activeSequencePosition?.move_notes ??
-      activeSequencePosition?.notes ??
-      [];
-    return normalizeTrainingNotes(raw);
-  }, [activeSequencePosition, currentPositionNotes]);
+    const position = activeSequencePosition as
+      | (VisibleSequencePosition & {
+          surfacedNotes?: unknown;
+          moveNotes?: unknown;
+          move_notes?: unknown;
+          notes?: unknown;
+          mistakeNotes?: unknown;
+          mistake_notes?: unknown;
+        })
+      | undefined;
+    const fromPosition =
+      position?.surfacedNotes ??
+      position?.moveNotes ??
+      position?.move_notes ??
+      position?.notes ??
+      position?.mistakeNotes ??
+      position?.mistake_notes ??
+      null;
+    if (Array.isArray(fromPosition) && fromPosition.length > 0) {
+      return normalizeTrainingNotes(fromPosition);
+    }
+    if (surfacedNotesForFen.fen && surfacedNotesForFen.fen === startingFen) {
+      return normalizeTrainingNotes(surfacedNotesForFen.notes);
+    }
+    return [];
+  }, [activeSequencePosition, surfacedNotesForFen, startingFen]);
 
   if (process.env.NODE_ENV === "development") {
+    const posAny = activeSequencePosition as Record<string, unknown> | undefined;
     console.log("[train] current position notes", {
-      surfacedNotes: activeSequencePosition?.surfacedNotes,
-      moveNotes: activeSequencePosition?.moveNotes,
-      move_notes: activeSequencePosition?.move_notes,
-      notes: activeSequencePosition?.notes,
+      surfacedNotes: posAny?.surfacedNotes,
+      moveNotes: posAny?.moveNotes,
+      move_notes: posAny?.move_notes,
+      notes: posAny?.notes,
+      mistakeNotes: posAny?.mistakeNotes,
+      mistake_notes: posAny?.mistake_notes,
+      surfacedFromFen: surfacedNotesForFen,
       normalized: resurfacedNotes,
     });
   }
@@ -5922,13 +5973,7 @@ function TrainingNotesRail({
   skipButton,
   dashboardButton,
 }: {
-  notes: Array<{
-    moveSan?: string | null;
-    moveUci?: string | null;
-    note?: string | null;
-    noteText?: string | null;
-    classification?: string | null;
-  }>;
+  notes: NormalizedNote[];
   copyFenButton: ReactNode;
   skipButton: ReactNode;
   dashboardButton: ReactNode;
@@ -5948,11 +5993,16 @@ function TrainingNotesRail({
           <div className="grid gap-2">
             {notes.map((note, index) => {
               const moveLabel = note.moveSan ?? note.moveUci ?? "Previous mistake";
-              const text = note.noteText ?? note.note ?? "";
+              const text = note.noteText || "No note text.";
+              const evalBefore = note.evalBeforeCp;
+              const evalAfter = note.evalAfterCp;
+              const evalDelta =
+                evalBefore != null && evalAfter != null ? evalAfter - evalBefore : null;
+              const showEvalRow = evalBefore != null || evalAfter != null;
 
               return (
                 <div
-                  key={`${moveLabel}-${index}`}
+                  key={`${note.moveKey || moveLabel}-${index}`}
                   className="grid gap-1 border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-3 py-2"
                 >
                   <div className="flex flex-wrap items-center gap-2">
@@ -5968,8 +6018,20 @@ function TrainingNotesRail({
                       </div>
                     ) : null}
                   </div>
+                  {showEvalRow ? (
+                    <div className="text-xs text-[var(--app-muted)]">
+                      {evalBefore != null && <span>Before: {formatEvalCp(evalBefore)}</span>}
+                      {evalBefore != null && evalAfter != null && <span> · </span>}
+                      {evalAfter != null && <span>After: {formatEvalCp(evalAfter)}</span>}
+                      {evalDelta != null && (
+                        <span>
+                          {" · "}Δ {formatEvalCp(evalDelta)}
+                        </span>
+                      )}
+                    </div>
+                  ) : null}
                   <div className="font-sans text-sm leading-5 text-[var(--app-text)]">
-                    {text || "No note text."}
+                    {text}
                   </div>
                 </div>
               );
