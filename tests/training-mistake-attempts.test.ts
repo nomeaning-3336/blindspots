@@ -77,10 +77,12 @@ test("next-position returns attemptRegistry in response shape", () => {
   const source = fs.readFileSync("app/api/train/next-position/route.ts", "utf8");
 
   assert.match(source, /attemptRegistry/);
+  assert.match(source, /moveNotes/);
   assert.match(source, /enrichAttemptRegistry/);
   assert.match(source, /user_mistake_attempts/);
   // Must join with training_move_notes for note field
   assert.match(source, /training_move_notes/);
+  assert.match(source, /loadMoveNotesForDecisionFen/);
 });
 
 test("next-position retry path is enriched with attempt registry", () => {
