@@ -760,7 +760,7 @@ function QueuePositionRow({
           </Link>
           <Link
             href={`/train?mistakeId=${encodeURIComponent(position.id)}&mode=postmortem`}
-            className="app-brutal-button-secondary inline-flex min-h-12 min-w-0 items-center justify-center px-6 py-3 text-sm text-[var(--app-muted)] hover:text-[var(--app-class-blunder)] disabled:opacity-60"
+            className="app-brutal-button-secondary inline-flex min-h-12 min-w-0 items-center justify-center px-6 py-3 text-sm"
           >
             Analyze
           </Link>
@@ -771,7 +771,6 @@ function QueuePositionRow({
               onClick={archivePosition}
               className="app-brutal-button-secondary inline-flex min-h-12 min-w-0 items-center justify-center px-6 py-3 text-sm text-[var(--app-muted)] hover:text-[var(--app-class-blunder)] disabled:opacity-60"
             >
-              <span aria-hidden="true">↧</span>
               {isArchiving ? "Archiving..." : "Archive"}
             </button>
           )}
