@@ -98,7 +98,7 @@ export default async function BlogPostPage({ params }: PageProps) {
         <article className="mx-auto w-full max-w-3xl px-6 py-12 md:px-10 md:py-16">
           <Link
             href="/blog"
-            className="app-brutal-button-secondary inline-flex min-h-10 min-w-0 items-center justify-center px-3 py-2 text-center text-sm font-bold uppercase leading-none tracking-[0.1em] text-[var(--app-muted)] transition hover:text-[var(--app-text)] hover:!text-black"
+            className="app-brutal-button-secondary inline-flex min-h-10 min-w-0 items-center justify-center px-3 py-2 text-center text-sm font-bold uppercase leading-none tracking-[0.1em] text-[var(--app-muted)] transition hover:text-[var(--app-text)] hover:!text-white"
           >
             Back to blog
           </Link>
