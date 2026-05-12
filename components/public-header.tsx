@@ -90,9 +90,17 @@ export function PublicHeaderClient({ isSignedIn }: { isSignedIn: boolean }) {
           ) : isAuthPage ? (
             <div className="min-h-9 w-28" />
           ) : (
-            <HeaderLink href={signUpHref} primary>
-              Find your blindspots
-            </HeaderLink>
+            <>
+              <Link
+                href="/blog"
+                className="inline-flex min-h-9 items-center justify-center px-3 py-2 text-xs font-bold uppercase tracking-[0.04em] text-[var(--app-muted)] transition hover:text-[var(--app-text)]"
+              >
+                Blog
+              </Link>
+              <HeaderLink href={signUpHref} primary>
+                Find your blindspots
+              </HeaderLink>
+            </>
           )}
         </div>
       </div>

@@ -1,0 +1,89 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { PublicHeaderClient } from "@/components/public-header";
+import { blogPosts } from "@/lib/blog-posts";
+
+export const metadata: Metadata = {
+  title: "Chess Training Blog",
+  description:
+    "Practical chess training notes on blindspots, game review, puzzle plateaus, and improving with positions from your own games.",
+  alternates: {
+    canonical: "/blog",
+  },
+  openGraph: {
+    title: "Chess Training Blog | Blindspots.gg",
+    description:
+      "Practical chess training notes on blindspots, game review, puzzle plateaus, and improving with positions from your own games.",
+    url: "https://blindspots.gg/blog",
+    siteName: "Blindspots.gg",
+    type: "website",
+    images: ["/og.png"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Chess Training Blog | Blindspots.gg",
+    description:
+      "Practical chess training notes on blindspots, game review, puzzle plateaus, and improving with positions from your own games.",
+  },
+};
+
+export default function BlogPage() {
+  return (
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-transparent">
+      <PublicHeaderClient isSignedIn={false} />
+
+      <main className="app-scroll min-h-0 flex-1 overflow-y-auto overflow-x-clip">
+        <section className="mx-auto w-full max-w-5xl px-6 py-12 md:px-10 md:py-16">
+          <div className="max-w-3xl">
+            <p className="app-eyebrow">Blindspots.gg / Blog</p>
+            <h1 className="mt-4 text-[clamp(2.5rem,5vw,4.75rem)] font-black leading-[0.95] tracking-[-0.04em] text-[var(--app-text)]">
+              Chess training notes for the mistakes that keep coming back.
+            </h1>
+            <p className="mt-6 max-w-2xl text-base leading-8 text-[var(--app-muted)]">
+              Practical articles about finding chess blindspots, reviewing your
+              games without drowning in engine lines, and turning recurring
+              mistakes into repeatable training.
+            </p>
+          </div>
+
+          <div className="mt-12 grid gap-5">
+            {blogPosts.map((post) => (
+              <article
+                key={post.slug}
+                className="app-brutal-section p-6 transition hover:-translate-y-0.5 md:p-7"
+              >
+                <div className="flex flex-wrap items-center gap-3 text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
+                  <span>{post.category}</span>
+                  <span aria-hidden="true">/</span>
+                  <time dateTime={post.publishedAt}>{post.publishedAt}</time>
+                  <span aria-hidden="true">/</span>
+                  <span>{post.readingMinutes} min read</span>
+                </div>
+
+                <h2 className="mt-4 text-2xl font-black tracking-[-0.03em] text-[var(--app-text)] md:text-3xl">
+                  <Link
+                    href={`/blog/${post.slug}`}
+                    className="transition hover:text-[var(--app-accent)]"
+                  >
+                    {post.title}
+                  </Link>
+                </h2>
+
+                <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--app-muted)] md:text-base">
+                  {post.excerpt}
+                </p>
+
+                <Link
+                  href={`/blog/${post.slug}`}
+                  className="mt-6 inline-flex text-xs font-black uppercase tracking-[0.16em] text-[var(--app-accent)] transition hover:text-[var(--app-text)]"
+                >
+                  Read article
+                </Link>
+              </article>
+            ))}
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
