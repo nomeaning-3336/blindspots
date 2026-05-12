@@ -39,9 +39,7 @@ export default function BlogPage() {
               Chess training notes for the mistakes that keep coming back.
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-8 text-[var(--app-muted)]">
-              Practical articles about finding chess blindspots, reviewing your
-              games without drowning in engine lines, and turning recurring
-              mistakes into repeatable training.
+              Just a place were you can read... things™
             </p>
           </div>
 
