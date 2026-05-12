@@ -35,8 +35,7 @@ export default function BlogPage() {
       <main className="app-scroll min-h-0 flex-1 overflow-y-auto overflow-x-clip">
         <section className="mx-auto w-full max-w-5xl px-6 py-12 md:px-10 md:py-16">
           <div className="max-w-3xl">
-            <p className="app-eyebrow">Blindspots.gg / Blog</p>
-            <h1 className="mt-4 text-[clamp(2.5rem,5vw,4.75rem)] font-black leading-[0.95] tracking-[-0.04em] text-[var(--app-text)]">
+                        <h1 className="mt-4 text-[clamp(2.5rem,5vw,4.75rem)] font-black leading-[0.95] tracking-[-0.04em] text-[var(--app-text)]">
               Chess training notes for the mistakes that keep coming back.
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-8 text-[var(--app-muted)]">
