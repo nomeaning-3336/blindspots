@@ -1331,6 +1331,11 @@ export default function TrainPage(props: TrainPageProps) {
         previousFen: payload.previousFen,
         playedMove: payload.playedMove,
       };
+      if (mode === "play") {
+        void startPendingInitialEngineMove(payload);
+      }
+    } else {
+      initialPreludeRef.current = null;
     }
   }
 
@@ -1558,8 +1563,8 @@ export default function TrainPage(props: TrainPageProps) {
     setIsAwaitingStartGesture(false);
     setPendingInitialEngineMove(null);
 
-    await unlockTrainAudio();
-    await primeTrainAudio();
+    void unlockTrainAudio();
+    void primeTrainAudio();
     const fallback = window.setTimeout(() => {
       completeInitialOpponentMove(pending);
     }, PRELUDE_SETUP_MOVE_DELAY_MS + 900);
@@ -1906,7 +1911,7 @@ export default function TrainPage(props: TrainPageProps) {
 
   function handleMove(move: BoardMove) {
     if (state !== "active" || isOpponentThinking || completingRef.current) return;
-    if (isActiveSetupReplay && activeSetupReplayIndex === 0) return;
+    if (isViewingPreludeReplay) return;
     if (isViewingActiveReplay) return;
 
     setActiveReplayIndex(null);
@@ -2877,8 +2882,9 @@ export default function TrainPage(props: TrainPageProps) {
   const isExploringResults = state === "complete" && resultMode === "explore";
   const isActiveSetupReplay =
     state === "active" &&
-    !!initialOpponentMove &&
+    !!initialPreludeRef.current &&
     moves.length === 0;
+  const isViewingPreludeReplay = isActiveSetupReplay && activeSetupReplayIndex === 0;
   const showStartGestureOverlay = state === "active" && isAwaitingStartGesture;
 
   const activeSetupBeforeFen = displayStartingFen;
@@ -3645,7 +3651,7 @@ export default function TrainPage(props: TrainPageProps) {
                         lastMove={replayLastMove}
                         boardTheme={visualPreferences.boardTheme}
                         pieceTheme={visualPreferences.pieceTheme}
-                        disabled={isPositionLoading || !hasLoadedPosition || state !== "active" || isOpponentThinking || isAwaitingStartGesture || (isActiveSetupReplay && activeSetupReplayIndex === 0)}
+                        disabled={isPositionLoading || !hasLoadedPosition || state !== "active" || isOpponentThinking || isAwaitingStartGesture || isViewingPreludeReplay}
                         annotationsDisabled={false}
                         highlightedSquares={getTrainingBoardHighlights(state)}
                         onMove={handleMove}
