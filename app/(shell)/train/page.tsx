@@ -5,11 +5,12 @@ import TrainPage from "./train-client";
 export default async function TrainPageWrapper({
   searchParams,
 }: {
-  searchParams: Promise<{ onboarding?: string; debugFEN?: string; debugFen?: string; positionId?: string; mistakeId?: string }>;
+  searchParams: Promise<{ onboarding?: string; debugFEN?: string; debugFen?: string; positionId?: string; mistakeId?: string; mode?: string }>;
 }) {
   const params = await searchParams;
   const forceOnboarding = params?.onboarding === "1";
   const isDebugRequest = Boolean(params?.debugFEN ?? params?.debugFen);
+  const initialMode = params?.mode === "postmortem" ? "postmortem" : "play";
   const initialMistakeId =
     typeof params?.positionId === "string"
       ? params.positionId
@@ -25,6 +26,7 @@ export default async function TrainPageWrapper({
         initialOnboarding={false}
         forceOnboarding={false}
         initialMistakeId={initialMistakeId}
+        initialMode={initialMode}
       />
     );
   }
@@ -37,6 +39,7 @@ export default async function TrainPageWrapper({
       initialOnboarding={initialOnboarding}
       forceOnboarding={forceOnboarding}
       initialMistakeId={initialMistakeId}
+      initialMode={initialMode}
     />
   );
 }

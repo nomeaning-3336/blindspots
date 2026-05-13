@@ -566,10 +566,11 @@ type TrainPageProps = {
   initialOnboarding?: boolean;
   forceOnboarding?: boolean;
   initialMistakeId?: string;
+  initialMode?: "play" | "postmortem";
 };
 
 export default function TrainPage(props: TrainPageProps) {
-  const { initialOnboarding = false, forceOnboarding = false, initialMistakeId } = props;
+  const { initialOnboarding = false, forceOnboarding = false, initialMistakeId, initialMode = "play" } = props;
   const initialMistakeIdConsumedRef = useRef(false);
   const [state, setState] = useState<TrainingState>("active");
   const [startingFen, setStartingFen] = useState<string>("");
@@ -590,6 +591,7 @@ export default function TrainPage(props: TrainPageProps) {
   const [exploreSelectedSquare, setExploreSelectedSquare] = useState<string | null>(null);
   const [selectedMoveIndex, setSelectedMoveIndex] = useState<number | null>(null);
   const [isManualPostmortemExploration, setIsManualPostmortemExploration] = useState(false);
+  const [initialModeApplied, setInitialModeApplied] = useState(false);
   const [engineLineCache, setEngineLineCache] = useState<Record<string, EngineLineResult[]>>({});
   const [engineLineErrorFens, setEngineLineErrorFens] = useState<Set<string>>(new Set());
   const [engineLineLoadingFen, setEngineLineLoadingFen] = useState<string | null>(null);
@@ -823,7 +825,7 @@ export default function TrainPage(props: TrainPageProps) {
           setPendingInitialEngineMove(null);
           setHasLoadedPosition(false);
           setActiveSetupReplayIndex(0);
-        } else if (!shouldRunPreplayOnboarding) {
+        } else if (!shouldRunPreplayOnboarding && !initialMistakeId) {
           void loadNextPosition();
         }
       } catch {
@@ -846,7 +848,7 @@ export default function TrainPage(props: TrainPageProps) {
           setPendingInitialEngineMove(null);
           setHasLoadedPosition(false);
           setActiveSetupReplayIndex(0);
-        } else if (!shouldRunPreplayOnboarding) {
+        } else if (!shouldRunPreplayOnboarding && !initialMistakeId) {
           void loadNextPosition();
         }
       }
@@ -1297,7 +1299,7 @@ export default function TrainPage(props: TrainPageProps) {
 
   // ── Exact-position loading ───────────────────────────────────────
 
-  async function loadSpecificPosition(mistakeId: string, mode: string) {
+  async function loadSpecificPosition(mistakeId: string, mode: "play" | "postmortem") {
     setIsPositionLoading(true);
     setPositionLoadError(null);
     const res = await fetch(`/api/train/position?positionId=${encodeURIComponent(mistakeId)}`);
@@ -1317,6 +1319,7 @@ export default function TrainPage(props: TrainPageProps) {
     initialOpponentMoveRef.current = null;
     setActiveSetupReplayIndex(0);
     setState(mode === "postmortem" ? "complete" : "active");
+    setResultMode(mode === "postmortem" ? "explore" : "results");
     setIsPositionLoading(false);
     setIsAwaitingStartGesture(false);
     setPendingInitialEngineMove(null);
@@ -1337,9 +1340,9 @@ export default function TrainPage(props: TrainPageProps) {
     if (loadDebugFenPosition()) return;
     if (initialMistakeId && !initialMistakeIdConsumedRef.current && !trainOnboardingIntroActive) {
       initialMistakeIdConsumedRef.current = true;
-      void loadNextPosition({ mistakeId: initialMistakeId, autoStart: true });
+      void loadSpecificPosition(initialMistakeId, initialMode);
     }
-  }, [onboardingScreen, initialMistakeId, trainOnboardingIntroActive]);
+  }, [onboardingScreen, initialMistakeId, initialMode, trainOnboardingIntroActive]);
 
   async function loadNextPosition(options: { autoStart?: boolean; mistakeId?: string } = {}) {
     const cachedPosition = cachedNextPosition;
@@ -2876,6 +2879,7 @@ export default function TrainPage(props: TrainPageProps) {
     state === "active" &&
     !!initialOpponentMove &&
     moves.length === 0;
+  const showStartGestureOverlay = state === "active" && isAwaitingStartGesture;
 
   const activeSetupBeforeFen = displayStartingFen;
   const activeSetupAfterFen = startingFen;
@@ -3649,7 +3653,7 @@ export default function TrainPage(props: TrainPageProps) {
                       />
                     )}
                   </BoardWithPlayerStrips>
-                  {isAwaitingStartGesture ? (
+                  {showStartGestureOverlay ? (
                     <div
                       className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-[10px] bg-black/70 backdrop-blur-sm"
                       data-testid="audio-unlock-overlay"
