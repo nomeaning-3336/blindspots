@@ -84,6 +84,32 @@ type AttemptRegistryEntry = {
   note: string | null;
 };
 
+function moveDeltaToneClass(cpLoss?: number | null, classification?: MoveClassification | null) {
+  if (typeof cpLoss === "number") {
+    if (cpLoss > 0) return "text-[var(--app-class-blunder)]";
+    if (cpLoss < 0) return "text-[var(--app-class-good)]";
+    return "text-[var(--app-muted-soft)]";
+  }
+  switch (classification) {
+    case "blunder":
+    case "mistake":
+    case "inaccuracy":
+      return "text-[var(--app-class-blunder)]";
+    case "brilliant":
+    case "best":
+    case "excellent":
+    case "good":
+      return "text-[var(--app-class-good)]";
+    default:
+      return "text-[var(--app-muted-soft)]";
+  }
+}
+
+function evalDeltaToneClass(delta: number | null | undefined) {
+  if (typeof delta !== "number" || delta === 0) return "text-[var(--app-muted-soft)]";
+  return delta > 0 ? "text-[var(--app-class-good)]" : "text-[var(--app-class-blunder)]";
+}
+
 const SKILL_LEVEL_STARTING_ELO: Record<SkillLevel, number> = {
   new_to_chess: 0,
   beginner: 500,
@@ -3417,6 +3443,7 @@ export default function TrainPage(props: TrainPageProps) {
                     isOpponentThinking={false}
                     isTrainingActive={false}
                     isExploring={false}
+                    isSetupReplay={false}
                   >
                     <BoardWithEvalBar
                       isLoading={false}
@@ -3521,6 +3548,7 @@ export default function TrainPage(props: TrainPageProps) {
                     isOpponentThinking={isOpponentThinking}
                     isTrainingActive={state === "active"}
                     isExploring={isExploringResults}
+                    isSetupReplay={isActiveSetupReplay}
                   >
                     {isExploringResults ? (
                       <BoardWithEvalBar
@@ -4621,6 +4649,7 @@ function BoardWithPlayerStrips({
   isOpponentThinking,
   isTrainingActive,
   isExploring,
+  isSetupReplay,
   children,
 }: {
   userSide: TrainingMove["side"];
@@ -4628,6 +4657,7 @@ function BoardWithPlayerStrips({
   isOpponentThinking: boolean;
   isTrainingActive: boolean;
   isExploring: boolean;
+  isSetupReplay?: boolean;
   children: import("react").ReactNode;
 }) {
   const opponentSide = userSide === "white" ? "black" : "white";
@@ -4644,6 +4674,10 @@ function BoardWithPlayerStrips({
   } else if (isTrainingActive) {
     isUserActive = !isOpponentThinking;
     isOpponentActive = isOpponentThinking;
+  } else if (isSetupReplay) {
+    const turnSide = getFenTurnSide(boardFen);
+    isUserActive = turnSide === userSide;
+    isOpponentActive = turnSide === opponentSide;
   }
 
   return (
@@ -5737,7 +5771,7 @@ function MoveList({
                 {row.white?.san ?? ""}
               </span>
               {showEvaluations && typeof row.white?.cpLoss === "number" ? (
-                <span className="shrink-0 text-[11px] font-normal text-[var(--app-muted)]">
+                <span className={`shrink-0 text-[11px] font-normal tabular-nums ${moveDeltaToneClass(row.white.cpLoss)}`}>
                   {row.white.cpLoss}cp
                 </span>
               ) : null}
@@ -5748,7 +5782,7 @@ function MoveList({
                 {row.black?.san ?? ""}
               </span>
               {showEvaluations && typeof row.black?.cpLoss === "number" ? (
-                <span className="shrink-0 text-[11px] font-normal text-[var(--app-muted)]">
+                <span className={`shrink-0 text-[11px] font-normal tabular-nums ${moveDeltaToneClass(row.black.cpLoss)}`}>
                   {row.black.cpLoss}cp
                 </span>
               ) : null}
@@ -5960,7 +5994,7 @@ function AttemptRegistryAside({
               <span className="text-[10px] uppercase tracking-[0.1em] text-[var(--app-muted-soft)]">
                 {entry.classification}
               </span>
-              <span className="tabular-nums text-[var(--app-muted)]">{entry.cpLoss}cp</span>
+              <span className={`tabular-nums text-[var(--app-muted-soft)] ${moveDeltaToneClass(entry.cpLoss)}`}>{entry.cpLoss}cp</span>
               <span className="ml-auto shrink-0 text-[10px] text-[var(--app-muted-soft)]">
                 {formatRelativeTime(entry.playedAt)}
               </span>
@@ -6046,7 +6080,7 @@ function TrainingNotesRail({
                       {evalBefore != null && evalAfter != null && <span> · </span>}
                       {evalAfter != null && <span>After: {formatEvalCp(evalAfter)}</span>}
                       {evalDelta != null && (
-                        <span>
+                        <span className={evalDeltaToneClass(evalDelta)}>
                           {" · "}Δ {formatEvalCp(evalDelta)}
                         </span>
                       )}
