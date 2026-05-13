@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Chess } from "chess.js";
 import type { DashboardClassifications, DashboardPosition, DashboardSummary, EloHistoryPoint } from "@/lib/dashboard";
 import { buildLastMoveBadge, classificationColor, type MoveClassification } from "@/lib/training-board-ui";
+import { buildMoveKey } from "@/lib/training/mistake-memory";
 import { ReplayThumbnail, type ThumbnailMovePreview } from "@/components/position-thumbnail";
 import { DAILY_TARGET_OPTIONS } from "@/lib/training/training-preferences";
 
@@ -692,7 +693,9 @@ function QueuePositionRow({
   const NOTE_HOVER_DELAY_MS = 100;
   const [notes, setNotes] = useState(position.moveNotes);
   const [editingMoveKey, setEditingMoveKey] = useState<string | null>(null);
+  const [editingMoveInput, setEditingMoveInput] = useState("");
   const [editingNoteText, setEditingNoteText] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
   const [pendingNoteKeys, setPendingNoteKeys] = useState<Set<string>>(() => new Set());
   const [savingNote, setSavingNote] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -872,23 +875,33 @@ function QueuePositionRow({
     setAdding(false);
     setAddError(null);
     setEditingMoveKey(note.moveKey);
+    setEditingMoveInput(note.moveSan ?? note.moveUci ?? "");
     setEditingNoteText(note.note ?? "");
+    setEditError(null);
   }
 
   function discardEdit() {
     setEditingMoveKey(null);
+    setEditingMoveInput("");
     setEditingNoteText("");
+    setEditError(null);
   }
 
   function submitEdit(note: typeof notes[number]) {
     if (!editingMoveKey) return;
     if (pendingNoteKeys.has(editingMoveKey)) return;
 
-    const moveKey = note.moveKey;
-    const moveUci = note.moveUci ?? note.moveKey.split("::").pop() ?? "";
-    if (!moveUci) return;
     const noteText = editingNoteText.trim();
-    const hasChanges = noteText !== (note.note ?? "");
+    const parsed = parseMoveInputForFen(position.startingFen, editingMoveInput);
+    if (!parsed) {
+      setEditError("Illegal move for this position.");
+      return;
+    }
+
+    const hasChanges =
+      noteText !== (note.note ?? "") ||
+      parsed.uci !== (note.moveUci ?? "") ||
+      parsed.san !== (note.moveSan ?? "");
 
     if (!hasChanges) {
       discardEdit();
@@ -897,10 +910,23 @@ function QueuePositionRow({
 
     setPendingNoteKeys((prev) => new Set(prev).add(editingMoveKey));
     const prevNotes = notes;
+    const newMoveKey = buildMoveKey(position.startingFen, parsed.uci);
+    const moveUci = parsed.uci;
+    const moveSan = parsed.san;
+
     setNotes((prev) =>
       prev.map((n) =>
         n.moveKey === editingMoveKey
-          ? { ...n, note: noteText }
+          ? {
+              ...n,
+              moveUci,
+              moveSan,
+              moveKey: newMoveKey,
+              note: noteText,
+              classification: null,
+              evalBeforeCp: null,
+              evalAfterCp: null,
+            }
           : n,
       ),
     );
@@ -912,14 +938,11 @@ function QueuePositionRow({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            moveKey,
+            moveKey: newMoveKey,
             decisionFen: position.startingFen,
             moveUci,
-            moveSan: note.moveSan,
+            moveSan,
             noteText: noteText,
-            classification: note.classification,
-            evalBeforeCp: note.evalBeforeCp,
-            evalAfterCp: note.evalAfterCp,
           }),
         });
         if (!res.ok) throw new Error(`Save failed: ${res.status}`);
@@ -931,21 +954,32 @@ function QueuePositionRow({
           evalAfterCp?: number | null;
           moverColor?: "white" | "black" | null;
         } | null;
+
         setNotes((prev) =>
           prev.map((n) =>
-            n.moveKey === moveKey
+            n.moveKey === newMoveKey
               ? {
                   ...n,
+                  moveKey: body?.moveKey ?? newMoveKey,
+                  moveUci,
+                  moveSan: body?.moveSan ?? moveSan,
                   note: noteText,
-                  moveSan: body?.moveSan ?? n.moveSan,
-                  classification: (body?.classification ?? n.classification) as typeof n.classification,
-                  evalBeforeCp: body?.evalBeforeCp ?? n.evalBeforeCp,
-                  evalAfterCp: body?.evalAfterCp ?? n.evalAfterCp,
+                  classification: (body?.classification ?? null) as typeof n.classification,
+                  evalBeforeCp: body?.evalBeforeCp ?? null,
+                  evalAfterCp: body?.evalAfterCp ?? null,
                   moverColor: body?.moverColor ?? n.moverColor,
                 }
               : n,
           ),
         );
+
+        if (newMoveKey !== note.moveKey) {
+          await fetch("/api/train/move-notes", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ moveKey: note.moveKey }),
+          });
+        }
       } catch (err) {
         console.error("[dashboard] failed to save note edit", err);
         setNotes(prevNotes);
@@ -1371,39 +1405,43 @@ function QueuePositionRow({
                   </div>
 
                   {editingMoveKey === note.moveKey ? (
-                    <div
-                      className="mt-2 grid gap-2"
-                      onBlur={(e) => {
-                        const currentTarget = e.currentTarget;
-                        setTimeout(() => {
-                          if (!currentTarget.contains(document.activeElement)) {
-                            submitEdit(note);
-                          }
-                        }, 0);
-                      }}
-                    >
-                      <textarea
-                        value={editingNoteText}
-                        onChange={(e) => setEditingNoteText(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Escape") {
-                            e.preventDefault();
-                            discardEdit();
-                          }
-                        }}
-                        rows={3}
-                        className="min-h-[96px] w-full resize-y rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 text-sm leading-6 text-[var(--app-text)] outline-none transition placeholder:text-[var(--app-muted-soft)] focus:border-[var(--app-border-strong)]"
-                      />
-                      {(note.evalBeforeCp != null || note.evalAfterCp != null) && (
-                        <div className="font-mono text-[11px] tabular-nums text-[var(--app-muted)]">
-                          {note.evalBeforeCp != null && <span>{formatEvalCp(note.evalBeforeCp)}</span>}
-                          {note.evalBeforeCp != null && note.evalAfterCp != null && (
-                            <span className="px-1.5 opacity-60">-&gt;</span>
-                          )}
-                          {note.evalAfterCp != null && <span>{formatEvalCp(note.evalAfterCp)}</span>}
-                        </div>
+                    <div className="mt-3 grid gap-2" onBlur={(e) => {
+                      const currentTarget = e.currentTarget;
+                      setTimeout(() => {
+                        if (!currentTarget.contains(document.activeElement)) {
+                          submitEdit(note);
+                        }
+                      }, 0);
+                    }}>
+                      <label className="grid gap-1 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
+                        Move
+                        <input
+                          type="text"
+                          value={editingMoveInput}
+                          onChange={(e) => setEditingMoveInput(e.target.value)}
+                          placeholder="Move, e.g. Nf3 or g1f3"
+                          className="box-border block w-full min-w-0 rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 text-sm font-bold text-[var(--app-text)] outline-none transition focus:border-[var(--app-border-strong)]"
+                        />
+                      </label>
+                      <label className="grid gap-1 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
+                        Note
+                        <textarea
+                          value={editingNoteText}
+                          onChange={(e) => setEditingNoteText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                              e.preventDefault();
+                              discardEdit();
+                            }
+                          }}
+                          rows={6}
+                          className="mt-2 box-border block min-h-[150px] w-full min-w-0 resize-y rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 text-sm leading-6 text-[var(--app-text)] outline-none transition placeholder:text-[var(--app-muted-soft)] focus:border-[var(--app-border-strong)]"
+                        />
+                      </label>
+                      {editError && (
+                        <div className="text-xs text-[var(--app-class-blunder)]">{editError}</div>
                       )}
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="mt-3 flex justify-end gap-2">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1411,7 +1449,7 @@ function QueuePositionRow({
                             discardEdit();
                           }}
                           aria-label="Discard changes"
-                          className="px-3 py-1.5 text-xs font-bold text-[var(--app-text)] transition-colors hover:text-[var(--app-muted)] focus-visible:outline-none"
+                          className="app-brutal-button-secondary inline-flex min-h-9 items-center justify-center px-3 py-1.5 text-xs disabled:opacity-60"
                         >
                           Cancel
                         </button>
