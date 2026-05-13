@@ -3858,6 +3858,18 @@ export default function TrainPage(props: TrainPageProps) {
               )}
             </div>
 
+            {/* ── Postmortem action footer ───────────────────────────────── */}
+            <div
+              data-tour="postmortem-actions"
+              className="mt-4 flex flex-col gap-2 border-t border-[var(--app-border-soft)] pt-4 sm:flex-row sm:items-center sm:justify-end"
+            >
+              <a href="/" className={secondaryActionClassName}>
+                <span className={postmortemActionTextClassName}>Return to Dashboard</span>
+              </a>
+              <a href="/train" className={primaryActionClassName}>
+                <span className={postmortemActionTextClassName}>Next Position</span>
+              </a>
+            </div>
           </aside>
         ) : null}
       </div>
