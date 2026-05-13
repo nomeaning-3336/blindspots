@@ -48,7 +48,7 @@ export const blogPosts: BlogPost[] = [
         body: [
           "The bad news is that your brain is not going to fix this because you noticed them once and then went on with your day.",
           "The game ended. You opened the analysis. You saw the game ending blunder. Fine. Cool. Then you closed the tab, made a sandwich, grabbed a cup of coffee, checked your phone, wondered what you should do on Saturday morning, mentally planned a summer holiday you may or may not take, debated whether black trainers go with those trousers, and moved on with your life.",
-          "Mission failed. We'll get em next time.",
+          "Mission failed.",
         ],
       },
       {
