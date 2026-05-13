@@ -1296,7 +1296,7 @@ function QueuePositionRow({
                     if (noteHoverTimerRef.current) clearTimeout(noteHoverTimerRef.current);
                     setNoteMovePreview(null);
                   }}
-                  className="group relative grid gap-1.5 border border-[var(--app-border)] bg-[var(--app-panel-deep)] pl-4 pr-9 py-3 transition-colors hover:border-[var(--app-accent)] focus-visible:border-[var(--app-accent)] focus-visible:outline-none"
+                  className="group relative grid gap-1.5 border border-[var(--app-border)] bg-[var(--app-panel-deep)] pl-4 pr-16 py-3 transition-colors hover:border-[var(--app-accent)] focus-visible:border-[var(--app-accent)] focus-visible:outline-none"
                 >
                   <span
                     aria-hidden="true"
