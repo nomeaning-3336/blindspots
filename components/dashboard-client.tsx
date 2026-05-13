@@ -692,9 +692,7 @@ function QueuePositionRow({
   const NOTE_HOVER_DELAY_MS = 100;
   const [notes, setNotes] = useState(position.moveNotes);
   const [editingMoveKey, setEditingMoveKey] = useState<string | null>(null);
-  const [editingMoveInput, setEditingMoveInput] = useState("");
   const [editingNoteText, setEditingNoteText] = useState("");
-  const [editError, setEditError] = useState<string | null>(null);
   const [pendingNoteKeys, setPendingNoteKeys] = useState<Set<string>>(() => new Set());
   const [savingNote, setSavingNote] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -873,35 +871,24 @@ function QueuePositionRow({
   function startEditNote(note: typeof notes[number]) {
     setAdding(false);
     setAddError(null);
-    setEditError(null);
     setEditingMoveKey(note.moveKey);
-    setEditingMoveInput(note.moveSan ?? note.moveUci ?? "");
     setEditingNoteText(note.note ?? "");
   }
 
   function discardEdit() {
     setEditingMoveKey(null);
-    setEditingMoveInput("");
     setEditingNoteText("");
-    setEditError(null);
   }
 
   function submitEdit(note: typeof notes[number]) {
     if (!editingMoveKey) return;
     if (pendingNoteKeys.has(editingMoveKey)) return;
 
-    const parsed = parseMoveInputForFen(position.startingFen, editingMoveInput);
-    if (!parsed) {
-      setEditError("Illegal move for this position.");
-      return;
-    }
-
-    const moveKey = `${position.startingFen.trim().split(/\s+/).slice(0, 4).join(" ")}::${parsed.uci}`;
+    const moveKey = note.moveKey;
+    const moveUci = note.moveUci ?? note.moveKey.split("::").pop() ?? "";
+    if (!moveUci) return;
     const noteText = editingNoteText.trim();
-    const hasChanges =
-      noteText !== (note.note ?? "") ||
-      parsed.uci !== (note.moveUci ?? "") ||
-      parsed.san !== (note.moveSan ?? "");
+    const hasChanges = noteText !== (note.note ?? "");
 
     if (!hasChanges) {
       discardEdit();
@@ -913,7 +900,7 @@ function QueuePositionRow({
     setNotes((prev) =>
       prev.map((n) =>
         n.moveKey === editingMoveKey
-          ? { ...n, note: noteText, moveSan: parsed.san, moveUci: parsed.uci, moveKey }
+          ? { ...n, note: noteText }
           : n,
       ),
     );
@@ -927,12 +914,38 @@ function QueuePositionRow({
           body: JSON.stringify({
             moveKey,
             decisionFen: position.startingFen,
-            moveUci: parsed.uci,
-            moveSan: parsed.san,
+            moveUci,
+            moveSan: note.moveSan,
             noteText: noteText,
+            classification: note.classification,
+            evalBeforeCp: note.evalBeforeCp,
+            evalAfterCp: note.evalAfterCp,
           }),
         });
         if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+        const body = (await res.json().catch(() => null)) as {
+          moveKey?: string;
+          moveSan?: string | null;
+          classification?: string | null;
+          evalBeforeCp?: number | null;
+          evalAfterCp?: number | null;
+          moverColor?: "white" | "black" | null;
+        } | null;
+        setNotes((prev) =>
+          prev.map((n) =>
+            n.moveKey === moveKey
+              ? {
+                  ...n,
+                  note: noteText,
+                  moveSan: body?.moveSan ?? n.moveSan,
+                  classification: (body?.classification ?? n.classification) as typeof n.classification,
+                  evalBeforeCp: body?.evalBeforeCp ?? n.evalBeforeCp,
+                  evalAfterCp: body?.evalAfterCp ?? n.evalAfterCp,
+                  moverColor: body?.moverColor ?? n.moverColor,
+                }
+              : n,
+          ),
+        );
       } catch (err) {
         console.error("[dashboard] failed to save note edit", err);
         setNotes(prevNotes);
@@ -1187,14 +1200,14 @@ function QueuePositionRow({
       {/* Notes column */}
       <div className="min-w-0 py-2">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="flex items-baseline gap-2 text-xl font-black leading-tight tracking-[-0.03em] text-[var(--app-text)]">
-            Notes
+          <div className="flex items-center gap-2">
+            <h3 className="text-xl font-black tracking-[-0.03em] text-[var(--app-text)]">Notes</h3>
             {notes.length > 0 && (
-              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--app-surface-subtle)] px-1.5 text-[10px] font-bold text-[var(--app-muted)]">
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--app-bg-2)] px-1.5 text-[10px] font-bold leading-none text-[var(--app-muted)]">
                 {notes.length}
               </span>
             )}
-          </h3>
+          </div>
           <button
             type="button"
             onClick={() => (adding ? closeAddComposer() : openAddComposer())}
@@ -1263,6 +1276,7 @@ function QueuePositionRow({
         ) : (
           <div className="mt-3 grid gap-2">
             {notes.map((note) => {
+              const moveLabel = note.moveSan || note.moveUci || "Move";
               const evalDeltaCp =
                 note.evalBeforeCp != null && note.evalAfterCp != null
                   ? note.evalAfterCp - note.evalBeforeCp
@@ -1277,7 +1291,6 @@ function QueuePositionRow({
               return (
                 <div
                   key={note.moveKey}
-                  tabIndex={0}
                   onPointerEnter={() => {
                     if (noteHoverTimerRef.current) clearTimeout(noteHoverTimerRef.current);
                     const preview = buildNoteMovePreview(position.startingFen, note.moveUci, note.classification);
@@ -1287,64 +1300,58 @@ function QueuePositionRow({
                     if (noteHoverTimerRef.current) clearTimeout(noteHoverTimerRef.current);
                     setNoteMovePreview(null);
                   }}
-                  onFocus={() => {
-                    if (noteHoverTimerRef.current) clearTimeout(noteHoverTimerRef.current);
-                    const preview = buildNoteMovePreview(position.startingFen, note.moveUci, note.classification);
-                    noteHoverTimerRef.current = setTimeout(() => setNoteMovePreview(preview), NOTE_HOVER_DELAY_MS);
-                  }}
-                  onBlur={() => {
-                    if (noteHoverTimerRef.current) clearTimeout(noteHoverTimerRef.current);
-                    setNoteMovePreview(null);
-                  }}
-                  className="group relative grid gap-1.5 border border-[var(--app-border)] bg-[var(--app-panel-deep)] pl-4 pr-16 py-3 transition-colors hover:border-[var(--app-accent)] focus-visible:border-[var(--app-accent)] focus-visible:outline-none"
+                  className="group relative border border-[var(--app-border-soft)] bg-[var(--app-panel-deep)] px-4 py-3 pr-20 transition-colors hover:border-[var(--app-border-strong)] hover:bg-[var(--app-panel-solid)] focus-within:border-[var(--app-border-strong)] focus-within:bg-[var(--app-panel-solid)]"
                 >
                   <span
                     aria-hidden="true"
                     className={[
                       "absolute left-0 top-0 bottom-0 w-[3px]",
-                      note.classification
-                        ? classificationStripeBgClass(note.classification)
-                        : "bg-transparent",
+                      classificationStripeBgClass(note.classification),
                     ].join(" ")}
                   />
                   {editingMoveKey !== note.moveKey && (
-                    <>
+                    <div className="absolute right-2 top-2 flex opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                       <button
                         type="button"
+                        aria-label={`Edit note for ${moveLabel}`}
+                        title="Edit note"
                         onClick={(e) => {
+                          e.preventDefault();
                           e.stopPropagation();
                           startEditNote(note);
                         }}
-                        aria-label="Edit note"
-                        className="absolute right-9 top-2 z-10 flex h-5 w-5 items-center justify-center rounded text-[var(--app-muted)] opacity-0 transition-opacity transition-colors hover:text-[var(--app-accent)] focus-visible:text-[var(--app-accent)] focus-visible:outline-none group-hover:opacity-100 group-focus-within:opacity-100"
+                        className="grid h-8 w-8 place-items-center rounded-md text-[var(--app-muted)] transition hover:bg-[var(--app-surface-subtle)] hover:text-[var(--app-text)] focus-visible:bg-[var(--app-surface-subtle)] focus-visible:text-[var(--app-text)] focus-visible:outline-none"
                       >
-                        <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden="true">
-                          <path d="M9 2 L12 5 L5 12 L2 12 L2 9 Z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                        <svg width="15" height="15" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                          <path d="M9 2 L12 5 L5 12 L2 12 L2 9 Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                          <path d="M8 3 L11 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                         </svg>
                       </button>
                       <button
                         type="button"
+                        aria-label={`Delete note for ${moveLabel}`}
+                        title="Delete note"
                         onClick={(e) => {
+                          e.preventDefault();
                           e.stopPropagation();
                           deleteNote(note);
                         }}
-                        aria-label="Delete note"
-                        className="absolute bottom-2 right-2 z-10 flex h-5 w-5 items-center justify-center rounded text-[var(--app-muted)] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 transition-colors hover:text-[var(--app-class-blunder)] focus-visible:text-[var(--app-class-blunder)] focus-visible:outline-none"
+                        className="grid h-8 w-8 place-items-center rounded-md text-[var(--app-muted)] transition hover:bg-[var(--app-surface-subtle)] hover:text-[var(--app-class-blunder)] focus-visible:bg-[var(--app-surface-subtle)] focus-visible:text-[var(--app-class-blunder)] focus-visible:outline-none"
                       >
-                        <svg width="16" height="16" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                        <svg width="15" height="15" viewBox="0 0 14 14" fill="none" aria-hidden="true">
                           <path d="M3 4 L11 4 M5 4 L5 3 C5 2.5 5.5 2 6 2 L8 2 C8.5 2 9 2.5 9 3 L9 4 M6 6 L6 10 M8 6 L8 10 M3 4 L4 12 L10 12 L11 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                       </button>
-                    </>
+                    </div>
                   )}
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <div className="flex flex-wrap items-baseline gap-2">
-                      <span className="font-sans text-base font-bold text-[var(--app-text)]">
-                        {note.moveSan || note.moveUci}
+                      <span className="font-mono text-sm font-bold text-[var(--app-text)]">
+                        {moveLabel}
                       </span>
                       {note.classification && (
                         <span className={[
-                          "rounded px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.12em] bg-[var(--app-surface-subtle)]",
+                          "rounded px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.08em] bg-[var(--app-surface-subtle)]",
                           classificationTextClass(note.classification),
                         ].join(" ")}>
                           {note.classification}
@@ -1358,24 +1365,14 @@ function QueuePositionRow({
                           ? "text-[var(--app-class-good)]"
                           : "text-[var(--app-class-blunder)]",
                       ].join(" ")}>
-                        Δ {formatEvalCp(evalDeltaCp)}
+                        {formatEvalCp(evalDeltaCp)}
                       </span>
                     )}
                   </div>
 
-                  {(note.evalBeforeCp != null || note.evalAfterCp != null) && (
-                    <div className="font-mono text-[11px] tabular-nums text-[var(--app-muted)]">
-                      {note.evalBeforeCp != null && <span>{formatEvalCp(note.evalBeforeCp)}</span>}
-                      {note.evalBeforeCp != null && note.evalAfterCp != null && (
-                        <span className="px-1.5 opacity-60">→</span>
-                      )}
-                      {note.evalAfterCp != null && <span>{formatEvalCp(note.evalAfterCp)}</span>}
-                    </div>
-                  )}
-
                   {editingMoveKey === note.moveKey ? (
                     <div
-                      className="grid gap-2"
+                      className="mt-2 grid gap-2"
                       onBlur={(e) => {
                         const currentTarget = e.currentTarget;
                         setTimeout(() => {
@@ -1385,13 +1382,6 @@ function QueuePositionRow({
                         }, 0);
                       }}
                     >
-                      <input
-                        type="text"
-                        value={editingMoveInput}
-                        onChange={(e) => setEditingMoveInput(e.target.value)}
-                        placeholder={note.moveSan || note.moveUci || "e.g. Nxg3"}
-                        className="font-sans text-sm font-semibold text-[var(--app-text)] rounded border border-[var(--app-accent)] bg-[var(--app-panel-solid)] px-2 py-1 focus-visible:outline-none"
-                      />
                       <textarea
                         value={editingNoteText}
                         onChange={(e) => setEditingNoteText(e.target.value)}
@@ -1402,12 +1392,18 @@ function QueuePositionRow({
                           }
                         }}
                         rows={3}
-                        className="font-sans text-sm leading-5 text-[var(--app-text)] rounded border border-[var(--app-border)] bg-[var(--app-panel-solid)] px-2 py-1.5 focus-visible:border-[var(--app-accent)] focus-visible:outline-none"
+                        className="min-h-[96px] w-full resize-y rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 text-sm leading-6 text-[var(--app-text)] outline-none transition placeholder:text-[var(--app-muted-soft)] focus:border-[var(--app-border-strong)]"
                       />
-                      {editError && (
-                        <div className="text-xs text-[var(--app-class-blunder)]">{editError}</div>
+                      {(note.evalBeforeCp != null || note.evalAfterCp != null) && (
+                        <div className="font-mono text-[11px] tabular-nums text-[var(--app-muted)]">
+                          {note.evalBeforeCp != null && <span>{formatEvalCp(note.evalBeforeCp)}</span>}
+                          {note.evalBeforeCp != null && note.evalAfterCp != null && (
+                            <span className="px-1.5 opacity-60">-&gt;</span>
+                          )}
+                          {note.evalAfterCp != null && <span>{formatEvalCp(note.evalAfterCp)}</span>}
+                        </div>
                       )}
-                      <div className="flex justify-end gap-2">
+                      <div className="flex items-center justify-end gap-2">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1415,11 +1411,9 @@ function QueuePositionRow({
                             discardEdit();
                           }}
                           aria-label="Discard changes"
-                          className="flex h-7 w-7 items-center justify-center rounded border border-[var(--app-border)] bg-[var(--app-panel-solid)] text-[var(--app-muted)] transition-colors hover:text-[var(--app-text)] focus-visible:outline-none"
+                          className="px-3 py-1.5 text-xs font-bold text-[var(--app-text)] transition-colors hover:text-[var(--app-muted)] focus-visible:outline-none"
                         >
-                          <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true">
-                            <path d="M2 2 L12 12 M12 2 L2 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                          </svg>
+                          Cancel
                         </button>
                         <button
                           type="button"
@@ -1429,16 +1423,14 @@ function QueuePositionRow({
                           }}
                           disabled={pendingNoteKeys.has(note.moveKey)}
                           aria-label="Save note"
-                          className="flex h-7 w-7 items-center justify-center rounded border border-[var(--app-brutal-edge)] bg-[var(--app-class-good)] text-[#050505] shadow-[2px_2px_0_var(--app-brutal-shadow)] transition-transform hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_var(--app-brutal-shadow)] focus-visible:outline-none disabled:opacity-60"
+                          className="inline-flex min-h-9 items-center justify-center rounded-lg border border-[var(--app-brutal-edge)] bg-[var(--app-class-good)] px-3 py-1.5 text-xs font-black uppercase tracking-[0.06em] text-[#050505] shadow-[2px_2px_0_var(--app-brutal-shadow)] transition-transform hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_var(--app-brutal-shadow)] disabled:opacity-60"
                         >
-                          <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true">
-                            <path d="M3 7 L6 10 L11 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
+                          {pendingNoteKeys.has(note.moveKey) ? "Saving..." : "Save"}
                         </button>
                       </div>
                     </div>
                   ) : (
-                    <p className="font-sans text-sm leading-6 text-[var(--app-text)]">
+                    <p className="mt-2 font-sans text-sm leading-5 text-[var(--app-muted)]">
                       {note.note}
                     </p>
                   )}
@@ -1581,8 +1573,10 @@ function classificationStripeBgClass(classification: string | null | undefined) 
       return "bg-[var(--app-class-inaccuracy)]";
     case "best":
     case "brilliant":
+    case "critical":
     case "excellent":
     case "good":
+    case "okay":
       return "bg-[var(--app-class-good)]";
     default:
       return "bg-[var(--app-border)]";
