@@ -698,6 +698,23 @@ function QueuePositionRow({
   const [editError, setEditError] = useState<string | null>(null);
   const [pendingNoteKeys, setPendingNoteKeys] = useState<Set<string>>(() => new Set());
   const [savingNote, setSavingNote] = useState(false);
+  const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  function resizeTextareaToContent(el: HTMLTextAreaElement | null) {
+    if (!el) return;
+    el.style.height = "auto";
+    const nextHeight = Math.min(
+      Math.max(el.scrollHeight, 72),
+      240,
+    );
+    el.style.height = `${nextHeight}px`;
+  }
+
+  useEffect(() => {
+    if (editingMoveKey && editTextareaRef.current) {
+      resizeTextareaToContent(editTextareaRef.current);
+    }
+  }, [editingMoveKey, editingNoteText]);
   const [adding, setAdding] = useState(false);
   const [newMoveInput, setNewMoveInput] = useState("");
   const [newNoteText, setNewNoteText] = useState("");
@@ -1405,7 +1422,7 @@ function QueuePositionRow({
                   </div>
 
                   {editingMoveKey === note.moveKey ? (
-                    <div className="mt-3 grid gap-2" onBlur={(e) => {
+                    <div className="mt-3 w-full min-w-0 grid gap-3" onBlur={(e) => {
                       const currentTarget = e.currentTarget;
                       setTimeout(() => {
                         if (!currentTarget.contains(document.activeElement)) {
@@ -1413,8 +1430,10 @@ function QueuePositionRow({
                         }
                       }, 0);
                     }}>
-                      <label className="grid gap-1 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
-                        Move
+                      <label className="grid w-full min-w-0 gap-1.5">
+                        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">
+                          Move
+                        </span>
                         <input
                           type="text"
                           value={editingMoveInput}
@@ -1423,19 +1442,25 @@ function QueuePositionRow({
                           className="box-border block w-full min-w-0 rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 text-sm font-bold text-[var(--app-text)] outline-none transition focus:border-[var(--app-border-strong)]"
                         />
                       </label>
-                      <label className="grid gap-1 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
-                        Note
+                      <label className="grid w-full min-w-0 gap-1.5">
+                        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">
+                          Note
+                        </span>
                         <textarea
+                          ref={editTextareaRef}
                           value={editingNoteText}
-                          onChange={(e) => setEditingNoteText(e.target.value)}
+                          onChange={(e) => {
+                            setEditingNoteText(e.target.value);
+                            resizeTextareaToContent(e.currentTarget);
+                          }}
                           onKeyDown={(e) => {
                             if (e.key === "Escape") {
                               e.preventDefault();
                               discardEdit();
                             }
                           }}
-                          rows={7}
-                          className="mt-2 box-border block min-h-[180px] w-full min-w-0 resize-y rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 text-sm font-normal leading-6 text-[var(--app-text)] outline-none transition placeholder:text-[var(--app-muted-soft)] focus:border-[var(--app-border-strong)]"
+                          className="box-border block w-full min-w-0 resize-none rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 text-sm font-normal leading-6 text-[var(--app-text)] outline-none transition placeholder:text-[var(--app-muted-soft)] focus:border-[var(--app-border-strong)] overflow-y-auto"
+                          style={{ minHeight: "72px", maxHeight: "240px" }}
                         />
                       </label>
                       {editError && (
