@@ -110,6 +110,42 @@ function evalDeltaToneClass(delta: number | null | undefined) {
   return delta > 0 ? "text-[var(--app-class-good)]" : "text-[var(--app-class-blunder)]";
 }
 
+function moverColorFromFen(fen: string | null | undefined): "white" | "black" | null {
+  if (!fen) return null;
+  const turn = fen.trim().split(/\s+/)[1];
+  if (turn === "w") return "white";
+  if (turn === "b") return "black";
+  return null;
+}
+
+function sideToMoveFromFen(fen: string | null | undefined): "white" | "black" | null {
+  return moverColorFromFen(fen);
+}
+
+function evalDeltaToneClassForMover(input: {
+  evalBeforeCp: number | null | undefined;
+  evalAfterCp: number | null | undefined;
+  moverColor: "white" | "black" | null | undefined;
+}) {
+  if (
+    typeof input.evalBeforeCp !== "number" ||
+    typeof input.evalAfterCp !== "number" ||
+    !input.moverColor
+  ) {
+    return "text-[var(--app-muted-soft)]";
+  }
+
+  const rawDelta = input.evalAfterCp - input.evalBeforeCp;
+  if (rawDelta === 0) return "text-[var(--app-muted-soft)]";
+
+  const perspectiveDelta =
+    input.moverColor === "black" ? -rawDelta : rawDelta;
+
+  return perspectiveDelta > 0
+    ? "text-[var(--app-class-good)]"
+    : "text-[var(--app-class-blunder)]";
+}
+
 const SKILL_LEVEL_STARTING_ELO: Record<SkillLevel, number> = {
   new_to_chess: 0,
   beginner: 500,
@@ -2420,6 +2456,7 @@ export default function TrainPage(props: TrainPageProps) {
           startingFen,
           moves,
           initialOpponentMove,
+          preludeBeforeFen: initialPreludeRef.current?.previousFen ?? null,
         }).map((position) => {
           if (position.userMoveIndex != null) {
             const moveScore = completedMoveScoreByUserMoveIndex.get(position.userMoveIndex);
@@ -5066,14 +5103,25 @@ function buildVisibleSequencePositions(params: {
   startingFen: string;
   moves: TrainingMove[];
   initialOpponentMove: TrainingMove | null;
+  preludeBeforeFen?: string | null;
 }): VisibleSequencePosition[] {
   const positions: VisibleSequencePosition[] = [];
   const userSide = getFenTurnSide(params.startingFen);
   let userMoveIndex = 0;
 
-  if (params.initialOpponentMove) {
+  // Prelude before-FEN (index 0)
+  if (params.preludeBeforeFen) {
     positions.push({
       index: 0,
+      fen: params.preludeBeforeFen,
+      label: "Before setup move",
+    });
+  }
+
+  // Prelude after-FEN (index 1, or 0 if no prelude before)
+  if (params.initialOpponentMove) {
+    positions.push({
+      index: positions.length,
       fen: params.startingFen,
       label: params.initialOpponentMove.san,
       move: params.initialOpponentMove,
@@ -5081,7 +5129,7 @@ function buildVisibleSequencePositions(params: {
     });
   } else {
     positions.push({
-      index: 0,
+      index: positions.length,
       fen: params.startingFen,
       label: "Start",
     });
@@ -6080,7 +6128,7 @@ function TrainingNotesRail({
                       {evalBefore != null && evalAfter != null && <span> · </span>}
                       {evalAfter != null && <span>After: {formatEvalCp(evalAfter)}</span>}
                       {evalDelta != null && (
-                        <span className={evalDeltaToneClass(evalDelta)}>
+                        <span className={evalDeltaToneClassForMover({ evalBeforeCp: evalBefore, evalAfterCp: evalAfter, moverColor: note.moverColor })}>
                           {" · "}Δ {formatEvalCp(evalDelta)}
                         </span>
                       )}
