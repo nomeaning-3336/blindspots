@@ -1351,7 +1351,10 @@ function QueuePositionRow({
                     if (noteHoverTimerRef.current) clearTimeout(noteHoverTimerRef.current);
                     setNoteMovePreview(null);
                   }}
-                  className="group relative border border-[var(--app-border-soft)] bg-[var(--app-panel-deep)] px-4 py-3 pr-20 transition-colors hover:border-[var(--app-border-strong)] hover:bg-[var(--app-panel-solid)] focus-within:border-[var(--app-border-strong)] focus-within:bg-[var(--app-panel-solid)]"
+                  className={[
+                    "group relative border border-[var(--app-border-soft)] bg-[var(--app-panel-deep)] px-4 py-3 transition-colors hover:border-[var(--app-border-strong)] hover:bg-[var(--app-panel-solid)] focus-within:border-[var(--app-border-strong)] focus-within:bg-[var(--app-panel-solid)]",
+                    editingMoveKey !== note.moveKey && !adding ? "pr-20" : "",
+                  ].filter(Boolean).join(" ")}
                 >
                   <span
                     aria-hidden="true"
@@ -1422,7 +1425,7 @@ function QueuePositionRow({
                   </div>
 
                   {editingMoveKey === note.moveKey ? (
-                    <div className="mt-3 w-full min-w-0 grid gap-3" onBlur={(e) => {
+                    <div className="mt-3 w-full min-w-0 pr-0 grid gap-3" onBlur={(e) => {
                       const currentTarget = e.currentTarget;
                       setTimeout(() => {
                         if (!currentTarget.contains(document.activeElement)) {
