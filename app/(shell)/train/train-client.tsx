@@ -3586,6 +3586,7 @@ export default function TrainPage(props: TrainPageProps) {
                     isTrainingActive={state === "active"}
                     isExploring={isExploringResults}
                     isSetupReplay={isActiveSetupReplay}
+                    isReplayMode={state === "active" && (isActiveSetupReplay || activeReplayIndex !== null)}
                   >
                     {isExploringResults ? (
                       <BoardWithEvalBar
@@ -4687,6 +4688,7 @@ function BoardWithPlayerStrips({
   isTrainingActive,
   isExploring,
   isSetupReplay,
+  isReplayMode,
   children,
 }: {
   userSide: TrainingMove["side"];
@@ -4695,6 +4697,7 @@ function BoardWithPlayerStrips({
   isTrainingActive: boolean;
   isExploring: boolean;
   isSetupReplay?: boolean;
+  isReplayMode?: boolean;
   children: import("react").ReactNode;
 }) {
   const opponentSide = userSide === "white" ? "black" : "white";
@@ -4704,17 +4707,13 @@ function BoardWithPlayerStrips({
   let isUserActive = false;
   let isOpponentActive = false;
 
-  if (isExploring) {
+  if (isExploring || isReplayMode || isSetupReplay) {
     const turnSide = getFenTurnSide(boardFen);
     isUserActive = turnSide === userSide;
     isOpponentActive = turnSide === opponentSide;
   } else if (isTrainingActive) {
     isUserActive = !isOpponentThinking;
     isOpponentActive = isOpponentThinking;
-  } else if (isSetupReplay) {
-    const turnSide = getFenTurnSide(boardFen);
-    isUserActive = turnSide === userSide;
-    isOpponentActive = turnSide === opponentSide;
   }
 
   return (
@@ -6100,6 +6099,7 @@ function TrainingNotesRail({
               const text = note.noteText || "No note text.";
               const evalBefore = note.evalBeforeCp;
               const evalAfter = note.evalAfterCp;
+              const moverColor = note.moverColor ?? moverColorFromFen(note.decisionFen);
               const evalDelta =
                 evalBefore != null && evalAfter != null ? evalAfter - evalBefore : null;
               const showEvalRow = evalBefore != null || evalAfter != null;
@@ -6128,7 +6128,7 @@ function TrainingNotesRail({
                       {evalBefore != null && evalAfter != null && <span> · </span>}
                       {evalAfter != null && <span>After: {formatEvalCp(evalAfter)}</span>}
                       {evalDelta != null && (
-                        <span className={evalDeltaToneClassForMover({ evalBeforeCp: evalBefore, evalAfterCp: evalAfter, moverColor: note.moverColor })}>
+                        <span className={evalDeltaToneClassForMover({ evalBeforeCp: evalBefore, evalAfterCp: evalAfter, moverColor })}>
                           {" · "}Δ {formatEvalCp(evalDelta)}
                         </span>
                       )}
