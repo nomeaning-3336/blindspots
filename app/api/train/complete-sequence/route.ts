@@ -301,13 +301,10 @@ export async function POST(request: Request) {
     previousDecisionFen: index === 0 ? initialPreviousFen : undefined,
     previousMoveUci: index === 0 ? initialPlayedMove : undefined,
   }));
-  mineMistakesFromSequence({
-    userId,
-    sessionId: session.id,
-    positionEvaluations: minedMistakesInput,
-  }).catch(() => {
-    // Mining is best-effort; never fail the sequence completion.
-  });
+  // Automatic mistake mining is disabled — users opt-in via the
+  // "Add Position to Learning Queue" button in the post-mortem screen
+  // to avoid cascading-mistake noise in the review queue.
+  void minedMistakesInput;
 
   // Persist mistake attempts — best-effort, never blocks the response.
   persistMistakeAttempts(userId, sequenceEvaluation.positionEvaluations).catch((err) => {
