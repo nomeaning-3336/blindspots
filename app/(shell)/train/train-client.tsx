@@ -11,6 +11,7 @@ import {
   type EngineLineResult,
 } from "@/components/train/postmortem-shared";
 import {
+  classifyEvaluatedMove,
   classifyRankedMove,
   isRecommendableClassification,
 } from "@/lib/move-classification";
@@ -3029,6 +3030,12 @@ export default function TrainPage(props: TrainPageProps) {
     engineLineCache[boardFen] ??
     engineLineCacheRef.current[boardFen] ??
     [];
+  const terminalBoardDisplay = useMemo(
+    () => getPostmortemTerminalDisplay(boardFen),
+    [boardFen],
+  );
+  const currentEngineEval = currentEngineLines[0]?.cp ?? terminalBoardDisplay.evalCp ?? undefined;
+  const currentEngineMate = currentEngineLines[0]?.mate ?? terminalBoardDisplay.evalMate ?? null;
   const displayLines = effectiveExploreSelectedSquare && cachedPieceLines
     ? mergePieceLinesWithDeeperKnownLines({
         fen: boardFen,
@@ -3040,23 +3047,37 @@ export default function TrainPage(props: TrainPageProps) {
       ? []
       : currentEngineLines;
   const classifiedDisplayLines = useMemo(
-    () => displayLines.map((line, index) => ({
-      ...line,
-      classification: line.classification ?? engineLineClassification(index, displayLines, boardFen),
-    })),
-    [boardFen, displayLines],
+    () => displayLines.map((line, index) => {
+      const selectedPieceClassification =
+        effectiveExploreSelectedSquare && typeof currentEngineEval === "number"
+          ? classifyEvaluatedMove({
+              previous: {
+                cp: currentEngineEval,
+                mate: currentEngineMate ?? null,
+                bestMove: currentEngineLines[0]?.bestMove,
+              },
+              next: {
+                cp: line.cp,
+                mate: line.mate ?? null,
+                bestMove: line.bestMove,
+              },
+              color: engineColorFromFen(boardFen),
+              move: line.bestMove,
+            })
+          : undefined;
+
+      return {
+        ...line,
+        classification: selectedPieceClassification ?? line.classification ?? engineLineClassification(index, displayLines, boardFen),
+      };
+    }),
+    [boardFen, currentEngineEval, currentEngineLines, currentEngineMate, displayLines, effectiveExploreSelectedSquare],
   );
   const boardEngineLines = effectiveExploreSelectedSquare
     ? classifiedDisplayLines
     : classifiedDisplayLines.filter((line) => isRecommendableClassification(line.classification));
   const hoveredEngineLineMove =
     hoveredEngineLineIndex == null ? null : classifiedDisplayLines[hoveredEngineLineIndex]?.bestMove ?? null;
-  const terminalBoardDisplay = useMemo(
-    () => getPostmortemTerminalDisplay(boardFen),
-    [boardFen],
-  );
-  const currentEngineEval = currentEngineLines[0]?.cp ?? terminalBoardDisplay.evalCp ?? undefined;
-  const currentEngineMate = currentEngineLines[0]?.mate ?? terminalBoardDisplay.evalMate ?? null;
   const currentEngineMateCp = whitePositiveMateCp(boardFen, currentEngineMate, currentEngineEval);
   const boardFrameClassName = [
     "app-brutal-board-frame relative max-w-full overflow-visible",
@@ -5437,6 +5458,10 @@ function engineLineClassification(
   fen: string,
 ): MoveClassification | undefined {
   return classifyRankedMove(index, lines, fen);
+}
+
+function engineColorFromFen(fen: string): "w" | "b" {
+  return fen.trim().split(/\s+/)[1] === "b" ? "b" : "w";
 }
 
 function ResultsPanel({
