@@ -69,6 +69,34 @@ export async function POST(request: Request) {
   return NextResponse.json({ ok: true });
 }
 
+export async function DELETE(request: Request) {
+  const userId = await getOptionalAppUserId();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const payload = (await request.json().catch(() => null)) as { moveKey?: unknown } | null;
+  if (!payload?.moveKey || typeof payload.moveKey !== "string") {
+    return NextResponse.json({ error: "Missing required field: moveKey" }, { status: 400 });
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const { error } = await supabase
+    .from("training_move_notes" as any)
+    .delete()
+    .eq("user_id", userId)
+    .eq("move_key", payload.moveKey);
+
+  if (error) {
+    return NextResponse.json(
+      { error: `Failed to delete move note: ${error.message}` },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({ ok: true });
+}
+
 export async function GET(request: Request) {
   const userId = await getOptionalAppUserId();
   if (!userId) {
