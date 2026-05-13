@@ -1212,7 +1212,7 @@ function QueuePositionRow({
         </div>
 
         {adding && (
-          <div className="mt-3 grid gap-2 rounded-md border border-[var(--app-accent)] bg-[var(--app-panel-deep)] p-3">
+          <div className="mt-3 grid gap-2 rounded-md border border-[var(--app-border)] bg-[var(--app-panel-deep)] p-3">
             <label className="grid gap-1 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
               Move
               <input
@@ -1402,7 +1402,7 @@ function QueuePositionRow({
                           }
                         }}
                         rows={3}
-                        className="font-sans text-sm leading-5 text-[var(--app-text)] rounded border border-[var(--app-accent)] bg-[var(--app-panel-solid)] px-2 py-1.5 focus-visible:outline-none"
+                        className="font-sans text-sm leading-5 text-[var(--app-text)] rounded border border-[var(--app-border)] bg-[var(--app-panel-solid)] px-2 py-1.5 focus-visible:border-[var(--app-accent)] focus-visible:outline-none"
                       />
                       {editError && (
                         <div className="text-xs text-[var(--app-class-blunder)]">{editError}</div>
