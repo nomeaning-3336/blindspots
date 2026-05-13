@@ -974,7 +974,7 @@ function QueuePositionRow({
         );
 
         if (newMoveKey !== note.moveKey) {
-          await fetch("/api/train/move-notes", {
+          await fetch("/api/dashboard/mistakes/delete-note", {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ moveKey: note.moveKey }),
@@ -1434,8 +1434,8 @@ function QueuePositionRow({
                               discardEdit();
                             }
                           }}
-                          rows={6}
-                          className="mt-2 box-border block min-h-[150px] w-full min-w-0 resize-y rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 text-sm leading-6 text-[var(--app-text)] outline-none transition placeholder:text-[var(--app-muted-soft)] focus:border-[var(--app-border-strong)]"
+                          rows={7}
+                          className="mt-2 box-border block min-h-[180px] w-full min-w-0 resize-y rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 text-sm font-normal leading-6 text-[var(--app-text)] outline-none transition placeholder:text-[var(--app-muted-soft)] focus:border-[var(--app-border-strong)]"
                         />
                       </label>
                       {editError && (
