@@ -37,7 +37,7 @@ export const blogPosts: BlogPost[] = [
       {
         heading: "Hello world",
         body: [
-          "You lose a game, click analysis, see a bunch of red question marks, feel vaguely accused by Stockfish, promise to \"work on tactics,\" then solve 6/7 puzzles (haha, funny number) where every position screams THERE IS A TACTIC HERE while a monkey is banging a tiny cymbal. Two days later, you hang the same exchange sac because your opponent's bishop was quiet and therefore, apparently, not real.",
+          "You lose a game, click analysis, see a bunch of red question marks, feel vaguely accused by Stockfish, promise to \"work on tactics,\" then solve 67 puzzles (haha, funny number) where every position screams THERE IS A TACTIC HERE while a monkey is banging a tiny cymbal. Two days later, you hang the same exchange sac because your opponent's bishop was quiet and therefore, apparently, not real.",
           "This is normal.",
           "Not acceptable. Normal.",
           "Blindspots are the bits of chess you keep failing in the same shape. The same \"Yup, I am definitely not getting checkmated in the next 2 moves\" delusion. The same poisoned trade. The same \"my attack is winning\" fantasy where your king is sitting in the center wearing a paper hat. They are not random. They cluster. Your brain has a small blacklist of positions it refuses to process correctly, and it has been enforcing that blacklist with religious discipline.",
