@@ -21,7 +21,7 @@ export const blogPosts: BlogPost[] = [
     slug: "what-is-a-chess-blindspot",
     title: "What Is a Chess Blindspot?",
     excerpt:
-      "Your chess improvement plan is probably a crime scene with a nicer font.",
+      "The issue is not that you missed it. The issue is that you forgot it by tomorrow.",
     publishedAt: "2026-05-12",
     updatedAt: "2026-05-12",
     readingMinutes: 6,
