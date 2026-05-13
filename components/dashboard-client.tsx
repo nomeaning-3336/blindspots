@@ -692,7 +692,10 @@ function QueuePositionRow({
   const NOTE_HOVER_DELAY_MS = 100;
   const [notes, setNotes] = useState(position.moveNotes);
   const [editingMoveKey, setEditingMoveKey] = useState<string | null>(null);
-  const [editingNoteText, setEditingNoteText] = useState<string>("");
+  const [editingMoveInput, setEditingMoveInput] = useState("");
+  const [editingNoteText, setEditingNoteText] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
+  const [pendingNoteKeys, setPendingNoteKeys] = useState<Set<string>>(() => new Set());
   const [savingNote, setSavingNote] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newMoveInput, setNewMoveInput] = useState("");
@@ -867,50 +870,103 @@ function QueuePositionRow({
     }
   }
 
-  function startEditNote(moveKey: string, currentText: string) {
+  function startEditNote(note: typeof notes[number]) {
     setAdding(false);
     setAddError(null);
-    setEditingMoveKey(moveKey);
-    setEditingNoteText(currentText);
+    setEditError(null);
+    setEditingMoveKey(note.moveKey);
+    setEditingMoveInput(note.moveSan ?? note.moveUci ?? "");
+    setEditingNoteText(note.note ?? "");
   }
 
-  function cancelEditNote() {
+  function discardEdit() {
     setEditingMoveKey(null);
+    setEditingMoveInput("");
     setEditingNoteText("");
+    setEditError(null);
   }
 
-  async function saveEditedNote() {
-    if (!editingMoveKey || savingNote) return;
-    const target = notes.find((n) => n.moveKey === editingMoveKey);
-    if (!target) return;
+  function submitEdit(note: typeof notes[number]) {
+    if (!editingMoveKey) return;
+    if (pendingNoteKeys.has(editingMoveKey)) return;
 
-    setSavingNote(true);
-    try {
-      const res = await fetch("/api/dashboard/notes/upsert", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          decisionFen: position.startingFen,
-          moveUci: target.moveUci,
-          noteText: editingNoteText,
-        }),
-      });
-      if (!res.ok) throw new Error(`Save failed: ${res.status}`);
-      const savedText = editingNoteText;
-      setNotes((prev) =>
-        prev.map((n) => (n.moveKey === editingMoveKey ? { ...n, note: savedText } : n)),
-      );
-      cancelEditNote();
-    } catch (err) {
-      console.error("[dashboard] failed to save note edit", err);
-      window.alert("Could not save the note. Try again.");
-    } finally {
-      setSavingNote(false);
+    const parsed = parseMoveInputForFen(position.startingFen, editingMoveInput);
+    if (!parsed) {
+      setEditError("Illegal move for this position.");
+      return;
     }
+
+    const moveKey = `${position.startingFen.trim().split(/\s+/).slice(0, 4).join(" ")}::${parsed.uci}`;
+    const noteText = editingNoteText.trim();
+    const hasChanges =
+      noteText !== (note.note ?? "") ||
+      parsed.uci !== (note.moveUci ?? "") ||
+      parsed.san !== (note.moveSan ?? "");
+
+    if (!hasChanges) {
+      discardEdit();
+      return;
+    }
+
+    setPendingNoteKeys((prev) => new Set(prev).add(editingMoveKey));
+    const prevNotes = notes;
+    setNotes((prev) =>
+      prev.map((n) =>
+        n.moveKey === editingMoveKey
+          ? { ...n, note: noteText, moveSan: parsed.san, moveUci: parsed.uci, moveKey }
+          : n,
+      ),
+    );
+    discardEdit();
+
+    void (async () => {
+      try {
+        const res = await fetch("/api/train/move-notes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            moveKey,
+            decisionFen: position.startingFen,
+            moveUci: parsed.uci,
+            moveSan: parsed.san,
+            noteText: noteText,
+          }),
+        });
+        if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+      } catch (err) {
+        console.error("[dashboard] failed to save note edit", err);
+        setNotes(prevNotes);
+      } finally {
+        setPendingNoteKeys((prev) => {
+          const next = new Set(prev);
+          next.delete(editingMoveKey);
+          return next;
+        });
+      }
+    })();
+  }
+
+  function deleteNote(note: typeof notes[number]) {
+    const prevNotes = notes;
+    setNotes((prev) => prev.filter((n) => n.moveKey !== note.moveKey));
+
+    void (async () => {
+      try {
+        const res = await fetch("/api/train/move-notes", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ moveKey: note.moveKey }),
+        });
+        if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+      } catch (err) {
+        console.error("[dashboard] failed to delete note", err);
+        setNotes(prevNotes);
+      }
+    })();
   }
 
   function openAddComposer() {
-    cancelEditNote();
+    discardEdit();
     setAdding(true);
     setNewMoveInput("");
     setNewNoteText("");
@@ -1222,19 +1278,34 @@ function QueuePositionRow({
                   className="relative grid gap-1 border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-3 py-2 pr-9 transition-colors hover:border-[var(--app-accent)] focus-visible:border-[var(--app-accent)] focus-visible:outline-none"
                 >
                   {editingMoveKey !== note.moveKey && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        startEditNote(note.moveKey, note.note);
-                      }}
-                      aria-label="Edit note"
-                      className="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded text-[var(--app-muted)] transition-colors hover:text-[var(--app-accent)] focus-visible:text-[var(--app-accent)] focus-visible:outline-none"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true">
-                        <path d="M9 2 L12 5 L5 12 L2 12 L2 9 Z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-                      </svg>
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startEditNote(note);
+                        }}
+                        aria-label="Edit note"
+                        className="absolute right-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded text-[var(--app-muted)] transition-colors hover:text-[var(--app-accent)] focus-visible:text-[var(--app-accent)] focus-visible:outline-none"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden="true">
+                          <path d="M9 2 L12 5 L5 12 L2 12 L2 9 Z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteNote(note);
+                        }}
+                        aria-label="Delete note"
+                        className="absolute bottom-2 right-2 z-10 flex h-5 w-5 items-center justify-center rounded text-[var(--app-muted)] transition-colors hover:text-[var(--app-class-blunder)] focus-visible:text-[var(--app-class-blunder)] focus-visible:outline-none"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                          <path d="M3 4 L11 4 M5 4 L5 3 C5 2.5 5.5 2 6 2 L8 2 C8.5 2 9 2.5 9 3 L9 4 M6 6 L6 10 M8 6 L8 10 M3 4 L4 12 L10 12 L11 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                    </>
                   )}
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-sans text-sm font-semibold text-[var(--app-text)]">
@@ -1265,35 +1336,69 @@ function QueuePositionRow({
                   )}
 
                   {editingMoveKey === note.moveKey ? (
-                    <>
+                    <div
+                      className="grid gap-2"
+                      onBlur={(e) => {
+                        const currentTarget = e.currentTarget;
+                        setTimeout(() => {
+                          if (!currentTarget.contains(document.activeElement)) {
+                            submitEdit(note);
+                          }
+                        }, 0);
+                      }}
+                    >
+                      <input
+                        type="text"
+                        value={editingMoveInput}
+                        onChange={(e) => setEditingMoveInput(e.target.value)}
+                        placeholder={note.moveSan || note.moveUci || "e.g. Nxg3"}
+                        className="font-sans text-sm font-semibold text-[var(--app-text)] rounded border border-[var(--app-accent)] bg-[var(--app-panel-solid)] px-2 py-1 focus-visible:outline-none"
+                      />
                       <textarea
                         value={editingNoteText}
                         onChange={(e) => setEditingNoteText(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === "Escape") {
                             e.preventDefault();
-                            cancelEditNote();
+                            discardEdit();
                           }
                         }}
                         rows={3}
-                        autoFocus
                         className="font-sans text-sm leading-5 text-[var(--app-text)] rounded border border-[var(--app-accent)] bg-[var(--app-panel-solid)] px-2 py-1.5 focus-visible:outline-none"
                       />
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void saveEditedNote();
-                        }}
-                        disabled={savingNote}
-                        aria-label="Save note"
-                        className="absolute right-2 bottom-2 z-10 flex h-6 w-6 items-center justify-center rounded bg-[var(--app-class-good)] text-[#050505] shadow-[2px_2px_0_var(--app-brutal-shadow)] transition-transform hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_var(--app-brutal-shadow)] focus-visible:outline-none disabled:opacity-60"
-                      >
-                        <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true">
-                          <path d="M3 7 L6 10 L11 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </button>
-                    </>
+                      {editError && (
+                        <div className="text-xs text-[var(--app-class-blunder)]">{editError}</div>
+                      )}
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            discardEdit();
+                          }}
+                          aria-label="Discard changes"
+                          className="flex h-7 w-7 items-center justify-center rounded border border-[var(--app-border)] bg-[var(--app-panel-solid)] text-[var(--app-muted)] transition-colors hover:text-[var(--app-text)] focus-visible:outline-none"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true">
+                            <path d="M2 2 L12 12 M12 2 L2 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            submitEdit(note);
+                          }}
+                          disabled={pendingNoteKeys.has(note.moveKey)}
+                          aria-label="Save note"
+                          className="flex h-7 w-7 items-center justify-center rounded border border-[var(--app-brutal-edge)] bg-[var(--app-class-good)] text-[#050505] shadow-[2px_2px_0_var(--app-brutal-shadow)] transition-transform hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_var(--app-brutal-shadow)] focus-visible:outline-none disabled:opacity-60"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true">
+                            <path d="M3 7 L6 10 L11 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
                   ) : (
                     <p className="font-sans text-sm leading-5 text-[var(--app-text)]">
                       {note.note}
