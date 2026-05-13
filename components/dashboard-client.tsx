@@ -1173,8 +1173,13 @@ function QueuePositionRow({
       {/* Notes column */}
       <div className="min-w-0 py-2">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-xl font-black leading-tight tracking-[-0.03em] text-[var(--app-text)]">
+          <h3 className="flex items-baseline gap-2 text-xl font-black leading-tight tracking-[-0.03em] text-[var(--app-text)]">
             Notes
+            {notes.length > 0 && (
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--app-surface-subtle)] px-1.5 text-[10px] font-bold text-[var(--app-muted)]">
+                {notes.length}
+              </span>
+            )}
           </h3>
           <button
             type="button"
@@ -1238,7 +1243,9 @@ function QueuePositionRow({
         )}
 
         {notes.length === 0 ? (
-          <div className="mt-2 text-sm text-[var(--app-muted)]">N/A</div>
+          <div className="mt-2 rounded border border-dashed border-[var(--app-border)] px-3 py-2 text-xs text-[var(--app-muted-soft)]">
+                No notes for this position yet.
+              </div>
         ) : (
           <div className="mt-3 grid gap-2">
             {notes.map((note) => {
@@ -1275,8 +1282,17 @@ function QueuePositionRow({
                     if (noteHoverTimerRef.current) clearTimeout(noteHoverTimerRef.current);
                     setNoteMovePreview(null);
                   }}
-                  className="relative grid gap-1 border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-3 py-2 pr-9 transition-colors hover:border-[var(--app-accent)] focus-visible:border-[var(--app-accent)] focus-visible:outline-none"
+                  className="group relative grid gap-1.5 border border-[var(--app-border)] bg-[var(--app-panel-deep)] pl-4 pr-9 py-3 transition-colors hover:border-[var(--app-accent)] focus-visible:border-[var(--app-accent)] focus-visible:outline-none"
                 >
+                  <span
+                    aria-hidden="true"
+                    className={[
+                      "absolute left-0 top-0 bottom-0 w-[3px]",
+                      note.classification
+                        ? classificationStripeBgClass(note.classification)
+                        : "bg-transparent",
+                    ].join(" ")}
+                  />
                   {editingMoveKey !== note.moveKey && (
                     <>
                       <button
@@ -1286,7 +1302,7 @@ function QueuePositionRow({
                           startEditNote(note);
                         }}
                         aria-label="Edit note"
-                        className="absolute right-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded text-[var(--app-muted)] transition-colors hover:text-[var(--app-accent)] focus-visible:text-[var(--app-accent)] focus-visible:outline-none"
+                        className="absolute right-9 top-2 z-10 flex h-5 w-5 items-center justify-center rounded text-[var(--app-muted)] opacity-0 transition-opacity transition-colors hover:text-[var(--app-accent)] focus-visible:text-[var(--app-accent)] focus-visible:outline-none group-hover:opacity-100 group-focus-within:opacity-100"
                       >
                         <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden="true">
                           <path d="M9 2 L12 5 L5 12 L2 12 L2 9 Z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
@@ -1299,7 +1315,7 @@ function QueuePositionRow({
                           deleteNote(note);
                         }}
                         aria-label="Delete note"
-                        className="absolute bottom-2 right-2 z-10 flex h-5 w-5 items-center justify-center rounded text-[var(--app-muted)] transition-colors hover:text-[var(--app-class-blunder)] focus-visible:text-[var(--app-class-blunder)] focus-visible:outline-none"
+                        className="absolute bottom-2 right-2 z-10 flex h-5 w-5 items-center justify-center rounded text-[var(--app-muted)] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 transition-colors hover:text-[var(--app-class-blunder)] focus-visible:text-[var(--app-class-blunder)] focus-visible:outline-none"
                       >
                         <svg width="16" height="16" viewBox="0 0 14 14" fill="none" aria-hidden="true">
                           <path d="M3 4 L11 4 M5 4 L5 3 C5 2.5 5.5 2 6 2 L8 2 C8.5 2 9 2.5 9 3 L9 4 M6 6 L6 10 M8 6 L8 10 M3 4 L4 12 L10 12 L11 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -1307,31 +1323,39 @@ function QueuePositionRow({
                       </button>
                     </>
                   )}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-sans text-sm font-semibold text-[var(--app-text)]">
-                      {note.moveSan || note.moveUci}
-                    </span>
-                    {note.classification && (
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <span className="font-sans text-base font-bold text-[var(--app-text)]">
+                        {note.moveSan || note.moveUci}
+                      </span>
+                      {note.classification && (
+                        <span className={[
+                          "rounded px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.12em] bg-[var(--app-surface-subtle)]",
+                          classificationTextClass(note.classification),
+                        ].join(" ")}>
+                          {note.classification}
+                        </span>
+                      )}
+                    </div>
+                    {evalDeltaCp != null && (
                       <span className={[
-                        "font-mono text-[10px] font-bold uppercase tracking-[0.12em]",
-                        classificationTextClass(note.classification),
+                        "font-mono text-xs font-bold tabular-nums",
+                        isMoverImprovement
+                          ? "text-[var(--app-class-good)]"
+                          : "text-[var(--app-class-blunder)]",
                       ].join(" ")}>
-                        {note.classification}
+                        Δ {formatEvalCp(evalDeltaCp)}
                       </span>
                     )}
                   </div>
 
-                  {(note.evalBeforeCp != null || note.evalAfterCp != null || evalDeltaCp != null) && (
-                    <div className="font-sans text-xs text-[var(--app-muted)]">
-                      {note.evalBeforeCp != null && <span>Before: {formatEvalCp(note.evalBeforeCp)}</span>}
-                      {note.evalBeforeCp != null && note.evalAfterCp != null && <span> · </span>}
-                      {note.evalAfterCp != null && <span>After: {formatEvalCp(note.evalAfterCp)}</span>}
-                      {(note.evalBeforeCp != null || note.evalAfterCp != null) && evalDeltaCp != null && <span> · </span>}
-                      {evalDeltaCp != null && (
-                        <span className={isMoverImprovement ? "text-[var(--app-class-good)]" : "text-[var(--app-class-blunder)]"}>
-                          Δ {formatEvalCp(evalDeltaCp)}
-                        </span>
+                  {(note.evalBeforeCp != null || note.evalAfterCp != null) && (
+                    <div className="font-mono text-[11px] tabular-nums text-[var(--app-muted)]">
+                      {note.evalBeforeCp != null && <span>{formatEvalCp(note.evalBeforeCp)}</span>}
+                      {note.evalBeforeCp != null && note.evalAfterCp != null && (
+                        <span className="px-1.5 opacity-60">→</span>
                       )}
+                      {note.evalAfterCp != null && <span>{formatEvalCp(note.evalAfterCp)}</span>}
                     </div>
                   )}
 
@@ -1400,7 +1424,7 @@ function QueuePositionRow({
                       </div>
                     </div>
                   ) : (
-                    <p className="font-sans text-sm leading-5 text-[var(--app-text)]">
+                    <p className="font-sans text-sm leading-6 text-[var(--app-text)]">
                       {note.note}
                     </p>
                   )}
@@ -1531,6 +1555,24 @@ function classificationTextClass(c: string) {
     critical: "text-[var(--app-class-critical)]",
   };
   return map[c.toLowerCase()] ?? "text-[var(--app-muted)]";
+}
+
+function classificationStripeBgClass(classification: string | null | undefined) {
+  switch (classification) {
+    case "blunder":
+      return "bg-[var(--app-class-blunder)]";
+    case "mistake":
+      return "bg-[var(--app-class-mistake)]";
+    case "inaccuracy":
+      return "bg-[var(--app-class-inaccuracy)]";
+    case "best":
+    case "brilliant":
+    case "excellent":
+    case "good":
+      return "bg-[var(--app-class-good)]";
+    default:
+      return "bg-[var(--app-border)]";
+  }
 }
 
 function EloChart({ points }: { points: EloHistoryPoint[] }) {
