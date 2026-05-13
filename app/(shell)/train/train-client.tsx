@@ -666,6 +666,8 @@ export default function TrainPage(props: TrainPageProps) {
   const shouldAnimatePieces = state === "active" || isPostMortemVisible;
 
   const [fenCopied, setFenCopied] = useState(false);
+  const [addingPositionToQueue, setAddingPositionToQueue] = useState(false);
+  const [positionAddedFlash, setPositionAddedFlash] = useState(false);
   const fenCopyTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -3895,10 +3897,87 @@ export default function TrainPage(props: TrainPageProps) {
               )}
             </div>
 
+            {/* ── Manual queue + Copy FEN row ─────────────────────────────── */}
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                disabled={addingPositionToQueue || !boardFen}
+                onClick={async () => {
+                  if (addingPositionToQueue) return;
+                  const fenToAdd = boardFen;
+                  if (!fenToAdd) return;
+                  const preludeMove =
+                    activeExploratoryPosition?.move ?? activeSequencePosition?.move ?? null;
+                  setAddingPositionToQueue(true);
+                  try {
+                    const res = await fetch("/api/dashboard/mistakes/add", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        decisionFen: fenToAdd,
+                        setupPreviousFen: preludeMove?.fenBefore ?? null,
+                        setupPlayedMoveUci: preludeMove?.uci ?? null,
+                        setupPlayedMoveSan: preludeMove?.san ?? null,
+                      }),
+                    });
+                    if (!res.ok) throw new Error(`Add failed: ${res.status}`);
+                    setPositionAddedFlash(true);
+                    window.setTimeout(() => setPositionAddedFlash(false), 1800);
+                  } catch (err) {
+                    console.error("[train] failed to add position to queue", err);
+                    window.alert("Could not add the position. Try again.");
+                  } finally {
+                    setAddingPositionToQueue(false);
+                  }
+                }}
+                className={[
+                  secondaryActionClassName,
+                  "min-h-12 w-full justify-center px-5 disabled:opacity-60",
+                ].join(" ")}
+              >
+                <span className={postmortemActionTextClassName}>
+                  {positionAddedFlash
+                    ? "Added to Queue ✓"
+                    : addingPositionToQueue
+                      ? "Adding..."
+                      : "Add Position to Learning Queue"}
+                </span>
+              </button>
+              <button
+                type="button"
+                disabled={!boardFen}
+                onClick={async () => {
+                  const fenToCopy = boardFen;
+                  if (!fenToCopy) return;
+                  try {
+                    await navigator.clipboard.writeText(fenToCopy);
+                    setFenCopied(true);
+                    if (fenCopyTimerRef.current) {
+                      window.clearTimeout(fenCopyTimerRef.current);
+                    }
+                    fenCopyTimerRef.current = window.setTimeout(() => {
+                      setFenCopied(false);
+                    }, 1600);
+                  } catch (err) {
+                    console.error("[train] failed to copy FEN", err);
+                    window.alert("Could not copy FEN. Try again.");
+                  }
+                }}
+                className={[
+                  secondaryActionClassName,
+                  "min-h-12 w-full justify-center px-5 disabled:opacity-60",
+                ].join(" ")}
+              >
+                <span className={postmortemActionTextClassName}>
+                  {fenCopied ? "Copied FEN ✓" : "Copy FEN"}
+                </span>
+              </button>
+            </div>
+
             {/* ── Postmortem action footer ───────────────────────────────── */}
             <div
               data-tour="postmortem-actions"
-              className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2"
+              className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2"
             >
               <a
                 href="/train"
