@@ -679,6 +679,12 @@ function formatEvalCp(cp: number | null | undefined) {
   return `${pawns > 0 ? "+" : ""}${pawns.toFixed(1)}`;
 }
 
+const noteBodyTextClassName =
+  "font-sans text-sm font-normal normal-case tracking-normal leading-5 text-[var(--app-muted)]";
+
+const noteMoveTextClassName =
+  "font-sans text-sm font-bold normal-case tracking-normal leading-5 text-[var(--app-text)]";
+
 function QueuePositionRow({
   position,
   nowMs,
@@ -699,6 +705,7 @@ function QueuePositionRow({
   const [pendingNoteKeys, setPendingNoteKeys] = useState<Set<string>>(() => new Set());
   const [savingNote, setSavingNote] = useState(false);
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const editContainerRef = useRef<HTMLDivElement | null>(null);
 
   function resizeTextareaToContent(el: HTMLTextAreaElement | null) {
     if (!el) return;
@@ -715,6 +722,38 @@ function QueuePositionRow({
       resizeTextareaToContent(editTextareaRef.current);
     }
   }, [editingMoveKey, editingNoteText]);
+
+  // Click outside edit container to save
+  useEffect(() => {
+    if (!editingMoveKey) return;
+
+    function onPointerDown(e: PointerEvent) {
+      const container = editContainerRef.current;
+      if (!container) return;
+      if (container.contains(e.target as Node)) return;
+      const note = notes.find((n) => n.moveKey === editingMoveKey);
+      if (note) submitEdit(note);
+    }
+
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [editingMoveKey]);
+
+  // Escape key to discard
+  useEffect(() => {
+    if (!editingMoveKey) return;
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        discardEdit();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [editingMoveKey]);
+
   const [adding, setAdding] = useState(false);
   const [newMoveInput, setNewMoveInput] = useState("");
   const [newNoteText, setNewNoteText] = useState("");
@@ -1425,14 +1464,7 @@ function QueuePositionRow({
                   </div>
 
                   {editingMoveKey === note.moveKey ? (
-                    <div className="mt-3 w-full min-w-0 pr-0 grid gap-3" onBlur={(e) => {
-                      const currentTarget = e.currentTarget;
-                      setTimeout(() => {
-                        if (!currentTarget.contains(document.activeElement)) {
-                          submitEdit(note);
-                        }
-                      }, 0);
-                    }}>
+                    <div ref={editContainerRef} className="mt-3 w-full min-w-0 pr-0 grid gap-3">
                       <label className="grid w-full min-w-0 gap-1.5">
                         <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">
                           Move
@@ -1442,7 +1474,12 @@ function QueuePositionRow({
                           value={editingMoveInput}
                           onChange={(e) => setEditingMoveInput(e.target.value)}
                           placeholder="Move, e.g. Nf3 or g1f3"
-                          className="box-border block w-full min-w-0 rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 text-sm font-bold text-[var(--app-text)] outline-none transition focus:border-[var(--app-border-strong)]"
+                          className={[
+                            "box-border block w-full min-w-0 rounded-md border border-[var(--app-border)]",
+                            "bg-[var(--app-bg)] px-3 py-2 outline-none transition",
+                            "focus:border-[var(--app-border-strong)] focus:ring-1 focus:ring-[var(--app-accent)]",
+                            noteMoveTextClassName,
+                          ].join(" ")}
                         />
                       </label>
                       <label className="grid w-full min-w-0 gap-1.5">
@@ -1456,13 +1493,14 @@ function QueuePositionRow({
                             setEditingNoteText(e.target.value);
                             resizeTextareaToContent(e.currentTarget);
                           }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Escape") {
-                              e.preventDefault();
-                              discardEdit();
-                            }
-                          }}
-                          className="box-border block w-full min-w-0 resize-none rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 text-sm font-normal leading-6 text-[var(--app-text)] outline-none transition placeholder:text-[var(--app-muted-soft)] focus:border-[var(--app-border-strong)] overflow-y-auto"
+                          className={[
+                            "box-border block w-full min-w-0 resize-none rounded-md border border-[var(--app-border)]",
+                            "bg-[var(--app-bg)] px-3 py-2 outline-none transition",
+                            "placeholder:text-[var(--app-muted)] focus:border-[var(--app-border-strong)]",
+                            "focus:ring-1 focus:ring-[var(--app-accent)] overflow-y-auto",
+                            noteBodyTextClassName,
+                            "text-[var(--app-text)]",
+                          ].join(" ")}
                           style={{ minHeight: "72px", maxHeight: "240px" }}
                         />
                       </label>
@@ -1474,6 +1512,18 @@ function QueuePositionRow({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
+                            submitEdit(note);
+                          }}
+                          disabled={pendingNoteKeys.has(note.moveKey)}
+                          aria-label="Save note"
+                          className="app-brutal-button inline-flex min-h-9 items-center justify-center px-3 py-1.5 text-xs disabled:opacity-60"
+                        >
+                          {pendingNoteKeys.has(note.moveKey) ? "Saving..." : "Save"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
                             discardEdit();
                           }}
                           aria-label="Discard changes"
@@ -1481,22 +1531,10 @@ function QueuePositionRow({
                         >
                           Cancel
                         </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            submitEdit(note);
-                          }}
-                          disabled={pendingNoteKeys.has(note.moveKey)}
-                          aria-label="Save note"
-                          className="inline-flex min-h-9 items-center justify-center rounded-lg border border-[var(--app-brutal-edge)] bg-[var(--app-class-good)] px-3 py-1.5 text-xs font-black uppercase tracking-[0.06em] text-[#050505] shadow-[2px_2px_0_var(--app-brutal-shadow)] transition-transform hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_var(--app-brutal-shadow)] disabled:opacity-60"
-                        >
-                          {pendingNoteKeys.has(note.moveKey) ? "Saving..." : "Save"}
-                        </button>
                       </div>
                     </div>
                   ) : (
-                    <p className="mt-2 font-sans text-sm leading-5 text-[var(--app-muted)]">
+                    <p className={`mt-2 ${noteBodyTextClassName}`}>
                       {note.note}
                     </p>
                   )}
