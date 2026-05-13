@@ -86,7 +86,7 @@ export const blogPosts: BlogPost[] = [
           "The useful part is what happens next. If you review the same position again, your exposure count goes up. First miss: one scar. Second miss: two scars. Fourth miss: congratulations, you have built a small personal museum of bad decisions, and now the exhibit is getting hard to ignore.",
           "That is not failure. That is data with a mean little face.",
           "Every repeat makes the pattern louder. The board stops looking like a random mess and starts looking like, \"Wait, I know this idiot trap. I have died here before.\"",
-          "That is the internal chess smoke alarm doing its job.",
+          "That is the system we are trying to build here with blindspots.",
         ],
       },
     ],
