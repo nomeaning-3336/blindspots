@@ -2634,9 +2634,31 @@ export default function TrainPage(props: TrainPageProps) {
           attemptCount: entry.attemptCount,
         }),
       })
-        .then((res) => {
+        .then(async (res) => {
           if (!res.ok) {
             throw new Error(`move-notes sync failed: ${res.status}`);
+          }
+          const body = (await res.json().catch(() => null)) as {
+            moveSan?: string | null;
+            classification?: string | null;
+            evalBeforeCp?: number | null;
+            evalAfterCp?: number | null;
+          } | null;
+          if (body) {
+            setMoveAnnotations((prev) => {
+              const current = prev[key];
+              if (!current) return prev;
+              return {
+                ...prev,
+                [key]: {
+                  ...current,
+                  san: body.moveSan ?? current.san,
+                  classification: body.classification ?? current.classification,
+                  evalBefore: body.evalBeforeCp ?? current.evalBefore,
+                  evalAfter: body.evalAfterCp ?? current.evalAfter,
+                },
+              };
+            });
           }
           const currentText = moveAnnotationsRef.current[key]?.noteText ?? "";
           if (currentText === sentNoteText) {
