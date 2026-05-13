@@ -1006,26 +1006,40 @@ function QueuePositionRow({
         }),
       });
       if (!res.ok) throw new Error(`Save failed: ${res.status}`);
-      const body = (await res.json().catch(() => null)) as { moveKey?: string } | null;
+      const body = (await res.json().catch(() => null)) as {
+        moveKey?: string;
+        moveSan?: string | null;
+        classification?: string | null;
+        evalBeforeCp?: number | null;
+        evalAfterCp?: number | null;
+        moverColor?: "white" | "black" | null;
+      } | null;
       const moveKey = body?.moveKey ?? "";
 
       setNotes((prev) => {
         const existingIdx = prev.findIndex((n) => n.moveKey === moveKey);
+        const newFields = {
+          moveSan: body?.moveSan ?? parsed.san,
+          classification: (body?.classification ?? null) as (typeof prev)[number]["classification"],
+          evalBeforeCp: body?.evalBeforeCp ?? null,
+          evalAfterCp: body?.evalAfterCp ?? null,
+          moverColor: (body?.moverColor ?? null) as (typeof prev)[number]["moverColor"],
+        };
         if (existingIdx >= 0) {
           const next = [...prev];
-          next[existingIdx] = { ...next[existingIdx], note: newNoteText };
+          next[existingIdx] = {
+            ...next[existingIdx],
+            ...newFields,
+            note: newNoteText,
+          };
           return next;
         }
         return [
           {
             moveKey,
             moveUci: parsed.uci,
-            moveSan: parsed.san,
-            classification: null,
-            evalBeforeCp: null,
-            evalAfterCp: null,
+            ...newFields,
             note: newNoteText,
-            moverColor: null,
           } as (typeof prev)[number],
           ...prev,
         ];
