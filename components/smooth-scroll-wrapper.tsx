@@ -16,6 +16,12 @@ export default function SmoothScrollWrapper({
   const rafRef = useRef(0);
   const isScrollingRef = useRef(false);
 
+  const getScrollElement = useCallback((): HTMLElement | null => {
+    const container = containerRef.current;
+    if (!container) return null;
+    return container.querySelector<HTMLElement>("[data-smooth-scroll], .app-scroll") ?? container;
+  }, []);
+
   useEffect(() => {
     setReducedMotion(
       window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -34,14 +40,15 @@ export default function SmoothScrollWrapper({
       isScrollingRef.current = true;
     }
 
-    if (containerRef.current) {
-      containerRef.current.scrollTop = currentY.current;
+    const scrollElement = getScrollElement();
+    if (scrollElement) {
+      scrollElement.scrollTop = currentY.current;
     }
 
     if (isScrollingRef.current) {
       rafRef.current = requestAnimationFrame(lerp);
     }
-  }, []);
+  }, [getScrollElement]);
 
   useEffect(() => {
     if (reducedMotion) return;
@@ -51,14 +58,15 @@ export default function SmoothScrollWrapper({
     function onWheel(e: WheelEvent) {
       const target = e.target as HTMLElement | null;
       if (target?.closest("[data-native-scroll]")) return;
+      const scrollElement = getScrollElement();
+      if (!scrollElement) return;
 
       e.preventDefault();
+      const maxScroll = Math.max(0, scrollElement.scrollHeight - scrollElement.clientHeight);
+      currentY.current = scrollElement.scrollTop;
       targetY.current = Math.max(
         0,
-        Math.min(
-          targetY.current + e.deltaY,
-          el!.scrollHeight - el!.clientHeight,
-        ),
+        Math.min(targetY.current + e.deltaY, maxScroll),
       );
       cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(lerp);
@@ -69,16 +77,17 @@ export default function SmoothScrollWrapper({
       el.removeEventListener("wheel", onWheel);
       cancelAnimationFrame(rafRef.current);
     };
-  }, [lerp, reducedMotion]);
+  }, [getScrollElement, lerp, reducedMotion]);
 
   // Reset scroll on route change
   useEffect(() => {
     targetY.current = 0;
     currentY.current = 0;
-    if (containerRef.current) {
-      containerRef.current.scrollTop = 0;
+    const scrollElement = getScrollElement();
+    if (scrollElement) {
+      scrollElement.scrollTop = 0;
     }
-  }, [pathname]);
+  }, [getScrollElement, pathname]);
 
   const scrollDisabled =
     reducedMotion ||

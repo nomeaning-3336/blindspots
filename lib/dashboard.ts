@@ -1,5 +1,6 @@
 import type { Json } from "@/lib/supabase/database";
 import { normalizeNotes, type NormalizedNote } from "@/lib/notes";
+import { normalizeDecisionFen } from "@/lib/training/mistake-memory";
 
 export type DashboardClassifications = {
   brilliant: number;
@@ -234,11 +235,12 @@ export function buildDashboardSummary({
   const notesByFen = new Map<string, NormalizedNote[]>();
   for (const n of normalizedNotes) {
     if (!n.decisionFen) continue;
-    const bucket = notesByFen.get(n.decisionFen);
+    const key = normalizeDecisionFen(n.decisionFen);
+    const bucket = notesByFen.get(key);
     if (bucket) {
       bucket.push(n);
     } else {
-      notesByFen.set(n.decisionFen, [n]);
+      notesByFen.set(key, [n]);
     }
   }
 
@@ -287,7 +289,7 @@ function buildPositionRows(
   notesByFen: Map<string, NormalizedNote[]>,
 ): DashboardPosition[] {
   return mistakes.map((m) => {
-    const fenMatches = notesByFen.get(m.starting_fen) ?? [];
+    const fenMatches = notesByFen.get(normalizeDecisionFen(m.starting_fen)) ?? [];
     const moverColor = moveColorFromFen(m.starting_fen);
     const moveNotes: DashboardMoveNote[] = fenMatches.map((n) => ({
       moveKey: n.moveKey,

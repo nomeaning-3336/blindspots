@@ -29,6 +29,7 @@ import { getNextActiveOrFillerMistakeForTraining, getNextReviewMistakeForTrainin
 import { getPreviousPosition } from "@/lib/training/position-index";
 import { normalizeSetupPrelude, validateSetupPrelude } from "@/lib/training/setup-prelude";
 import { normalizeDecisionFen, buildMoveKey } from "@/lib/training/mistake-memory";
+import { normalizeNotes } from "@/lib/notes";
 import {
   DEFAULT_BLINDSPOTS_ELO,
   buildDefaultBlindspotProfile,
@@ -1256,17 +1257,22 @@ async function loadMoveNotesForDecisionFen(
   const moveKeyPrefix = `${decisionFen}::`;
   const { data } = await supabase
     .from("training_move_notes" as any)
-    .select("move_key, move_san, move_uci, classification, note_text")
+    .select("move_key, decision_fen, move_san, move_uci, classification, note_text, eval_before_cp, eval_after_cp")
+    .eq("user_id", userId)
+    .eq("decision_fen", decisionFen)
+    .neq("note_text", "")
+    .order("last_attempted_at", { ascending: false });
+
+  const directMatches = (data as any[] | null) ?? [];
+  if (directMatches.length > 0) return normalizeNotes(directMatches);
+
+  const { data: keyMatches } = await supabase
+    .from("training_move_notes" as any)
+    .select("move_key, decision_fen, move_san, move_uci, classification, note_text, eval_before_cp, eval_after_cp")
     .eq("user_id", userId)
     .like("move_key", `${moveKeyPrefix}%`)
     .neq("note_text", "")
     .order("last_attempted_at", { ascending: false });
 
-  return ((data as any[] | null) ?? []).map((row) => ({
-    moveKey: row.move_key,
-    moveSan: row.move_san ?? null,
-    moveUci: row.move_uci ?? null,
-    classification: row.classification ?? null,
-    noteText: row.note_text ?? "",
-  }));
+  return normalizeNotes((keyMatches as any[] | null) ?? []);
 }

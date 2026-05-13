@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAppAuth } from "@/lib/app-auth";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { normalizeNotes } from "@/lib/notes";
 import { isValidFen } from "@/lib/training/corpus-helpers";
+import { normalizeDecisionFen } from "@/lib/training/mistake-memory";
 
 export async function GET(request: NextRequest) {
   const userId = await requireAppAuth("/train");
@@ -30,10 +32,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid FEN in position" }, { status: 422 });
   }
 
+  const decisionFen = normalizeDecisionFen((m.decision_fen as string) ?? (m.starting_fen as string));
+  const { data: noteRows } = await supabase
+    .from("training_move_notes" as any)
+    .select("move_key, decision_fen, move_san, move_uci, classification, note_text, eval_before_cp, eval_after_cp")
+    .eq("user_id", userId)
+    .eq("decision_fen", decisionFen)
+    .neq("note_text", "")
+    .order("last_attempted_at", { ascending: false });
+
   return NextResponse.json({
     mistakeId: m.id,
     fen: m.starting_fen,
-    decisionFen: m.starting_fen,
+    decisionFen,
     previousFen: (m.setup_previous_fen as string) ?? undefined,
     playedMove: (m.setup_played_move_uci as string) ?? undefined,
     actualMoveUci: (m.actual_move_uci as string) ?? undefined,
@@ -44,5 +55,6 @@ export async function GET(request: NextRequest) {
     source: m.source_type,
     selectedServeMode: "exact_queue_position",
     selectedBucket: m.status,
+    moveNotes: normalizeNotes((noteRows as any[] | null) ?? []),
   });
 }
