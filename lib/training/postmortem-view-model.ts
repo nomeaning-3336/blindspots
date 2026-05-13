@@ -123,6 +123,16 @@ export function getAuthoritativeMoveClassification(input: {
   return input.moveScore?.classification ?? input.move?.classification;
 }
 
+export function classificationFromCpLoss(
+  cpLoss: number | null | undefined,
+): PostmortemMoveClassification | undefined {
+  if (typeof cpLoss !== "number") return undefined;
+  if (cpLoss >= 300) return "blunder";
+  if (cpLoss >= 100) return "mistake";
+  if (cpLoss >= 50) return "inaccuracy";
+  return "okay";
+}
+
 export function mergeMoveWithAuthoritativeScore(input: {
   move: PostmortemTrainingMove;
   moveScore?: PostmortemMoveScore | null;
@@ -137,7 +147,9 @@ export function mergeMoveWithAuthoritativeScore(input: {
     evalAfter: moveScore.evalAfter !== undefined ? moveScore.evalAfter : move.evalAfter,
     mateBefore: moveScore.mateBefore !== undefined ? moveScore.mateBefore : move.mateBefore,
     mateAfter: moveScore.mateAfter !== undefined ? moveScore.mateAfter : move.mateAfter,
-    classification: getAuthoritativeMoveClassification({ move, moveScore }),
+    classification:
+      classificationFromCpLoss(moveScore.cpLoss) ??
+      getAuthoritativeMoveClassification({ move, moveScore }),
   };
 }
 
@@ -165,7 +177,15 @@ export function buildCanonicalPostmortemMoves(input: {
       ? mergeMoveWithAuthoritativeScore({ move: position.move, moveScore })
       : null;
     const { from, to } = uciFromMove(move);
-    const classification = getAuthoritativeMoveClassification({ move, moveScore });
+    const cpLoss =
+      typeof move?.cpLoss === "number"
+        ? move.cpLoss
+        : typeof moveScore?.cpLoss === "number"
+          ? moveScore.cpLoss
+          : undefined;
+    const classification =
+      classificationFromCpLoss(cpLoss) ??
+      getAuthoritativeMoveClassification({ move, moveScore });
     const hasClassification = Boolean(classification);
     const boardBadge = classification ? buildLastMoveBadge(classification) : null;
     const boardHighlight = move && from && to
@@ -206,7 +226,7 @@ export function buildCanonicalPostmortemMoves(input: {
       to,
       san: move?.san ?? null,
       ...(classification ? { classification } : {}),
-      ...(typeof move?.cpLoss === "number" ? { cpLoss: move.cpLoss } : {}),
+      ...(typeof cpLoss === "number" ? { cpLoss } : {}),
       ...(typeof move?.evalBefore === "number" ? { evalBefore: move.evalBefore } : {}),
       ...(typeof move?.evalAfter === "number" ? { evalAfter: move.evalAfter } : {}),
       ...(move?.mateBefore !== undefined ? { mateBefore: move.mateBefore } : {}),

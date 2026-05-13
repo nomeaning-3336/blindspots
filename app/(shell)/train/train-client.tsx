@@ -39,6 +39,7 @@ import {
 } from "@/lib/training-board-ui";
 import {
   buildCanonicalPostmortemMoves,
+  classificationFromCpLoss,
   getAuthoritativeMoveClassification,
   mergeMoveWithAuthoritativeScore,
   type CanonicalPostmortemMove,
@@ -2997,6 +2998,11 @@ export default function TrainPage(props: TrainPageProps) {
     ? { ...selectedMoveSquares, classification: selectedMoveClassification }
     : null;
   const selectedMoveUci = selectedMove?.uci ?? null;
+  const userColor = getFenTurnSide(startingFen);
+  const selectedMoveOwner =
+    selectedMove && userColor
+      ? selectedMove.side === userColor ? "user" : "engine"
+      : null;
   const currentEngineLines = isExploringResults
     ? engineLineCache[boardFen] ?? []
     : [];
@@ -5492,6 +5498,15 @@ function ResultsPanel({
   onSelectMove?: (positionIndex: number) => void;
   isManualPostmortemExploration: boolean;
 }) {
+  const selectedMove =
+    selectedMoveIndex != null && selectedMoveIndex > 0 && selectedMoveIndex <= moves.length
+      ? moves[selectedMoveIndex - 1]
+      : null;
+  const userColor = getFenTurnSide(startingFen);
+  const selectedMoveOwner =
+    selectedMove && userColor
+      ? selectedMove.side === userColor ? "user" : "engine"
+      : null;
   const userMoves = moves
     .map((move, index) => ({ ...move, absoluteIndex: index }))
     .filter((move) => move.side === userSide);
@@ -5520,6 +5535,7 @@ function ResultsPanel({
               onHoverLine={onEngineLineHover}
               onSelectLine={onEngineLineSelect}
               selectedMoveUci={selectedMoveUci}
+              selectedMoveOwner={selectedMoveOwner}
             />
           </div>
         </EvalGraph>
@@ -5733,14 +5749,14 @@ function AnalysisMoveTable({
           currentIndex === positionIndex;
         const pendingValue = isAnalyzing ? "..." : "--";
         const moveScore = asyncMoveEvaluations?.[move.absoluteIndex ?? index]?.moveScore;
+        const cpLoss = canonicalRow?.cpLoss ?? move.cpLoss ?? moveScore?.cpLoss;
         const visibleClassification = showEvaluations
-          ? canonicalRow?.classification ?? getAuthoritativeMoveClassification({ move, moveScore })
+          ? classificationFromCpLoss(cpLoss) ?? canonicalRow?.classification ?? getAuthoritativeMoveClassification({ move, moveScore })
           : undefined;
         const evalBefore = canonicalRow?.evalBefore ?? move.evalBefore;
         const evalAfter = canonicalRow?.evalAfter ?? move.evalAfter;
         const mateBefore = canonicalRow?.mateBefore ?? move.mateBefore;
         const mateAfter = canonicalRow?.mateAfter ?? move.mateAfter;
-        const cpLoss = canonicalRow?.cpLoss ?? move.cpLoss;
         return (
         <button
           type="button"
