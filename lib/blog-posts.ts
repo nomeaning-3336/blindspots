@@ -65,7 +65,7 @@ export const blogPosts: BlogPost[] = [
           "You look at the board and get a tiny little slap of realism.",
           "\"Oh wait. Here is where I did the stupid thing.\"",
           "Good.",
-          "That sting matters. Annoyance helps. Shame helps. Even the despair of \"How am I still falling for this as an [Insert lichess/chess.com rating here]\" helps. Your brain is much better at remembering a small emotional car crash than a boring Tuesday evening where nothing even happened.",
+          "That sting matters. Annoyance helps. Shame helps. Even the despair of \"How am I still falling for this as an [Insert lichess/chess.com rating here] player\" helps. Your brain is much better at remembering a small emotional car crash than a boring Tuesday evening where nothing even happened.",
         ],
       },
       {
