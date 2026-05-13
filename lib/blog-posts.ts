@@ -87,8 +87,6 @@ export const blogPosts: BlogPost[] = [
           "That is not failure. That is data with a mean little face.",
           "Every repeat makes the pattern louder. The board stops looking like a random mess and starts looking like, \"Wait, I know this idiot trap. I have died here before.\"",
           "That is the internal chess smoke alarm doing its job.",
-          "Especially if you are playing blitz first thing in the morning while eating your cereal, replying to a message, and wearing flip-flops with the reckless confidence of a human who has stopped negotiating with reality.",
-          "But at least the odds get better.",
         ],
       },
     ],
