@@ -112,31 +112,35 @@ export function EngineLinesSection({
               onPointerLeave={() => onHoverLine?.(null)}
               onClick={() => onSelectLine?.({ from: line.bestMove.slice(0, 2), to: line.bestMove.slice(2, 4) })}
             >
-              <div className="grid h-full grid-cols-[26px_auto_auto_auto_minmax(0,1fr)_auto_auto] items-center gap-2.5">
+              <div className="grid h-full grid-cols-[26px_20px_auto_auto_minmax(0,1fr)_32px] items-center gap-2.5">
                 <span className="text-right text-sm font-black leading-none text-[var(--app-text)]">
                   #{index + 1}
                 </span>
-                {cls && !isSelectedUserMove ? (
+                {cls ? (
                   <ClassificationBadge classification={cls} />
-                ) : <span />}
+                ) : (
+                  <span className="h-5 w-5" />
+                )}
                 <span className="text-sm font-black tabular-nums text-[var(--app-text)]">
                   {formatPostmortemEvalLabel(line.cp, line.mate)}
                 </span>
                 <strong className="min-w-0 truncate text-base font-black leading-none text-[var(--app-text)]">
                   {lead}
                 </strong>
-                <span className="min-w-0 truncate text-sm font-bold text-[var(--app-muted-soft)]">
-                  {pv}
-                </span>
-                {isSelectedUserMove ? (
-                  <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--app-accent)]">
-                    Your move
+                <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+                  <span className="min-w-0 truncate text-sm font-bold text-[var(--app-muted-soft)]">
+                    {pv}
                   </span>
-                ) : line.source === "candidate" ? (
-                  <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--app-muted-soft)]">
-                    candidate
-                  </span>
-                ) : null}
+                  {isSelectedUserMove ? (
+                    <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--app-accent)]">
+                      Your move
+                    </span>
+                  ) : line.source === "candidate" ? (
+                    <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--app-muted-soft)]">
+                      candidate
+                    </span>
+                  ) : null}
+                </div>
                 <span className="justify-self-end text-xs font-bold tabular-nums text-[var(--app-muted-soft)]">
                   {line.depth || 18}
                 </span>
