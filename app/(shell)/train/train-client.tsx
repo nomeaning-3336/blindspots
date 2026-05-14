@@ -162,6 +162,7 @@ const CLIENT_STOCKFISH_MULTIPV = 5;
 const CLIENT_STOCKFISH_MOVETIME_MS = 800;
 const PRELUDE_SETUP_MOVE_DELAY_MS = 1000;
 const COMPLETION_EVAL_GRACE_MS = 500;
+const PREPLAY_PRELUDE_POST_FADE_DELAY_MS = 500;
 
 type PostmortemTourStep = {
   target: string;
@@ -1051,6 +1052,9 @@ export default function TrainPage(props: TrainPageProps) {
       setHasLoadedPosition(true);
       setIsOpponentThinking(true);
       setIsCompletingSequence(false);
+
+      // Pause so the user sees the board in previousFen before the prelude animates.
+      await delayMs(PREPLAY_PRELUDE_POST_FADE_DELAY_MS);
 
       // ── Apply the visual prelude move (castling) ────────────────
       setActiveSetupReplayIndex(1);
