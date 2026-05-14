@@ -4454,34 +4454,39 @@ function TrainPostmortemTourOverlay({
   return (
     <div className="fixed inset-0 z-[80]" role="dialog" aria-modal="true" aria-label="Postmortem onboarding">
       {/* Cutout dim layer — four rectangles leaving spotlight area undimmed */}
-      {!currentStep.suppressSpotlight && spotlight ? (
-        <div aria-hidden="true" className="pointer-events-none fixed inset-0">
-          <div
-            className="fixed left-0 right-0 top-0 bg-black/68 transition-[height] duration-300 ease-out"
-            style={{ height: Math.max(0, spotlight.top) }}
-          />
-          <div
-            className="fixed left-0 right-0 bottom-0 bg-black/68 transition-[height] duration-300 ease-out"
-            style={{ height: Math.max(0, viewportSize.height - spotlight.bottom) }}
-          />
-          <div
-            className="fixed left-0 bg-black/68 transition-[top,width,height] duration-300 ease-out"
-            style={{
-              top: spotlight.top,
-              width: Math.max(0, spotlight.left),
-              height: spotlight.height,
-            }}
-          />
-          <div
-            className="fixed right-0 bg-black/68 transition-[top,width,height] duration-300 ease-out"
-            style={{
-              top: spotlight.top,
-              width: Math.max(0, viewportSize.width - spotlight.right),
-              height: spotlight.height,
-            }}
-          />
-        </div>
-      ) : null}
+      {!currentStep.suppressSpotlight && spotlight ? (() => {
+        const BLEED = 2;
+        const maskTop = Math.floor(spotlight.top);
+        const maskLeft = Math.floor(spotlight.left);
+        const maskRight = Math.ceil(spotlight.right);
+        const maskBottom = Math.ceil(spotlight.bottom);
+        const topHeight = Math.max(0, maskTop + BLEED);
+        const bottomHeight = Math.max(0, viewportSize.height - maskBottom + BLEED);
+        const sideTop = Math.max(0, maskTop - BLEED);
+        const sideHeight = Math.max(0, maskBottom - maskTop + BLEED * 2);
+        const leftWidth = Math.max(0, maskLeft + BLEED);
+        const rightWidth = Math.max(0, viewportSize.width - maskRight + BLEED);
+        return (
+          <div aria-hidden="true" className="pointer-events-none fixed inset-0">
+            <div
+              className="fixed left-0 right-0 top-0 bg-black/68 transition-[height] duration-300 ease-out"
+              style={{ height: topHeight }}
+            />
+            <div
+              className="fixed left-0 right-0 bottom-0 bg-black/68 transition-[height] duration-300 ease-out"
+              style={{ height: bottomHeight }}
+            />
+            <div
+              className="fixed left-0 bg-black/68 transition-[top,width,height] duration-300 ease-out"
+              style={{ top: sideTop, width: leftWidth, height: sideHeight }}
+            />
+            <div
+              className="fixed right-0 bg-black/68 transition-[top,width,height] duration-300 ease-out"
+              style={{ top: sideTop, width: rightWidth, height: sideHeight }}
+            />
+          </div>
+        );
+      })() : null}
       {/* Click catcher — always transparent, dim layer handled separately */}
       <button
         type="button"
