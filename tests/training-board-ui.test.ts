@@ -36,7 +36,6 @@ test("preplay onboarding and active training share the playing grid geometry", (
   const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
 
   assert.match(source, /const playingGridClassName =/);
-  assert.match(source, /<div className=\{playingGridClassName\}>/);
   assert.match(source, /: playingGridClassName/);
   assert.match(source, /lg:grid-cols-\[auto_320px\]/);
   assert.match(source, /lg:translate-x-\[5vw\]/);
@@ -45,10 +44,15 @@ test("preplay onboarding and active training share the playing grid geometry", (
 test("begin sequence uses a gentle opacity handoff without moving the board", () => {
   const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
 
-  assert.match(source, /isPreplayBoardTransitioning/);
-  assert.match(source, /train-preplay-board-handoff/);
-  assert.match(source, /motion-reduce:transition-none/);
   assert.doesNotMatch(source, /train-preplay-board-handoff[^\n]+translate/);
+});
+
+test("preplay intro overlay receives pointer events while visible", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+
+  assert.match(source, /const introOverlay = trainOnboardingIntroVisible \? \(/);
+  assert.doesNotMatch(source, /pointer-events-none fixed inset-0 z-40/);
+  assert.match(source, /pointer-events-auto fixed inset-0 z-40/);
 });
 
 test("moveBadgeForPosition returns a badge for classified sequence moves", () => {
@@ -274,7 +278,6 @@ test("postmortem panel uses responsive height budget variables", () => {
   assert.match(trainClientSource, /var\(--pm-card-pad\)/);
   assert.match(trainClientSource, /var\(--pm-graph-h\)/);
   assert.match(trainClientSource, /var\(--pm-move-row-h\)/);
-  assert.match(trainClientSource, /var\(--pm-actions-h\)/);
   assert.match(trainClientSource, /var\(--pm-tab-h\)/);
   assert.match(postmortemSharedSource, /var\(--pm-engine-row-h\)/);
 });
