@@ -674,7 +674,7 @@ export default function TrainPage(props: TrainPageProps) {
 
   const [fenCopied, setFenCopied] = useState(false);
   const [addingPositionToQueue, setAddingPositionToQueue] = useState(false);
-    const fenCopyTimerRef = useRef<number | null>(null);
+  const fenCopyTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     return () => {
