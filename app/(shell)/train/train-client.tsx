@@ -4166,9 +4166,11 @@ function TrainPostmortemTourOverlay({
   const cardRef = useRef<HTMLDivElement>(null);
   const [cardSize, setCardSize] = useState<{ width: number; height: number } | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
+  const [displayedStep, setDisplayedStep] = useState(step);
+  const [cardTransitionPhase, setCardTransitionPhase] = useState<"visible" | "leaving" | "entering">("visible");
   const transitionTokenRef = useRef(0);
   const allSteps = steps as readonly PostmortemTourStep[];
-  const resolvedStep = allSteps[resolvedStepIndex] ?? allSteps[0];
+  const displayedTourStep = allSteps[displayedStep] ?? allSteps[0];
   const currentStep = allSteps[step] ?? allSteps[0];
   const isFirst = step <= 0;
   const isLast = step >= steps.length - 1;
@@ -4351,7 +4353,31 @@ function TrainPostmortemTourOverlay({
     return () => window.removeEventListener("resize", updateViewportSize);
   }, []);
 
-  if (!currentStep) return null;
+  // ── Animate card content between steps ──
+  useEffect(() => {
+    if (step === displayedStep) return;
+
+    let cancelled = false;
+
+    setCardTransitionPhase("leaving");
+
+    const leaveTimer = window.setTimeout(() => {
+      if (cancelled) return;
+
+      setDisplayedStep(step);
+      setCardTransitionPhase("entering");
+
+      window.requestAnimationFrame(() => {
+        if (cancelled) return;
+        setCardTransitionPhase("visible");
+      });
+    }, 140);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(leaveTimer);
+    };
+  }, [step, displayedStep]);
 
   const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
   const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
@@ -4488,12 +4514,23 @@ function TrainPostmortemTourOverlay({
 
         <div className="mb-6" />
 
-        <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
-          {currentStep.headline}
-        </h2>
-        <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
-          {missingTarget ? "Finding the section..." : currentStep.body}
-        </p>
+        <div
+          className={[
+            "transition-all duration-200 ease-out",
+            cardTransitionPhase === "visible"
+              ? "translate-y-0 opacity-100"
+              : cardTransitionPhase === "leaving"
+                ? "-translate-y-1 opacity-0"
+                : "translate-y-1 opacity-0",
+          ].join(" ")}
+        >
+          <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
+            {displayedTourStep.headline}
+          </h2>
+          <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
+            {missingTarget ? "Finding the section..." : displayedTourStep.body}
+          </p>
+        </div>
 
         <div className="flex items-center justify-between gap-3">
           <button
@@ -4511,7 +4548,7 @@ function TrainPostmortemTourOverlay({
             className="app-brutal-button min-h-11 px-6 text-xs"
             disabled={completionInFlight || isPositioningSpotlight || (isActionStep && !actionCompleted)}
           >
-            {completionInFlight ? "Saving..." : (isActionStep && !actionCompleted ? currentStep.cta ?? "Waiting..." : currentStep.cta ?? "Next")}
+            {completionInFlight ? "Saving..." : (isActionStep && !actionCompleted ? displayedTourStep.cta ?? "Waiting..." : displayedTourStep.cta ?? "Next")}
           </button>
         </div>
       </div>
