@@ -4168,6 +4168,7 @@ function TrainPostmortemTourOverlay({
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [displayedStep, setDisplayedStep] = useState(step);
   const [cardTransitionPhase, setCardTransitionPhase] = useState<"visible" | "leaving" | "entering">("visible");
+  const cardTransitionTimersRef = useRef<number[]>([]);
   const transitionTokenRef = useRef(0);
   const allSteps = steps as readonly PostmortemTourStep[];
   const displayedTourStep = allSteps[displayedStep] ?? allSteps[0];
@@ -4354,30 +4355,36 @@ function TrainPostmortemTourOverlay({
   }, []);
 
   // ── Animate card content between steps ──
+  function clearCardTransitionTimers() {
+    cardTransitionTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    cardTransitionTimersRef.current = [];
+  }
+
+  useEffect(() => {
+    return clearCardTransitionTimers;
+  }, []);
+
   useEffect(() => {
     if (step === displayedStep) return;
 
-    let cancelled = false;
-
+    clearCardTransitionTimers();
     setCardTransitionPhase("leaving");
 
-    const leaveTimer = window.setTimeout(() => {
-      if (cancelled) return;
-
+    const swapTimer = window.setTimeout(() => {
       setDisplayedStep(step);
       setCardTransitionPhase("entering");
 
-      window.requestAnimationFrame(() => {
-        if (cancelled) return;
+      const visibleTimer = window.setTimeout(() => {
         setCardTransitionPhase("visible");
-      });
-    }, 140);
+      }, 30);
 
-    return () => {
-      cancelled = true;
-      window.clearTimeout(leaveTimer);
-    };
-  }, [step, displayedStep]);
+      cardTransitionTimersRef.current.push(visibleTimer);
+    }, 110);
+
+    cardTransitionTimersRef.current.push(swapTimer);
+
+    return clearCardTransitionTimers;
+  }, [step]);
 
   const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
   const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
@@ -4514,22 +4521,24 @@ function TrainPostmortemTourOverlay({
 
         <div className="mb-6" />
 
-        <div
-          className={[
-            "transition-all duration-200 ease-out",
-            cardTransitionPhase === "visible"
-              ? "translate-y-0 opacity-100"
-              : cardTransitionPhase === "leaving"
-                ? "-translate-y-1 opacity-0"
-                : "translate-y-1 opacity-0",
-          ].join(" ")}
-        >
-          <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
-            {displayedTourStep.headline}
-          </h2>
-          <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
-            {missingTarget ? "Finding the section..." : displayedTourStep.body}
-          </p>
+        <div className="min-h-[190px]">
+          <div
+            className={[
+              "transition-all duration-200 ease-out",
+              cardTransitionPhase === "visible"
+                ? "translate-y-0 opacity-100"
+                : cardTransitionPhase === "leaving"
+                  ? "-translate-y-1 opacity-0"
+                  : "translate-y-1 opacity-0",
+            ].join(" ")}
+          >
+            <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
+              {displayedTourStep.headline}
+            </h2>
+            <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
+              {missingTarget ? "Finding the section..." : displayedTourStep.body}
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center justify-between gap-3">
