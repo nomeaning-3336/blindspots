@@ -161,8 +161,6 @@ const ENABLE_CLIENT_STOCKFISH_LINES = true;
 const CLIENT_STOCKFISH_MULTIPV = 5;
 const CLIENT_STOCKFISH_MOVETIME_MS = 800;
 const PRELUDE_SETUP_MOVE_DELAY_MS = 1000;
-const PREPLAY_INTRO_FADE_MS = 300;
-const PREPLAY_INTRO_SETTLE_MS = 40;
 const COMPLETION_EVAL_GRACE_MS = 500;
 
 type PostmortemTourStep = {
@@ -509,6 +507,27 @@ function delayMs(ms: number) {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms);
   });
+}
+
+async function waitForIntroOverlayExit(element: HTMLElement | null) {
+  if (!element) return;
+
+  // Let the browser start the CSS transition before we inspect animations.
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+  const animations = element
+    .getAnimations({ subtree: true })
+    .filter((a) => a.playState !== "finished" && a.playState !== "idle");
+
+  if (animations.length > 0) {
+    await Promise.race([
+      Promise.allSettled(animations.map((a) => a.finished)),
+      delayMs(1000),
+    ]);
+  }
+
+  // One more frame so the browser paints the cleared overlay.
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
 async function waitForTourTargetMotion(target: Element, timeoutMs = 800) {
@@ -1017,7 +1036,9 @@ export default function TrainPage(props: TrainPageProps) {
       setTrainOnboardingIntroExiting(true);
       setTrainOnboardingIntroDone(true);
 
-      await delayMs(PREPLAY_INTRO_FADE_MS + PREPLAY_INTRO_SETTLE_MS);
+      // Wait for the actual CSS transition/animation on the overlay
+      // element subtree to finish — not a brittle fixed timeout.
+      await waitForIntroOverlayExit(introOverlayRef.current);
 
       // ── Phase 2: Overlay is gone — unmount it and start the prelude ──
       setTrainOnboardingIntroVisible(false);
@@ -3509,6 +3530,7 @@ export default function TrainPage(props: TrainPageProps) {
   // ── Wheel navigation (board scroll → replay step) ──
 
   const boardContainerRef = useRef<HTMLDivElement | null>(null);
+  const introOverlayRef = useRef<HTMLDivElement | null>(null);
   const wheelDeltaAccRef = useRef(0);
   const wheelNavLastRef = useRef(0);
 
@@ -3570,6 +3592,7 @@ export default function TrainPage(props: TrainPageProps) {
 // Once done, fade it out then unmount so it stops blocking interaction.
 const introOverlay = trainOnboardingIntroVisible ? (
     <div
+      ref={introOverlayRef}
       className={[
         "pointer-events-auto fixed inset-0 z-40 transition-opacity duration-300",
         (trainOnboardingIntroExiting || trainOnboardingIntroDone) ? "opacity-0" : "opacity-100",
@@ -6464,7 +6487,7 @@ function TrainingNotesRail({
   dashboardButton: ReactNode;
 }) {
   return (
-    <aside className="flex min-h-[420px] w-full flex-col border-l border-[var(--app-border)] bg-[var(--app-panel-solid)] p-4 lg:min-h-[520px]">
+    <aside className="flex min-h-[420px] w-full flex-col rounded-xl border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-4 ring-1 ring-inset ring-[var(--app-border-strong)] lg:min-h-[520px]">
       <div>
         <div className="mb-4 text-xl font-black leading-tight tracking-[-0.03em] text-[var(--app-text)]">
           Notes
