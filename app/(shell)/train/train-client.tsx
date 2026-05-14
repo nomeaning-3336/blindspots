@@ -4160,7 +4160,7 @@ function TrainPostmortemTourOverlay({
   actionCompleted?: boolean;
 }) {
   const [resolvedStepIndex, setResolvedStepIndex] = useState(step);
-  const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
+  const [targetRect, setTargetRect] = useState<{ top: number; left: number; width: number; height: number; right: number; bottom: number } | null>(null);
   const [missingTarget, setMissingTarget] = useState(false);
   const [isPositioningSpotlight, setIsPositioningSpotlight] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -4184,6 +4184,27 @@ function TrainPostmortemTourOverlay({
       rect.left >= padding &&
       rect.bottom <= window.innerHeight - padding &&
       rect.right <= window.innerWidth - padding
+    );
+  }
+
+  function rectSnapshot(rect: DOMRect) {
+    return {
+      top: rect.top,
+      left: rect.left,
+      width: rect.width,
+      height: rect.height,
+      right: rect.right,
+      bottom: rect.bottom,
+    };
+  }
+
+  function rectsClose(a: DOMRect | null, b: DOMRect, epsilon = 0.5) {
+    if (!a) return false;
+    return (
+      Math.abs(a.top - b.top) <= epsilon &&
+      Math.abs(a.left - b.left) <= epsilon &&
+      Math.abs(a.width - b.width) <= epsilon &&
+      Math.abs(a.height - b.height) <= epsilon
     );
   }
 
@@ -4226,26 +4247,64 @@ function TrainPostmortemTourOverlay({
       // Observe target for resize/reflow
       if (targetObserver) targetObserver.disconnect();
       targetObserver = new ResizeObserver(() => {
-        if (cancelled) return;
-        const rect = target!.getBoundingClientRect();
-        setTargetRect(rect);
+        if (cancelled || !target) return;
+        setTargetRect(target.getBoundingClientRect());
       });
       targetObserver.observe(target);
 
+      // Scroll listener for position changes (parent scrolled, etc.)
+      function handleScrollOrResize() {
+        if (cancelled || !target) return;
+        window.requestAnimationFrame(() => {
+          if (cancelled || !target) return;
+          setTargetRect(rectSnapshot(target.getBoundingClientRect()));
+        });
+      }
+      window.addEventListener("scroll", handleScrollOrResize, true);
+      window.addEventListener("resize", handleScrollOrResize);
+
       const rect = target.getBoundingClientRect();
       if (!isRectFullyVisible(rect, 24)) {
-        target.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+        target.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "auto" });
       }
 
+      // Wait for scroll to settle
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
       if (cancelled) return;
 
-      const newRect = target.getBoundingClientRect();
-      setTargetRect(newRect);
+      // Stabilization loop: keep measuring until rect is stable for 2 consecutive frames
+      let previousRect: DOMRect | null = null;
+      let stableFrames = 0;
+
+      for (let i = 0; i < 20; i += 1) {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        if (cancelled) return;
+
+        const nextRect = target.getBoundingClientRect();
+        const snapshot = rectSnapshot(nextRect);
+
+        if (rectsClose(previousRect, nextRect)) {
+          stableFrames += 1;
+        } else {
+          stableFrames = 0;
+        }
+
+        previousRect = nextRect;
+        setTargetRect(snapshot);
+
+        if (stableFrames >= 2) break;
+      }
+
+      if (cancelled) return;
+
       setResolvedStepIndex(step);
       setIsPositioningSpotlight(false);
+
+      // Cleanup scroll listeners
+      window.removeEventListener("scroll", handleScrollOrResize, true);
+      window.removeEventListener("resize", handleScrollOrResize);
     }
 
     void resolveStep();
@@ -4345,13 +4404,19 @@ function TrainPostmortemTourOverlay({
 
   return (
     <div className="fixed inset-0 z-[80]" role="dialog" aria-modal="true" aria-label="Postmortem onboarding">
+      {/* Dim layer — stays visible across normal steps, hidden for interactive suppressSpotlight steps */}
+      {!resolvedStep.suppressSpotlight ? (
+        <div aria-hidden="true" className="fixed inset-0 bg-black/68" />
+      ) : null}
+      {/* Click catcher — always transparent, dim layer handled separately */}
       <button
         type="button"
         aria-label="Next tour step"
-        className={["absolute inset-0 cursor-default", spotlight ? "bg-transparent" : "bg-black/68"].join(" ")}
+        className="absolute inset-0 cursor-default bg-transparent"
         onClick={() => { if (!isPositioningSpotlight) onNext(); }}
       />
-      {!resolvedStep.suppressSpotlight && spotlight ? (
+      {/* Spotlight border — only when rect is stable */}
+      {!isPositioningSpotlight && !resolvedStep.suppressSpotlight && spotlight ? (
         <div
           aria-hidden="true"
           className="pointer-events-none fixed rounded-[10px] border border-[var(--app-accent)] shadow-[0_0_0_9999px_rgba(0,0,0,0.68),0_0_0_2px_color-mix(in_srgb,var(--app-accent)_42%,transparent)]"
