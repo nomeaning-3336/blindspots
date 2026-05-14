@@ -6055,7 +6055,7 @@ function AnalysisMoveTable({
     <div
       data-tour="move-table"
       className="flex shrink-0 flex-col overflow-hidden rounded-[8px] border border-[var(--app-border-soft)]"
-      style={{ height: `calc(2rem + ${rowCount} * var(--pm-move-row-h))` }}
+      style={{ height: `calc(2rem + ${rowCount} * var(--pm-move-row-h))`, minHeight: "8rem" }}
     >
       <div className="grid h-8 shrink-0 grid-cols-[minmax(0,1.1fr)_66px_66px_76px] items-center border-b border-[var(--app-border-soft)] px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted-soft)] min-[1500px]:grid-cols-[minmax(0,1.1fr)_76px_76px_88px] min-[1500px]:text-xs">
         <span>Move</span>
