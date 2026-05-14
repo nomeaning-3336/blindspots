@@ -192,7 +192,7 @@ const POSTMORTEM_TOUR_STEPS = [
   {
     target: "move-table",
     headline: "Your played moves.",
-    body: "Every move you played during the sequence: eval before, eval after, cp lost, verdict. Click a row to send the board back to that moment so you can stare at it like a detective. Or you can use the left and right arrow keys like a normal human would.",
+    body: "Every move you played during the sequence: eval before, eval after and total centipawns lost.",
   },
   {
     target: "add-position-to-learning-queue",
@@ -4576,11 +4576,11 @@ function TrainPostmortemTourOverlay({
 
         <div className="mb-6" />
 
-        <div className="relative min-h-[120px] overflow-hidden">
+        <div className="relative">
           {previousTourStep ? (
             <div
               key={`prev-${previousDisplayedStep}`}
-              className="absolute inset-0 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] opacity-0 -translate-y-2 blur-[1px] motion-reduce:transition-none motion-reduce:opacity-100 motion-reduce:translate-y-0 motion-reduce:blur-0"
+              className="pointer-events-none absolute inset-x-0 top-0 opacity-0 -translate-y-2 blur-[1px] transition-all duration-200 motion-reduce:transition-none motion-reduce:opacity-100 motion-reduce:translate-y-0 motion-reduce:blur-0"
             >
               <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
                 {previousTourStep.headline}
@@ -4593,7 +4593,7 @@ function TrainPostmortemTourOverlay({
           <div
             key={`current-${displayedStep}`}
             className={[
-              "absolute inset-0 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
+              "relative transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
               isCardSwitching
                 ? "opacity-0 translate-y-2 blur-[1px]"
                 : "opacity-100 translate-y-0 blur-0",
