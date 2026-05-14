@@ -3562,7 +3562,7 @@ export default function TrainPage(props: TrainPageProps) {
 const introOverlay = trainOnboardingIntroVisible ? (
     <div
       className={[
-        "pointer-events-none fixed inset-0 z-40 transition-opacity duration-300",
+        "pointer-events-auto fixed inset-0 z-40 transition-opacity duration-300",
         trainOnboardingIntroDone ? "opacity-0" : "opacity-100",
       ].join(" ")}
       aria-hidden={trainOnboardingIntroDone}
