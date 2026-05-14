@@ -6267,7 +6267,7 @@ function TrainOnboardingIntroOverlay({
       style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(2px)" }}
     >
       <div
-        className="app-brutal-card relative mx-4 max-w-lg border-2 p-8"
+        className="app-brutal-card relative mx-4 w-[32rem] max-w-[90vw] border-2 p-8"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
