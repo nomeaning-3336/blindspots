@@ -168,6 +168,8 @@ type PostmortemTourStep = {
   headline: string;
   body: string;
   cta?: string;
+  requiresAction?: "add-position-to-learning-queue";
+  suppressSpotlight?: boolean;
 };
 
 const POSTMORTEM_TOUR_STEPS = [
@@ -195,6 +197,14 @@ const POSTMORTEM_TOUR_STEPS = [
     target: "add-position-to-learning-queue",
     headline: "Add positions to your Learning queue.",
     body: "This is the core of your learning here at Blindspots. When you make a mistake, you can navigate to the exact position/FEN where the mistake happened, then press Add Position to Learning Queue. This schedules the position for the future, where you will have a chance to see exactly what went wrong using Notes, then try an alternative move.",
+  },
+  {
+    target: "add-position-to-learning-queue",
+    headline: "Add any position to the Learning queue.",
+    body: "Now go ahead and try adding any position from this completed sequence to the Learning queue.",
+    cta: "Waiting for you to add a position",
+    requiresAction: "add-position-to-learning-queue",
+    suppressSpotlight: true,
   },
   {
     target: "notes-panel",
@@ -723,6 +733,11 @@ export default function TrainPage(props: TrainPageProps) {
   const [postmortemOnboardingActive, setPostmortemOnboardingActive] = useState(false);
   const [postmortemOnboardingStep, setPostmortemOnboardingStep] = useState(0);
   const [postmortemOnboardingFinished, setPostmortemOnboardingFinished] = useState(false);
+  const [postmortemAddPositionActionDone, setPostmortemAddPositionActionDone] = useState(false);
+  const currentPostmortemTourStep = POSTMORTEM_TOUR_STEPS[postmortemOnboardingStep] as PostmortemTourStep;
+  const isPostmortemAddPositionActionStep =
+    postmortemOnboardingActive &&
+    (currentPostmortemTourStep?.requiresAction ?? null) === "add-position-to-learning-queue";
   const [onboardingCompletionInFlight, setOnboardingCompletionInFlight] = useState(false);
   const [showOnboardingPreferencesModal, setShowOnboardingPreferencesModal] = useState(false);
   const [selectedDailyTargetLevel, setSelectedDailyTargetLevel] = useState<string>("balanced");
@@ -895,6 +910,7 @@ export default function TrainPage(props: TrainPageProps) {
             }
             setPostmortemOnboardingStep(0);
             setPostmortemOnboardingActive(true);
+            setPostmortemAddPositionActionDone(false);
           }
           return;
         }
@@ -3932,6 +3948,14 @@ export default function TrainPage(props: TrainPageProps) {
                       title: "Added to Learning queue",
                       message: "You will see this position again soon.",
                     });
+                    if (isPostmortemAddPositionActionStep) {
+                      setPostmortemAddPositionActionDone(true);
+                      window.setTimeout(() => {
+                        setPostmortemOnboardingStep((step) =>
+                          Math.min(step + 1, POSTMORTEM_TOUR_STEPS.length - 1),
+                        );
+                      }, 1000);
+                    }
                   } catch (err) {
                     console.error("[train] failed to add position to queue", err);
                     showAlert({
@@ -3993,18 +4017,24 @@ export default function TrainPage(props: TrainPageProps) {
             >
               <a
                 href="/train"
+                onClick={isPostmortemAddPositionActionStep && !postmortemAddPositionActionDone ? (e) => e.preventDefault() : undefined}
+                aria-disabled={isPostmortemAddPositionActionStep && !postmortemAddPositionActionDone ? "true" : undefined}
                 className={[
                   primaryActionClassName,
                   "min-h-12 w-full justify-center px-5",
+                  isPostmortemAddPositionActionStep && !postmortemAddPositionActionDone ? "opacity-40 cursor-not-allowed pointer-events-none" : "",
                 ].join(" ")}
               >
                 <span className={postmortemActionTextClassName}>Next Position</span>
               </a>
               <a
                 href="/"
+                onClick={isPostmortemAddPositionActionStep && !postmortemAddPositionActionDone ? (e) => e.preventDefault() : undefined}
+                aria-disabled={isPostmortemAddPositionActionStep && !postmortemAddPositionActionDone ? "true" : undefined}
                 className={[
                   secondaryActionClassName,
                   "min-h-12 w-full justify-center px-5",
+                  isPostmortemAddPositionActionStep && !postmortemAddPositionActionDone ? "opacity-40 cursor-not-allowed pointer-events-none" : "",
                 ].join(" ")}
               >
                 <span className={postmortemActionTextClassName}>Return to Dashboard</span>
@@ -4022,6 +4052,8 @@ export default function TrainPage(props: TrainPageProps) {
           onNext={handlePostmortemTourNext}
           onSkip={handlePostmortemTourSkip}
           onMissingTarget={handleMissingPostmortemTourTarget}
+          isActionStep={isPostmortemAddPositionActionStep}
+          actionCompleted={postmortemAddPositionActionDone}
         />
       ) : null}
 
@@ -4114,6 +4146,8 @@ function TrainPostmortemTourOverlay({
   onNext,
   onSkip,
   onMissingTarget,
+  isActionStep,
+  actionCompleted,
 }: {
   steps: readonly PostmortemTourStep[];
   step: number;
@@ -4122,6 +4156,8 @@ function TrainPostmortemTourOverlay({
   onNext: () => void;
   onSkip: () => void;
   onMissingTarget: () => void;
+  isActionStep?: boolean;
+  actionCompleted?: boolean;
 }) {
   const [resolvedStepIndex, setResolvedStepIndex] = useState(step);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
@@ -4130,7 +4166,8 @@ function TrainPostmortemTourOverlay({
   const cardRef = useRef<HTMLDivElement>(null);
   const [cardSize, setCardSize] = useState<{ width: number; height: number } | null>(null);
   const transitionTokenRef = useRef(0);
-  const resolvedStep = steps[resolvedStepIndex] ?? steps[0];
+  const allSteps = steps as readonly PostmortemTourStep[];
+  const resolvedStep = allSteps[resolvedStepIndex] ?? allSteps[0];
   const isFirst = resolvedStepIndex <= 0;
   const isLast = resolvedStepIndex >= steps.length - 1;
 
@@ -4141,17 +4178,24 @@ function TrainPostmortemTourOverlay({
     return Math.max(min, Math.min(max, value));
   }
 
+  function isRectFullyVisible(rect: DOMRect, padding = 24): boolean {
+    return (
+      rect.top >= padding &&
+      rect.left >= padding &&
+      rect.bottom <= window.innerHeight - padding &&
+      rect.right <= window.innerWidth - padding
+    );
+  }
+
   // ── Resolve step: find target, scroll, measure, then update copy ──
   useLayoutEffect(() => {
-    if (step === resolvedStepIndex && targetRect) return;
-
     let cancelled = false;
-    const token = ++transitionTokenRef.current;
+    let targetObserver: ResizeObserver | null = null;
 
     async function resolveStep() {
       setIsPositioningSpotlight(true);
 
-      const currentStep = steps[step];
+      const currentStep = allSteps[step];
       if (!currentStep) {
         setIsPositioningSpotlight(false);
         return;
@@ -4164,7 +4208,7 @@ function TrainPostmortemTourOverlay({
         target = document.querySelector<HTMLElement>(selector);
         if (target) break;
         await delayMs(50);
-        if (cancelled || token !== transitionTokenRef.current) return;
+        if (cancelled) return;
       }
 
       if (!target) {
@@ -4178,15 +4222,28 @@ function TrainPostmortemTourOverlay({
       }
 
       setMissingTarget(false);
-      target.scrollIntoView({ block: "center", inline: "nearest" });
 
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-      if (cancelled || token !== transitionTokenRef.current) return;
+      // Observe target for resize/reflow
+      if (targetObserver) targetObserver.disconnect();
+      targetObserver = new ResizeObserver(() => {
+        if (cancelled) return;
+        const rect = target!.getBoundingClientRect();
+        setTargetRect(rect);
+      });
+      targetObserver.observe(target);
 
       const rect = target.getBoundingClientRect();
-      setTargetRect(rect);
+      if (!isRectFullyVisible(rect, 24)) {
+        target.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+      }
+
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+      if (cancelled) return;
+
+      const newRect = target.getBoundingClientRect();
+      setTargetRect(newRect);
       setResolvedStepIndex(step);
       setIsPositioningSpotlight(false);
     }
@@ -4195,8 +4252,9 @@ function TrainPostmortemTourOverlay({
 
     return () => {
       cancelled = true;
+      if (targetObserver) targetObserver.disconnect();
     };
-  }, [step, steps, onMissingTarget]);
+  }, [step, allSteps, onMissingTarget]);
 
   // ── Measure card size (re-measure when resolved step changes) ──
   useLayoutEffect(() => {
@@ -4293,7 +4351,7 @@ function TrainPostmortemTourOverlay({
         className={["absolute inset-0 cursor-default", spotlight ? "bg-transparent" : "bg-black/68"].join(" ")}
         onClick={() => { if (!isPositioningSpotlight) onNext(); }}
       />
-      {spotlight ? (
+      {!resolvedStep.suppressSpotlight && spotlight ? (
         <div
           aria-hidden="true"
           className="pointer-events-none fixed rounded-[10px] border border-[var(--app-accent)] shadow-[0_0_0_9999px_rgba(0,0,0,0.68),0_0_0_2px_color-mix(in_srgb,var(--app-accent)_42%,transparent)]"
@@ -4347,9 +4405,9 @@ function TrainPostmortemTourOverlay({
             type="button"
             onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight) onNext(); }}
             className="app-brutal-button min-h-11 px-6 text-xs"
-            disabled={completionInFlight || isPositioningSpotlight}
+            disabled={completionInFlight || isPositioningSpotlight || (isActionStep && !actionCompleted)}
           >
-            {completionInFlight ? "Saving..." : resolvedStep.cta ?? "Next"}
+            {completionInFlight ? "Saving..." : (isActionStep && !actionCompleted ? resolvedStep.cta ?? "Waiting..." : resolvedStep.cta ?? "Next")}
           </button>
         </div>
       </div>
