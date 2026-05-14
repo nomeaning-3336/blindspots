@@ -4527,7 +4527,7 @@ function TrainPostmortemTourOverlay({
         />
       ) : null}
       <div
-        className="fixed grid gap-4 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)] min-h-[360px]"
+        className="fixed grid gap-4 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)]"
         ref={cardRef}
         style={cardStyle}
         onClick={(event) => event.stopPropagation()}
@@ -4547,7 +4547,7 @@ function TrainPostmortemTourOverlay({
 
         <div className="mb-6" />
 
-        <div className="relative min-h-[220px] overflow-hidden">
+        <div className="relative min-h-[120px] overflow-hidden">
           {previousTourStep ? (
             <div
               key={`prev-${previousDisplayedStep}`}
