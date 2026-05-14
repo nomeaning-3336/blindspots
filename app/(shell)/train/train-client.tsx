@@ -4138,6 +4138,42 @@ function OnboardingPreferencesModal({
   );
 }
 
+function WordRevealText({
+  text,
+  activeKey,
+  className,
+}: {
+  text: string;
+  activeKey: string | number;
+  className?: string;
+}) {
+  const words = useMemo(() => text.split(/(\s+)/), [text]);
+
+  return (
+    <p className={className} key={activeKey}>
+      {words.map((part, index) => {
+        const isWhitespace = /^\s+$/.test(part);
+        if (isWhitespace) return part;
+
+        const wordIndex = words
+          .slice(0, index)
+          .filter((item) => !/^\s+$/.test(item))
+          .length;
+
+        return (
+          <span
+            key={`${part}-${index}`}
+            className="inline-block animate-[tour-word-in_260ms_ease-out_forwards] motion-reduce:animate-none motion-reduce:opacity-100 motion-reduce:translate-y-0 motion-reduce:blur-0"
+            style={{ animationDelay: `${Math.min(wordIndex * 28, 420)}ms` }}
+          >
+            {part}
+          </span>
+        );
+      })}
+    </p>
+  );
+}
+
 function TrainPostmortemTourOverlay({
   steps,
   step,
@@ -4376,10 +4412,10 @@ function TrainPostmortemTourOverlay({
 
       const visibleTimer = window.setTimeout(() => {
         setCardTransitionPhase("visible");
-      }, 30);
+      }, 40);
 
       cardTransitionTimersRef.current.push(visibleTimer);
-    }, 110);
+    }, 140);
 
     cardTransitionTimersRef.current.push(swapTimer);
 
@@ -4524,20 +4560,29 @@ function TrainPostmortemTourOverlay({
         <div className="min-h-[190px]">
           <div
             className={[
-              "transition-all duration-200 ease-out",
+              "transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
               cardTransitionPhase === "visible"
-                ? "translate-y-0 opacity-100"
+                ? "translate-y-0 opacity-100 blur-0"
                 : cardTransitionPhase === "leaving"
-                  ? "-translate-y-1 opacity-0"
-                  : "translate-y-1 opacity-0",
+                  ? "-translate-y-2 opacity-0 blur-[1px]"
+                  : "translate-y-2 opacity-0 blur-[1px]",
+              "motion-reduce:transform-none motion-reduce:blur-0 motion-reduce:transition-none motion-reduce:opacity-100",
             ].join(" ")}
           >
             <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
               {displayedTourStep.headline}
             </h2>
-            <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
-              {missingTarget ? "Finding the section..." : displayedTourStep.body}
-            </p>
+            {missingTarget ? (
+              <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
+                Finding the section...
+              </p>
+            ) : (
+              <WordRevealText
+                text={displayedTourStep.body}
+                activeKey={displayedStep}
+                className="mb-8 text-sm leading-7 text-[var(--app-muted)]"
+              />
+            )}
           </div>
         </div>
 
