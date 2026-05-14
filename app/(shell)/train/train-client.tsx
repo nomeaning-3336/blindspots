@@ -4169,8 +4169,9 @@ function TrainPostmortemTourOverlay({
   const transitionTokenRef = useRef(0);
   const allSteps = steps as readonly PostmortemTourStep[];
   const resolvedStep = allSteps[resolvedStepIndex] ?? allSteps[0];
-  const isFirst = resolvedStepIndex <= 0;
-  const isLast = resolvedStepIndex >= steps.length - 1;
+  const currentStep = allSteps[step] ?? allSteps[0];
+  const isFirst = step <= 0;
+  const isLast = step >= steps.length - 1;
 
   const VIEWPORT_PAD = 16;
   const GAP = 16;
@@ -4350,7 +4351,7 @@ function TrainPostmortemTourOverlay({
     return () => window.removeEventListener("resize", updateViewportSize);
   }, []);
 
-  if (!resolvedStep) return null;
+  if (!currentStep) return null;
 
   const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
   const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
@@ -4418,7 +4419,7 @@ function TrainPostmortemTourOverlay({
   return (
     <div className="fixed inset-0 z-[80]" role="dialog" aria-modal="true" aria-label="Postmortem onboarding">
       {/* Cutout dim layer — four rectangles leaving spotlight area undimmed */}
-      {!resolvedStep.suppressSpotlight && spotlight ? (
+      {!currentStep.suppressSpotlight && spotlight ? (
         <div aria-hidden="true" className="pointer-events-none fixed inset-0">
           <div
             className="fixed left-0 right-0 top-0 bg-black/68 transition-[height] duration-300 ease-out"
@@ -4454,7 +4455,7 @@ function TrainPostmortemTourOverlay({
         onClick={() => { if (!isPositioningSpotlight) onNext(); }}
       />
       {/* Spotlight border — smooth transition between targets */}
-      {!resolvedStep.suppressSpotlight && spotlight ? (
+      {!currentStep.suppressSpotlight && spotlight ? (
         <div
           aria-hidden="true"
           className="pointer-events-none fixed rounded-[10px] border border-[var(--app-accent)] shadow-[0_0_0_2px_color-mix(in_srgb,var(--app-accent)_42%,transparent)] transition-[top,left,width,height] duration-300 ease-out"
@@ -4488,10 +4489,10 @@ function TrainPostmortemTourOverlay({
         <div className="mb-6" />
 
         <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
-          {resolvedStep.headline}
+          {currentStep.headline}
         </h2>
         <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
-          {missingTarget ? "Finding the section..." : resolvedStep.body}
+          {missingTarget ? "Finding the section..." : currentStep.body}
         </p>
 
         <div className="flex items-center justify-between gap-3">
@@ -4510,7 +4511,7 @@ function TrainPostmortemTourOverlay({
             className="app-brutal-button min-h-11 px-6 text-xs"
             disabled={completionInFlight || isPositioningSpotlight || (isActionStep && !actionCompleted)}
           >
-            {completionInFlight ? "Saving..." : (isActionStep && !actionCompleted ? resolvedStep.cta ?? "Waiting..." : resolvedStep.cta ?? "Next")}
+            {completionInFlight ? "Saving..." : (isActionStep && !actionCompleted ? currentStep.cta ?? "Waiting..." : currentStep.cta ?? "Next")}
           </button>
         </div>
       </div>
