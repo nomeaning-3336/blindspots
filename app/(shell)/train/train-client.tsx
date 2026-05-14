@@ -6287,12 +6287,14 @@ function TrainOnboardingIntroOverlay({
 
         <div className="mb-6" />
 
-        <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
-          {current.headline}
-        </h2>
-        <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
-          {current.body}
-        </p>
+        <div className="min-h-[170px]">
+          <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
+            {current.headline}
+          </h2>
+          <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
+            {current.body}
+          </p>
+        </div>
 
         <div className="flex items-center justify-between gap-3">
           <button
