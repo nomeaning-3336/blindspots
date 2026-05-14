@@ -1,0 +1,139 @@
+Fix 1px undimmed seam in postmortem onboarding spotlight overlay.
+
+Use any of the available plugins where applicable.
+
+Scope:
+- app/(shell)/train/train-client.tsx
+- Component: TrainPostmortemTourOverlay
+- Do not change onboarding copy.
+- Do not change card/modal transition behavior.
+- Do not change Add Position action-step behavior.
+- Do not change top alert behavior.
+- Do not change backend/API logic.
+
+Bug:
+In the postmortem onboarding spotlight overlay, there is sometimes a thin horizontal/vertical line that is not dimmed. It looks like a 1px seam/gap in the opacity layer.
+
+Likely cause:
+The spotlight overlay uses four fixed dim rectangles around the highlighted target. Because spotlight coordinates can be fractional/subpixel values, the rectangles can leave a small uncovered gap between them during transitions.
+
+Goal:
+Remove all visible seams/gaps in the dim overlay while keeping the spotlight cutout behavior.
+
+Required fix:
+
+1. Add a small bleed/overlap for the four dim rectangles
+
+Inside TrainPostmortemTourOverlay, near the spotlight/cutout rendering code, add:
+
+const SPOTLIGHT_MASK_BLEED_PX = 2;
+
+When computing the dim rectangles, overlap them slightly into the spotlight area by 2px.
+
+Example:
+
+const maskTop = Math.floor(spotlight.top);
+const maskLeft = Math.floor(spotlight.left);
+const maskRight = Math.ceil(spotlight.right);
+const maskBottom = Math.ceil(spotlight.bottom);
+
+const topHeight = Math.max(0, maskTop + SPOTLIGHT_MASK_BLEED_PX);
+const bottomHeight = Math.max(
+  0,
+  viewportSize.height - maskBottom + SPOTLIGHT_MASK_BLEED_PX,
+);
+
+const sideTop = Math.max(0, maskTop - SPOTLIGHT_MASK_BLEED_PX);
+const sideHeight = Math.max(
+  0,
+  maskBottom - maskTop + SPOTLIGHT_MASK_BLEED_PX * 2,
+);
+
+const leftWidth = Math.max(0, maskLeft + SPOTLIGHT_MASK_BLEED_PX);
+const rightWidth = Math.max(
+  0,
+  viewportSize.width - maskRight + SPOTLIGHT_MASK_BLEED_PX,
+);
+
+Use these values for the four dim rectangles.
+
+2. Replace direct fractional spotlight values in dim rectangles
+
+If current code does something like:
+
+style={{ height: Math.max(0, spotlight.top) }}
+style={{ height: Math.max(0, window.innerHeight - spotlight.bottom) }}
+style={{ top: spotlight.top, width: spotlight.left, height: spotlight.height }}
+style={{ top: spotlight.top, width: window.innerWidth - spotlight.right, height: spotlight.height }}
+
+Replace those with the rounded/bleed values above.
+
+3. Keep the purple border using the real spotlight rect
+
+Do not apply the bleed to the purple border.
+
+The border should still use:
+
+style={{
+  top: spotlight.top,
+  left: spotlight.left,
+  width: spotlight.width,
+  height: spotlight.height,
+}}
+
+Only the dim rectangles need rounded/bleed values.
+
+4. Keep transitions
+
+The dim rectangles should keep their existing transition classes, for example:
+
+transition-[top,width,height] duration-300 ease-out
+
+Do not remove the smooth spotlight transition.
+
+5. Avoid using window.innerWidth directly in render
+
+If viewportSize state already exists, use:
+
+viewportSize.width
+viewportSize.height
+
+If it does not exist, add it:
+
+const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
+
+useEffect(() => {
+  function updateViewportSize() {
+    setViewportSize({
+      width: window.innerWidth,
+      height: window.innerHeight,
+    });
+  }
+
+  updateViewportSize();
+  window.addEventListener("resize", updateViewportSize);
+  return () => window.removeEventListener("resize", updateViewportSize);
+}, []);
+
+6. Acceptance checks
+
+Step through all postmortem onboarding spotlight steps:
+- Your blindspots ELO.
+- Engine lines.
+- Eval chart.
+- Your played moves.
+- Add positions to your Learning queue.
+
+Expected:
+- No thin horizontal or vertical undimmed lines appear.
+- Highlighted element remains mostly undimmed.
+- Purple border stays correctly aligned.
+- Dim overlay still excludes the spotlight target.
+- Smooth transitions still work.
+- Interactive Add Position step still removes dim/cutout.
+- npm run build passes.
+
+
+***
+When you are done, make a new commit and push to origin main.
+***

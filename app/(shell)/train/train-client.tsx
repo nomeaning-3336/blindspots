@@ -34,6 +34,7 @@ import {
   classificationIcon,
   classificationLabel,
   formatClassifiedMoveLead,
+  buildSpotlightMaskRects,
   getTrainingBoardHighlights,
   moveHighlightsForClassifiedMove,
   type MoveClassification,
@@ -176,7 +177,7 @@ const POSTMORTEM_TOUR_STEPS = [
   {
     target: "elo-card",
     headline: "Your blindspots ELO.",
-    body: "This is pretty self explanatory. This ELO will be used to tune the difficulty of your opponent engine. Play well and it will go up, play badly and expect it to go down.",
+    body: "This ELO will be used to tune the difficulty of your opponent engine. Play well and it will go up, play badly and expect it to go down.",
   },
   {
     target: "engine-lines",
@@ -507,6 +508,20 @@ function delayMs(ms: number) {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms);
   });
+}
+
+async function waitForTourTargetMotion(target: Element, timeoutMs = 800) {
+  const animatedContainer = target.closest(".train-postmortem-panel") ?? target;
+  const animations = animatedContainer
+    .getAnimations({ subtree: true })
+    .filter((animation) => animation.playState !== "finished" && animation.playState !== "idle");
+
+  if (animations.length === 0) return;
+
+  await Promise.race([
+    Promise.allSettled(animations.map((animation) => animation.finished)),
+    delayMs(timeoutMs),
+  ]);
 }
 
 async function waitForCompletedMoveEvaluations({
@@ -904,6 +919,8 @@ export default function TrainPage(props: TrainPageProps) {
 
         const target = document.querySelector('[data-tour="elo-card"]');
         if (target) {
+          await waitForTourTargetMotion(target);
+          if (cancelled) return;
           if (!cancelled) {
             if (process.env.NODE_ENV !== "production") {
               console.debug("[train-onboarding]", "elo-card found, starting tour");
@@ -4455,34 +4472,35 @@ function TrainPostmortemTourOverlay({
     <div className="fixed inset-0 z-[80]" role="dialog" aria-modal="true" aria-label="Postmortem onboarding">
       {/* Cutout dim layer — four rectangles leaving spotlight area undimmed */}
       {!currentStep.suppressSpotlight && spotlight ? (() => {
-        const BLEED = 2;
-        const maskTop = Math.floor(spotlight.top);
-        const maskLeft = Math.floor(spotlight.left);
-        const maskRight = Math.ceil(spotlight.right);
-        const maskBottom = Math.ceil(spotlight.bottom);
-        const topHeight = Math.max(0, maskTop + BLEED);
-        const bottomHeight = Math.max(0, viewportSize.height - maskBottom + BLEED);
-        const sideTop = Math.max(0, maskTop - BLEED);
-        const sideHeight = Math.max(0, maskBottom - maskTop + BLEED * 2);
-        const leftWidth = Math.max(0, maskLeft + BLEED);
-        const rightWidth = Math.max(0, viewportSize.width - maskRight + BLEED);
+        const maskRects = buildSpotlightMaskRects({
+          spotlight,
+          viewport: viewportSize,
+        });
         return (
           <div aria-hidden="true" className="pointer-events-none fixed inset-0">
             <div
               className="fixed left-0 right-0 top-0 bg-black/68 transition-[height] duration-300 ease-out"
-              style={{ height: topHeight }}
+              style={{ height: maskRects.top.height }}
             />
             <div
               className="fixed left-0 right-0 bottom-0 bg-black/68 transition-[height] duration-300 ease-out"
-              style={{ height: bottomHeight }}
+              style={{ height: maskRects.bottom.height }}
             />
             <div
               className="fixed left-0 bg-black/68 transition-[top,width,height] duration-300 ease-out"
-              style={{ top: sideTop, width: leftWidth, height: sideHeight }}
+              style={{
+                top: maskRects.left.top,
+                width: maskRects.left.width,
+                height: maskRects.left.height,
+              }}
             />
             <div
               className="fixed right-0 bg-black/68 transition-[top,width,height] duration-300 ease-out"
-              style={{ top: sideTop, width: rightWidth, height: sideHeight }}
+              style={{
+                top: maskRects.right.top,
+                width: maskRects.right.width,
+                height: maskRects.right.height,
+              }}
             />
           </div>
         );
