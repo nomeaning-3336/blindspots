@@ -850,7 +850,7 @@ export default function TrainPage(props: TrainPageProps) {
         if (shouldRunPreplayOnboarding && !trainOnboardingIntroDone) {
           setStartingFen(ONBOARDING_PREVIEW_POSITION.fen);
           setDisplayStartingFen(ONBOARDING_PREVIEW_POSITION.previousFen);
-          setFen(ONBOARDING_PREVIEW_POSITION.previousFen);
+          setFen(ONBOARDING_PREVIEW_POSITION.fen);
           setMoves([]);
           setLastMove(null);
           setInitialOpponentMove(null);
@@ -863,7 +863,7 @@ export default function TrainPage(props: TrainPageProps) {
           setIsAwaitingStartGesture(false);
           setPendingInitialEngineMove(null);
           setHasLoadedPosition(false);
-          setActiveSetupReplayIndex(0);
+          setActiveSetupReplayIndex(1);
         } else if (!shouldRunPreplayOnboarding && !initialMistakeId) {
           void loadNextPosition();
         }
@@ -873,7 +873,7 @@ export default function TrainPage(props: TrainPageProps) {
         if (shouldRunPreplayOnboarding && !trainOnboardingIntroDone) {
           setStartingFen(ONBOARDING_PREVIEW_POSITION.fen);
           setDisplayStartingFen(ONBOARDING_PREVIEW_POSITION.previousFen);
-          setFen(ONBOARDING_PREVIEW_POSITION.previousFen);
+          setFen(ONBOARDING_PREVIEW_POSITION.fen);
           setMoves([]);
           setLastMove(null);
           setInitialOpponentMove(null);
@@ -886,7 +886,7 @@ export default function TrainPage(props: TrainPageProps) {
           setIsAwaitingStartGesture(false);
           setPendingInitialEngineMove(null);
           setHasLoadedPosition(false);
-          setActiveSetupReplayIndex(0);
+          setActiveSetupReplayIndex(1);
         } else if (!shouldRunPreplayOnboarding && !initialMistakeId) {
           void loadNextPosition();
         }
@@ -966,45 +966,17 @@ export default function TrainPage(props: TrainPageProps) {
     if (hasStartedFirstOnboardingSequenceRef.current) return;
     hasStartedFirstOnboardingSequenceRef.current = true;
     setIsStartingPreplayPosition(true);
-    setIsPreplayBoardTransitioning(true);
 
     try {
       await unlockTrainAudio();
       await primeTrainAudio();
 
-      await delayMs(180);
-
-      setTrainOnboardingIntroDone(true);
-
-      setState("active");
-      setResultMode("results");
-      setPositionLoadError(null);
-      setIsPositionLoading(false);
-      setIsAwaitingStartGesture(false);
-      setPendingInitialEngineMove(null);
-      setHasLoadedPosition(true);
-      setIsOpponentThinking(true);
-      setIsCompletingSequence(false);
-      window.setTimeout(() => {
-        setIsPreplayBoardTransitioning(false);
-      }, 260);
-
-      setMoves([]);
-      setLastMove(null);
-      setInitialOpponentMove(null);
-      initialOpponentMoveRef.current = null;
-
+      // Prepare all board state BEFORE removing the intro overlay.
+      // The prelude move has already been visually applied — Begin must not replay it.
       initialPreludeRef.current = {
         previousFen: ONBOARDING_PREVIEW_POSITION.previousFen,
         playedMove: ONBOARDING_PREVIEW_POSITION.playedMove,
       };
-
-      setStartingFen(ONBOARDING_PREVIEW_POSITION.fen);
-      setDisplayStartingFen(ONBOARDING_PREVIEW_POSITION.previousFen);
-      setActiveSetupReplayIndex(0);
-      setFen(ONBOARDING_PREVIEW_POSITION.previousFen);
-
-      await delayMs(PRELUDE_SETUP_MOVE_DELAY_MS);
 
       const applied = applyIndexedMove(
         ONBOARDING_PREVIEW_POSITION.previousFen,
@@ -1023,11 +995,31 @@ export default function TrainPage(props: TrainPageProps) {
         fenAfter: ONBOARDING_PREVIEW_POSITION.fen,
       };
 
+      setStartingFen(ONBOARDING_PREVIEW_POSITION.fen);
+      setDisplayStartingFen(ONBOARDING_PREVIEW_POSITION.previousFen);
+      setFen(ONBOARDING_PREVIEW_POSITION.fen);
+      setMoves([]);
+      setLastMove(null);
+      setInitialOpponentMove(null);
+      initialOpponentMoveRef.current = null;
+      setActiveSetupReplayIndex(1);
+
+      // Now that the board state is stable, remove the intro overlay.
+      setTrainOnboardingIntroDone(true);
+
+      setState("active");
+      setResultMode("results");
+      setPositionLoadError(null);
+      setIsPositionLoading(false);
+      setIsAwaitingStartGesture(false);
+      setPendingInitialEngineMove(null);
+      setHasLoadedPosition(true);
+      setIsOpponentThinking(true);
+      setIsCompletingSequence(false);
+
       initialOpponentMoveRef.current = initialMove;
       setInitialOpponentMove(initialMove);
       setLastMove(applied.lastMove);
-      setActiveSetupReplayIndex(1);
-      setFen(ONBOARDING_PREVIEW_POSITION.fen);
 
       playTrainMoveSound({
         move: applied.move,
@@ -1039,7 +1031,6 @@ export default function TrainPage(props: TrainPageProps) {
       console.error("[train-onboarding] failed to start static prelude", error);
       setPositionLoadError("Could not start the onboarding position.");
       hasStartedFirstOnboardingSequenceRef.current = false;
-      setIsPreplayBoardTransitioning(false);
     } finally {
       setIsOpponentThinking(false);
       setIsPositionLoading(false);
@@ -3142,10 +3133,7 @@ export default function TrainPage(props: TrainPageProps) {
     "mx-auto grid h-full min-h-0 w-fit max-w-[calc(100vw-32px)] min-w-0 grid-cols-1 gap-5 transition-opacity duration-200 lg:grid-cols-[auto_320px] lg:items-center lg:justify-center lg:translate-x-[5vw]";
   const playingBoardSectionClassName =
     "app-brutal-section relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden p-3 sm:p-4 lg:w-fit lg:p-4";
-  const preplayBoardHandoffClassName = [
-    "train-preplay-board-handoff transition-[opacity,filter] duration-[220ms] ease-out motion-reduce:transition-none",
-    isPreplayBoardTransitioning ? "opacity-80 brightness-90" : "opacity-100 brightness-100",
-  ].join(" ");
+  const preplayBoardHandoffClassName = "";
   const isEngineLinesLoading = Boolean(
     isExploringResults && engineLineLoadingFen === boardFen,
   );
