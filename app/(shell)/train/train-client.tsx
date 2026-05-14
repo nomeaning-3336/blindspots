@@ -4415,11 +4415,11 @@ function TrainPostmortemTourOverlay({
         className="absolute inset-0 cursor-default bg-transparent"
         onClick={() => { if (!isPositioningSpotlight) onNext(); }}
       />
-      {/* Spotlight border — only when rect is stable */}
-      {!isPositioningSpotlight && !resolvedStep.suppressSpotlight && spotlight ? (
+      {/* Spotlight border — smooth transition between targets */}
+      {!resolvedStep.suppressSpotlight && spotlight ? (
         <div
           aria-hidden="true"
-          className="pointer-events-none fixed rounded-[10px] border border-[var(--app-accent)] shadow-[0_0_0_2px_color-mix(in_srgb,var(--app-accent)_42%,transparent)]"
+          className="pointer-events-none fixed rounded-[10px] border border-[var(--app-accent)] shadow-[0_0_0_2px_color-mix(in_srgb,var(--app-accent)_42%,transparent)] transition-[top,left,width,height] duration-300 ease-out"
           style={{
             top: spotlight.top,
             left: spotlight.left,
