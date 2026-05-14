@@ -68,6 +68,7 @@ import {
   type AnnotatedMove,
 } from "@/lib/training/mistake-memory";
 import { MoveNotesPanel } from "@/components/train/mistake-memory-panel";
+import { TopAlertViewport, useTopAlert } from "@/components/ui/top-alert";
 import { normalizeNotes, formatEvalCp, type NormalizedNote, type RawNoteRow } from "@/lib/notes";
 
 type TrainingState = "active" | "complete" | "drift" | "resolving";
@@ -193,7 +194,7 @@ const POSTMORTEM_TOUR_STEPS = [
   {
     target: "add-position-to-learning-queue",
     headline: "Add positions to your Learning queue.",
-    body: "This button lets you save the current board position from the sequence. You will see this exact position again in the near future, so you can check whether you find a better move or keep playing good moves.",
+    body: "This is the core of your learning here at Blindspots. When you make a mistake, you can navigate to the exact position/FEN where the mistake happened, then press Add Position to Learning Queue. This schedules the position for the future, where you will have a chance to see exactly what went wrong using Notes, then try an alternative move.",
   },
   {
     target: "notes-panel",
@@ -590,6 +591,7 @@ export default function TrainPage(props: TrainPageProps) {
   const [blindspotsElo, setBlindspotsElo] = useState(mockRep.rating);
   const [eloResult, setEloResult] = useState<EloResult | null>(null);
   const [resultMode, setResultMode] = useState<ResultMode>("results");
+  const { alert: topAlert, showAlert, dismissAlert } = useTopAlert();
   const [exploreIndex, setExploreIndex] = useState(0);
   const [exploratoryFen, setExploratoryFen] = useState<string | null>(null);
   const [exploratoryLastMove, setExploratoryLastMove] = useState<{ from: string; to: string } | null>(null);
@@ -3926,11 +3928,18 @@ export default function TrainPage(props: TrainPageProps) {
                       }),
                     });
                     if (!res.ok) throw new Error(`Add failed: ${res.status}`);
-                    setPositionAddedFlash(true);
-                    window.setTimeout(() => setPositionAddedFlash(false), 1800);
+                    showAlert({
+                      kind: "success",
+                      title: "Added to Learning queue",
+                      message: "You will see this position again soon.",
+                    });
                   } catch (err) {
                     console.error("[train] failed to add position to queue", err);
-                    window.alert("Could not add the position. Try again.");
+                    showAlert({
+                      kind: "error",
+                      title: "Could not add position",
+                      message: "Try again in a moment.",
+                    });
                   } finally {
                     setAddingPositionToQueue(false);
                   }
@@ -4027,6 +4036,8 @@ export default function TrainPage(props: TrainPageProps) {
           onFinish={finishOnboardingWithPreferences}
         />
       ) : null}
+
+      <TopAlertViewport alert={topAlert} onDismiss={dismissAlert} />
     </div>
   );
 }
