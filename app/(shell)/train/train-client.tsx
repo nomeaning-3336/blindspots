@@ -171,6 +171,8 @@ type PostmortemTourStep = {
   cta?: string;
   requiresAction?: "add-position-to-learning-queue";
   suppressSpotlight?: boolean;
+  centerCard?: boolean;
+  sidePanel?: "analysis" | "memory" | "keep";
 };
 
 const POSTMORTEM_TOUR_STEPS = [
@@ -208,9 +210,12 @@ const POSTMORTEM_TOUR_STEPS = [
     suppressSpotlight: true,
   },
   {
-    target: "notes-panel",
+    target: "postmortem-panel",
     headline: "Notes",
     body: "Now that we know how to add a position to the Learning queue, let's see how to use the Notes section.",
+    centerCard: true,
+    suppressSpotlight: true,
+    sidePanel: "analysis",
   },
   {
     target: "notes-panel",
@@ -787,6 +792,8 @@ export default function TrainPage(props: TrainPageProps) {
     postmortemAddPositionInstructionAcknowledged &&
     !postmortemAddPositionActionDone;
   const [onboardingCompletionInFlight, setOnboardingCompletionInFlight] = useState(false);
+  const [postmortemTourSoftSwitching, setPostmortemTourSoftSwitching] = useState(false);
+  const [postmortemAddPositionCheckpointReached, setPostmortemAddPositionCheckpointReached] = useState(false);
   const [showOnboardingPreferencesModal, setShowOnboardingPreferencesModal] = useState(false);
   const [selectedDailyTargetLevel, setSelectedDailyTargetLevel] = useState<string>("balanced");
     const [isSavingOnboardingPreferences, setIsSavingOnboardingPreferences] = useState(false);
@@ -964,6 +971,7 @@ export default function TrainPage(props: TrainPageProps) {
             setPostmortemOnboardingActive(true);
             setPostmortemAddPositionActionDone(false);
             setPostmortemAddPositionInstructionAcknowledged(false);
+            setPostmortemAddPositionCheckpointReached(false);
           }
           return;
         }
@@ -975,6 +983,7 @@ export default function TrainPage(props: TrainPageProps) {
         setPostmortemOnboardingStep(0);
         setPostmortemOnboardingActive(true);
         setPostmortemAddPositionInstructionAcknowledged(false);
+        setPostmortemAddPositionCheckpointReached(false);
       }
     }
 
@@ -990,11 +999,15 @@ export default function TrainPage(props: TrainPageProps) {
 
   useEffect(() => {
     if (!postmortemOnboardingActive) return;
-    const target = POSTMORTEM_TOUR_STEPS[postmortemOnboardingStep]?.target;
-    if (!target) return;
-    if (target === "notes-panel") {
+    const currentStep = POSTMORTEM_TOUR_STEPS[postmortemOnboardingStep] as PostmortemTourStep | undefined;
+    if (!currentStep?.target) return;
+    if (currentStep.sidePanel === "memory") {
       setPostmortemSidePanel("memory");
-    } else if (target !== "postmortem-actions") {
+    } else if (currentStep.sidePanel === "analysis") {
+      setPostmortemSidePanel("analysis");
+    } else if (currentStep.target === "notes-panel") {
+      setPostmortemSidePanel("memory");
+    } else if (currentStep.target !== "postmortem-actions") {
       setPostmortemSidePanel("analysis");
     }
   }, [postmortemOnboardingActive, postmortemOnboardingStep]);
@@ -2500,9 +2513,17 @@ export default function TrainPage(props: TrainPageProps) {
   }
 
   const handlePostmortemTourBack = useCallback(() => {
+    const notesBridgeStepIndex = POSTMORTEM_TOUR_STEPS.findIndex(
+      (step) => step.headline === "Notes" && step.centerCard === true
+    );
     setPostmortemAddPositionInstructionAcknowledged(false);
-    setPostmortemOnboardingStep((current) => Math.max(0, current - 1));
-  }, []);
+    setPostmortemOnboardingStep((current) => {
+      if (postmortemAddPositionCheckpointReached && notesBridgeStepIndex >= 0) {
+        return Math.max(notesBridgeStepIndex, current - 1);
+      }
+      return Math.max(0, current - 1);
+    });
+  }, [postmortemAddPositionCheckpointReached]);
 
   const handlePostmortemTourNext = useCallback(() => {
     const currentStep = POSTMORTEM_TOUR_STEPS[postmortemOnboardingStep] as PostmortemTourStep | undefined;
@@ -2515,6 +2536,26 @@ export default function TrainPage(props: TrainPageProps) {
         return;
       }
     }
+
+    // Bridge step → Notes: fade card first, switch panel, then advance
+    if (currentStep?.centerCard && currentStep?.sidePanel === "analysis") {
+      const nextStep = POSTMORTEM_TOUR_STEPS[postmortemOnboardingStep + 1];
+      if (nextStep?.target === "notes-panel") {
+        setPostmortemTourSoftSwitching(true);
+        setTimeout(() => {
+          setPostmortemOnboardingStep((current) => {
+            if (current < POSTMORTEM_TOUR_STEPS.length - 1) {
+              return current + 1;
+            }
+            void completeTrainingOnboarding();
+            return current;
+          });
+          setPostmortemTourSoftSwitching(false);
+        }, 180);
+        return;
+      }
+    }
+
     setPostmortemOnboardingStep((current) => {
       if (current < POSTMORTEM_TOUR_STEPS.length - 1) {
         return current + 1;
@@ -4016,6 +4057,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                     });
                     if (isPostmortemAddPositionActionStep) {
                       setPostmortemAddPositionActionDone(true);
+                      setPostmortemAddPositionCheckpointReached(true);
                       setPostmortemOnboardingStep((step) =>
                         Math.min(step + 1, POSTMORTEM_TOUR_STEPS.length - 1),
                       );
@@ -4132,6 +4174,19 @@ const introOverlay = trainOnboardingIntroVisible ? (
           isActionStep={isPostmortemAddPositionActionStep}
           actionCompleted={postmortemAddPositionActionDone}
           centerCard={isPostmortemAddPositionActionStep && !postmortemAddPositionInstructionAcknowledged}
+          postmortemTourSoftSwitching={postmortemTourSoftSwitching}
+          backDisabled={
+            postmortemOnboardingStep <= 0 ||
+            (
+              postmortemAddPositionCheckpointReached &&
+              POSTMORTEM_TOUR_STEPS.findIndex(
+                (s) => s.headline === "Notes" && s.centerCard === true
+              ) >= 0 &&
+              postmortemOnboardingStep <= POSTMORTEM_TOUR_STEPS.findIndex(
+                (s) => s.headline === "Notes" && s.centerCard === true
+              )
+            )
+          }
         />
         </div>
       ) : null}
@@ -4252,6 +4307,8 @@ function TrainPostmortemTourOverlay({
   isActionStep,
   actionCompleted,
   centerCard = false,
+  postmortemTourSoftSwitching = false,
+  backDisabled = false,
 }: {
   steps: readonly PostmortemTourStep[];
   step: number;
@@ -4263,6 +4320,8 @@ function TrainPostmortemTourOverlay({
   isActionStep?: boolean;
   actionCompleted?: boolean;
   centerCard?: boolean;
+  postmortemTourSoftSwitching?: boolean;
+  backDisabled?: boolean;
 }) {
   const [resolvedStepIndex, setResolvedStepIndex] = useState(step);
   const [targetRect, setTargetRect] = useState<{ top: number; left: number; width: number; height: number; right: number; bottom: number } | null>(null);
@@ -4275,13 +4334,14 @@ function TrainPostmortemTourOverlay({
   const [previousDisplayedStep, setPreviousDisplayedStep] = useState<number | null>(null);
   const [isCardSwitching, setIsCardSwitching] = useState(false);
   const [isPlacementSwitching, setIsPlacementSwitching] = useState(false);
-  const previousCenterCardRef = useRef(centerCard);
   const cardSwitchingTimersRef = useRef<number[]>([]);
   const transitionTokenRef = useRef(0);
   const allSteps = steps as readonly PostmortemTourStep[];
   const displayedTourStep = allSteps[displayedStep] ?? allSteps[0];
   const previousTourStep = previousDisplayedStep === null ? null : allSteps[previousDisplayedStep] ?? null;
   const currentStep = allSteps[step] ?? allSteps[0];
+  const shouldCenterCard = centerCard || currentStep.centerCard === true;
+  const previousCenterCardRef = useRef(shouldCenterCard);
   const isFirst = step <= 0;
   const isLast = step >= steps.length - 1;
 
@@ -4497,15 +4557,15 @@ function TrainPostmortemTourOverlay({
 
   // ── Detect placement-mode changes (target-positioned ↔ centered) ──
   useEffect(() => {
-    if (previousCenterCardRef.current !== centerCard) {
-      previousCenterCardRef.current = centerCard;
+    if (previousCenterCardRef.current !== shouldCenterCard) {
+      previousCenterCardRef.current = shouldCenterCard;
       setIsPlacementSwitching(true);
       const timer = window.setTimeout(() => {
         setIsPlacementSwitching(false);
       }, 280);
       return () => window.clearTimeout(timer);
     }
-  }, [centerCard]);
+  }, [shouldCenterCard]);
 
   const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
   const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
@@ -4530,7 +4590,7 @@ function TrainPostmortemTourOverlay({
   let cardTop: number;
   let cardStyle: React.CSSProperties;
 
-  if (centerCard) {
+  if (shouldCenterCard) {
     const cardWidth = Math.min(520, viewportWidth - VIEWPORT_PAD * 2);
     cardStyle = {
       left: "50%",
@@ -4580,7 +4640,7 @@ function TrainPostmortemTourOverlay({
     cardStyle = { top: cardTop, left: cardLeft, width: cardMaxWidth };
   }
 
-  const cardVisibilityClass = isPlacementSwitching
+  const cardVisibilityClass = isPlacementSwitching || postmortemTourSoftSwitching
     ? "opacity-0 scale-[0.985] translate-y-0.5"
     : "opacity-100 scale-100 translate-y-0";
 
@@ -4624,7 +4684,7 @@ function TrainPostmortemTourOverlay({
         </svg>
       ) : null}
       {/* Full-screen dim for centered instruction modal (no spotlight mask) */}
-      {centerCard ? (
+      {shouldCenterCard ? (
         <div className="pointer-events-none fixed inset-0 bg-black/68 transition-opacity duration-300" />
       ) : null}
       {/* Click catcher — always transparent, dim layer handled separately */}
@@ -4708,9 +4768,10 @@ function TrainPostmortemTourOverlay({
         <div className="flex items-center justify-between gap-3">
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight && !isFirst) onBack(); }}
-            aria-disabled={isFirst || isPositioningSpotlight}
-            className="min-h-11 border border-[var(--app-border)] px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)] aria-disabled:cursor-not-allowed aria-disabled:opacity-40"
+            onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight && !isFirst && !backDisabled) onBack(); }}
+            aria-disabled={isFirst || isPositioningSpotlight || backDisabled}
+            disabled={backDisabled}
+            className="min-h-11 border border-[var(--app-border)] px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)] aria-disabled:cursor-not-allowed aria-disabled:opacity-40 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Back
           </button>
@@ -4719,7 +4780,7 @@ function TrainPostmortemTourOverlay({
             type="button"
             onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight) onNext(); }}
             className="app-brutal-button min-h-11 px-6 text-xs"
-            disabled={completionInFlight || isPositioningSpotlight || (isActionStep && !actionCompleted && !centerCard)}
+            disabled={completionInFlight || isPositioningSpotlight || (isActionStep && !actionCompleted && !shouldCenterCard)}
           >
             {completionInFlight ? "Saving..." : (isActionStep && !actionCompleted ? displayedTourStep.cta ?? "Waiting..." : displayedTourStep.cta ?? "Next")}
           </button>
