@@ -4138,42 +4138,6 @@ function OnboardingPreferencesModal({
   );
 }
 
-function WordRevealText({
-  text,
-  activeKey,
-  className,
-}: {
-  text: string;
-  activeKey: string | number;
-  className?: string;
-}) {
-  const words = useMemo(() => text.split(/(\s+)/), [text]);
-
-  return (
-    <p className={className} key={activeKey}>
-      {words.map((part, index) => {
-        const isWhitespace = /^\s+$/.test(part);
-        if (isWhitespace) return part;
-
-        const wordIndex = words
-          .slice(0, index)
-          .filter((item) => !/^\s+$/.test(item))
-          .length;
-
-        return (
-          <span
-            key={`${part}-${index}`}
-            className="inline-block animate-[tour-word-in_260ms_ease-out_forwards] motion-reduce:animate-none motion-reduce:opacity-100 motion-reduce:translate-y-0 motion-reduce:blur-0"
-            style={{ animationDelay: `${Math.min(wordIndex * 28, 420)}ms` }}
-          >
-            {part}
-          </span>
-        );
-      })}
-    </p>
-  );
-}
-
 function TrainPostmortemTourOverlay({
   steps,
   step,
@@ -4572,17 +4536,9 @@ function TrainPostmortemTourOverlay({
             <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
               {displayedTourStep.headline}
             </h2>
-            {missingTarget ? (
-              <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
-                Finding the section...
-              </p>
-            ) : (
-              <WordRevealText
-                text={displayedTourStep.body}
-                activeKey={displayedStep}
-                className="mb-8 text-sm leading-7 text-[var(--app-muted)]"
-              />
-            )}
+            <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
+              {missingTarget ? "Finding the section..." : displayedTourStep.body}
+            </p>
           </div>
         </div>
 
