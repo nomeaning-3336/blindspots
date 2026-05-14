@@ -18,7 +18,6 @@ const {
   moveHighlightFill,
   moveHighlightsForClassifiedMove,
   getTrainingBoardHighlights,
-  buildSpotlightMaskRects,
   moveBadgeForPosition,
 } = trainingBoardUi;
 
@@ -26,18 +25,11 @@ test("skipped onboarding starts from the default Blindspots Elo", () => {
   assert.equal(DEFAULT_BLINDSPOTS_ELO, 1200);
 });
 
-test("spotlight mask rectangles do not cross the spotlight top or bottom edge", () => {
-  const rects = buildSpotlightMaskRects({
-    spotlight: { top: 84.4, left: 96.2, right: 452.8, bottom: 171.6 },
-    viewport: { width: 900, height: 600 },
-  });
+test("postmortem tour uses one masked dim layer instead of four stitched rectangles", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
 
-  assert.equal(rects.top.height, 84);
-  assert.equal(rects.bottom.height, 428);
-  assert.equal(rects.left.top, 84);
-  assert.equal(rects.left.height, 88);
-  assert.equal(rects.right.top, 84);
-  assert.equal(rects.right.height, 88);
+  assert.match(source, /data-testid="train-spotlight-dim-mask"/);
+  assert.doesNotMatch(source, /buildSpotlightMaskRects/);
 });
 
 test("moveBadgeForPosition returns a badge for classified sequence moves", () => {
