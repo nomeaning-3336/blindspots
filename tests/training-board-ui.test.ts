@@ -32,6 +32,25 @@ test("postmortem tour uses one masked dim layer instead of four stitched rectang
   assert.doesNotMatch(source, /buildSpotlightMaskRects/);
 });
 
+test("preplay onboarding and active training share the playing grid geometry", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+
+  assert.match(source, /const playingGridClassName =/);
+  assert.match(source, /<div className=\{playingGridClassName\}>/);
+  assert.match(source, /: playingGridClassName/);
+  assert.match(source, /lg:grid-cols-\[auto_320px\]/);
+  assert.match(source, /lg:translate-x-\[5vw\]/);
+});
+
+test("begin sequence uses a gentle opacity handoff without moving the board", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+
+  assert.match(source, /isPreplayBoardTransitioning/);
+  assert.match(source, /train-preplay-board-handoff/);
+  assert.match(source, /motion-reduce:transition-none/);
+  assert.doesNotMatch(source, /train-preplay-board-handoff[^\n]+translate/);
+});
+
 test("moveBadgeForPosition returns a badge for classified sequence moves", () => {
   assert.deepEqual(
     moveBadgeForPosition({

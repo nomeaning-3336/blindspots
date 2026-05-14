@@ -737,6 +737,7 @@ export default function TrainPage(props: TrainPageProps) {
   const [trainOnboardingIntroStep, setTrainOnboardingIntroStep] = useState(0);
   const [trainOnboardingIntroDone, setTrainOnboardingIntroDone] = useState(false);
   const [isStartingPreplayPosition, setIsStartingPreplayPosition] = useState(false);
+  const [isPreplayBoardTransitioning, setIsPreplayBoardTransitioning] = useState(false);
   const trainOnboardingIntroActive =
     shouldRunPreplayOnboarding && onboardingScreen === "done" && !trainOnboardingIntroDone;
   const [moveAnnotations, setMoveAnnotations] = useState<Record<string, AnnotatedMove>>({});
@@ -965,10 +966,13 @@ export default function TrainPage(props: TrainPageProps) {
     if (hasStartedFirstOnboardingSequenceRef.current) return;
     hasStartedFirstOnboardingSequenceRef.current = true;
     setIsStartingPreplayPosition(true);
+    setIsPreplayBoardTransitioning(true);
 
     try {
       await unlockTrainAudio();
       await primeTrainAudio();
+
+      await delayMs(180);
 
       setTrainOnboardingIntroDone(true);
 
@@ -981,6 +985,9 @@ export default function TrainPage(props: TrainPageProps) {
       setHasLoadedPosition(true);
       setIsOpponentThinking(true);
       setIsCompletingSequence(false);
+      window.setTimeout(() => {
+        setIsPreplayBoardTransitioning(false);
+      }, 260);
 
       setMoves([]);
       setLastMove(null);
@@ -1031,6 +1038,8 @@ export default function TrainPage(props: TrainPageProps) {
     } catch (error) {
       console.error("[train-onboarding] failed to start static prelude", error);
       setPositionLoadError("Could not start the onboarding position.");
+      hasStartedFirstOnboardingSequenceRef.current = false;
+      setIsPreplayBoardTransitioning(false);
     } finally {
       setIsOpponentThinking(false);
       setIsPositionLoading(false);
@@ -3127,6 +3136,16 @@ export default function TrainPage(props: TrainPageProps) {
         ? "w-[min(82vw,calc(100dvh-12.5rem),800px)]"
         : "w-[min(82vw,calc(100dvh-12.5rem),800px)]",
   ].join(" ");
+  const trainViewportClassName =
+    "-mx-4 -mb-4 flex h-full min-h-0 w-[calc(100%+2rem)] flex-1 overflow-hidden px-3 py-3 md:-mx-6 md:w-[calc(100%+3rem)]";
+  const playingGridClassName =
+    "mx-auto grid h-full min-h-0 w-fit max-w-[calc(100vw-32px)] min-w-0 grid-cols-1 gap-5 transition-opacity duration-200 lg:grid-cols-[auto_320px] lg:items-center lg:justify-center lg:translate-x-[5vw]";
+  const playingBoardSectionClassName =
+    "app-brutal-section relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden p-3 sm:p-4 lg:w-fit lg:p-4";
+  const preplayBoardHandoffClassName = [
+    "train-preplay-board-handoff transition-[opacity,filter] duration-[220ms] ease-out motion-reduce:transition-none",
+    isPreplayBoardTransitioning ? "opacity-80 brightness-90" : "opacity-100 brightness-100",
+  ].join(" ");
   const isEngineLinesLoading = Boolean(
     isExploringResults && engineLineLoadingFen === boardFen,
   );
@@ -3546,39 +3565,38 @@ export default function TrainPage(props: TrainPageProps) {
   if (trainOnboardingIntroActive) {
     return (
       <>
-        <div className="-mx-4 -mb-4 flex h-full min-h-0 w-[calc(100%+2rem)] flex-1 overflow-hidden px-3 py-3 md:-mx-6 md:w-[calc(100%+3rem)]">
-          <div className="mx-auto grid h-full min-h-0 w-full max-w-[100rem] min-w-0 gap-4 lg:grid-cols-1 lg:items-center lg:justify-items-center">
-            <section className="app-brutal-section flex min-h-0 min-w-0 items-center justify-center overflow-hidden p-3 sm:p-4 lg:p-4 lg:w-fit lg:justify-self-center">
-              <div className="flex min-h-0 min-w-0 items-center justify-center">
-                <div ref={boardContainerRef} className={boardFrameClassName}>
-                  <BoardWithPlayerStrips
-                    userSide={userMoveSide}
-                    boardFen={fen}
-                    isOpponentThinking={false}
-                    isTrainingActive={false}
-                    isExploring={false}
-                    isSetupReplay={false}
+        <div className={trainViewportClassName}>
+          <div className={playingGridClassName}>
+            <section className={[playingBoardSectionClassName, preplayBoardHandoffClassName].join(" ")}>
+              <div ref={boardContainerRef} className={boardFrameClassName}>
+                <BoardWithPlayerStrips
+                  userSide={userMoveSide}
+                  boardFen={fen}
+                  isOpponentThinking={false}
+                  isTrainingActive={false}
+                  isExploring={false}
+                  isSetupReplay={false}
+                >
+                  <BoardWithEvalBar
+                    isLoading={false}
+                    orientation={boardOrientation}
                   >
-                    <BoardWithEvalBar
-                      isLoading={false}
+                    <AnalysisBoard
+                      fen={fen}
+                      mode="training"
+                      pieceAnimation={false}
                       orientation={boardOrientation}
-                    >
-                      <AnalysisBoard
-                        fen={fen}
-                        mode="training"
-                        pieceAnimation={false}
-                        orientation={boardOrientation}
-                        coordinates
-                        showLegalTargets={false}
-                        boardTheme={visualPreferences.boardTheme}
-                        pieceTheme={visualPreferences.pieceTheme}
-                        disabled
-                      />
-                    </BoardWithEvalBar>
-                  </BoardWithPlayerStrips>
-                </div>
+                      coordinates
+                      showLegalTargets={false}
+                      boardTheme={visualPreferences.boardTheme}
+                      pieceTheme={visualPreferences.pieceTheme}
+                      disabled
+                    />
+                  </BoardWithEvalBar>
+                </BoardWithPlayerStrips>
               </div>
             </section>
+            <div aria-hidden="true" className="hidden lg:block" />
           </div>
         </div>
         <TrainOnboardingIntroOverlay
@@ -3634,22 +3652,22 @@ export default function TrainPage(props: TrainPageProps) {
   }
 
   return (
-    <div className="-mx-4 -mb-4 flex h-full min-h-0 w-[calc(100%+2rem)] flex-1 overflow-hidden px-3 py-3 md:-mx-6 md:w-[calc(100%+3rem)]">
+    <div className={trainViewportClassName}>
       <div
         ref={trainLayoutGridRef}
         data-train-layout-state={isPostMortemVisible ? "results" : "playing"}
-        className={[
-          "mx-auto grid h-full min-h-0 w-full max-w-[100rem] min-w-0 gap-4 transition-opacity duration-200",
+        className={
           isPostMortemVisible
-            ? "lg:grid-cols-[minmax(0,1.22fr)_minmax(28rem,0.92fr)] lg:items-stretch"
-            : "mx-auto grid w-fit max-w-[calc(100vw-32px)] grid-cols-1 gap-5 lg:grid-cols-[auto_320px] lg:items-center lg:justify-center lg:translate-x-[5vw]",
-        ].join(" ")}
+            ? "mx-auto grid h-full min-h-0 w-full max-w-[100rem] min-w-0 gap-4 transition-opacity duration-200 lg:grid-cols-[minmax(0,1.22fr)_minmax(28rem,0.92fr)] lg:items-stretch"
+            : playingGridClassName
+        }
       >
         <section
           className={[
             "app-brutal-section relative flex min-h-0 min-w-0 items-center justify-center p-3 sm:p-4 lg:p-4",
             state === "active" && !trainOnboardingIntroActive ? "overflow-visible" : "overflow-hidden",
             isPostMortemVisible ? "" : "lg:w-fit",
+            shouldRunPreplayOnboarding ? preplayBoardHandoffClassName : "",
           ].join(" ")}
         >
           <div className="relative flex min-h-0 w-fit max-w-full min-w-0 flex-col items-stretch justify-center self-center">
