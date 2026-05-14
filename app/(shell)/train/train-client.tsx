@@ -161,6 +161,8 @@ const ENABLE_CLIENT_STOCKFISH_LINES = true;
 const CLIENT_STOCKFISH_MULTIPV = 5;
 const CLIENT_STOCKFISH_MOVETIME_MS = 800;
 const PRELUDE_SETUP_MOVE_DELAY_MS = 1000;
+const PREPLAY_INTRO_FADE_MS = 300;
+const PREPLAY_INTRO_SETTLE_MS = 40;
 const COMPLETION_EVAL_GRACE_MS = 500;
 
 type PostmortemTourStep = {
@@ -737,6 +739,7 @@ export default function TrainPage(props: TrainPageProps) {
   const [trainOnboardingIntroStep, setTrainOnboardingIntroStep] = useState(0);
   const [trainOnboardingIntroDone, setTrainOnboardingIntroDone] = useState(false);
   const [trainOnboardingIntroVisible, setTrainOnboardingIntroVisible] = useState(false);
+  const [trainOnboardingIntroExiting, setTrainOnboardingIntroExiting] = useState(false);
   const [isStartingPreplayPosition, setIsStartingPreplayPosition] = useState(false);
   const trainOnboardingIntroActive =
     shouldRunPreplayOnboarding && onboardingScreen === "done" && !trainOnboardingIntroDone;
@@ -973,8 +976,7 @@ export default function TrainPage(props: TrainPageProps) {
       await unlockTrainAudio();
       await primeTrainAudio();
 
-      // Prepare all board state BEFORE removing the intro overlay.
-      // The prelude move has already been visually applied — Begin must not replay it.
+      // Prepare metadata and board state (not yet visible as prelude).
       initialPreludeRef.current = {
         previousFen: ONBOARDING_PREVIEW_POSITION.previousFen,
         playedMove: ONBOARDING_PREVIEW_POSITION.playedMove,
@@ -997,6 +999,9 @@ export default function TrainPage(props: TrainPageProps) {
         fenAfter: ONBOARDING_PREVIEW_POSITION.fen,
       };
 
+      // Board state is already set during initialization. Re-affirm it here
+      // so downstream memoised values are consistent, but do NOT change the
+      // visible board position. The board already shows the final onboarding FEN.
       setStartingFen(ONBOARDING_PREVIEW_POSITION.fen);
       setDisplayStartingFen(ONBOARDING_PREVIEW_POSITION.previousFen);
       setFen(ONBOARDING_PREVIEW_POSITION.fen);
@@ -1006,12 +1011,16 @@ export default function TrainPage(props: TrainPageProps) {
       initialOpponentMoveRef.current = null;
       setActiveSetupReplayIndex(1);
 
-      // Mark intro as done — main layout will fade it out via opacity transition.
+      // ── Phase 1: Fade out the intro overlay ─────────────────────
+      // Start the CSS opacity transition.  Do NOT apply the prelude
+      // animation or sound yet — the overlay must finish fading first.
+      setTrainOnboardingIntroExiting(true);
       setTrainOnboardingIntroDone(true);
-      // Unmount the intro overlay after the fade completes so it stops blocking interaction.
-      window.setTimeout(() => {
-        setTrainOnboardingIntroVisible(false);
-      }, 320);
+
+      await delayMs(PREPLAY_INTRO_FADE_MS + PREPLAY_INTRO_SETTLE_MS);
+
+      // ── Phase 2: Overlay is gone — unmount it and start the prelude ──
+      setTrainOnboardingIntroVisible(false);
 
       setState("active");
       setResultMode("results");
@@ -3563,9 +3572,9 @@ const introOverlay = trainOnboardingIntroVisible ? (
     <div
       className={[
         "pointer-events-auto fixed inset-0 z-40 transition-opacity duration-300",
-        trainOnboardingIntroDone ? "opacity-0" : "opacity-100",
+        (trainOnboardingIntroExiting || trainOnboardingIntroDone) ? "opacity-0" : "opacity-100",
       ].join(" ")}
-      aria-hidden={trainOnboardingIntroDone}
+      aria-hidden={trainOnboardingIntroExiting || trainOnboardingIntroDone}
     >
       <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px]" />
       <div className="absolute inset-0 flex items-center justify-center">
