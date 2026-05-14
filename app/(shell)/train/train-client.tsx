@@ -4167,11 +4167,13 @@ function TrainPostmortemTourOverlay({
   const [cardSize, setCardSize] = useState<{ width: number; height: number } | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [displayedStep, setDisplayedStep] = useState(step);
-  const [cardTransitionPhase, setCardTransitionPhase] = useState<"visible" | "leaving" | "entering">("visible");
-  const cardTransitionTimersRef = useRef<number[]>([]);
+  const [previousDisplayedStep, setPreviousDisplayedStep] = useState<number | null>(null);
+  const [isCardSwitching, setIsCardSwitching] = useState(false);
+  const cardSwitchingTimersRef = useRef<number[]>([]);
   const transitionTokenRef = useRef(0);
   const allSteps = steps as readonly PostmortemTourStep[];
   const displayedTourStep = allSteps[displayedStep] ?? allSteps[0];
+  const previousTourStep = previousDisplayedStep === null ? null : allSteps[previousDisplayedStep] ?? null;
   const currentStep = allSteps[step] ?? allSteps[0];
   const isFirst = step <= 0;
   const isLast = step >= steps.length - 1;
@@ -4354,36 +4356,36 @@ function TrainPostmortemTourOverlay({
     return () => window.removeEventListener("resize", updateViewportSize);
   }, []);
 
-  // ── Animate card content between steps ──
-  function clearCardTransitionTimers() {
-    cardTransitionTimersRef.current.forEach((timer) => window.clearTimeout(timer));
-    cardTransitionTimersRef.current = [];
+  // ── Crossfade card content between steps ──
+  function clearSwitchingTimers() {
+    cardSwitchingTimersRef.current.forEach((t) => window.clearTimeout(t));
+    cardSwitchingTimersRef.current = [];
   }
 
   useEffect(() => {
-    return clearCardTransitionTimers;
+    return clearSwitchingTimers;
   }, []);
 
   useEffect(() => {
     if (step === displayedStep) return;
 
-    clearCardTransitionTimers();
-    setCardTransitionPhase("leaving");
+    const previous = displayedStep;
+    clearSwitchingTimers();
+    setPreviousDisplayedStep(previous);
+    setIsCardSwitching(true);
 
     const swapTimer = window.setTimeout(() => {
       setDisplayedStep(step);
-      setCardTransitionPhase("entering");
+    }, 80);
 
-      const visibleTimer = window.setTimeout(() => {
-        setCardTransitionPhase("visible");
-      }, 40);
+    const doneTimer = window.setTimeout(() => {
+      setPreviousDisplayedStep(null);
+      setIsCardSwitching(false);
+    }, 260);
 
-      cardTransitionTimersRef.current.push(visibleTimer);
-    }, 140);
+    cardSwitchingTimersRef.current.push(swapTimer, doneTimer);
 
-    cardTransitionTimersRef.current.push(swapTimer);
-
-    return clearCardTransitionTimers;
+    return clearSwitchingTimers;
   }, [step]);
 
   const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
@@ -4501,7 +4503,7 @@ function TrainPostmortemTourOverlay({
         />
       ) : null}
       <div
-        className="fixed grid gap-4 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)]"
+        className="fixed grid gap-4 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)] min-h-[360px]"
         ref={cardRef}
         style={cardStyle}
         onClick={(event) => event.stopPropagation()}
@@ -4521,15 +4523,27 @@ function TrainPostmortemTourOverlay({
 
         <div className="mb-6" />
 
-        <div className="min-h-[190px]">
+        <div className="relative min-h-[220px] overflow-hidden">
+          {previousTourStep ? (
+            <div
+              key={`prev-${previousDisplayedStep}`}
+              className="absolute inset-0 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] opacity-0 -translate-y-2 blur-[1px] motion-reduce:transition-none motion-reduce:opacity-100 motion-reduce:translate-y-0 motion-reduce:blur-0"
+            >
+              <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
+                {previousTourStep.headline}
+              </h2>
+              <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
+                {previousTourStep.body}
+              </p>
+            </div>
+          ) : null}
           <div
+            key={`current-${displayedStep}`}
             className={[
-              "transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
-              cardTransitionPhase === "visible"
-                ? "translate-y-0 opacity-100 blur-0"
-                : cardTransitionPhase === "leaving"
-                  ? "-translate-y-2 opacity-0 blur-[1px]"
-                  : "translate-y-2 opacity-0 blur-[1px]",
+              "absolute inset-0 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
+              isCardSwitching
+                ? "opacity-0 translate-y-2 blur-[1px]"
+                : "opacity-100 translate-y-0 blur-0",
               "motion-reduce:transform-none motion-reduce:blur-0 motion-reduce:transition-none motion-reduce:opacity-100",
             ].join(" ")}
           >
