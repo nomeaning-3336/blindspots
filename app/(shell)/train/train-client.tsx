@@ -4165,6 +4165,7 @@ function TrainPostmortemTourOverlay({
   const [isPositioningSpotlight, setIsPositioningSpotlight] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const [cardSize, setCardSize] = useState<{ width: number; height: number } | null>(null);
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const transitionTokenRef = useRef(0);
   const allSteps = steps as readonly PostmortemTourStep[];
   const resolvedStep = allSteps[resolvedStepIndex] ?? allSteps[0];
@@ -4339,6 +4340,16 @@ function TrainPostmortemTourOverlay({
     };
   }, [resolvedStepIndex]);
 
+  // ── Track viewport size ──
+  useEffect(() => {
+    function updateViewportSize() {
+      setViewportSize({ width: window.innerWidth, height: window.innerHeight });
+    }
+    updateViewportSize();
+    window.addEventListener("resize", updateViewportSize);
+    return () => window.removeEventListener("resize", updateViewportSize);
+  }, []);
+
   if (!resolvedStep) return null;
 
   const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
@@ -4350,6 +4361,8 @@ function TrainPostmortemTourOverlay({
         left: Math.max(margin, targetRect.left - 6),
         width: Math.min(viewportWidth - margin * 2, targetRect.width + 12),
         height: Math.min(viewportHeight - margin * 2, targetRect.height + 12),
+        bottom: Math.min(viewportHeight - margin, targetRect.bottom + 6),
+        right: Math.min(viewportWidth - margin, targetRect.right + 6),
       }
     : null;
   const measuredCardWidth = cardSize?.width ?? 440;
@@ -4404,9 +4417,34 @@ function TrainPostmortemTourOverlay({
 
   return (
     <div className="fixed inset-0 z-[80]" role="dialog" aria-modal="true" aria-label="Postmortem onboarding">
-      {/* Dim layer — stays visible across normal steps, hidden for interactive suppressSpotlight steps */}
-      {!resolvedStep.suppressSpotlight ? (
-        <div aria-hidden="true" className="fixed inset-0 bg-black/68" />
+      {/* Cutout dim layer — four rectangles leaving spotlight area undimmed */}
+      {!resolvedStep.suppressSpotlight && spotlight ? (
+        <div aria-hidden="true" className="pointer-events-none fixed inset-0">
+          <div
+            className="fixed left-0 right-0 top-0 bg-black/68 transition-[height] duration-300 ease-out"
+            style={{ height: Math.max(0, spotlight.top) }}
+          />
+          <div
+            className="fixed left-0 right-0 bottom-0 bg-black/68 transition-[height] duration-300 ease-out"
+            style={{ height: Math.max(0, viewportSize.height - spotlight.bottom) }}
+          />
+          <div
+            className="fixed left-0 bg-black/68 transition-[top,width,height] duration-300 ease-out"
+            style={{
+              top: spotlight.top,
+              width: Math.max(0, spotlight.left),
+              height: spotlight.height,
+            }}
+          />
+          <div
+            className="fixed right-0 bg-black/68 transition-[top,width,height] duration-300 ease-out"
+            style={{
+              top: spotlight.top,
+              width: Math.max(0, viewportSize.width - spotlight.right),
+              height: spotlight.height,
+            }}
+          />
+        </div>
       ) : null}
       {/* Click catcher — always transparent, dim layer handled separately */}
       <button
