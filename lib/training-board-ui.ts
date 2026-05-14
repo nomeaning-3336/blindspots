@@ -29,6 +29,45 @@ export const DRIFT_BOARD_HIGHLIGHTS = {
   b8: "color-mix(in srgb, var(--app-class-mistake) 42%, #7f8190 58%)",
 } as const;
 
+export type SpotlightMaskRect = {
+  top?: number;
+  bottom?: number;
+  left?: number;
+  right?: number;
+  width?: number;
+  height: number;
+};
+
+export function buildSpotlightMaskRects({
+  spotlight,
+  viewport,
+}: {
+  spotlight: { top: number; left: number; right: number; bottom: number };
+  viewport: { width: number; height: number };
+}) {
+  const maskTop = Math.floor(spotlight.top);
+  const maskLeft = Math.floor(spotlight.left);
+  const maskRight = Math.ceil(spotlight.right);
+  const maskBottom = Math.ceil(spotlight.bottom);
+
+  return {
+    top: { left: 0, right: 0, top: 0, height: Math.max(0, maskTop) },
+    bottom: { left: 0, right: 0, bottom: 0, height: Math.max(0, viewport.height - maskBottom) },
+    left: {
+      left: 0,
+      top: maskTop,
+      width: Math.max(0, maskLeft),
+      height: Math.max(0, maskBottom - maskTop),
+    },
+    right: {
+      right: 0,
+      top: maskTop,
+      width: Math.max(0, viewport.width - maskRight),
+      height: Math.max(0, maskBottom - maskTop),
+    },
+  } satisfies Record<"top" | "bottom" | "left" | "right", SpotlightMaskRect>;
+}
+
 export function buildLastMoveBadge(classification: MoveClassification): LastMoveBadge {
   return {
     label: classificationLabel(classification),
