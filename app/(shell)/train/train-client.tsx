@@ -674,8 +674,7 @@ export default function TrainPage(props: TrainPageProps) {
 
   const [fenCopied, setFenCopied] = useState(false);
   const [addingPositionToQueue, setAddingPositionToQueue] = useState(false);
-  const [positionAddedFlash, setPositionAddedFlash] = useState(false);
-  const fenCopyTimerRef = useRef<number | null>(null);
+    const fenCopyTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     return () => {
@@ -3951,11 +3950,9 @@ export default function TrainPage(props: TrainPageProps) {
                 ].join(" ")}
               >
                 <span className={postmortemActionTextClassName}>
-                  {positionAddedFlash
-                    ? "Added to Queue ✓"
-                    : addingPositionToQueue
-                      ? "Adding..."
-                      : "Add Position to Learning Queue"}
+                  {addingPositionToQueue
+                    ? "Adding..."
+                    : "Add Position to Learning Queue"}
                 </span>
               </button>
               <button

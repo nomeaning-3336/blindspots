@@ -16,10 +16,14 @@ type Phase = "entering" | "visible" | "leaving";
 
 function kindColor(k: TopAlertKind): string {
   switch (k) {
-    case "success": return "var(--app-class-good)";
-    case "error":    return "var(--app-class-blunder)";
-    case "info":     return "var(--app-accent)";
-    case "warning":  return "var(--app-class-inaccuracy)";
+    case "success":
+      return "var(--app-class-good)";
+    case "error":
+      return "var(--app-class-blunder)";
+    case "info":
+      return "var(--app-accent)";
+    case "warning":
+      return "var(--app-class-inaccuracy)";
   }
 }
 
@@ -72,7 +76,7 @@ export function TopAlertViewport({
 
   const phaseClasses = {
     entering: "opacity-0 -translate-y-6",
-    visible:  "opacity-100 translate-y-5",
+    visible:  "opacity-100 translate-y-0",
     leaving:  "opacity-0 -translate-y-4",
   };
 
