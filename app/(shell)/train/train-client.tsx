@@ -736,8 +736,8 @@ export default function TrainPage(props: TrainPageProps) {
 
   const [trainOnboardingIntroStep, setTrainOnboardingIntroStep] = useState(0);
   const [trainOnboardingIntroDone, setTrainOnboardingIntroDone] = useState(false);
+  const [trainOnboardingIntroVisible, setTrainOnboardingIntroVisible] = useState(false);
   const [isStartingPreplayPosition, setIsStartingPreplayPosition] = useState(false);
-  const [isPreplayBoardTransitioning, setIsPreplayBoardTransitioning] = useState(false);
   const trainOnboardingIntroActive =
     shouldRunPreplayOnboarding && onboardingScreen === "done" && !trainOnboardingIntroDone;
   const [moveAnnotations, setMoveAnnotations] = useState<Record<string, AnnotatedMove>>({});
@@ -864,6 +864,7 @@ export default function TrainPage(props: TrainPageProps) {
           setPendingInitialEngineMove(null);
           setHasLoadedPosition(false);
           setActiveSetupReplayIndex(1);
+          setTrainOnboardingIntroVisible(true);
         } else if (!shouldRunPreplayOnboarding && !initialMistakeId) {
           void loadNextPosition();
         }
@@ -887,6 +888,7 @@ export default function TrainPage(props: TrainPageProps) {
           setPendingInitialEngineMove(null);
           setHasLoadedPosition(false);
           setActiveSetupReplayIndex(1);
+          setTrainOnboardingIntroVisible(true);
         } else if (!shouldRunPreplayOnboarding && !initialMistakeId) {
           void loadNextPosition();
         }
@@ -1004,8 +1006,12 @@ export default function TrainPage(props: TrainPageProps) {
       initialOpponentMoveRef.current = null;
       setActiveSetupReplayIndex(1);
 
-      // Now that the board state is stable, remove the intro overlay.
+      // Mark intro as done — main layout will fade it out via opacity transition.
       setTrainOnboardingIntroDone(true);
+      // Unmount the intro overlay after the fade completes so it stops blocking interaction.
+      window.setTimeout(() => {
+        setTrainOnboardingIntroVisible(false);
+      }, 320);
 
       setState("active");
       setResultMode("results");
@@ -3550,43 +3556,19 @@ export default function TrainPage(props: TrainPageProps) {
     return () => container.removeEventListener("wheel", handleWheel);
   }, [isActiveSetupReplay, state, isAwaitingStartGesture, isOpponentThinking, isCompletingSequence, activeSetupReplayIndex, activeReplayIndex, activeExploreIndex, visibleSequencePositions, resultMode, exploratoryHistory.length, exploratoryHistoryIndex]);
 
-  if (trainOnboardingIntroActive) {
-    return (
-      <>
-        <div className={trainViewportClassName}>
-          <div className={playingGridClassName}>
-            <section className={[playingBoardSectionClassName, preplayBoardHandoffClassName].join(" ")}>
-              <div ref={boardContainerRef} className={boardFrameClassName}>
-                <BoardWithPlayerStrips
-                  userSide={userMoveSide}
-                  boardFen={fen}
-                  isOpponentThinking={false}
-                  isTrainingActive={false}
-                  isExploring={false}
-                  isSetupReplay={false}
-                >
-                  <BoardWithEvalBar
-                    isLoading={false}
-                    orientation={boardOrientation}
-                  >
-                    <AnalysisBoard
-                      fen={fen}
-                      mode="training"
-                      pieceAnimation={false}
-                      orientation={boardOrientation}
-                      coordinates
-                      showLegalTargets={false}
-                      boardTheme={visualPreferences.boardTheme}
-                      pieceTheme={visualPreferences.pieceTheme}
-                      disabled
-                    />
-                  </BoardWithEvalBar>
-                </BoardWithPlayerStrips>
-              </div>
-            </section>
-            <div aria-hidden="true" className="hidden lg:block" />
-          </div>
-        </div>
+  // ── Train Onboarding Intro Overlay ─────────────────────────────────
+// Show (and animate) the intro overlay while it is still visible.
+// Once done, fade it out then unmount so it stops blocking interaction.
+const introOverlay = trainOnboardingIntroVisible ? (
+    <div
+      className={[
+        "pointer-events-none fixed inset-0 z-40 transition-opacity duration-300",
+        trainOnboardingIntroDone ? "opacity-0" : "opacity-100",
+      ].join(" ")}
+      aria-hidden={trainOnboardingIntroDone}
+    >
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px]" />
+      <div className="absolute inset-0 flex items-center justify-center">
         <TrainOnboardingIntroOverlay
           step={trainOnboardingIntroStep}
           totalSteps={PREPLAY_TOUR_STEPS.length}
@@ -3611,9 +3593,9 @@ export default function TrainPage(props: TrainPageProps) {
             void startPreplayOnboardingPosition();
           }}
         />
-      </>
-    );
-  }
+      </div>
+    </div>
+  ) : null;
 
   if (onboardingScreen !== "done") {
     return (
@@ -4065,6 +4047,8 @@ export default function TrainPage(props: TrainPageProps) {
           </aside>
         ) : null}
       </div>
+      {introOverlay}
+
       {postmortemOnboardingActive ? (
         <TrainPostmortemTourOverlay
           steps={POSTMORTEM_TOUR_STEPS}
