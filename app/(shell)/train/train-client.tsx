@@ -203,7 +203,7 @@ const POSTMORTEM_TOUR_STEPS = [
     target: "add-position-to-learning-queue",
     headline: "Add any position to the Learning queue.",
     body: "Now go ahead and try adding any position from this completed sequence to the Learning queue.",
-    cta: "Waiting for you to add a position",
+    cta: "Okay",
     requiresAction: "add-position-to-learning-queue",
     suppressSpotlight: true,
   },
@@ -772,10 +772,15 @@ export default function TrainPage(props: TrainPageProps) {
   const [postmortemOnboardingStep, setPostmortemOnboardingStep] = useState(0);
   const [postmortemOnboardingFinished, setPostmortemOnboardingFinished] = useState(false);
   const [postmortemAddPositionActionDone, setPostmortemAddPositionActionDone] = useState(false);
+  const [postmortemAddPositionInstructionAcknowledged, setPostmortemAddPositionInstructionAcknowledged] = useState(false);
   const currentPostmortemTourStep = POSTMORTEM_TOUR_STEPS[postmortemOnboardingStep] as PostmortemTourStep;
   const isPostmortemAddPositionActionStep =
     postmortemOnboardingActive &&
     (currentPostmortemTourStep?.requiresAction ?? null) === "add-position-to-learning-queue";
+  const isPostmortemAddPositionWaiting =
+    isPostmortemAddPositionActionStep &&
+    postmortemAddPositionInstructionAcknowledged &&
+    !postmortemAddPositionActionDone;
   const [onboardingCompletionInFlight, setOnboardingCompletionInFlight] = useState(false);
   const [showOnboardingPreferencesModal, setShowOnboardingPreferencesModal] = useState(false);
   const [selectedDailyTargetLevel, setSelectedDailyTargetLevel] = useState<string>("balanced");
@@ -953,6 +958,7 @@ export default function TrainPage(props: TrainPageProps) {
             setPostmortemOnboardingStep(0);
             setPostmortemOnboardingActive(true);
             setPostmortemAddPositionActionDone(false);
+            setPostmortemAddPositionInstructionAcknowledged(false);
           }
           return;
         }
@@ -963,6 +969,7 @@ export default function TrainPage(props: TrainPageProps) {
       if (!cancelled) {
         setPostmortemOnboardingStep(0);
         setPostmortemOnboardingActive(true);
+        setPostmortemAddPositionInstructionAcknowledged(false);
       }
     }
 
@@ -2488,10 +2495,21 @@ export default function TrainPage(props: TrainPageProps) {
   }
 
   const handlePostmortemTourBack = useCallback(() => {
+    setPostmortemAddPositionInstructionAcknowledged(false);
     setPostmortemOnboardingStep((current) => Math.max(0, current - 1));
   }, []);
 
   const handlePostmortemTourNext = useCallback(() => {
+    const currentStep = POSTMORTEM_TOUR_STEPS[postmortemOnboardingStep] as PostmortemTourStep | undefined;
+    if (currentStep?.requiresAction === "add-position-to-learning-queue") {
+      if (!postmortemAddPositionInstructionAcknowledged) {
+        setPostmortemAddPositionInstructionAcknowledged(true);
+        return;
+      }
+      if (!postmortemAddPositionActionDone) {
+        return;
+      }
+    }
     setPostmortemOnboardingStep((current) => {
       if (current < POSTMORTEM_TOUR_STEPS.length - 1) {
         return current + 1;
@@ -2499,7 +2517,7 @@ export default function TrainPage(props: TrainPageProps) {
       void completeTrainingOnboarding();
       return current;
     });
-  }, [onboardingCompletionInFlight]);
+  }, [postmortemOnboardingStep, postmortemAddPositionInstructionAcknowledged, postmortemAddPositionActionDone, onboardingCompletionInFlight]);
 
   const handlePostmortemTourSkip = useCallback(() => {
     void completeTrainingOnboarding();
@@ -3993,11 +4011,9 @@ const introOverlay = trainOnboardingIntroVisible ? (
                     });
                     if (isPostmortemAddPositionActionStep) {
                       setPostmortemAddPositionActionDone(true);
-                      window.setTimeout(() => {
-                        setPostmortemOnboardingStep((step) =>
-                          Math.min(step + 1, POSTMORTEM_TOUR_STEPS.length - 1),
-                        );
-                      }, 1000);
+                      setPostmortemOnboardingStep((step) =>
+                        Math.min(step + 1, POSTMORTEM_TOUR_STEPS.length - 1),
+                      );
                     }
                   } catch (err) {
                     console.error("[train] failed to add position to queue", err);
@@ -4014,6 +4030,9 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 className={[
                   secondaryActionClassName,
                   "min-h-12 w-full justify-center px-5 disabled:opacity-60",
+                  isPostmortemAddPositionWaiting
+                    ? "ring-2 ring-[var(--app-accent)] shadow-[0_0_24px_color-mix(in_srgb,var(--app-accent)_70%,transparent)] animate-pulse transition-all duration-300 ease-out"
+                    : "",
                 ].join(" ")}
               >
                 <span className={postmortemActionTextClassName}>
@@ -4088,7 +4107,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
       </div>
       {introOverlay}
 
-      {postmortemOnboardingActive ? (
+      {postmortemOnboardingActive && !isPostmortemAddPositionWaiting ? (
         <TrainPostmortemTourOverlay
           steps={POSTMORTEM_TOUR_STEPS}
           step={postmortemOnboardingStep}
@@ -4099,6 +4118,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
           onMissingTarget={handleMissingPostmortemTourTarget}
           isActionStep={isPostmortemAddPositionActionStep}
           actionCompleted={postmortemAddPositionActionDone}
+          centerCard={isPostmortemAddPositionActionStep && !postmortemAddPositionInstructionAcknowledged}
         />
       ) : null}
 
@@ -4193,6 +4213,7 @@ function TrainPostmortemTourOverlay({
   onMissingTarget,
   isActionStep,
   actionCompleted,
+  centerCard = false,
 }: {
   steps: readonly PostmortemTourStep[];
   step: number;
@@ -4203,6 +4224,7 @@ function TrainPostmortemTourOverlay({
   onMissingTarget: () => void;
   isActionStep?: boolean;
   actionCompleted?: boolean;
+  centerCard?: boolean;
 }) {
   const [resolvedStepIndex, setResolvedStepIndex] = useState(step);
   const [targetRect, setTargetRect] = useState<{ top: number; left: number; width: number; height: number; right: number; bottom: number } | null>(null);
@@ -4456,7 +4478,17 @@ function TrainPostmortemTourOverlay({
   let cardTop: number;
   let cardStyle: React.CSSProperties;
 
-  if (isSmallScreen || !spotlight) {
+  if (centerCard) {
+    const cardWidth = Math.min(520, viewportWidth - VIEWPORT_PAD * 2);
+    cardStyle = {
+      left: "50%",
+      top: "50%",
+      transform: "translate(-50%, -50%)",
+      width: cardWidth,
+      maxHeight: `calc(100vh - ${VIEWPORT_PAD * 2}px)`,
+      overflowY: "auto",
+    };
+  } else if (isSmallScreen || !spotlight) {
     cardStyle = {
       left: VIEWPORT_PAD,
       right: VIEWPORT_PAD,
@@ -4534,6 +4566,10 @@ function TrainPostmortemTourOverlay({
             mask="url(#train-postmortem-spotlight-mask)"
           />
         </svg>
+      ) : null}
+      {/* Full-screen dim for centered instruction modal (no spotlight mask) */}
+      {centerCard ? (
+        <div className="pointer-events-none fixed inset-0 bg-black/68 transition-opacity duration-300" />
       ) : null}
       {/* Click catcher — always transparent, dim layer handled separately */}
       <button
@@ -4623,7 +4659,7 @@ function TrainPostmortemTourOverlay({
             type="button"
             onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight) onNext(); }}
             className="app-brutal-button min-h-11 px-6 text-xs"
-            disabled={completionInFlight || isPositioningSpotlight || (isActionStep && !actionCompleted)}
+            disabled={completionInFlight || isPositioningSpotlight || (isActionStep && !actionCompleted && !centerCard)}
           >
             {completionInFlight ? "Saving..." : (isActionStep && !actionCompleted ? displayedTourStep.cta ?? "Waiting..." : displayedTourStep.cta ?? "Next")}
           </button>
