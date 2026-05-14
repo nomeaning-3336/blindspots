@@ -209,6 +209,11 @@ const POSTMORTEM_TOUR_STEPS = [
   },
   {
     target: "notes-panel",
+    headline: "Notes",
+    body: "Now that we know how to add a position to the Learning queue, let's see how to use the Notes section.",
+  },
+  {
+    target: "notes-panel",
     headline: "Write a note to your future self.",
     body: "Select any of the moves you made, and write any note you want to see in the future. When the position comes back for review, this note might be shown to you, or hidden to see if you will perform well without it. This part is optional, but useful to remember things such as \"I played queen to a4 here but totally forgot the knight can fork the queen and king.\" Also useful to see commonly recurring patterns in your play, or rather, your \"blindspots\".",
   },
@@ -4031,7 +4036,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                   secondaryActionClassName,
                   "min-h-12 w-full justify-center px-5 disabled:opacity-60",
                   isPostmortemAddPositionWaiting
-                    ? "ring-2 ring-[var(--app-accent)] shadow-[0_0_24px_color-mix(in_srgb,var(--app-accent)_70%,transparent)] animate-pulse transition-all duration-300 ease-out"
+                    ? "train-add-position-glow ring-2 ring-[var(--app-accent)] transition-all duration-300 ease-out"
                     : "",
                 ].join(" ")}
               >
@@ -4107,7 +4112,15 @@ const introOverlay = trainOnboardingIntroVisible ? (
       </div>
       {introOverlay}
 
-      {postmortemOnboardingActive && !isPostmortemAddPositionWaiting ? (
+      {postmortemOnboardingActive ? (
+        <div
+          className={[
+            isPostmortemAddPositionWaiting
+              ? "opacity-0 pointer-events-none"
+              : "opacity-100",
+            "transition-opacity duration-200 ease-out motion-reduce:transition-none",
+          ].join(" ")}
+        >
         <TrainPostmortemTourOverlay
           steps={POSTMORTEM_TOUR_STEPS}
           step={postmortemOnboardingStep}
@@ -4120,7 +4133,32 @@ const introOverlay = trainOnboardingIntroVisible ? (
           actionCompleted={postmortemAddPositionActionDone}
           centerCard={isPostmortemAddPositionActionStep && !postmortemAddPositionInstructionAcknowledged}
         />
+        </div>
       ) : null}
+      <style>{`
+        .train-add-position-glow {
+          box-shadow:
+            0 0 0 1px color-mix(in srgb, var(--app-accent) 80%, transparent),
+            0 0 24px color-mix(in srgb, var(--app-accent) 70%, transparent);
+        }
+        @media (prefers-reduced-motion: no-preference) {
+          .train-add-position-glow {
+            animation: train-glow-pulse 1.4s ease-in-out infinite alternate;
+          }
+        }
+        @keyframes train-glow-pulse {
+          from {
+            box-shadow:
+              0 0 0 1px color-mix(in srgb, var(--app-accent) 70%, transparent),
+              0 0 14px color-mix(in srgb, var(--app-accent) 45%, transparent);
+          }
+          to {
+            box-shadow:
+              0 0 0 2px color-mix(in srgb, var(--app-accent) 95%, transparent),
+              0 0 30px color-mix(in srgb, var(--app-accent) 85%, transparent);
+          }
+        }
+      `}</style>
 
       {showOnboardingPreferencesModal ? (
         <OnboardingPreferencesModal

@@ -89,12 +89,15 @@ export function TopAlertViewport({
         "transition-all duration-300 ease-out",
         phaseClasses[phase],
       ].join(" ")}
-      style={{ top: "20px" }}
+      style={{ top: "76px" }}
     >
       <div
-        className="flex items-start gap-3 border border-[var(--app-border-strong)] bg-[var(--app-panel-solid)] px-4 py-3 shadow-[2px_2px_0_var(--app-border-strong)]"
-        style={{ borderLeftWidth: 4, borderLeftColor: kindColor(k) }}
+        className="relative flex items-start gap-3 overflow-hidden border border-[var(--app-border-strong)] bg-[var(--app-panel-solid)] px-4 py-3 shadow-[2px_2px_0_var(--app-border-strong)]"
       >
+        <div
+          className="absolute left-0 top-0 h-full w-1 shrink-0"
+          style={{ backgroundColor: kindColor(k) }}
+        />
         {alert.title ? (
           <div className="flex flex-col gap-0.5">
             <span className="text-sm font-bold text-[var(--app-text)]">{alert.title}</span>
