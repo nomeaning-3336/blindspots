@@ -197,7 +197,7 @@ const POSTMORTEM_TOUR_STEPS = [
   {
     target: "add-position-to-learning-queue",
     headline: "Add positions to your Learning queue.",
-    body: "This is the core of your learning here at Blindspots. When you make a mistake, you can navigate to the exact position/FEN where the mistake happened, then press Add Position to Learning Queue. This schedules the position for the future, where you will have a chance to see exactly what went wrong using Notes, then try an alternative move.",
+    body: "This is the core of your journey here at Blindspots. After a sequence is complete, you can navigate to any of the positions of the sequence and press Add Position to Learning Queue. This schedules a future review for that position where you will have a chance to see and remember exactly what went wrong and then try an alternative move.",
   },
   {
     target: "add-position-to-learning-queue",
