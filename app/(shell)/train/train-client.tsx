@@ -4274,6 +4274,8 @@ function TrainPostmortemTourOverlay({
   const [displayedStep, setDisplayedStep] = useState(step);
   const [previousDisplayedStep, setPreviousDisplayedStep] = useState<number | null>(null);
   const [isCardSwitching, setIsCardSwitching] = useState(false);
+  const [isPlacementSwitching, setIsPlacementSwitching] = useState(false);
+  const previousCenterCardRef = useRef(centerCard);
   const cardSwitchingTimersRef = useRef<number[]>([]);
   const transitionTokenRef = useRef(0);
   const allSteps = steps as readonly PostmortemTourStep[];
@@ -4493,6 +4495,18 @@ function TrainPostmortemTourOverlay({
     return clearSwitchingTimers;
   }, [step]);
 
+  // ── Detect placement-mode changes (target-positioned ↔ centered) ──
+  useEffect(() => {
+    if (previousCenterCardRef.current !== centerCard) {
+      previousCenterCardRef.current = centerCard;
+      setIsPlacementSwitching(true);
+      const timer = window.setTimeout(() => {
+        setIsPlacementSwitching(false);
+      }, 280);
+      return () => window.clearTimeout(timer);
+    }
+  }, [centerCard]);
+
   const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
   const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
   const margin = 16;
@@ -4566,6 +4580,10 @@ function TrainPostmortemTourOverlay({
     cardStyle = { top: cardTop, left: cardLeft, width: cardMaxWidth };
   }
 
+  const cardVisibilityClass = isPlacementSwitching
+    ? "opacity-0 scale-[0.985] translate-y-0.5"
+    : "opacity-100 scale-100 translate-y-0";
+
   return (
     <div className="fixed inset-0 z-[80]" role="dialog" aria-modal="true" aria-label="Postmortem onboarding">
       {/* Single SVG mask cutout avoids seams from stitched dim rectangles. */}
@@ -4630,7 +4648,11 @@ function TrainPostmortemTourOverlay({
         />
       ) : null}
       <div
-        className="fixed grid gap-4 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)]"
+        className={[
+          "fixed grid gap-4 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)]",
+          cardVisibilityClass,
+          "transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none motion-reduce:transform-none",
+        ].join(" ")}
         ref={cardRef}
         style={cardStyle}
         onClick={(event) => event.stopPropagation()}
