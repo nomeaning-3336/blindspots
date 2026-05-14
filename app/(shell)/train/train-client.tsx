@@ -4419,7 +4419,7 @@ function TrainPostmortemTourOverlay({
       {!isPositioningSpotlight && !resolvedStep.suppressSpotlight && spotlight ? (
         <div
           aria-hidden="true"
-          className="pointer-events-none fixed rounded-[10px] border border-[var(--app-accent)] shadow-[0_0_0_9999px_rgba(0,0,0,0.68),0_0_0_2px_color-mix(in_srgb,var(--app-accent)_42%,transparent)]"
+          className="pointer-events-none fixed rounded-[10px] border border-[var(--app-accent)] shadow-[0_0_0_2px_color-mix(in_srgb,var(--app-accent)_42%,transparent)]"
           style={{
             top: spotlight.top,
             left: spotlight.left,
