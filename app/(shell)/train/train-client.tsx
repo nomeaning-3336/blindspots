@@ -872,7 +872,7 @@ export default function TrainPage(props: TrainPageProps) {
         if (shouldRunPreplayOnboarding && !trainOnboardingIntroDone) {
           setStartingFen(ONBOARDING_PREVIEW_POSITION.fen);
           setDisplayStartingFen(ONBOARDING_PREVIEW_POSITION.previousFen);
-          setFen(ONBOARDING_PREVIEW_POSITION.fen);
+          setFen(ONBOARDING_PREVIEW_POSITION.previousFen);
           setMoves([]);
           setLastMove(null);
           setInitialOpponentMove(null);
@@ -885,7 +885,7 @@ export default function TrainPage(props: TrainPageProps) {
           setIsAwaitingStartGesture(false);
           setPendingInitialEngineMove(null);
           setHasLoadedPosition(false);
-          setActiveSetupReplayIndex(1);
+          setActiveSetupReplayIndex(0);
           setTrainOnboardingIntroVisible(true);
         } else if (!shouldRunPreplayOnboarding && !initialMistakeId) {
           void loadNextPosition();
@@ -896,7 +896,7 @@ export default function TrainPage(props: TrainPageProps) {
         if (shouldRunPreplayOnboarding && !trainOnboardingIntroDone) {
           setStartingFen(ONBOARDING_PREVIEW_POSITION.fen);
           setDisplayStartingFen(ONBOARDING_PREVIEW_POSITION.previousFen);
-          setFen(ONBOARDING_PREVIEW_POSITION.fen);
+          setFen(ONBOARDING_PREVIEW_POSITION.previousFen);
           setMoves([]);
           setLastMove(null);
           setInitialOpponentMove(null);
@@ -909,7 +909,7 @@ export default function TrainPage(props: TrainPageProps) {
           setIsAwaitingStartGesture(false);
           setPendingInitialEngineMove(null);
           setHasLoadedPosition(false);
-          setActiveSetupReplayIndex(1);
+          setActiveSetupReplayIndex(0);
           setTrainOnboardingIntroVisible(true);
         } else if (!shouldRunPreplayOnboarding && !initialMistakeId) {
           void loadNextPosition();
@@ -1018,17 +1018,16 @@ export default function TrainPage(props: TrainPageProps) {
         fenAfter: ONBOARDING_PREVIEW_POSITION.fen,
       };
 
-      // Board state is already set during initialization. Re-affirm it here
-      // so downstream memoised values are consistent, but do NOT change the
-      // visible board position. The board already shows the final onboarding FEN.
+      // Re-affirm metadata for downstream memoised values, but keep the visible
+      // board at previousFen (pre-move position). The prelude animation will
+      // be applied in Phase 2 after the overlay fades out.
       setStartingFen(ONBOARDING_PREVIEW_POSITION.fen);
       setDisplayStartingFen(ONBOARDING_PREVIEW_POSITION.previousFen);
-      setFen(ONBOARDING_PREVIEW_POSITION.fen);
       setMoves([]);
       setLastMove(null);
       setInitialOpponentMove(null);
       initialOpponentMoveRef.current = null;
-      setActiveSetupReplayIndex(1);
+      // activeSetupReplayIndex stays at 0 — boardFen remains at previousFen
 
       // ── Phase 1: Fade out the intro overlay ─────────────────────
       // Start the CSS opacity transition.  Do NOT apply the prelude
@@ -1052,6 +1051,10 @@ export default function TrainPage(props: TrainPageProps) {
       setHasLoadedPosition(true);
       setIsOpponentThinking(true);
       setIsCompletingSequence(false);
+
+      // ── Apply the visual prelude move (castling) ────────────────
+      setActiveSetupReplayIndex(1);
+      setFen(ONBOARDING_PREVIEW_POSITION.fen);
 
       initialOpponentMoveRef.current = initialMove;
       setInitialOpponentMove(initialMove);
