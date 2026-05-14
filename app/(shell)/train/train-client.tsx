@@ -34,7 +34,6 @@ import {
   classificationIcon,
   classificationLabel,
   formatClassifiedMoveLead,
-  buildSpotlightMaskRects,
   getTrainingBoardHighlights,
   moveHighlightsForClassifiedMove,
   type MoveClassification,
@@ -187,7 +186,7 @@ const POSTMORTEM_TOUR_STEPS = [
   {
     target: "eval-graph",
     headline: "Eval chart.",
-    body: "We really don't have to explain this one.",
+    body: "Just a chart.",
   },
   {
     target: "move-table",
@@ -4470,41 +4469,43 @@ function TrainPostmortemTourOverlay({
 
   return (
     <div className="fixed inset-0 z-[80]" role="dialog" aria-modal="true" aria-label="Postmortem onboarding">
-      {/* Cutout dim layer — four rectangles leaving spotlight area undimmed */}
-      {!currentStep.suppressSpotlight && spotlight ? (() => {
-        const maskRects = buildSpotlightMaskRects({
-          spotlight,
-          viewport: viewportSize,
-        });
-        return (
-          <div aria-hidden="true" className="pointer-events-none fixed inset-0">
-            <div
-              className="fixed left-0 right-0 top-0 bg-black/68 transition-[height] duration-300 ease-out"
-              style={{ height: maskRects.top.height }}
-            />
-            <div
-              className="fixed left-0 right-0 bottom-0 bg-black/68 transition-[height] duration-300 ease-out"
-              style={{ height: maskRects.bottom.height }}
-            />
-            <div
-              className="fixed left-0 bg-black/68 transition-[top,width,height] duration-300 ease-out"
-              style={{
-                top: maskRects.left.top,
-                width: maskRects.left.width,
-                height: maskRects.left.height,
-              }}
-            />
-            <div
-              className="fixed right-0 bg-black/68 transition-[top,width,height] duration-300 ease-out"
-              style={{
-                top: maskRects.right.top,
-                width: maskRects.right.width,
-                height: maskRects.right.height,
-              }}
-            />
-          </div>
-        );
-      })() : null}
+      {/* Single SVG mask cutout avoids seams from stitched dim rectangles. */}
+      {!currentStep.suppressSpotlight && spotlight ? (
+        <svg
+          aria-hidden="true"
+          data-testid="train-spotlight-dim-mask"
+          className="pointer-events-none fixed inset-0"
+          width={viewportWidth}
+          height={viewportHeight}
+          viewBox={`0 0 ${viewportWidth} ${viewportHeight}`}
+          preserveAspectRatio="none"
+        >
+          <defs>
+            <mask id="train-postmortem-spotlight-mask">
+              <rect x="0" y="0" width={viewportWidth} height={viewportHeight} fill="white" />
+              <rect
+                x={spotlight.left}
+                y={spotlight.top}
+                width={spotlight.width}
+                height={spotlight.height}
+                rx="10"
+                ry="10"
+                fill="black"
+                className="transition-[x,y,width,height] duration-300 ease-out"
+              />
+            </mask>
+          </defs>
+          <rect
+            x="0"
+            y="0"
+            width={viewportWidth}
+            height={viewportHeight}
+            fill="black"
+            fillOpacity="0.68"
+            mask="url(#train-postmortem-spotlight-mask)"
+          />
+        </svg>
+      ) : null}
       {/* Click catcher — always transparent, dim layer handled separately */}
       <button
         type="button"
