@@ -191,6 +191,11 @@ const POSTMORTEM_TOUR_STEPS = [
     body: "Every move you played during the sequence: eval before, eval after, cp lost, verdict. Click a row to send the board back to that moment so you can stare at it like a detective. Or you can use the left and right arrow keys like a normal human would.",
   },
   {
+    target: "add-position-to-learning-queue",
+    headline: "Add positions to your Learning queue.",
+    body: "This button lets you save the current board position from the sequence. You will see this exact position again in the near future, so you can check whether you find a better move or keep playing good moves.",
+  },
+  {
     target: "notes-panel",
     headline: "Write a note to your future self.",
     body: "Select any of the moves you made, and write any note you want to see in the future. When the position comes back for review, this note might be shown to you, or hidden to see if you will perform well without it. This part is optional, but useful to remember things such as \"I played queen to a4 here but totally forgot the knight can fork the queen and king.\" Also useful to see commonly recurring patterns in your play, or rather, your \"blindspots\".",
@@ -720,8 +725,7 @@ export default function TrainPage(props: TrainPageProps) {
   const [onboardingCompletionInFlight, setOnboardingCompletionInFlight] = useState(false);
   const [showOnboardingPreferencesModal, setShowOnboardingPreferencesModal] = useState(false);
   const [selectedDailyTargetLevel, setSelectedDailyTargetLevel] = useState<string>("balanced");
-  const [selectedMistakeThresholdLevel, setSelectedMistakeThresholdLevel] = useState<string>("balanced");
-  const [isSavingOnboardingPreferences, setIsSavingOnboardingPreferences] = useState(false);
+    const [isSavingOnboardingPreferences, setIsSavingOnboardingPreferences] = useState(false);
 
   useEffect(() => {
     engineLineCacheRef.current = engineLineCache;
@@ -2375,7 +2379,6 @@ export default function TrainPage(props: TrainPageProps) {
   async function finishOnboardingWithPreferences() {
     setIsSavingOnboardingPreferences(true);
     const dailyTarget = DAILY_TARGET_OPTIONS.find((o) => o.level === selectedDailyTargetLevel) ?? DAILY_TARGET_OPTIONS[1];
-    const threshold = MISTAKE_CAPTURE_THRESHOLD_OPTIONS.find((o) => o.level === selectedMistakeThresholdLevel) ?? MISTAKE_CAPTURE_THRESHOLD_OPTIONS[1];
 
     try {
       await fetch("/api/train/preferences", {
@@ -2384,8 +2387,6 @@ export default function TrainPage(props: TrainPageProps) {
         body: JSON.stringify({
           dailyTargetLevel: dailyTarget.level,
           dailyTargetPositions: dailyTarget.positions,
-          mistakeCaptureThresholdLevel: threshold.level,
-          mistakeCaptureThresholdCp: threshold.cp,
         }),
       });
     } catch { /* continue even if prefs save fails */ }
@@ -2773,11 +2774,15 @@ export default function TrainPage(props: TrainPageProps) {
     syncDirtyMoveNoteKeys("flush");
   }, [isPostMortemVisible]);
 
+  const currentDecisionFen = normalizeDecisionFen(
+    activeSequencePosition?.move?.fenBefore ?? startingFen,
+  );
+
   // Load surfaced notes for the current decision position so the
   // training "Notes" rail can show what the user has previously noted
   // about this exact FEN, matching the dashboard view.
   useEffect(() => {
-    const fen = startingFen;
+    const fen = currentDecisionFen;
     if (!fen) {
       setSurfacedNotesForFen({ fen: "", notes: [] });
       return;
@@ -2799,7 +2804,7 @@ export default function TrainPage(props: TrainPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [startingFen]);
+  }, [currentDecisionFen]);
 
   // Load existing notes from Supabase when postmortem opens.
   useEffect(() => {
@@ -2941,11 +2946,11 @@ export default function TrainPage(props: TrainPageProps) {
     if (Array.isArray(fromPosition) && fromPosition.length > 0) {
       return normalizeTrainingNotes(fromPosition);
     }
-    if (surfacedNotesForFen.fen && surfacedNotesForFen.fen === startingFen) {
+    if (surfacedNotesForFen.fen && surfacedNotesForFen.fen === currentDecisionFen) {
       return normalizeTrainingNotes(surfacedNotesForFen.notes);
     }
     return [];
-  }, [activeSequencePosition, surfacedNotesForFen, startingFen]);
+  }, [activeSequencePosition, surfacedNotesForFen, currentDecisionFen]);
 
   if (process.env.NODE_ENV === "development") {
     const posAny = activeSequencePosition as Record<string, unknown> | undefined;
@@ -3930,6 +3935,7 @@ export default function TrainPage(props: TrainPageProps) {
                     setAddingPositionToQueue(false);
                   }
                 }}
+                data-tour="add-position-to-learning-queue"
                 className={[
                   secondaryActionClassName,
                   "min-h-12 w-full justify-center px-5 disabled:opacity-60",
@@ -4016,10 +4022,8 @@ export default function TrainPage(props: TrainPageProps) {
       {showOnboardingPreferencesModal ? (
         <OnboardingPreferencesModal
           selectedDailyTarget={selectedDailyTargetLevel}
-          selectedThreshold={selectedMistakeThresholdLevel}
           isSaving={isSavingOnboardingPreferences}
           onDailyTargetChange={setSelectedDailyTargetLevel}
-          onThresholdChange={setSelectedMistakeThresholdLevel}
           onFinish={finishOnboardingWithPreferences}
         />
       ) : null}
@@ -4029,17 +4033,13 @@ export default function TrainPage(props: TrainPageProps) {
 
 function OnboardingPreferencesModal({
   selectedDailyTarget,
-  selectedThreshold,
   isSaving,
   onDailyTargetChange,
-  onThresholdChange,
   onFinish,
 }: {
   selectedDailyTarget: string;
-  selectedThreshold: string;
   isSaving: boolean;
   onDailyTargetChange: (level: string) => void;
-  onThresholdChange: (level: string) => void;
   onFinish: () => void;
 }) {
   return (
@@ -4078,34 +4078,6 @@ function OnboardingPreferencesModal({
                   ) : null}
                 </span>
                 <div className="mt-0.5 text-xs text-[var(--app-muted)]">{opt.positions} positions/day</div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Mistake sensitivity */}
-        <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Mistake sensitivity</h3>
-        <p className="mb-3 text-xs text-[var(--app-muted)]">How costly should a move be before it enters your New queue?</p>
-        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {MISTAKE_CAPTURE_THRESHOLD_OPTIONS.map((opt) => {
-            const selected = selectedThreshold === opt.level;
-            return (
-              <button
-                key={opt.level}
-                type="button"
-                onClick={() => onThresholdChange(opt.level)}
-                className={[
-                  "min-h-[92px] rounded-lg border p-4 text-left transition",
-                  selected ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] ring-1 ring-[var(--app-accent)]" : "border-[var(--app-border)] hover:border-[var(--app-border-strong)]",
-                ].join(" ")}
-              >
-                <span className="flex min-w-0 items-baseline gap-1 text-sm font-bold text-[var(--app-text)]">
-                  <span>{opt.label}</span>
-                  {(opt as any).recommended ? (
-                    <span className="whitespace-nowrap text-xs font-medium text-[var(--app-muted)]">(Recommended)</span>
-                  ) : null}
-                </span>
-                <div className="mt-0.5 text-xs text-[var(--app-muted)]">&gt;{opt.cp}cp loss</div>
               </button>
             );
           })}
