@@ -4889,6 +4889,12 @@ function TrainPostmortemTourOverlay({
         right: Math.min(viewportWidth - margin, targetRect.right + 6),
       }
     : null;
+
+  const waitsForSpotlightGeometry =
+    !shouldCenterCard && !currentStep.suppressSpotlight;
+  const hasInitialTourGeometry =
+    !waitsForSpotlightGeometry || Boolean(spotlight);
+
   const measuredCardHeight = cardSize?.height ?? 300;
   const maxCardHeight = Math.max(280, viewportHeight - VIEWPORT_PAD * 2);
   const effectiveCardHeight = Math.min(measuredCardHeight, maxCardHeight);
@@ -4961,6 +4967,14 @@ function TrainPostmortemTourOverlay({
   );
 
   useLayoutEffect(() => {
+    if (!hasInitialTourGeometry) {
+      previousTourGeometryRef.current = {
+        card: null,
+        spotlight: null,
+      };
+      return;
+    }
+
     previousTourGeometryRef.current = {
       card: { top: cardTop, left: cardLeft },
       spotlight: spotlight
@@ -4973,6 +4987,7 @@ function TrainPostmortemTourOverlay({
         : null,
     };
   }, [
+    hasInitialTourGeometry,
     cardTop,
     cardLeft,
     spotlight?.top,
@@ -4995,6 +5010,19 @@ function TrainPostmortemTourOverlay({
   const cardVisibilityClass = postmortemTourSoftSwitching
     ? "opacity-0 scale-[0.985] translate-y-0.5"
     : "opacity-100 scale-100 translate-y-0";
+
+  if (!hasInitialTourGeometry) {
+    return (
+      <div
+        className="fixed inset-0 z-[80]"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Postmortem onboarding"
+      >
+        <div className="pointer-events-none fixed inset-0 bg-black/68" />
+      </div>
+    );
+  }
 
   return (
     <div
