@@ -175,6 +175,12 @@ type PostmortemTourStep = {
   sidePanel?: "analysis" | "memory" | "keep";
 };
 
+type AddPositionOnboardingPhase =
+  | "idle"
+  | "waiting-for-click"
+  | "saving"
+  | "success";
+
 const POSTMORTEM_TOUR_STEPS = [
   {
     target: "elo-card",
@@ -210,11 +216,9 @@ const POSTMORTEM_TOUR_STEPS = [
     suppressSpotlight: true,
   },
   {
-    target: "postmortem-panel",
-    headline: "Notes",
-    body: "Now that we know how to add a position to the Learning queue, let's see how to use the Notes section.",
-    centerCard: true,
-    suppressSpotlight: true,
+    target: "notes-toggle",
+    headline: "The Notes toggle.",
+    body: "This Notes toggle switches the panel from Analysis to Notes.",
     sidePanel: "analysis",
   },
   {
@@ -965,6 +969,8 @@ export default function TrainPage(props: TrainPageProps) {
   const [postmortemOnboardingFinished, setPostmortemOnboardingFinished] = useState(false);
   const [postmortemAddPositionActionDone, setPostmortemAddPositionActionDone] = useState(false);
   const [postmortemAddPositionInstructionAcknowledged, setPostmortemAddPositionInstructionAcknowledged] = useState(false);
+  const [addPositionOnboardingPhase, setAddPositionOnboardingPhase] = useState<AddPositionOnboardingPhase>("idle");
+  const addPositionOnboardingSuccessTimerRef = useRef<number | null>(null);
   const currentPostmortemTourStep = POSTMORTEM_TOUR_STEPS[postmortemOnboardingStep] as PostmortemTourStep;
   const isPostmortemAddPositionActionStep =
     postmortemOnboardingActive &&
@@ -972,7 +978,13 @@ export default function TrainPage(props: TrainPageProps) {
   const isPostmortemAddPositionWaiting =
     isPostmortemAddPositionActionStep &&
     postmortemAddPositionInstructionAcknowledged &&
-    !postmortemAddPositionActionDone;
+    !postmortemAddPositionActionDone &&
+    addPositionOnboardingPhase === "waiting-for-click";
+  const shouldHideTourForAddPosition =
+    isPostmortemAddPositionActionStep &&
+    postmortemAddPositionInstructionAcknowledged &&
+    !postmortemAddPositionActionDone &&
+    addPositionOnboardingPhase !== "idle";
   const [onboardingCompletionInFlight, setOnboardingCompletionInFlight] = useState(false);
   const [postmortemTourSoftSwitching, setPostmortemTourSoftSwitching] = useState(false);
   const [postmortemAddPositionCheckpointReached, setPostmortemAddPositionCheckpointReached] = useState(false);
@@ -1257,6 +1269,7 @@ export default function TrainPage(props: TrainPageProps) {
     setPostmortemOnboardingFinished(false);
     setPostmortemAddPositionActionDone(false);
     setPostmortemAddPositionInstructionAcknowledged(false);
+    setAddPositionOnboardingPhase("idle");
     setPostmortemAddPositionCheckpointReached(false);
 
     return true;
@@ -1384,6 +1397,7 @@ export default function TrainPage(props: TrainPageProps) {
             setPostmortemOnboardingActive(true);
             setPostmortemAddPositionActionDone(false);
             setPostmortemAddPositionInstructionAcknowledged(false);
+            setAddPositionOnboardingPhase("idle");
             setPostmortemAddPositionCheckpointReached(false);
           }
           return;
@@ -1395,7 +1409,9 @@ export default function TrainPage(props: TrainPageProps) {
       if (!cancelled) {
         setPostmortemOnboardingStep(0);
         setPostmortemOnboardingActive(true);
+        setPostmortemAddPositionActionDone(false);
         setPostmortemAddPositionInstructionAcknowledged(false);
+        setAddPositionOnboardingPhase("idle");
         setPostmortemAddPositionCheckpointReached(false);
       }
     }
@@ -1409,6 +1425,14 @@ export default function TrainPage(props: TrainPageProps) {
     isOnboardingFirstPostmortem,
     postmortemOnboardingActive,
   ]);
+
+  useEffect(() => {
+    return () => {
+      if (addPositionOnboardingSuccessTimerRef.current) {
+        window.clearTimeout(addPositionOnboardingSuccessTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!postmortemOnboardingActive) return;
@@ -2933,9 +2957,14 @@ export default function TrainPage(props: TrainPageProps) {
 
   const handlePostmortemTourBack = useCallback(() => {
     const notesBridgeStepIndex = POSTMORTEM_TOUR_STEPS.findIndex(
-      (step) => step.headline === "Notes" && step.centerCard === true
+      (step) => step.target === "notes-toggle"
     );
     setPostmortemAddPositionInstructionAcknowledged(false);
+    setAddPositionOnboardingPhase("idle");
+    if (addPositionOnboardingSuccessTimerRef.current) {
+      window.clearTimeout(addPositionOnboardingSuccessTimerRef.current);
+      addPositionOnboardingSuccessTimerRef.current = null;
+    }
     setPostmortemOnboardingStep((current) => {
       if (postmortemAddPositionCheckpointReached && notesBridgeStepIndex >= 0) {
         return Math.max(notesBridgeStepIndex, current - 1);
@@ -2949,6 +2978,7 @@ export default function TrainPage(props: TrainPageProps) {
     if (currentStep?.requiresAction === "add-position-to-learning-queue") {
       if (!postmortemAddPositionInstructionAcknowledged) {
         setPostmortemAddPositionInstructionAcknowledged(true);
+        setAddPositionOnboardingPhase("waiting-for-click");
         return;
       }
       if (!postmortemAddPositionActionDone) {
@@ -2956,12 +2986,13 @@ export default function TrainPage(props: TrainPageProps) {
       }
     }
 
-    // Bridge step → Notes: fade card first, switch panel, then advance
-    if (currentStep?.centerCard && currentStep?.sidePanel === "analysis") {
+    // Notes toggle -> Notes panel: fade card first, switch panel, then advance.
+    if (currentStep?.target === "notes-toggle") {
       const nextStep = POSTMORTEM_TOUR_STEPS[postmortemOnboardingStep + 1];
       if (nextStep?.target === "notes-panel") {
         setPostmortemTourSoftSwitching(true);
         setTimeout(() => {
+          setPostmortemSidePanel("memory");
           setPostmortemOnboardingStep((current) => {
             if (current < POSTMORTEM_TOUR_STEPS.length - 1) {
               return current + 1;
@@ -2969,7 +3000,9 @@ export default function TrainPage(props: TrainPageProps) {
             void completeTrainingOnboarding();
             return current;
           });
-          setPostmortemTourSoftSwitching(false);
+          window.setTimeout(() => {
+            setPostmortemTourSoftSwitching(false);
+          }, 180);
         }, 180);
         return;
       }
@@ -4444,6 +4477,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                   <button
                     key={item}
                     type="button"
+                    data-tour={item === "memory" ? "notes-toggle" : undefined}
                     className={[
                       "inline-flex h-full items-center border px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] transition min-[1500px]:text-sm",
                       active
@@ -4514,11 +4548,15 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 disabled={addingPositionToQueue || !learningQueueAddTarget?.decisionFen}
                 onClick={async () => {
                   if (addingPositionToQueue) return;
+                  if (addPositionOnboardingPhase === "success") return;
                   const addTarget = learningQueueAddTarget;
                   const fenToAdd = addTarget?.decisionFen;
                   if (!fenToAdd) return;
                   const preludeMove = addTarget.setupMove;
                   setAddingPositionToQueue(true);
+                  if (isPostmortemAddPositionActionStep) {
+                    setAddPositionOnboardingPhase("saving");
+                  }
                   try {
                     const res = await fetch("/api/dashboard/mistakes/add", {
                       method: "POST",
@@ -4531,6 +4569,22 @@ const introOverlay = trainOnboardingIntroVisible ? (
                       }),
                     });
                     if (!res.ok) throw new Error(`Add failed: ${res.status}`);
+                    if (isPostmortemAddPositionActionStep) {
+                      setAddPositionOnboardingPhase("success");
+                      if (addPositionOnboardingSuccessTimerRef.current) {
+                        window.clearTimeout(addPositionOnboardingSuccessTimerRef.current);
+                      }
+                      addPositionOnboardingSuccessTimerRef.current = window.setTimeout(() => {
+                        setPostmortemAddPositionActionDone(true);
+                        setPostmortemAddPositionCheckpointReached(true);
+                        setPostmortemOnboardingStep((step) =>
+                          Math.min(step + 1, POSTMORTEM_TOUR_STEPS.length - 1),
+                        );
+                        setAddPositionOnboardingPhase("idle");
+                        addPositionOnboardingSuccessTimerRef.current = null;
+                      }, 1050);
+                      return;
+                    }
                     showAlert({
                       kind: "success",
                       title: addTarget.fellBackFromEnginePosition
@@ -4540,15 +4594,11 @@ const introOverlay = trainOnboardingIntroVisible ? (
                         ? "Engine-to-move positions are saved as the previous user decision."
                         : "You will see this position again soon.",
                     });
-                    if (isPostmortemAddPositionActionStep) {
-                      setPostmortemAddPositionActionDone(true);
-                      setPostmortemAddPositionCheckpointReached(true);
-                      setPostmortemOnboardingStep((step) =>
-                        Math.min(step + 1, POSTMORTEM_TOUR_STEPS.length - 1),
-                      );
-                    }
                   } catch (err) {
                     console.error("[train] failed to add position to queue", err);
+                    if (isPostmortemAddPositionActionStep) {
+                      setAddPositionOnboardingPhase("waiting-for-click");
+                    }
                     showAlert({
                       kind: "error",
                       title: "Could not add position",
@@ -4565,11 +4615,16 @@ const introOverlay = trainOnboardingIntroVisible ? (
                   isPostmortemAddPositionWaiting
                     ? "train-add-position-glow ring-2 ring-[var(--app-accent)] transition-all duration-300 ease-out"
                     : "",
+                  addPositionOnboardingPhase === "success"
+                    ? "border-[var(--app-class-good)] text-[var(--app-class-good)] shadow-[0_0_24px_color-mix(in_srgb,var(--app-class-good)_55%,transparent)] transition-all duration-300 ease-out"
+                    : "",
                 ].join(" ")}
               >
                 <span className={postmortemActionTextClassName}>
-                  {addingPositionToQueue
-                    ? "Adding..."
+                  {addPositionOnboardingPhase === "saving"
+                    ? "Saving..."
+                    : addPositionOnboardingPhase === "success"
+                      ? "Position added successfully"
                     : "Add Position to Learning Queue"}
                 </span>
               </button>
@@ -4642,7 +4697,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
       {postmortemOnboardingActive ? (
         <div
           className={[
-            isPostmortemAddPositionWaiting
+            shouldHideTourForAddPosition
               ? "opacity-0 pointer-events-none"
               : "opacity-100",
             "transition-opacity duration-[520ms] ease-[var(--tour-geometry-ease)] motion-reduce:transition-none",
@@ -4666,10 +4721,10 @@ const introOverlay = trainOnboardingIntroVisible ? (
             (
               postmortemAddPositionCheckpointReached &&
               POSTMORTEM_TOUR_STEPS.findIndex(
-                (s) => s.headline === "Notes" && s.centerCard === true
+                (s) => s.target === "notes-toggle"
               ) >= 0 &&
               postmortemOnboardingStep <= POSTMORTEM_TOUR_STEPS.findIndex(
-                (s) => s.headline === "Notes" && s.centerCard === true
+                (s) => s.target === "notes-toggle"
               )
             )
           }
@@ -6902,7 +6957,7 @@ function AnalysisMoveTable({
           <div className="px-3 py-4 text-sm text-[var(--app-muted)]">No move grades yet.</div>
         ) : null}
         {moves.map((move, index) => {
-        const positionIndex = (move.absoluteIndex ?? index) + 1;
+        const positionIndex = move.absoluteIndex ?? index;
         const canonicalMove = canonicalMoves?.find((entry) => entry.positionIndex === positionIndex) ?? null;
         const canonicalRow = canonicalMove?.tableRow ?? null;
         const isSelected =
