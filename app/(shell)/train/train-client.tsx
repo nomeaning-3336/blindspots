@@ -5012,16 +5012,7 @@ function TrainPostmortemTourOverlay({
     : "opacity-100 scale-100 translate-y-0";
 
   if (!hasInitialTourGeometry) {
-    return (
-      <div
-        className="fixed inset-0 z-[80]"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Postmortem onboarding"
-      >
-        <div className="pointer-events-none fixed inset-0 bg-black/68" />
-      </div>
-    );
+    return null;
   }
 
   return (
