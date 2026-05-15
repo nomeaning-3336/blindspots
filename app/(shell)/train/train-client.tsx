@@ -4585,66 +4585,51 @@ function TrainPostmortemTourOverlay({
   const cardMaxWidth = Math.min(440, viewportWidth - VIEWPORT_PAD * 2);
   const isSmallScreen = viewportWidth < 760;
 
-  // On small screens, dock the card at the bottom.
-  let cardLeft: number;
-  let cardTop: number;
-  let cardStyle: React.CSSProperties;
-
+  // Determine card width per placement mode.
+  let cardWidth: number;
   if (shouldCenterCard) {
-    const cardWidth = Math.min(520, viewportWidth - VIEWPORT_PAD * 2);
-    cardStyle = {
-      left: "50%",
-      top: "50%",
-      transform: "translate(-50%, -50%)",
-      width: cardWidth,
-      height: measuredCardHeight,
-      maxHeight: `calc(100vh - ${VIEWPORT_PAD * 2}px)`,
-    };
+    cardWidth = Math.min(520, viewportWidth - VIEWPORT_PAD * 2);
   } else if (isSmallScreen || !spotlight) {
-    cardStyle = {
-      left: VIEWPORT_PAD,
-      right: VIEWPORT_PAD,
-      bottom: VIEWPORT_PAD,
-      height: measuredCardHeight,
-      maxHeight: `calc(100vh - ${VIEWPORT_PAD * 2}px)`,
-      width: "auto",
-    };
-  } else if (measuredCardHeight >= viewportHeight - VIEWPORT_PAD * 2) {
-    // Card taller than viewport — scroll inside.
-    cardStyle = {
-      left: VIEWPORT_PAD,
-      right: VIEWPORT_PAD,
-      top: VIEWPORT_PAD,
-      height: measuredCardHeight,
-      maxHeight: `calc(100vh - ${VIEWPORT_PAD * 2}px)`,
-      width: spotlight ? Math.min(cardMaxWidth, viewportWidth - VIEWPORT_PAD * 2) : cardMaxWidth,
-    };
+    cardWidth = viewportWidth - VIEWPORT_PAD * 2;
   } else {
-    // Desktop: try right side, then left, then center horizontally.
-    const preferredRight = spotlight.left + spotlight.width + GAP;
-    const preferredLeft = spotlight.left - cardMaxWidth - GAP;
-    const canPlaceRight = preferredRight + cardMaxWidth <= viewportWidth - VIEWPORT_PAD;
-    const canPlaceLeft = preferredLeft >= VIEWPORT_PAD;
-
-    const preferredLeftPos = canPlaceRight
-      ? preferredRight
-      : canPlaceLeft
-        ? preferredLeft
-        : Math.max(VIEWPORT_PAD, (viewportWidth - cardMaxWidth) / 2);
-
-    const preferredTopPos = spotlight.top;
-
-    cardLeft = clamp(preferredLeftPos, VIEWPORT_PAD, viewportWidth - cardMaxWidth - VIEWPORT_PAD);
-    cardTop = clamp(preferredTopPos, VIEWPORT_PAD, viewportHeight - measuredCardHeight - VIEWPORT_PAD);
-
-    cardStyle = {
-      top: cardTop,
-      left: cardLeft,
-      width: cardMaxWidth,
-      height: measuredCardHeight,
-      maxHeight: `calc(100vh - ${VIEWPORT_PAD * 2}px)`,
-    };
+    cardWidth = cardMaxWidth;
   }
+
+  // Determine preferred top-left per placement strategy.
+  let preferredLeft: number;
+  let preferredTop: number;
+  if (shouldCenterCard) {
+    preferredLeft = (viewportWidth - cardWidth) / 2;
+    preferredTop = (viewportHeight - measuredCardHeight) / 2;
+  } else if (isSmallScreen || !spotlight) {
+    preferredLeft = VIEWPORT_PAD;
+    preferredTop = viewportHeight - measuredCardHeight - VIEWPORT_PAD;
+  } else {
+    // Desktop with a spotlight target: prefer right of target, fall back to
+    // left, then horizontal centre.
+    const tryRight = spotlight.left + spotlight.width + GAP;
+    const tryLeft = spotlight.left - cardWidth - GAP;
+    const canPlaceRight = tryRight + cardWidth <= viewportWidth - VIEWPORT_PAD;
+    const canPlaceLeft = tryLeft >= VIEWPORT_PAD;
+    preferredLeft = canPlaceRight
+      ? tryRight
+      : canPlaceLeft
+        ? tryLeft
+        : (viewportWidth - cardWidth) / 2;
+    preferredTop = spotlight.top;
+  }
+
+  // Clamp to viewport bounds so the modal's bounding box always sits inside
+  // the viewport with VIEWPORT_PAD of breathing room on every side.
+  const cardLeft = clamp(preferredLeft, VIEWPORT_PAD, viewportWidth - cardWidth - VIEWPORT_PAD);
+  const cardTop = clamp(preferredTop, VIEWPORT_PAD, viewportHeight - measuredCardHeight - VIEWPORT_PAD);
+
+  const cardStyle: React.CSSProperties = {
+    top: cardTop,
+    left: cardLeft,
+    width: cardWidth,
+    height: measuredCardHeight,
+  };
 
   const cardVisibilityClass = isPlacementSwitching || postmortemTourSoftSwitching
     ? "opacity-0 scale-[0.985] translate-y-0.5"
@@ -4715,7 +4700,7 @@ function TrainPostmortemTourOverlay({
       ) : null}
       <div
         className={[
-          "fixed flex flex-col gap-4 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)]",
+          "fixed grid gap-4 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)]",
           cardVisibilityClass,
           "transition-[opacity,transform,top,left,width,height] duration-[280ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none motion-reduce:transform-none",
         ].join(" ")}
@@ -4736,9 +4721,9 @@ function TrainPostmortemTourOverlay({
           </svg>
         </button>
 
-        <div className="mb-6 shrink-0" />
+        <div className="mb-6" />
 
-        <div className="relative min-h-0 overflow-y-auto">
+        <div className="relative">
           {previousTourStep ? (
             <div
               key={`prev-${previousDisplayedStep}`}
@@ -4769,7 +4754,7 @@ function TrainPostmortemTourOverlay({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3">
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight && !isFirst && !backDisabled) onBack(); }}
