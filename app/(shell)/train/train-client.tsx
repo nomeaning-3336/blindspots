@@ -4547,12 +4547,12 @@ function TrainPostmortemTourOverlay({
 
     const swapTimer = window.setTimeout(() => {
       setDisplayedStep(step);
-    }, 130);
+    }, 180);
 
     const doneTimer = window.setTimeout(() => {
       setPreviousDisplayedStep(null);
       setIsCardSwitching(false);
-    }, 380);
+    }, 520);
 
     cardSwitchingTimersRef.current.push(swapTimer, doneTimer);
 
@@ -4640,7 +4640,7 @@ function TrainPostmortemTourOverlay({
     : 0;
   const tourGeometryTravelDistance = Math.max(cardTravelDistance, spotlightTravelDistance);
   const tourGeometryDurationMs = Math.round(
-    clamp(360 + tourGeometryTravelDistance * 0.18, 420, 720),
+    clamp(520 + tourGeometryTravelDistance * 0.24, 620, 980),
   );
 
   useLayoutEffect(() => {
@@ -4726,7 +4726,7 @@ function TrainPostmortemTourOverlay({
       ) : null}
       {/* Full-screen dim for centered instruction modal (no spotlight mask) */}
       {shouldCenterCard ? (
-        <div className="pointer-events-none fixed inset-0 bg-black/68 transition-opacity duration-300" />
+        <div className="pointer-events-none fixed inset-0 bg-black/68 transition-opacity duration-[520ms]" />
       ) : null}
       {/* Click catcher — always transparent, dim layer handled separately */}
       <button
@@ -4777,7 +4777,7 @@ function TrainPostmortemTourOverlay({
           {previousTourStep ? (
             <div
               key={`prev-${previousDisplayedStep}`}
-              className="pointer-events-none absolute inset-x-0 top-0 opacity-0 -translate-y-2 blur-[1px] transition-all duration-[260ms] motion-reduce:transition-none motion-reduce:opacity-100 motion-reduce:translate-y-0 motion-reduce:blur-0"
+              className="pointer-events-none absolute inset-x-0 top-0 opacity-0 -translate-y-2 blur-[1px] transition-all duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none motion-reduce:opacity-100 motion-reduce:translate-y-0 motion-reduce:blur-0"
             >
               <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
                 {previousTourStep.headline}
@@ -4790,7 +4790,7 @@ function TrainPostmortemTourOverlay({
           <div
             key={`current-${displayedStep}`}
             className={[
-              "relative transition-opacity duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+              "relative transition-opacity duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
               isCardSwitching ? "opacity-0" : "opacity-100",
               "motion-reduce:transition-none motion-reduce:opacity-100",
             ].join(" ")}
