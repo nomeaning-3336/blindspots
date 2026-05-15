@@ -375,7 +375,21 @@ interface InitializationSummary {
   averageCpLossPerMove: number;
 }
 
+interface TrainingTourCheckpointPayload {
+  type?: unknown;
+  sessionId?: unknown;
+  startingFen?: unknown;
+  sequenceLength?: unknown;
+  previousFen?: unknown;
+  playedMove?: unknown;
+  moves?: unknown;
+  moveScores?: unknown;
+  positionEvaluations?: unknown;
+  elo?: unknown;
+}
+
 interface OnboardingStatePayload {
+  trainingTourCheckpoint?: TrainingTourCheckpointPayload | null;
   preferences: {
     sequence_length: number;
     opponent_mode: string;
@@ -855,6 +869,189 @@ export default function TrainPage(props: TrainPageProps) {
     onboardingIntroWasActiveRef.current = true;
   }
 
+  function normalizeCheckpointMoves(input: unknown): TrainingMove[] {
+    if (!Array.isArray(input)) return [];
+
+    return input.flatMap((move): TrainingMove[] => {
+      if (!move || typeof move !== "object") return [];
+      const row = move as Record<string, unknown>;
+      if (typeof row.uci !== "string" || typeof row.san !== "string") return [];
+      if (row.side !== "white" && row.side !== "black") return [];
+
+      return [{
+        san: row.san,
+        uci: row.uci,
+        side: row.side,
+        fenBefore: typeof row.fenBefore === "string" ? row.fenBefore : undefined,
+        fenAfter: typeof row.fenAfter === "string" ? row.fenAfter : undefined,
+        cpLoss: typeof row.cpLoss === "number" ? row.cpLoss : undefined,
+        evalBefore: typeof row.evalBefore === "number" ? row.evalBefore : undefined,
+        evalAfter: typeof row.evalAfter === "number" ? row.evalAfter : undefined,
+        mateBefore: typeof row.mateBefore === "number" ? row.mateBefore : null,
+        mateAfter: typeof row.mateAfter === "number" ? row.mateAfter : null,
+        classification: typeof row.classification === "string"
+          ? row.classification as MoveClassification
+          : undefined,
+      }];
+    });
+  }
+
+  function normalizeCheckpointMoveScores(input: unknown): MoveScore[] {
+    if (!Array.isArray(input)) return [];
+
+    return input.flatMap((score): MoveScore[] => {
+      if (!score || typeof score !== "object") return [];
+      const row = score as Record<string, unknown>;
+      if (typeof row.userMoveIndex !== "number") return [];
+      if (typeof row.cpLoss !== "number") return [];
+      if (typeof row.evalBefore !== "number") return [];
+      if (typeof row.evalAfter !== "number") return [];
+
+      return [{
+        userMoveIndex: row.userMoveIndex,
+        cpLoss: row.cpLoss,
+        evalBefore: row.evalBefore,
+        evalAfter: row.evalAfter,
+        mateBefore: typeof row.mateBefore === "number" ? row.mateBefore : null,
+        mateAfter: typeof row.mateAfter === "number" ? row.mateAfter : null,
+        classification: typeof row.classification === "string"
+          ? row.classification as MoveClassification
+          : "good",
+      }];
+    });
+  }
+
+  function normalizeCheckpointElo(input: unknown): EloResult | null {
+    if (!input || typeof input !== "object") return null;
+    const row = input as Record<string, unknown>;
+
+    const required = [
+      "eloBefore",
+      "eloAfter",
+      "eloDelta",
+      "kFactor",
+      "opponentElo",
+      "expectedScore",
+      "actualScore",
+      "rawDelta",
+      "clampedDelta",
+    ];
+
+    for (const key of required) {
+      if (typeof row[key] !== "number") return null;
+    }
+
+    return {
+      eloBefore: row.eloBefore as number,
+      eloAfter: row.eloAfter as number,
+      eloDelta: row.eloDelta as number,
+      kFactor: row.kFactor as number,
+      opponentElo: row.opponentElo as number,
+      expectedScore: row.expectedScore as number,
+      actualScore: row.actualScore as number,
+      rawDelta: row.rawDelta as number,
+      clampedDelta: row.clampedDelta as number,
+      skipped: Boolean(row.skipped),
+    };
+  }
+
+  function restoreTrainingTourCheckpoint(checkpoint: TrainingTourCheckpointPayload | null | undefined) {
+    if (!checkpoint || checkpoint.type !== "postmortem_elo") return false;
+    if (typeof checkpoint.startingFen !== "string") return false;
+
+    const restoredMoves = normalizeCheckpointMoves(checkpoint.moves);
+    if (restoredMoves.length === 0) return false;
+
+    const restoredMoveScores = normalizeCheckpointMoveScores(checkpoint.moveScores);
+    const restoredElo = normalizeCheckpointElo(checkpoint.elo);
+    if (!restoredElo) return false;
+
+    const restoredMovesWithScores = applyMoveScores(
+      restoredMoves,
+      restoredMoveScores,
+      checkpoint.startingFen,
+    );
+
+    const restoredPositionEvaluations = Array.isArray(checkpoint.positionEvaluations)
+      ? checkpoint.positionEvaluations
+      : [];
+
+    const restoredAsyncEvaluations = Object.fromEntries(
+      restoredMoveScores.map((moveScore) => [
+        moveScore.userMoveIndex,
+        {
+          status: "done" as const,
+          moveScore,
+          positionEvaluation:
+            restoredPositionEvaluations.find((entry) => {
+              if (!entry || typeof entry !== "object") return false;
+              return (entry as Record<string, unknown>).index === moveScore.userMoveIndex;
+            }) ?? {
+              index: moveScore.userMoveIndex,
+            },
+        },
+      ]),
+    );
+
+    const previousFen = typeof checkpoint.previousFen === "string"
+      ? checkpoint.previousFen
+      : null;
+    const playedMove = typeof checkpoint.playedMove === "string"
+      ? checkpoint.playedMove
+      : null;
+    const restoredPrelude = previousFen && playedMove
+      ? applyIndexedMove(previousFen, playedMove)
+      : null;
+
+    setOnboardingScreen("done");
+    setTrainOnboardingIntroDone(true);
+    setTrainOnboardingIntroVisible(false);
+    setTrainOnboardingIntroExiting(false);
+    setIsStartingPreplayPosition(false);
+    hasStartedFirstOnboardingSequenceRef.current = true;
+
+    setState("complete");
+    setResultMode("explore");
+    setStartingFen(checkpoint.startingFen);
+    setDisplayStartingFen(previousFen ?? checkpoint.startingFen);
+    setFen(checkpoint.startingFen);
+    setMoves(restoredMovesWithScores);
+    setLastMove(lastMoveFromTrainingMove(restoredMovesWithScores[restoredMovesWithScores.length - 1]));
+    setAsyncMoveEvaluations(restoredAsyncEvaluations);
+    setEloResult(restoredElo);
+    setBlindspotsElo(restoredElo.eloAfter);
+
+    initialPreludeRef.current = previousFen && playedMove
+      ? { previousFen, playedMove }
+      : null;
+    initialOpponentMoveRef.current = restoredPrelude?.move ?? null;
+    setInitialOpponentMove(restoredPrelude?.move ?? null);
+
+    setIsPositionLoading(false);
+    setIsAwaitingStartGesture(false);
+    setPendingInitialEngineMove(null);
+    setHasLoadedPosition(true);
+    setIsOpponentThinking(false);
+    setIsCompletingSequence(false);
+    setPositionLoadError(null);
+
+    setExploreIndex(0);
+    resetExploratoryLine();
+    setExploreSelectedSquare(null);
+    setSelectedMoveIndex(null);
+    setActiveReplayIndex(null);
+    setIsManualPostmortemExploration(false);
+    setPostmortemSidePanel("analysis");
+    setPostmortemOnboardingStep(0);
+    setPostmortemOnboardingActive(false);
+    setPostmortemOnboardingFinished(false);
+    setPostmortemAddPositionActionDone(false);
+    setPostmortemAddPositionInstructionAcknowledged(false);
+    setPostmortemAddPositionCheckpointReached(false);
+
+    return true;
+  }
+
   useEffect(() => {
     let alive = true;
 
@@ -883,6 +1080,13 @@ export default function TrainPage(props: TrainPageProps) {
         }
 
         setOnboardingScreen("done");
+
+        if (
+          shouldRunPreplayOnboarding &&
+          restoreTrainingTourCheckpoint(payload.trainingTourCheckpoint)
+        ) {
+          return;
+        }
 
         // Only seed onboarding intro if it hasn't been shown yet.
         // Do not call loadNextPosition here — onboarding intro CTA handles it.
@@ -2292,6 +2496,12 @@ export default function TrainPage(props: TrainPageProps) {
           previousFen: initialPreludeRef.current?.previousFen ?? null,
           playedMove: initialPreludeRef.current?.playedMove ?? null,
           precomputedEvaluations: completedEvaluations,
+          onboardingCheckpoint:
+            shouldRunPreplayOnboarding &&
+            hasStartedFirstOnboardingSequenceRef.current &&
+            !postmortemOnboardingFinished
+              ? "postmortem_elo"
+              : null,
         }),
       });
       const payload = (await response.json().catch(() => null)) as

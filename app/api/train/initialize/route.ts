@@ -46,16 +46,18 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const [profile, preferences, linkedProfiles] = await Promise.all([
+  const [profile, preferences, linkedProfiles, trainingTourCheckpoint] = await Promise.all([
     getOrCreateDefaultBlindspotProfile(userId),
     getTrainingPreferences(userId),
     getLinkedChessProfilesForUser(userId),
+    getTrainingTourCheckpoint(userId),
   ]);
 
   return NextResponse.json({
     profile,
     preferences,
     linkedProfiles,
+    trainingTourCheckpoint,
   });
 }
 
@@ -368,4 +370,29 @@ function normalizeSequenceLength(value: unknown) {
   const parsed = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(parsed)) return DEFAULT_SEQUENCE_LENGTH;
   return Math.max(MIN_SEQUENCE_LENGTH, Math.min(MAX_SEQUENCE_LENGTH, Math.round(parsed)));
+}
+
+async function getTrainingTourCheckpoint(userId: string) {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await (supabase
+    .from("user_onboarding_state") as any)
+    .select("training_onboarding_completed_at, training_tour_checkpoint")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Failed to load training tour checkpoint", error);
+    return null;
+  }
+
+  if (data?.training_onboarding_completed_at) {
+    return null;
+  }
+
+  const checkpoint = data?.training_tour_checkpoint;
+  if (!checkpoint || typeof checkpoint !== "object" || Array.isArray(checkpoint)) {
+    return null;
+  }
+
+  return checkpoint;
 }
