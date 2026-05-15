@@ -4121,7 +4121,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
             {/* ── Postmortem action footer ───────────────────────────────── */}
             <div
               data-tour="postmortem-actions"
-              className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2"
+              className="mt-3 grid grid-cols-1 gap-3 pb-4 sm:grid-cols-2"
             >
               <a
                 href="/train"
@@ -4579,8 +4579,9 @@ function TrainPostmortemTourOverlay({
         right: Math.min(viewportWidth - margin, targetRect.right + 6),
       }
     : null;
-  const measuredCardWidth = cardSize?.width ?? 440;
   const measuredCardHeight = cardSize?.height ?? 300;
+  const maxCardHeight = Math.max(280, viewportHeight - VIEWPORT_PAD * 2);
+  const effectiveCardHeight = Math.min(measuredCardHeight, maxCardHeight);
   const cardMaxWidth = Math.min(440, viewportWidth - VIEWPORT_PAD * 2);
   const isSmallScreen = viewportWidth < 760;
 
@@ -4599,10 +4600,10 @@ function TrainPostmortemTourOverlay({
   let preferredTop: number;
   if (shouldCenterCard) {
     preferredLeft = (viewportWidth - cardWidth) / 2;
-    preferredTop = (viewportHeight - measuredCardHeight) / 2;
+    preferredTop = (viewportHeight - effectiveCardHeight) / 2;
   } else if (isSmallScreen || !spotlight) {
     preferredLeft = VIEWPORT_PAD;
-    preferredTop = viewportHeight - measuredCardHeight - VIEWPORT_PAD;
+    preferredTop = viewportHeight - effectiveCardHeight - VIEWPORT_PAD;
   } else {
     // Desktop with a spotlight target: prefer right of target, fall back to
     // left, then horizontal centre.
@@ -4620,14 +4621,22 @@ function TrainPostmortemTourOverlay({
 
   // Clamp to viewport bounds so the modal's bounding box always sits inside
   // the viewport with VIEWPORT_PAD of breathing room on every side.
-  const cardLeft = clamp(preferredLeft, VIEWPORT_PAD, viewportWidth - cardWidth - VIEWPORT_PAD);
-  const cardTop = clamp(preferredTop, VIEWPORT_PAD, viewportHeight - measuredCardHeight - VIEWPORT_PAD);
+  const cardLeft = clamp(
+    preferredLeft,
+    VIEWPORT_PAD,
+    Math.max(VIEWPORT_PAD, viewportWidth - cardWidth - VIEWPORT_PAD),
+  );
+  const cardTop = clamp(
+    preferredTop,
+    VIEWPORT_PAD,
+    Math.max(VIEWPORT_PAD, viewportHeight - effectiveCardHeight - VIEWPORT_PAD),
+  );
 
   const cardStyle: React.CSSProperties = {
     top: cardTop,
     left: cardLeft,
     width: cardWidth,
-    height: measuredCardHeight,
+    maxHeight: maxCardHeight,
   };
 
   const cardVisibilityClass = isPlacementSwitching || postmortemTourSoftSwitching
@@ -4699,9 +4708,9 @@ function TrainPostmortemTourOverlay({
       ) : null}
       <div
         className={[
-          "fixed grid gap-4 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)]",
+          "fixed flex flex-col overflow-hidden rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)]",
           cardVisibilityClass,
-          "transition-[opacity,transform,top,left,width,height] duration-[280ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none motion-reduce:transform-none",
+          "transition-[opacity,transform,top,left,width,max-height] duration-[280ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none motion-reduce:transform-none",
         ].join(" ")}
         ref={cardRef}
         style={cardStyle}
@@ -4720,9 +4729,9 @@ function TrainPostmortemTourOverlay({
           </svg>
         </button>
 
-        <div className="mb-6" />
+        <div className="shrink-0 pb-6" />
 
-        <div className="relative">
+        <div className="relative min-h-0 flex-1 overflow-y-auto pr-1">
           {previousTourStep ? (
             <div
               key={`prev-${previousDisplayedStep}`}
@@ -4753,7 +4762,7 @@ function TrainPostmortemTourOverlay({
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3">
+        <div className="mt-4 flex shrink-0 items-center justify-between gap-3 pt-4">
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight && !isFirst && !backDisabled) onBack(); }}
