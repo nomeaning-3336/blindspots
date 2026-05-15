@@ -28,7 +28,6 @@ const INIT_SKIPPED: Record<string, unknown> = {
   },
   preferences: { sequence_length: 4 },
   linkedProfiles: [],
-  shouldShowOnboarding: false,
 };
 
 const MOCK_PAYLOAD: NextPositionResponse = {

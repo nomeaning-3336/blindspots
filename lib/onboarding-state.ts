@@ -2,14 +2,14 @@ import { getOptionalAppUserId } from "@/lib/app-auth";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 
 export type OnboardingState = {
-  trainingOnboardingCompleted: boolean;
-  trainingOnboardingCompletedAt: string | null;
+  trainingTourCompleted: boolean;
+  trainingTourCompletedAt: string | null;
 };
 
 export async function getOnboardingState(): Promise<OnboardingState> {
   const userId = await getOptionalAppUserId();
   if (!userId) {
-    return { trainingOnboardingCompleted: false, trainingOnboardingCompletedAt: null };
+    return { trainingTourCompleted: false, trainingTourCompletedAt: null };
   }
   return getOnboardingStateForUser(userId);
 }
@@ -24,12 +24,12 @@ export async function getOnboardingStateForUser(userId: string): Promise<Onboard
 
   if (error) {
     console.error("Failed to load onboarding state from Supabase", error);
-    return { trainingOnboardingCompleted: false, trainingOnboardingCompletedAt: null };
+    return { trainingTourCompleted: false, trainingTourCompletedAt: null };
   }
 
   return {
-    trainingOnboardingCompleted: Boolean(data?.training_onboarding_completed_at),
-    trainingOnboardingCompletedAt: data?.training_onboarding_completed_at ?? null,
+    trainingTourCompleted: Boolean(data?.training_onboarding_completed_at),
+    trainingTourCompletedAt: data?.training_onboarding_completed_at ?? null,
   };
 }
 
@@ -48,11 +48,11 @@ export async function completeOnboardingForUser(userId: string): Promise<Onboard
 
   if (error) {
     console.error("Failed to upsert onboarding state", error);
-    return { trainingOnboardingCompleted: false, trainingOnboardingCompletedAt: null };
+    return { trainingTourCompleted: false, trainingTourCompletedAt: null };
   }
 
   return {
-    trainingOnboardingCompleted: Boolean(data.training_onboarding_completed_at),
-    trainingOnboardingCompletedAt: data.training_onboarding_completed_at,
+    trainingTourCompleted: Boolean(data.training_onboarding_completed_at),
+    trainingTourCompletedAt: data.training_onboarding_completed_at,
   };
 }

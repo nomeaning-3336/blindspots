@@ -376,7 +376,6 @@ interface InitializationSummary {
 }
 
 interface OnboardingStatePayload {
-  shouldShowOnboarding: boolean;
   preferences: {
     sequence_length: number;
     opponent_mode: string;

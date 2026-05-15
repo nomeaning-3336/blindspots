@@ -33,10 +33,10 @@ export default async function TrainPageWrapper({
 
   const userId = await requireAppAuth("/train");
   const state = await getOnboardingStateForUser(userId);
-  const initialOnboarding = !state.trainingOnboardingCompleted;
+  const shouldRunTrainingTour = !state.trainingTourCompleted;
   return (
     <TrainPage
-      initialOnboarding={initialOnboarding}
+      initialOnboarding={shouldRunTrainingTour}
       forceOnboarding={forceOnboarding}
       initialMistakeId={initialMistakeId}
       initialMode={initialMode}

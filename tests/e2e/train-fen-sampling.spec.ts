@@ -316,7 +316,7 @@ test("train-fen-sampling: collect 30 /api/train/next-position samples with board
 
   // Mock initialize to avoid queue refill noise
   await page.route("**/api/train/initialize", (route) => {
-    route.fulfill({ json: { profile: { initialization_status: "skipped", profile_initialized: false, weakness_vector: {}, mastery_vector: {}, exploit_queue: [], explore_queue: [], revisit_queue: [], mastered_queue: [] }, preferences: { sequence_length: 4 }, linkedProfiles: [], shouldShowOnboarding: false } });
+    route.fulfill({ json: { profile: { initialization_status: "skipped", profile_initialized: false, weakness_vector: {}, mastery_vector: {}, exploit_queue: [], explore_queue: [], revisit_queue: [], mastered_queue: [] }, preferences: { sequence_length: 4 }, linkedProfiles: [] } });
   });
 
   for (let i = 0; i < 30; i++) {
@@ -750,7 +750,7 @@ test.describe("real /train page-owned next-position smoke", () => {
 
     // Do NOT mock next-position — let the page fetch it live
     await page.route("**/api/train/initialize", (route) => {
-      route.fulfill({ json: { profile: { initialization_status: "skipped", profile_initialized: false, weakness_vector: {}, mastery_vector: {}, exploit_queue: [], explore_queue: [], revisit_queue: [], mastered_queue: [] }, preferences: { sequence_length: 4 }, linkedProfiles: [], shouldShowOnboarding: false } });
+      route.fulfill({ json: { profile: { initialization_status: "skipped", profile_initialized: false, weakness_vector: {}, mastery_vector: {}, exploit_queue: [], explore_queue: [], revisit_queue: [], mastered_queue: [] }, preferences: { sequence_length: 4 }, linkedProfiles: [] } });
     });
 
     // Capture the live response from the page's own fetch
@@ -825,7 +825,7 @@ test.describe("real /train page-owned next-position smoke", () => {
 
     // Also mock initialize so the component doesn't try to refill queues
     await page.route("**/api/train/initialize", (route) => {
-      route.fulfill({ json: { profile: { initialization_status: "skipped", profile_initialized: false, weakness_vector: {}, mastery_vector: {}, exploit_queue: [], explore_queue: [], revisit_queue: [], mastered_queue: [] }, preferences: { sequence_length: 4 }, linkedProfiles: [], shouldShowOnboarding: false } });
+      route.fulfill({ json: { profile: { initialization_status: "skipped", profile_initialized: false, weakness_vector: {}, mastery_vector: {}, exploit_queue: [], explore_queue: [], revisit_queue: [], mastered_queue: [] }, preferences: { sequence_length: 4 }, linkedProfiles: [] } });
     });
 
     await page.goto("/train", { waitUntil: "domcontentloaded" });
