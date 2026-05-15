@@ -4334,6 +4334,13 @@ function TrainPostmortemTourOverlay({
   const [isCardSwitching, setIsCardSwitching] = useState(false);
   const cardSwitchingTimersRef = useRef<number[]>([]);
   const transitionTokenRef = useRef(0);
+  const previousTourGeometryRef = useRef<{
+    card: { top: number; left: number } | null;
+    spotlight: { top: number; left: number; width: number; height: number } | null;
+  }>({
+    card: null,
+    spotlight: null,
+  });
   const allSteps = steps as readonly PostmortemTourStep[];
   const displayedTourStep = allSteps[displayedStep] ?? allSteps[0];
   const previousTourStep = previousDisplayedStep === null ? null : allSteps[previousDisplayedStep] ?? null;
@@ -4540,12 +4547,12 @@ function TrainPostmortemTourOverlay({
 
     const swapTimer = window.setTimeout(() => {
       setDisplayedStep(step);
-    }, 80);
+    }, 130);
 
     const doneTimer = window.setTimeout(() => {
       setPreviousDisplayedStep(null);
       setIsCardSwitching(false);
-    }, 260);
+    }, 380);
 
     cardSwitchingTimersRef.current.push(swapTimer, doneTimer);
 
@@ -4618,19 +4625,68 @@ function TrainPostmortemTourOverlay({
     Math.max(VIEWPORT_PAD, viewportHeight - effectiveCardHeight - VIEWPORT_PAD),
   );
 
-  const cardStyle: React.CSSProperties = {
+  const previousTourGeometry = previousTourGeometryRef.current;
+  const cardTravelDistance = previousTourGeometry.card
+    ? Math.hypot(
+        cardLeft - previousTourGeometry.card.left,
+        cardTop - previousTourGeometry.card.top,
+      )
+    : 0;
+  const spotlightTravelDistance = previousTourGeometry.spotlight && spotlight
+    ? Math.hypot(
+        spotlight.left - previousTourGeometry.spotlight.left,
+        spotlight.top - previousTourGeometry.spotlight.top,
+      )
+    : 0;
+  const tourGeometryTravelDistance = Math.max(cardTravelDistance, spotlightTravelDistance);
+  const tourGeometryDurationMs = Math.round(
+    clamp(360 + tourGeometryTravelDistance * 0.18, 420, 720),
+  );
+
+  useLayoutEffect(() => {
+    previousTourGeometryRef.current = {
+      card: { top: cardTop, left: cardLeft },
+      spotlight: spotlight
+        ? {
+            top: spotlight.top,
+            left: spotlight.left,
+            width: spotlight.width,
+            height: spotlight.height,
+          }
+        : null,
+    };
+  }, [
+    cardTop,
+    cardLeft,
+    spotlight?.top,
+    spotlight?.left,
+    spotlight?.width,
+    spotlight?.height,
+  ]);
+
+  const cardStyle = {
     top: cardTop,
     left: cardLeft,
     width: cardWidth,
     maxHeight: maxCardHeight,
-  };
+  } satisfies React.CSSProperties;
+
+  const tourOverlayStyle = {
+    "--tour-geometry-duration": `${tourGeometryDurationMs}ms`,
+  } as React.CSSProperties;
 
   const cardVisibilityClass = postmortemTourSoftSwitching
     ? "opacity-0 scale-[0.985] translate-y-0.5"
     : "opacity-100 scale-100 translate-y-0";
 
   return (
-    <div className="fixed inset-0 z-[80]" role="dialog" aria-modal="true" aria-label="Postmortem onboarding">
+    <div
+      className="fixed inset-0 z-[80]"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Postmortem onboarding"
+      style={tourOverlayStyle}
+    >
       {/* Single SVG mask cutout avoids seams from stitched dim rectangles. */}
       {!currentStep.suppressSpotlight && spotlight ? (
         <svg
@@ -4653,7 +4709,7 @@ function TrainPostmortemTourOverlay({
                 rx="10"
                 ry="10"
                 fill="black"
-                className="transition-[x,y,width,height] duration-300 ease-out"
+                className="transition-[x,y,width,height] duration-[var(--tour-geometry-duration)] ease-[cubic-bezier(0.22,1,0.36,1)]"
               />
             </mask>
           </defs>
@@ -4683,7 +4739,7 @@ function TrainPostmortemTourOverlay({
       {!currentStep.suppressSpotlight && spotlight ? (
         <div
           aria-hidden="true"
-          className="pointer-events-none fixed rounded-[10px] border border-[var(--app-accent)] shadow-[0_0_0_2px_color-mix(in_srgb,var(--app-accent)_42%,transparent)] transition-[top,left,width,height] duration-300 ease-out"
+          className="pointer-events-none fixed rounded-[10px] border border-[var(--app-accent)] shadow-[0_0_0_2px_color-mix(in_srgb,var(--app-accent)_42%,transparent)] transition-[top,left,width,height] duration-[var(--tour-geometry-duration)] ease-[cubic-bezier(0.22,1,0.36,1)]"
           style={{
             top: spotlight.top,
             left: spotlight.left,
@@ -4696,7 +4752,7 @@ function TrainPostmortemTourOverlay({
         className={[
           "fixed flex flex-col overflow-hidden rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)]",
           cardVisibilityClass,
-          "transition-[opacity,transform,top,left,width,max-height] duration-[280ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none motion-reduce:transform-none",
+          "transition-[opacity,transform,top,left,width,max-height] duration-[var(--tour-geometry-duration)] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none motion-reduce:transform-none",
         ].join(" ")}
         ref={cardRef}
         style={cardStyle}
@@ -4721,7 +4777,7 @@ function TrainPostmortemTourOverlay({
           {previousTourStep ? (
             <div
               key={`prev-${previousDisplayedStep}`}
-              className="pointer-events-none absolute inset-x-0 top-0 opacity-0 -translate-y-2 blur-[1px] transition-all duration-200 motion-reduce:transition-none motion-reduce:opacity-100 motion-reduce:translate-y-0 motion-reduce:blur-0"
+              className="pointer-events-none absolute inset-x-0 top-0 opacity-0 -translate-y-2 blur-[1px] transition-all duration-[260ms] motion-reduce:transition-none motion-reduce:opacity-100 motion-reduce:translate-y-0 motion-reduce:blur-0"
             >
               <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
                 {previousTourStep.headline}
@@ -4734,7 +4790,7 @@ function TrainPostmortemTourOverlay({
           <div
             key={`current-${displayedStep}`}
             className={[
-              "relative transition-opacity duration-[180ms] ease-[cubic-bezier(0.32,0.72,0,1)]",
+              "relative transition-opacity duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
               isCardSwitching ? "opacity-0" : "opacity-100",
               "motion-reduce:transition-none motion-reduce:opacity-100",
             ].join(" ")}
