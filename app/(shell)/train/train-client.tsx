@@ -3051,6 +3051,68 @@ export default function TrainPage(props: TrainPageProps) {
     : isActiveSetupReplay
       ? activeSetupCurrentFen
       : activeReplayPosition?.fen ?? (fen ?? "");
+
+  const learningQueueAddTarget = useMemo(() => {
+    function isUserDecisionFen(candidateFen: string | null | undefined) {
+      return Boolean(candidateFen) && getFenTurnSide(candidateFen ?? null) === userMoveSide;
+    }
+
+    function setupMoveForDecisionFen(decisionFen: string): TrainingMove | null {
+      const normalizedDecisionFen = normalizeDecisionFen(decisionFen);
+      const matchingPosition = visibleSequencePositions.find((position) => (
+        normalizeDecisionFen(position.fen) === normalizedDecisionFen
+      ));
+      return matchingPosition?.move ?? null;
+    }
+
+    if (isUserDecisionFen(boardFen)) {
+      return {
+        decisionFen: boardFen,
+        setupMove: activeExploratoryPosition?.move ?? activeSequencePosition?.move ?? null,
+        fellBackFromEnginePosition: false,
+      };
+    }
+
+    const fallbackFromExploratoryMove = activeExploratoryPosition?.move?.fenBefore;
+    if (isUserDecisionFen(fallbackFromExploratoryMove)) {
+      return {
+        decisionFen: fallbackFromExploratoryMove!,
+        setupMove: setupMoveForDecisionFen(fallbackFromExploratoryMove!),
+        fellBackFromEnginePosition: true,
+      };
+    }
+
+    const fallbackFromSequenceMove = activeSequencePosition?.move?.fenBefore;
+    if (isUserDecisionFen(fallbackFromSequenceMove)) {
+      return {
+        decisionFen: fallbackFromSequenceMove!,
+        setupMove: setupMoveForDecisionFen(fallbackFromSequenceMove!),
+        fellBackFromEnginePosition: true,
+      };
+    }
+
+    const previousUserDecisionPosition = [...visibleSequencePositions]
+      .slice(0, activeExploreIndex)
+      .reverse()
+      .find((position) => isUserDecisionFen(position.fen));
+
+    if (!previousUserDecisionPosition) {
+      return null;
+    }
+
+    return {
+      decisionFen: previousUserDecisionPosition.fen,
+      setupMove: previousUserDecisionPosition.move ?? null,
+      fellBackFromEnginePosition: true,
+    };
+  }, [
+    activeExploreIndex,
+    activeExploratoryPosition,
+    activeSequencePosition,
+    boardFen,
+    userMoveSide,
+    visibleSequencePositions,
+  ]);
   const boardRailMoves = useMemo(
     () => displayMoves.map((move, index) => ({ move, index })),
     [displayMoves],
@@ -4029,13 +4091,13 @@ const introOverlay = trainOnboardingIntroVisible ? (
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <button
                 type="button"
-                disabled={addingPositionToQueue || !boardFen}
+                disabled={addingPositionToQueue || !learningQueueAddTarget?.decisionFen}
                 onClick={async () => {
                   if (addingPositionToQueue) return;
-                  const fenToAdd = boardFen;
+                  const addTarget = learningQueueAddTarget;
+                  const fenToAdd = addTarget?.decisionFen;
                   if (!fenToAdd) return;
-                  const preludeMove =
-                    activeExploratoryPosition?.move ?? activeSequencePosition?.move ?? null;
+                  const preludeMove = addTarget.setupMove;
                   setAddingPositionToQueue(true);
                   try {
                     const res = await fetch("/api/dashboard/mistakes/add", {
@@ -4051,8 +4113,12 @@ const introOverlay = trainOnboardingIntroVisible ? (
                     if (!res.ok) throw new Error(`Add failed: ${res.status}`);
                     showAlert({
                       kind: "success",
-                      title: "Added to Learning queue",
-                      message: "You will see this position again soon.",
+                      title: addTarget.fellBackFromEnginePosition
+                        ? "Added previous decision point"
+                        : "Added to Learning queue",
+                      message: addTarget.fellBackFromEnginePosition
+                        ? "Engine-to-move positions are saved as the previous user decision."
+                        : "You will see this position again soon.",
                     });
                     if (isPostmortemAddPositionActionStep) {
                       setPostmortemAddPositionActionDone(true);
