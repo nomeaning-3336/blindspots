@@ -1009,6 +1009,7 @@ export default function TrainPage(props: TrainPageProps) {
     setTrainOnboardingIntroExiting(false);
     setIsStartingPreplayPosition(false);
     hasStartedFirstOnboardingSequenceRef.current = true;
+    startTrainingGestureConsumedRef.current = true;
 
     setState("complete");
     setResultMode("explore");
@@ -1020,6 +1021,7 @@ export default function TrainPage(props: TrainPageProps) {
     setAsyncMoveEvaluations(restoredAsyncEvaluations);
     setEloResult(restoredElo);
     setBlindspotsElo(restoredElo.eloAfter);
+    setCurrentChallengeElo(restoredElo.opponentElo);
 
     initialPreludeRef.current = previousFen && playedMove
       ? { previousFen, playedMove }
@@ -1034,6 +1036,7 @@ export default function TrainPage(props: TrainPageProps) {
     setIsOpponentThinking(false);
     setIsCompletingSequence(false);
     setPositionLoadError(null);
+    completingRef.current = false;
 
     setExploreIndex(0);
     resetExploratoryLine();
