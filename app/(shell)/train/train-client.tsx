@@ -642,24 +642,188 @@ const mockRep = {
 type TrainPageProps = {
   initialOnboarding?: boolean;
   forceOnboarding?: boolean;
+  initialTrainingTourCheckpoint?: TrainingTourCheckpointPayload | null;
   initialMistakeId?: string;
   initialMode?: "play" | "postmortem";
 };
 
+function normalizeInitialCheckpointMoves(input: unknown): TrainingMove[] {
+  if (!Array.isArray(input)) return [];
+
+  return input.flatMap((move): TrainingMove[] => {
+    if (!move || typeof move !== "object") return [];
+    const row = move as Record<string, unknown>;
+    if (typeof row.uci !== "string" || typeof row.san !== "string") return [];
+    if (row.side !== "white" && row.side !== "black") return [];
+
+    return [{
+      san: row.san,
+      uci: row.uci,
+      side: row.side,
+      fenBefore: typeof row.fenBefore === "string" ? row.fenBefore : undefined,
+      fenAfter: typeof row.fenAfter === "string" ? row.fenAfter : undefined,
+      cpLoss: typeof row.cpLoss === "number" ? row.cpLoss : undefined,
+      evalBefore: typeof row.evalBefore === "number" ? row.evalBefore : undefined,
+      evalAfter: typeof row.evalAfter === "number" ? row.evalAfter : undefined,
+      mateBefore: typeof row.mateBefore === "number" ? row.mateBefore : null,
+      mateAfter: typeof row.mateAfter === "number" ? row.mateAfter : null,
+      classification: typeof row.classification === "string"
+        ? row.classification as MoveClassification
+        : undefined,
+    }];
+  });
+}
+
+function normalizeInitialCheckpointMoveScores(input: unknown): MoveScore[] {
+  if (!Array.isArray(input)) return [];
+
+  return input.flatMap((score): MoveScore[] => {
+    if (!score || typeof score !== "object") return [];
+    const row = score as Record<string, unknown>;
+    if (typeof row.userMoveIndex !== "number") return [];
+    if (typeof row.cpLoss !== "number") return [];
+    if (typeof row.evalBefore !== "number") return [];
+    if (typeof row.evalAfter !== "number") return [];
+
+    return [{
+      userMoveIndex: row.userMoveIndex,
+      cpLoss: row.cpLoss,
+      evalBefore: row.evalBefore,
+      evalAfter: row.evalAfter,
+      mateBefore: typeof row.mateBefore === "number" ? row.mateBefore : null,
+      mateAfter: typeof row.mateAfter === "number" ? row.mateAfter : null,
+      classification: typeof row.classification === "string"
+        ? row.classification as MoveClassification
+        : "good",
+    }];
+  });
+}
+
+function normalizeInitialCheckpointElo(input: unknown): EloResult | null {
+  if (!input || typeof input !== "object") return null;
+  const row = input as Record<string, unknown>;
+
+  const required = [
+    "eloBefore",
+    "eloAfter",
+    "eloDelta",
+    "kFactor",
+    "opponentElo",
+    "expectedScore",
+    "actualScore",
+    "rawDelta",
+    "clampedDelta",
+  ];
+
+  for (const key of required) {
+    if (typeof row[key] !== "number") return null;
+  }
+
+  return {
+    eloBefore: row.eloBefore as number,
+    eloAfter: row.eloAfter as number,
+    eloDelta: row.eloDelta as number,
+    kFactor: row.kFactor as number,
+    opponentElo: row.opponentElo as number,
+    expectedScore: row.expectedScore as number,
+    actualScore: row.actualScore as number,
+    rawDelta: row.rawDelta as number,
+    clampedDelta: row.clampedDelta as number,
+    skipped: Boolean(row.skipped),
+  };
+}
+
+function rehydrateInitialCheckpointMoves(startingFen: string, moves: TrainingMove[]) {
+  let chess: Chess;
+
+  try {
+    chess = new Chess(startingFen);
+  } catch {
+    return moves;
+  }
+
+  return moves.map((move) => {
+    const fenBefore = chess.fen();
+
+    try {
+      const played = chess.move({
+        from: move.uci.slice(0, 2),
+        to: move.uci.slice(2, 4),
+        promotion: move.uci[4],
+      });
+
+      if (!played) return move;
+
+      return {
+        ...move,
+        fenBefore,
+        fenAfter: chess.fen(),
+        san: move.san || played.san,
+      };
+    } catch {
+      return move;
+    }
+  });
+}
+
+function buildInitialTrainingTourCheckpointState(checkpoint: TrainingTourCheckpointPayload | null | undefined) {
+  if (!checkpoint || checkpoint.type !== "postmortem_elo") return null;
+  if (typeof checkpoint.startingFen !== "string") return null;
+
+  const restoredMoves = rehydrateInitialCheckpointMoves(
+    checkpoint.startingFen,
+    normalizeInitialCheckpointMoves(checkpoint.moves),
+  );
+  if (restoredMoves.length === 0) return null;
+
+  const restoredMoveScores = normalizeInitialCheckpointMoveScores(checkpoint.moveScores);
+  const restoredElo = normalizeInitialCheckpointElo(checkpoint.elo);
+  if (!restoredElo) return null;
+
+  const moves = applyMoveScores(restoredMoves, restoredMoveScores, checkpoint.startingFen);
+  const previousFen = typeof checkpoint.previousFen === "string" ? checkpoint.previousFen : null;
+  const playedMove = typeof checkpoint.playedMove === "string" ? checkpoint.playedMove : null;
+  const restoredPrelude = previousFen && playedMove ? applyIndexedMove(previousFen, playedMove) : null;
+
+  return {
+    startingFen: checkpoint.startingFen,
+    displayStartingFen: previousFen ?? checkpoint.startingFen,
+    moves,
+    lastMove: lastMoveFromTrainingMove(moves[moves.length - 1]),
+    elo: restoredElo,
+    initialPrelude: previousFen && playedMove ? { previousFen, playedMove } : null,
+    initialOpponentMove: restoredPrelude?.move ?? null,
+  };
+}
+
 export default function TrainPage(props: TrainPageProps) {
-  const { initialOnboarding = false, forceOnboarding = false, initialMistakeId, initialMode = "play" } = props;
+  const {
+    initialOnboarding = false,
+    forceOnboarding = false,
+    initialTrainingTourCheckpoint = null,
+    initialMistakeId,
+    initialMode = "play",
+  } = props;
+  const shouldRunPreplayOnboarding = initialOnboarding || forceOnboarding;
+  const initialCheckpointState = shouldRunPreplayOnboarding
+    ? buildInitialTrainingTourCheckpointState(initialTrainingTourCheckpoint)
+    : null;
   const initialMistakeIdConsumedRef = useRef(false);
-  const [state, setState] = useState<TrainingState>("active");
-  const [startingFen, setStartingFen] = useState<string>("");
+  const [state, setState] = useState<TrainingState>(initialCheckpointState ? "complete" : "active");
+  const [startingFen, setStartingFen] = useState<string>(initialCheckpointState?.startingFen ?? "");
   const searchParams = useSearchParams();
-  const initialPreludeRef = useRef<{ previousFen: string; playedMove: string } | null>(null);
-  const [moves, setMoves] = useState<TrainingMove[]>(mockRep.moveHistory);
-  const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(null);
+  const initialPreludeRef = useRef<{ previousFen: string; playedMove: string } | null>(
+    initialCheckpointState?.initialPrelude ?? null,
+  );
+  const [moves, setMoves] = useState<TrainingMove[]>(initialCheckpointState?.moves ?? mockRep.moveHistory);
+  const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(
+    initialCheckpointState?.lastMove ?? null,
+  );
   const [sequenceLength, _setSequenceLength] = useState(4);
   const [skillLevel, setSkillLevel] = useState<SkillLevel>("beginner");
-  const [blindspotsElo, setBlindspotsElo] = useState(mockRep.rating);
-  const [eloResult, setEloResult] = useState<EloResult | null>(null);
-  const [resultMode, setResultMode] = useState<ResultMode>("results");
+  const [blindspotsElo, setBlindspotsElo] = useState(initialCheckpointState?.elo.eloAfter ?? mockRep.rating);
+  const [eloResult, setEloResult] = useState<EloResult | null>(initialCheckpointState?.elo ?? null);
+  const [resultMode, setResultMode] = useState<ResultMode>(initialCheckpointState ? "explore" : "results");
   const { alert: topAlert, showAlert, dismissAlert } = useTopAlert();
   const [exploreIndex, setExploreIndex] = useState(0);
   const [exploratoryFen, setExploratoryFen] = useState<string | null>(null);
@@ -679,11 +843,13 @@ export default function TrainPage(props: TrainPageProps) {
   const [currentChallengeElo, setCurrentChallengeElo] = useState<number | null>(null);
   const [isOpponentThinking, setIsOpponentThinking] = useState(false);
   const [isCompletingSequence, setIsCompletingSequence] = useState(false);
-  const [isPositionLoading, setIsPositionLoading] = useState(true);
+  const [isPositionLoading, setIsPositionLoading] = useState(!initialCheckpointState);
   const [hoveredAnnotationSquare, setHoveredAnnotationSquare] = useState<string | null>(null);
   const [hoveredEngineLineIndex, setHoveredEngineLineIndex] = useState<number | null>(null);
   const [hoveredMoveSquares, setHoveredMoveSquares] = useState<MoveHighlightTarget | null>(null);
-  const [onboardingScreen, setOnboardingScreen] = useState<OnboardingScreen>("loading");
+  const [onboardingScreen, setOnboardingScreen] = useState<OnboardingScreen>(
+    shouldRunPreplayOnboarding ? "done" : "loading",
+  );
   const [selectedProvider, setSelectedProvider] = useState<ProfileProvider | null>(null);
   const [profileUsername, setProfileUsername] = useState("");
   const [connectionMessage, setConnectionMessage] = useState("");
@@ -710,10 +876,10 @@ export default function TrainPage(props: TrainPageProps) {
   const [pieceLineCache, setPieceLineCache] = useState<Record<string, EngineLineResult[]>>({});
   const [pieceLinesLoadingKey, setPieceLinesLoadingKey] = useState<string | null>(null);
   const moveSoundPlyRef = useRef(0);
-  const hasStartedFirstOnboardingSequenceRef = useRef(false);
+  const hasStartedFirstOnboardingSequenceRef = useRef(Boolean(initialCheckpointState));
   const completingRef = useRef(false);
   const completionRequestRef = useRef(0);
-  const initialOpponentMoveRef = useRef<TrainingMove | null>(null);
+  const initialOpponentMoveRef = useRef<TrainingMove | null>(initialCheckpointState?.initialOpponentMove ?? null);
   const [attemptRegistry, setAttemptRegistry] = useState<AttemptRegistryEntry[]>([]);
   const initialOpponentRequestRef = useRef(0);
   const selectedServeModeRef = useRef<string | null>(null);
@@ -726,9 +892,13 @@ export default function TrainPage(props: TrainPageProps) {
   const selectedEcoRef = useRef<string | null>(null);
   const currentMistakeIdRef = useRef<string | null>(null);
   const currentQueueSourceRef = useRef<string | null>(null);
-  const [initialOpponentMove, setInitialOpponentMove] = useState<TrainingMove | null>(null);
-  const [displayStartingFen, setDisplayStartingFen] = useState<string>("");
-  const [hasLoadedPosition, setHasLoadedPosition] = useState(false);
+  const [initialOpponentMove, setInitialOpponentMove] = useState<TrainingMove | null>(
+    initialCheckpointState?.initialOpponentMove ?? null,
+  );
+  const [displayStartingFen, setDisplayStartingFen] = useState<string>(
+    initialCheckpointState?.displayStartingFen ?? "",
+  );
+  const [hasLoadedPosition, setHasLoadedPosition] = useState(Boolean(initialCheckpointState));
   const [activeSetupReplayIndex, setActiveSetupReplayIndex] = useState<0 | 1>(1);
   const [activeReplayIndex, setActiveReplayIndex] = useState<number | null>(null);
   const nextPositionPrefetchRef = useRef<Promise<NextPositionResponse | null> | null>(null);
@@ -753,10 +923,9 @@ export default function TrainPage(props: TrainPageProps) {
     };
   }, []);
 
-  const shouldRunPreplayOnboarding = initialOnboarding || forceOnboarding;
-
   const [fen, setFen] = useState<string>(
-    shouldRunPreplayOnboarding ? ONBOARDING_PREVIEW_POSITION.previousFen : DEFAULT_TRAINING_FEN,
+    initialCheckpointState?.startingFen ??
+      (shouldRunPreplayOnboarding ? ONBOARDING_PREVIEW_POSITION.previousFen : DEFAULT_TRAINING_FEN),
   );
 
   const PREPLAY_TOUR_STEPS = [
@@ -780,7 +949,7 @@ export default function TrainPage(props: TrainPageProps) {
   ];
 
   const [trainOnboardingIntroStep, setTrainOnboardingIntroStep] = useState(0);
-  const [trainOnboardingIntroDone, setTrainOnboardingIntroDone] = useState(false);
+  const [trainOnboardingIntroDone, setTrainOnboardingIntroDone] = useState(Boolean(initialCheckpointState));
   const [trainOnboardingIntroVisible, setTrainOnboardingIntroVisible] = useState(false);
   const [trainOnboardingIntroExiting, setTrainOnboardingIntroExiting] = useState(false);
   const [isStartingPreplayPosition, setIsStartingPreplayPosition] = useState(false);
@@ -4476,7 +4645,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
             isPostmortemAddPositionWaiting
               ? "opacity-0 pointer-events-none"
               : "opacity-100",
-            "transition-opacity duration-200 ease-out motion-reduce:transition-none",
+            "transition-opacity duration-[520ms] ease-[var(--tour-geometry-ease)] motion-reduce:transition-none",
           ].join(" ")}
         >
         <TrainPostmortemTourOverlay
@@ -4489,7 +4658,8 @@ const introOverlay = trainOnboardingIntroVisible ? (
           onMissingTarget={handleMissingPostmortemTourTarget}
           isActionStep={isPostmortemAddPositionActionStep}
           actionCompleted={postmortemAddPositionActionDone}
-          centerCard={isPostmortemAddPositionActionStep && !postmortemAddPositionInstructionAcknowledged}
+          actionInstructionAcknowledged={postmortemAddPositionInstructionAcknowledged}
+          centerCard={false}
           postmortemTourSoftSwitching={postmortemTourSoftSwitching}
           backDisabled={
             postmortemOnboardingStep <= 0 ||
@@ -4622,6 +4792,7 @@ function TrainPostmortemTourOverlay({
   onMissingTarget,
   isActionStep,
   actionCompleted,
+  actionInstructionAcknowledged = false,
   centerCard = false,
   postmortemTourSoftSwitching = false,
   backDisabled = false,
@@ -4635,12 +4806,21 @@ function TrainPostmortemTourOverlay({
   onMissingTarget: () => void;
   isActionStep?: boolean;
   actionCompleted?: boolean;
+  actionInstructionAcknowledged?: boolean;
   centerCard?: boolean;
   postmortemTourSoftSwitching?: boolean;
   backDisabled?: boolean;
 }) {
   const [resolvedStepIndex, setResolvedStepIndex] = useState(step);
-  const [targetRect, setTargetRect] = useState<{ top: number; left: number; width: number; height: number; right: number; bottom: number } | null>(null);
+  const [targetRect, setTargetRect] = useState<{
+    step: number;
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+    right: number;
+    bottom: number;
+  } | null>(null);
   const [missingTarget, setMissingTarget] = useState(false);
   const [isPositioningSpotlight, setIsPositioningSpotlight] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -4658,6 +4838,11 @@ function TrainPostmortemTourOverlay({
     card: null,
     spotlight: null,
   });
+  const measureCardRef = useRef<HTMLDivElement>(null);
+  const [measuredIncomingCard, setMeasuredIncomingCard] = useState<{
+    step: number;
+    height: number;
+  } | null>(null);
   const allSteps = steps as readonly PostmortemTourStep[];
   const displayedTourStep = allSteps[displayedStep] ?? allSteps[0];
   const previousTourStep = previousDisplayedStep === null ? null : allSteps[previousDisplayedStep] ?? null;
@@ -4706,7 +4891,7 @@ function TrainPostmortemTourOverlay({
   // ── Resolve step: find target, scroll, measure, then update copy ──
   useLayoutEffect(() => {
     let cancelled = false;
-    let targetObserver: ResizeObserver | null = null;
+    let removeScrollOrResizeListeners: (() => void) | null = null;
 
     async function resolveStep() {
       setIsPositioningSpotlight(true);
@@ -4739,24 +4924,20 @@ function TrainPostmortemTourOverlay({
 
       setMissingTarget(false);
 
-      // Observe target for resize/reflow
-      if (targetObserver) targetObserver.disconnect();
-      targetObserver = new ResizeObserver(() => {
-        if (cancelled || !target) return;
-        setTargetRect(target.getBoundingClientRect());
-      });
-      targetObserver.observe(target);
-
       // Scroll listener for position changes (parent scrolled, etc.)
       function handleScrollOrResize() {
         if (cancelled || !target) return;
         window.requestAnimationFrame(() => {
           if (cancelled || !target) return;
-          setTargetRect(rectSnapshot(target.getBoundingClientRect()));
+          setTargetRect({ step, ...rectSnapshot(target.getBoundingClientRect()) });
         });
       }
       window.addEventListener("scroll", handleScrollOrResize, true);
       window.addEventListener("resize", handleScrollOrResize);
+      removeScrollOrResizeListeners = () => {
+        window.removeEventListener("scroll", handleScrollOrResize, true);
+        window.removeEventListener("resize", handleScrollOrResize);
+      };
 
       const rect = target.getBoundingClientRect();
       if (!isRectFullyVisible(rect, 24)) {
@@ -4778,8 +4959,6 @@ function TrainPostmortemTourOverlay({
         if (cancelled) return;
 
         const nextRect = target.getBoundingClientRect();
-        const snapshot = rectSnapshot(nextRect);
-
         if (rectsClose(previousRect, nextRect)) {
           stableFrames += 1;
         } else {
@@ -4787,26 +4966,29 @@ function TrainPostmortemTourOverlay({
         }
 
         previousRect = nextRect;
-        setTargetRect(snapshot);
 
         if (stableFrames >= 2) break;
       }
 
       if (cancelled) return;
 
+      if (previousRect) {
+        const snapshot = rectSnapshot(previousRect);
+        setTargetRect({ step, ...snapshot });
+      }
+
       setResolvedStepIndex(step);
       setIsPositioningSpotlight(false);
 
-      // Cleanup scroll listeners
-      window.removeEventListener("scroll", handleScrollOrResize, true);
-      window.removeEventListener("resize", handleScrollOrResize);
+      removeScrollOrResizeListeners?.();
+      removeScrollOrResizeListeners = null;
     }
 
     void resolveStep();
 
     return () => {
       cancelled = true;
-      if (targetObserver) targetObserver.disconnect();
+      removeScrollOrResizeListeners?.();
     };
   }, [step, allSteps, onMissingTarget]);
 
@@ -4879,25 +5061,37 @@ function TrainPostmortemTourOverlay({
   const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
   const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
   const margin = 16;
-  const spotlight = targetRect
+  const currentTargetRect = targetRect?.step === step ? targetRect : null;
+  const spotlight = currentTargetRect
     ? {
-        top: Math.max(margin, targetRect.top - 6),
-        left: Math.max(margin, targetRect.left - 6),
-        width: Math.min(viewportWidth - margin * 2, targetRect.width + 12),
-        height: Math.min(viewportHeight - margin * 2, targetRect.height + 12),
-        bottom: Math.min(viewportHeight - margin, targetRect.bottom + 6),
-        right: Math.min(viewportWidth - margin, targetRect.right + 6),
+        top: Math.max(margin, currentTargetRect.top - 6),
+        left: Math.max(margin, currentTargetRect.left - 6),
+        width: Math.min(viewportWidth - margin * 2, currentTargetRect.width + 12),
+        height: Math.min(viewportHeight - margin * 2, currentTargetRect.height + 12),
+        bottom: Math.min(viewportHeight - margin, currentTargetRect.bottom + 6),
+        right: Math.min(viewportWidth - margin, currentTargetRect.right + 6),
       }
     : null;
 
-  const waitsForSpotlightGeometry =
-    !shouldCenterCard && !currentStep.suppressSpotlight;
+  const waitsForTargetGeometry =
+    !shouldCenterCard;
+  const previousTourGeometry = previousTourGeometryRef.current;
+  const displayedSpotlight = spotlight ?? (
+    waitsForTargetGeometry ? previousTourGeometry.spotlight : null
+  );
+  const shouldDimSuppressedSpotlight =
+    currentStep.suppressSpotlight &&
+    isActionStep &&
+    !actionInstructionAcknowledged;
+  const hasResolvedCurrentTourGeometry =
+    !waitsForTargetGeometry || Boolean(spotlight);
+  const isResolvingTargetGeometry =
+    waitsForTargetGeometry && !spotlight && Boolean(previousTourGeometry.card);
   const hasInitialTourGeometry =
-    !waitsForSpotlightGeometry || Boolean(spotlight);
+    hasResolvedCurrentTourGeometry || isResolvingTargetGeometry;
 
   const measuredCardHeight = cardSize?.height ?? 300;
   const maxCardHeight = Math.max(280, viewportHeight - VIEWPORT_PAD * 2);
-  const effectiveCardHeight = Math.min(measuredCardHeight, maxCardHeight);
   const cardMaxWidth = Math.min(440, viewportWidth - VIEWPORT_PAD * 2);
   const isSmallScreen = viewportWidth < 760;
 
@@ -4905,11 +5099,37 @@ function TrainPostmortemTourOverlay({
   let cardWidth: number;
   if (shouldCenterCard) {
     cardWidth = Math.min(520, viewportWidth - VIEWPORT_PAD * 2);
-  } else if (isSmallScreen || !spotlight) {
+  } else if (isSmallScreen || (!spotlight && !previousTourGeometry.spotlight)) {
     cardWidth = viewportWidth - VIEWPORT_PAD * 2;
   } else {
     cardWidth = cardMaxWidth;
   }
+
+  // Pre-measure incoming step card height so positioning uses the right size before animation starts.
+  const incomingCardHeight =
+    measuredIncomingCard?.step === step ? measuredIncomingCard.height : null;
+
+  const positioningCardHeight =
+    isCardSwitching && incomingCardHeight
+      ? Math.max(measuredCardHeight, incomingCardHeight)
+      : incomingCardHeight ?? measuredCardHeight;
+
+  const effectiveCardHeight = Math.min(positioningCardHeight, maxCardHeight);
+
+  useLayoutEffect(() => {
+    const el = measureCardRef.current;
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    const nextHeight = Math.ceil(rect.height);
+
+    setMeasuredIncomingCard((prev) => {
+      if (prev?.step === step && Math.abs(prev.height - nextHeight) < 1) {
+        return prev;
+      }
+      return { step, height: nextHeight };
+    });
+  }, [step, cardWidth, maxCardHeight, currentStep.headline, currentStep.body, currentStep.cta]);
 
   // Determine preferred top-left per placement strategy.
   let preferredLeft: number;
@@ -4921,34 +5141,48 @@ function TrainPostmortemTourOverlay({
     preferredLeft = VIEWPORT_PAD;
     preferredTop = viewportHeight - effectiveCardHeight - VIEWPORT_PAD;
   } else {
-    // Desktop with a spotlight target: prefer right of target, fall back to
-    // left, then horizontal centre.
+    // Desktop with a spotlight target.
+    // For the Learning Queue button, keep the tour card on the left so the text
+    // does not jump to the right side of the button.
     const tryRight = spotlight.left + spotlight.width + GAP;
     const tryLeft = spotlight.left - cardWidth - GAP;
     const canPlaceRight = tryRight + cardWidth <= viewportWidth - VIEWPORT_PAD;
     const canPlaceLeft = tryLeft >= VIEWPORT_PAD;
-    preferredLeft = canPlaceRight
-      ? tryRight
-      : canPlaceLeft
+    const preferLeftOfTarget = currentStep.target === "add-position-to-learning-queue";
+
+    preferredLeft = preferLeftOfTarget
+      ? canPlaceLeft
         ? tryLeft
-        : (viewportWidth - cardWidth) / 2;
+        : canPlaceRight
+          ? tryRight
+          : (viewportWidth - cardWidth) / 2
+      : canPlaceRight
+        ? tryRight
+        : canPlaceLeft
+          ? tryLeft
+          : (viewportWidth - cardWidth) / 2;
     preferredTop = spotlight.top;
   }
 
   // Clamp to viewport bounds so the modal's bounding box always sits inside
   // the viewport with VIEWPORT_PAD of breathing room on every side.
-  const cardLeft = clamp(
+  const computedCardLeft = clamp(
     preferredLeft,
     VIEWPORT_PAD,
     Math.max(VIEWPORT_PAD, viewportWidth - cardWidth - VIEWPORT_PAD),
   );
-  const cardTop = clamp(
+  const computedCardTop = clamp(
     preferredTop,
     VIEWPORT_PAD,
     Math.max(VIEWPORT_PAD, viewportHeight - effectiveCardHeight - VIEWPORT_PAD),
   );
+  const cardLeft = isResolvingTargetGeometry && previousTourGeometry.card
+    ? previousTourGeometry.card.left
+    : computedCardLeft;
+  const cardTop = isResolvingTargetGeometry && previousTourGeometry.card
+    ? previousTourGeometry.card.top
+    : computedCardTop;
 
-  const previousTourGeometry = previousTourGeometryRef.current;
   const cardTravelDistance = previousTourGeometry.card
     ? Math.hypot(
         cardLeft - previousTourGeometry.card.left,
@@ -4963,10 +5197,14 @@ function TrainPostmortemTourOverlay({
     : 0;
   const tourGeometryTravelDistance = Math.max(cardTravelDistance, spotlightTravelDistance);
   const tourGeometryDurationMs = Math.round(
-    clamp(520 + tourGeometryTravelDistance * 0.24, 620, 980),
+    clamp(700 + tourGeometryTravelDistance * 0.18, 760, 1180),
   );
 
   useLayoutEffect(() => {
+    if (!hasResolvedCurrentTourGeometry) {
+      return;
+    }
+
     if (!hasInitialTourGeometry) {
       previousTourGeometryRef.current = {
         card: null,
@@ -4987,6 +5225,7 @@ function TrainPostmortemTourOverlay({
         : null,
     };
   }, [
+    hasResolvedCurrentTourGeometry,
     hasInitialTourGeometry,
     cardTop,
     cardLeft,
@@ -5005,6 +5244,7 @@ function TrainPostmortemTourOverlay({
 
   const tourOverlayStyle = {
     "--tour-geometry-duration": `${tourGeometryDurationMs}ms`,
+    "--tour-geometry-ease": "cubic-bezier(0.16,0.84,0.32,1)",
   } as React.CSSProperties;
 
   const cardVisibilityClass = postmortemTourSoftSwitching
@@ -5024,7 +5264,7 @@ function TrainPostmortemTourOverlay({
       style={tourOverlayStyle}
     >
       {/* Single SVG mask cutout avoids seams from stitched dim rectangles. */}
-      {!currentStep.suppressSpotlight && spotlight ? (
+      {!currentStep.suppressSpotlight && displayedSpotlight ? (
         <svg
           aria-hidden="true"
           data-testid="train-spotlight-dim-mask"
@@ -5038,14 +5278,14 @@ function TrainPostmortemTourOverlay({
             <mask id="train-postmortem-spotlight-mask">
               <rect x="0" y="0" width={viewportWidth} height={viewportHeight} fill="white" />
               <rect
-                x={spotlight.left}
-                y={spotlight.top}
-                width={spotlight.width}
-                height={spotlight.height}
+                x={displayedSpotlight.left}
+                y={displayedSpotlight.top}
+                width={displayedSpotlight.width}
+                height={displayedSpotlight.height}
                 rx="10"
                 ry="10"
                 fill="black"
-                className="transition-[x,y,width,height] duration-[var(--tour-geometry-duration)] ease-[cubic-bezier(0.22,1,0.36,1)]"
+                className="transition-[x,y,width,height] duration-[var(--tour-geometry-duration)] ease-[var(--tour-geometry-ease)]"
               />
             </mask>
           </defs>
@@ -5060,8 +5300,8 @@ function TrainPostmortemTourOverlay({
           />
         </svg>
       ) : null}
-      {/* Full-screen dim for centered instruction modal (no spotlight mask) */}
-      {shouldCenterCard ? (
+      {/* Full-screen dim for centered or action instruction modal (no spotlight mask) */}
+      {shouldCenterCard || shouldDimSuppressedSpotlight ? (
         <div className="pointer-events-none fixed inset-0 bg-black/68 transition-opacity duration-[520ms]" />
       ) : null}
       {/* Click catcher — always transparent, dim layer handled separately */}
@@ -5072,23 +5312,56 @@ function TrainPostmortemTourOverlay({
         onClick={() => { if (!isPositioningSpotlight) onNext(); }}
       />
       {/* Spotlight border — smooth transition between targets */}
-      {!currentStep.suppressSpotlight && spotlight ? (
+      {!currentStep.suppressSpotlight && displayedSpotlight ? (
         <div
           aria-hidden="true"
-          className="pointer-events-none fixed rounded-[10px] border border-[var(--app-accent)] shadow-[0_0_0_2px_color-mix(in_srgb,var(--app-accent)_42%,transparent)] transition-[top,left,width,height] duration-[var(--tour-geometry-duration)] ease-[cubic-bezier(0.22,1,0.36,1)]"
+          className="pointer-events-none fixed rounded-[10px] border border-[var(--app-accent)] shadow-[0_0_0_2px_color-mix(in_srgb,var(--app-accent)_42%,transparent)] transition-[top,left,width,height] duration-[var(--tour-geometry-duration)] ease-[var(--tour-geometry-ease)]"
           style={{
-            top: spotlight.top,
-            left: spotlight.left,
-            width: spotlight.width,
-            height: spotlight.height,
+            top: displayedSpotlight.top,
+            left: displayedSpotlight.left,
+            width: displayedSpotlight.width,
+            height: displayedSpotlight.height,
           }}
         />
       ) : null}
+      {/* Hidden measurement card — renders content offscreen to pre-measure height for positioning */}
+      <div
+        ref={measureCardRef}
+        aria-hidden="true"
+        className={[
+          "pointer-events-none invisible fixed left-[-9999px] top-0",
+          "flex flex-col overflow-hidden rounded-[8px] border border-[var(--app-border)]",
+          "bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)]",
+          "shadow-[4px_4px_0_var(--app-brutal-edge)]",
+        ].join(" ")}
+        style={{
+          width: cardWidth,
+          maxHeight: maxCardHeight,
+        }}
+      >
+        <div className="shrink-0 pb-6" />
+        <div className="relative min-h-0 flex-1 overflow-y-auto pr-1">
+          <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
+            {currentStep.headline}
+          </h2>
+          <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
+            {currentStep.body}
+          </p>
+        </div>
+        <div className="mt-4 flex shrink-0 items-center justify-between gap-3 pt-4">
+          <div className="min-h-11 border border-[var(--app-border)] px-5 py-3 text-xs font-bold uppercase tracking-[0.12em]">
+            Back
+          </div>
+          <div className="app-brutal-button min-h-11 px-6 text-xs">
+            {currentStep.cta ?? "Next"}
+          </div>
+        </div>
+      </div>
       <div
         className={[
           "fixed flex flex-col overflow-hidden rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)]",
           cardVisibilityClass,
-          "transition-[opacity,transform,top,left,width,max-height] duration-[var(--tour-geometry-duration)] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none motion-reduce:transform-none",
+          "transition-[opacity,transform,top,left,width] duration-[var(--tour-geometry-duration)] ease-[var(--tour-geometry-ease)] motion-reduce:transition-none motion-reduce:transform-none",
         ].join(" ")}
         ref={cardRef}
         style={cardStyle}
@@ -5155,7 +5428,7 @@ function TrainPostmortemTourOverlay({
             type="button"
             onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight) onNext(); }}
             className="app-brutal-button min-h-11 px-6 text-xs"
-            disabled={completionInFlight || isPositioningSpotlight || (isActionStep && !actionCompleted && !shouldCenterCard)}
+            disabled={completionInFlight || isPositioningSpotlight || (isActionStep && actionInstructionAcknowledged && !actionCompleted)}
           >
             {completionInFlight ? "Saving..." : (isActionStep && !actionCompleted ? displayedTourStep.cta ?? "Waiting..." : displayedTourStep.cta ?? "Next")}
           </button>

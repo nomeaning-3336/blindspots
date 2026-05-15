@@ -4,6 +4,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/server";
 export type OnboardingState = {
   trainingTourCompleted: boolean;
   trainingTourCompletedAt: string | null;
+  trainingTourCheckpoint?: Record<string, unknown> | null;
 };
 
 export async function getOnboardingState(): Promise<OnboardingState> {
@@ -16,9 +17,9 @@ export async function getOnboardingState(): Promise<OnboardingState> {
 
 export async function getOnboardingStateForUser(userId: string): Promise<OnboardingState> {
   const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from("user_onboarding_state")
-    .select("training_onboarding_completed_at")
+  const { data, error } = await (supabase
+    .from("user_onboarding_state") as any)
+    .select("training_onboarding_completed_at, training_tour_checkpoint")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -30,6 +31,13 @@ export async function getOnboardingStateForUser(userId: string): Promise<Onboard
   return {
     trainingTourCompleted: Boolean(data?.training_onboarding_completed_at),
     trainingTourCompletedAt: data?.training_onboarding_completed_at ?? null,
+    trainingTourCheckpoint:
+      data?.training_onboarding_completed_at ||
+      !data?.training_tour_checkpoint ||
+      typeof data.training_tour_checkpoint !== "object" ||
+      Array.isArray(data.training_tour_checkpoint)
+        ? null
+        : data.training_tour_checkpoint,
   };
 }
 

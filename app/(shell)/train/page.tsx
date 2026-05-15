@@ -25,6 +25,7 @@ export default async function TrainPageWrapper({
       <TrainPage
         initialOnboarding={false}
         forceOnboarding={false}
+        initialTrainingTourCheckpoint={null}
         initialMistakeId={initialMistakeId}
         initialMode={initialMode}
       />
@@ -38,6 +39,7 @@ export default async function TrainPageWrapper({
     <TrainPage
       initialOnboarding={shouldRunTrainingTour}
       forceOnboarding={forceOnboarding}
+      initialTrainingTourCheckpoint={state.trainingTourCheckpoint}
       initialMistakeId={initialMistakeId}
       initialMode={initialMode}
     />
