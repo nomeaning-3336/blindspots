@@ -32,6 +32,82 @@ test("postmortem tour uses one masked dim layer instead of four stitched rectang
   assert.doesNotMatch(source, /buildSpotlightMaskRects/);
 });
 
+test("postmortem tour card does not animate max-height during target transitions", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+
+  assert.doesNotMatch(source, /transition-\[[^\]]*max-height[^\]]*\]/);
+});
+
+test("postmortem tour target geometry is not live-resized during card transitions", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
+
+  assert.doesNotMatch(overlaySource, /new ResizeObserver\(\(\) => \{\s*if \(cancelled \|\| !target\) return;\s*setTargetRect/);
+});
+
+test("postmortem tour placement ignores stale target geometry from another step", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
+
+  assert.match(overlaySource, /targetRect\?\.step === step/);
+  assert.match(overlaySource, /setTargetRect\(\{ step, \.\.\.snapshot \}\)/);
+});
+
+test("postmortem tour keeps the dim spotlight mounted while next target resolves", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
+
+  assert.match(overlaySource, /const displayedSpotlight = spotlight \?\? \(/);
+  assert.match(overlaySource, /!currentStep\.suppressSpotlight && displayedSpotlight \? \(/);
+});
+
+test("postmortem tour geometry uses a gentle timing curve", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
+
+  assert.match(overlaySource, /clamp\(700 \+ tourGeometryTravelDistance \* 0\.18, 760, 1180\)/);
+  assert.match(overlaySource, /--tour-geometry-ease/);
+  assert.match(overlaySource, /cubic-bezier\(0\.16,0\.84,0\.32,1\)/);
+  assert.doesNotMatch(overlaySource, /transition-\[opacity,transform,top,left,width\][^\n]+cubic-bezier\(0\.22,1,0\.36,1\)/);
+});
+
+test("add-position action step reuses the target-anchored postmortem tour card", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const overlayUsageSource = source.slice(source.indexOf("<TrainPostmortemTourOverlay"));
+  const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
+
+  assert.doesNotMatch(overlayUsageSource, /centerCard=\{isPostmortemAddPositionActionStep/);
+  assert.match(overlayUsageSource, /centerCard=\{false\}/);
+  assert.match(overlaySource, /const waitsForTargetGeometry =\s*!shouldCenterCard;/);
+  assert.doesNotMatch(overlaySource, /const waitsForSpotlightGeometry =\s*!shouldCenterCard && !currentStep\.suppressSpotlight;/);
+});
+
+test("add-position action step keeps the dim layer until Okay is pressed", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const overlayUsageSource = source.slice(source.indexOf("<TrainPostmortemTourOverlay"));
+  const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
+
+  assert.match(overlayUsageSource, /actionInstructionAcknowledged=\{postmortemAddPositionInstructionAcknowledged\}/);
+  assert.match(overlaySource, /const shouldDimSuppressedSpotlight =/);
+  assert.match(overlaySource, /currentStep\.suppressSpotlight &&\s*isActionStep &&\s*!actionInstructionAcknowledged/);
+  assert.match(overlaySource, /\{shouldCenterCard \|\| shouldDimSuppressedSpotlight \? \(/);
+  assert.match(source, /transition-opacity duration-\[520ms\] ease-\[var\(--tour-geometry-ease\)\]/);
+});
+
+test("add-position Okay button remains clickable before the action instruction is acknowledged", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
+
+  assert.match(
+    overlaySource,
+    /disabled=\{completionInFlight \|\| isPositioningSpotlight \|\| \(isActionStep && actionInstructionAcknowledged && !actionCompleted\)\}/,
+  );
+  assert.doesNotMatch(
+    overlaySource,
+    /disabled=\{completionInFlight \|\| isPositioningSpotlight \|\| \(isActionStep && !actionCompleted && !shouldCenterCard\)\}/,
+  );
+});
+
 test("preplay onboarding and active training share the playing grid geometry", () => {
   const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
 
