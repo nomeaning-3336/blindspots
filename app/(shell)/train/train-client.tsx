@@ -4599,7 +4599,6 @@ function TrainPostmortemTourOverlay({
       width: cardWidth,
       height: measuredCardHeight,
       maxHeight: `calc(100vh - ${VIEWPORT_PAD * 2}px)`,
-      overflowY: "auto",
     };
   } else if (isSmallScreen || !spotlight) {
     cardStyle = {
@@ -4608,7 +4607,6 @@ function TrainPostmortemTourOverlay({
       bottom: VIEWPORT_PAD,
       height: measuredCardHeight,
       maxHeight: `calc(100vh - ${VIEWPORT_PAD * 2}px)`,
-      overflowY: "auto",
       width: "auto",
     };
   } else if (measuredCardHeight >= viewportHeight - VIEWPORT_PAD * 2) {
@@ -4619,7 +4617,6 @@ function TrainPostmortemTourOverlay({
       top: VIEWPORT_PAD,
       height: measuredCardHeight,
       maxHeight: `calc(100vh - ${VIEWPORT_PAD * 2}px)`,
-      overflowY: "auto",
       width: spotlight ? Math.min(cardMaxWidth, viewportWidth - VIEWPORT_PAD * 2) : cardMaxWidth,
     };
   } else {
@@ -4640,7 +4637,13 @@ function TrainPostmortemTourOverlay({
     cardLeft = clamp(preferredLeftPos, VIEWPORT_PAD, viewportWidth - cardMaxWidth - VIEWPORT_PAD);
     cardTop = clamp(preferredTopPos, VIEWPORT_PAD, viewportHeight - measuredCardHeight - VIEWPORT_PAD);
 
-    cardStyle = { top: cardTop, left: cardLeft, width: cardMaxWidth, height: measuredCardHeight };
+    cardStyle = {
+      top: cardTop,
+      left: cardLeft,
+      width: cardMaxWidth,
+      height: measuredCardHeight,
+      maxHeight: `calc(100vh - ${VIEWPORT_PAD * 2}px)`,
+    };
   }
 
   const cardVisibilityClass = isPlacementSwitching || postmortemTourSoftSwitching
@@ -4712,7 +4715,7 @@ function TrainPostmortemTourOverlay({
       ) : null}
       <div
         className={[
-          "fixed grid gap-4 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)]",
+          "fixed flex flex-col gap-4 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)]",
           cardVisibilityClass,
           "transition-[opacity,transform,top,left,width,height] duration-[280ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none motion-reduce:transform-none",
         ].join(" ")}
@@ -4733,9 +4736,9 @@ function TrainPostmortemTourOverlay({
           </svg>
         </button>
 
-        <div className="mb-6" />
+        <div className="mb-6 shrink-0" />
 
-        <div className="relative">
+        <div className="relative min-h-0 overflow-y-auto">
           {previousTourStep ? (
             <div
               key={`prev-${previousDisplayedStep}`}
@@ -4766,7 +4769,7 @@ function TrainPostmortemTourOverlay({
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex shrink-0 items-center justify-between gap-3">
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight && !isFirst && !backDisabled) onBack(); }}
