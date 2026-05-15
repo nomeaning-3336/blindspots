@@ -37,10 +37,10 @@ export async function completeOnboardingForUser(userId: string): Promise<Onboard
   const supabase = getSupabaseAdminClient();
   const now = new Date().toISOString();
 
-  const { data, error } = await supabase
-    .from("user_onboarding_state")
+  const { data, error } = await (supabase
+    .from("user_onboarding_state") as any)
     .upsert(
-      { user_id: userId, training_onboarding_completed_at: now },
+      { user_id: userId, training_onboarding_completed_at: now, training_tour_checkpoint: null },
       { onConflict: "user_id" },
     )
     .select("training_onboarding_completed_at")

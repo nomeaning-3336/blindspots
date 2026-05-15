@@ -42,6 +42,7 @@ type SequenceMove = {
 };
 
 type CompleteSequencePayload = {
+  onboardingCheckpoint?: unknown;
   startingFen?: unknown;
   moves?: unknown;
   sequenceLength?: unknown;
@@ -275,6 +276,37 @@ export async function POST(request: Request) {
   // Fire-and-forget mining of app-native active mistakes — never blocks response.
   const initialPreviousFen = typeof payload?.previousFen === "string" ? payload.previousFen : null;
   const initialPlayedMove = typeof payload?.playedMove === "string" ? payload.playedMove : null;
+
+  if (shouldPersistTrainingTourCheckpoint(payload?.onboardingCheckpoint)) {
+    await persistTrainingTourCheckpoint({
+      userId,
+      sessionId: session.id,
+      startingFen,
+      moves,
+      sequenceLength,
+      previousFen: initialPreviousFen,
+      playedMove: initialPlayedMove,
+      moveScores: sequenceEvaluation.moveScores,
+      positionEvaluations: sequenceEvaluation.positionEvaluations,
+      elo: {
+        eloBefore,
+        eloAfter,
+        eloDelta,
+        kFactor,
+        opponentElo,
+        expectedScore,
+        actualScore,
+        rawDelta: eloUpdate?.rawDelta ?? 0,
+        clampedDelta: eloUpdate?.clampedDelta ?? 0,
+        skipped: evalPreservationScore === null,
+        ratingDeviationBefore: eloUpdate?.ratingDeviationBefore ?? profileRatingDeviation,
+        ratingDeviationAfter: eloUpdate?.ratingDeviationAfter ?? profileRatingDeviation,
+      },
+      trainingOutcome,
+      averageCpLoss,
+      maxSingleCpLoss,
+    });
+  }
 
   if (process.env.NODE_ENV !== "production" && (!initialPreviousFen || !initialPlayedMove)) {
     console.warn("[complete-sequence] missing served-position prelude in completion payload", {
@@ -1339,5 +1371,73 @@ async function persistMistakeAttempts(
         .eq("decision_fen", decisionFen)
         .is("resolved_at", null);
     }
+  }
+}
+
+function shouldPersistTrainingTourCheckpoint(value: unknown) {
+  return value === "postmortem_elo";
+}
+
+async function persistTrainingTourCheckpoint(input: {
+  userId: string;
+  sessionId: string;
+  startingFen: string;
+  moves: Array<{ san: string; uci: string; side: string }>;
+  sequenceLength: number;
+  previousFen: string | null;
+  playedMove: string | null;
+  moveScores: SequenceEvaluationResult["moveScores"];
+  positionEvaluations: PositionEvaluation[];
+  elo: Record<string, unknown>;
+  trainingOutcome: string;
+  averageCpLoss: number;
+  maxSingleCpLoss: number;
+}) {
+  const supabase = getSupabaseAdminClient();
+
+  const { data: existing, error: loadError } = await supabase
+    .from("user_onboarding_state")
+    .select("training_onboarding_completed_at")
+    .eq("user_id", input.userId)
+    .maybeSingle();
+
+  if (loadError) {
+    console.error("[training-tour-checkpoint] failed to load onboarding state", loadError);
+    return;
+  }
+
+  if (existing?.training_onboarding_completed_at) {
+    return;
+  }
+
+  const checkpoint = {
+    type: "postmortem_elo",
+    createdAt: new Date().toISOString(),
+    sessionId: input.sessionId,
+    startingFen: input.startingFen,
+    sequenceLength: input.sequenceLength,
+    previousFen: input.previousFen,
+    playedMove: input.playedMove,
+    moves: input.moves,
+    moveScores: input.moveScores,
+    positionEvaluations: input.positionEvaluations,
+    elo: input.elo,
+    trainingOutcome: input.trainingOutcome,
+    averageCpLoss: input.averageCpLoss,
+    maxSingleCpLoss: input.maxSingleCpLoss,
+  };
+
+  const { error } = await (supabase
+    .from("user_onboarding_state") as any)
+    .upsert(
+      {
+        user_id: input.userId,
+        training_tour_checkpoint: checkpoint,
+      },
+      { onConflict: "user_id" },
+    );
+
+  if (error) {
+    console.error("[training-tour-checkpoint] failed to persist checkpoint", error);
   }
 }
