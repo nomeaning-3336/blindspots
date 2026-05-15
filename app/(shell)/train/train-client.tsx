@@ -4332,7 +4332,6 @@ function TrainPostmortemTourOverlay({
   const [displayedStep, setDisplayedStep] = useState(step);
   const [previousDisplayedStep, setPreviousDisplayedStep] = useState<number | null>(null);
   const [isCardSwitching, setIsCardSwitching] = useState(false);
-  const [isPlacementSwitching, setIsPlacementSwitching] = useState(false);
   const cardSwitchingTimersRef = useRef<number[]>([]);
   const transitionTokenRef = useRef(0);
   const allSteps = steps as readonly PostmortemTourStep[];
@@ -4340,7 +4339,6 @@ function TrainPostmortemTourOverlay({
   const previousTourStep = previousDisplayedStep === null ? null : allSteps[previousDisplayedStep] ?? null;
   const currentStep = allSteps[step] ?? allSteps[0];
   const shouldCenterCard = centerCard || currentStep.centerCard === true;
-  const previousCenterCardRef = useRef(shouldCenterCard);
   const isFirst = step <= 0;
   const isLast = step >= steps.length - 1;
 
@@ -4554,18 +4552,6 @@ function TrainPostmortemTourOverlay({
     return clearSwitchingTimers;
   }, [step]);
 
-  // ── Detect placement-mode changes (target-positioned ↔ centered) ──
-  useEffect(() => {
-    if (previousCenterCardRef.current !== shouldCenterCard) {
-      previousCenterCardRef.current = shouldCenterCard;
-      setIsPlacementSwitching(true);
-      const timer = window.setTimeout(() => {
-        setIsPlacementSwitching(false);
-      }, 280);
-      return () => window.clearTimeout(timer);
-    }
-  }, [shouldCenterCard]);
-
   const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
   const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
   const margin = 16;
@@ -4639,7 +4625,7 @@ function TrainPostmortemTourOverlay({
     maxHeight: maxCardHeight,
   };
 
-  const cardVisibilityClass = isPlacementSwitching || postmortemTourSoftSwitching
+  const cardVisibilityClass = postmortemTourSoftSwitching
     ? "opacity-0 scale-[0.985] translate-y-0.5"
     : "opacity-100 scale-100 translate-y-0";
 
