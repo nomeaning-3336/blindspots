@@ -9,7 +9,6 @@ const INIT_ONBOARDING = {
   profile: null,
   preferences: { sequence_length: 4, skill_level: "beginner" },
   linkedProfiles: [],
-  shouldShowOnboarding: true,
 };
 
 const MOCK_POSITION = {

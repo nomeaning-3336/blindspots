@@ -16,7 +16,6 @@ const INIT_SKIPPED: Record<string, unknown> = {
   },
   preferences: { sequence_length: 4 },
   linkedProfiles: [],
-  shouldShowOnboarding: false,
 };
 
 // A fixture position with previousFen + playedMove so the setup replay mode activates

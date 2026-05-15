@@ -12,7 +12,7 @@ export async function POST() {
   }
 
   const state = await completeOnboardingForUser(userId);
-  if (!state.trainingOnboardingCompleted) {
+  if (!state.trainingTourCompleted) {
     return NextResponse.json({ error: "Failed to complete onboarding" }, { status: 500 });
   }
 

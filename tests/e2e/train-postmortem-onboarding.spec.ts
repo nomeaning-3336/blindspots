@@ -18,7 +18,6 @@ const INIT_READY = {
   },
   preferences: { sequence_length: 4, skill_level: "beginner" },
   linkedProfiles: [],
-  shouldShowOnboarding: false,
 };
 
 const FIRST_POSITION = {
@@ -127,8 +126,8 @@ test("postmortem onboarding tour runs on the real postmortem UI", async ({ page 
       json: {
         ok: true,
         onboarding: {
-          trainingOnboardingCompleted: true,
-          trainingOnboardingCompletedAt: new Date().toISOString(),
+          trainingTourCompleted: true,
+          trainingTourCompletedAt: new Date().toISOString(),
         },
       },
     });

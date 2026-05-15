@@ -64,9 +64,3 @@ export function buildDefaultBlindspotProfile(
     bucket_stats: buildDefaultBucketStats(),
   };
 }
-
-export function shouldShowTrainingOnboarding(
-  _profile: { profile_initialized?: boolean | null; initialization_status?: string | null } | null,
-) {
-  return false;
-}

@@ -15,7 +15,6 @@ import {
 } from "@/lib/training/elo";
 import {
   buildDefaultBlindspotProfile,
-  shouldShowTrainingOnboarding,
 } from "@/lib/training/default-profile";
 
 export const runtime = "nodejs";
@@ -57,7 +56,6 @@ export async function GET() {
     profile,
     preferences,
     linkedProfiles,
-    shouldShowOnboarding: shouldShowTrainingOnboarding(profile),
   });
 }
 
