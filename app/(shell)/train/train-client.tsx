@@ -955,11 +955,49 @@ export default function TrainPage(props: TrainPageProps) {
     };
   }
 
+  function rehydrateCheckpointMoves(startingFen: string, moves: TrainingMove[]) {
+    let chess: Chess;
+
+    try {
+      chess = new Chess(startingFen);
+    } catch {
+      return moves;
+    }
+
+    return moves.map((move) => {
+      const fenBefore = chess.fen();
+
+      try {
+        const played = chess.move({
+          from: move.uci.slice(0, 2),
+          to: move.uci.slice(2, 4),
+          promotion: move.uci[4],
+        });
+
+        if (!played) {
+          return move;
+        }
+
+        return {
+          ...move,
+          fenBefore,
+          fenAfter: chess.fen(),
+          san: move.san || played.san,
+        };
+      } catch {
+        return move;
+      }
+    });
+  }
+
   function restoreTrainingTourCheckpoint(checkpoint: TrainingTourCheckpointPayload | null | undefined) {
     if (!checkpoint || checkpoint.type !== "postmortem_elo") return false;
     if (typeof checkpoint.startingFen !== "string") return false;
 
-    const restoredMoves = normalizeCheckpointMoves(checkpoint.moves);
+    const restoredMoves = rehydrateCheckpointMoves(
+      checkpoint.startingFen,
+      normalizeCheckpointMoves(checkpoint.moves),
+    );
     if (restoredMoves.length === 0) return false;
 
     const restoredMoveScores = normalizeCheckpointMoveScores(checkpoint.moveScores);
