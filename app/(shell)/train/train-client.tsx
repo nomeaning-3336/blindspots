@@ -4597,6 +4597,7 @@ function TrainPostmortemTourOverlay({
       top: "50%",
       transform: "translate(-50%, -50%)",
       width: cardWidth,
+      height: measuredCardHeight,
       maxHeight: `calc(100vh - ${VIEWPORT_PAD * 2}px)`,
       overflowY: "auto",
     };
@@ -4605,6 +4606,7 @@ function TrainPostmortemTourOverlay({
       left: VIEWPORT_PAD,
       right: VIEWPORT_PAD,
       bottom: VIEWPORT_PAD,
+      height: measuredCardHeight,
       maxHeight: `calc(100vh - ${VIEWPORT_PAD * 2}px)`,
       overflowY: "auto",
       width: "auto",
@@ -4615,6 +4617,7 @@ function TrainPostmortemTourOverlay({
       left: VIEWPORT_PAD,
       right: VIEWPORT_PAD,
       top: VIEWPORT_PAD,
+      height: measuredCardHeight,
       maxHeight: `calc(100vh - ${VIEWPORT_PAD * 2}px)`,
       overflowY: "auto",
       width: spotlight ? Math.min(cardMaxWidth, viewportWidth - VIEWPORT_PAD * 2) : cardMaxWidth,
@@ -4637,7 +4640,7 @@ function TrainPostmortemTourOverlay({
     cardLeft = clamp(preferredLeftPos, VIEWPORT_PAD, viewportWidth - cardMaxWidth - VIEWPORT_PAD);
     cardTop = clamp(preferredTopPos, VIEWPORT_PAD, viewportHeight - measuredCardHeight - VIEWPORT_PAD);
 
-    cardStyle = { top: cardTop, left: cardLeft, width: cardMaxWidth };
+    cardStyle = { top: cardTop, left: cardLeft, width: cardMaxWidth, height: measuredCardHeight };
   }
 
   const cardVisibilityClass = isPlacementSwitching || postmortemTourSoftSwitching
@@ -4711,7 +4714,7 @@ function TrainPostmortemTourOverlay({
         className={[
           "fixed grid gap-4 rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)]",
           cardVisibilityClass,
-          "transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none motion-reduce:transform-none",
+          "transition-[opacity,transform,top,left,width,height] duration-[280ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none motion-reduce:transform-none",
         ].join(" ")}
         ref={cardRef}
         style={cardStyle}
@@ -4749,11 +4752,9 @@ function TrainPostmortemTourOverlay({
           <div
             key={`current-${displayedStep}`}
             className={[
-              "relative transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
-              isCardSwitching
-                ? "opacity-0 translate-y-2 blur-[1px]"
-                : "opacity-100 translate-y-0 blur-0",
-              "motion-reduce:transform-none motion-reduce:blur-0 motion-reduce:transition-none motion-reduce:opacity-100",
+              "relative transition-opacity duration-[180ms] ease-[cubic-bezier(0.32,0.72,0,1)]",
+              isCardSwitching ? "opacity-0" : "opacity-100",
+              "motion-reduce:transition-none motion-reduce:opacity-100",
             ].join(" ")}
           >
             <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
