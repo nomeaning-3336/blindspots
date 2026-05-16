@@ -179,7 +179,9 @@ type AddPositionOnboardingPhase =
   | "idle"
   | "waiting-for-click"
   | "saving"
-  | "success";
+  | "success-entering"
+  | "success-visible"
+  | "success-leaving";
 
 const POSTMORTEM_TOUR_STEPS = [
   {
@@ -218,7 +220,7 @@ const POSTMORTEM_TOUR_STEPS = [
   {
     target: "postmortem-panel",
     headline: "Position saved.",
-    body: "Great, now you know how to add new positions to the Learning queue. Next, let's learn how to add notes.",
+    body: "Great! Now you know how to add new positions to the Learning queue. Next, let's learn how to add notes.",
     cta: "Next",
     centerCard: true,
     suppressSpotlight: true,
@@ -229,15 +231,7 @@ const POSTMORTEM_TOUR_STEPS = [
     headline: "The Notes toggle.",
     body: "To access the Notes section, press the Notes toggle on the top right.",
     cta: "Okay",
-    sidePanel: "analysis",
-  },
-  {
-    target: "notes-toggle",
-    headline: "Open the Notes section.",
-    body: "Now press the Notes toggle.",
-    cta: "Okay",
     requiresAction: "notes-toggle",
-    suppressSpotlight: true,
     sidePanel: "analysis",
   },
   {
@@ -459,7 +453,6 @@ import {
   primeTrainAudio,
   unlockTrainAudio,
   playTrainMoveSound,
-  playTrainUiSound,
   setupTrainAudioUnlockOnGesture,
   getTrainAudioStats,
   pitchRatioForPly,
@@ -990,7 +983,22 @@ export default function TrainPage(props: TrainPageProps) {
   const [postmortemAddPositionActionDone, setPostmortemAddPositionActionDone] = useState(false);
   const [postmortemAddPositionInstructionAcknowledged, setPostmortemAddPositionInstructionAcknowledged] = useState(false);
   const [addPositionOnboardingPhase, setAddPositionOnboardingPhase] = useState<AddPositionOnboardingPhase>("idle");
+  const [queuedLearningPositionFens, setQueuedLearningPositionFens] = useState<Set<string>>(() => new Set());
   const addPositionOnboardingSuccessTimerRef = useRef<number | null>(null);
+  const addPositionOnboardingSuccessTimerRef2 = useRef<number | null>(null);
+  const addPositionOnboardingSuccessTimerRef3 = useRef<number | null>(null);
+  const clearAddPositionOnboardingSuccessTimers = useCallback(() => {
+    [
+      addPositionOnboardingSuccessTimerRef,
+      addPositionOnboardingSuccessTimerRef2,
+      addPositionOnboardingSuccessTimerRef3,
+    ].forEach((timerRef) => {
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    });
+  }, []);
   const currentPostmortemTourStep = POSTMORTEM_TOUR_STEPS[postmortemOnboardingStep] as PostmortemTourStep;
   const isPostmortemAddPositionActionStep =
     postmortemOnboardingActive &&
@@ -1472,11 +1480,9 @@ export default function TrainPage(props: TrainPageProps) {
 
   useEffect(() => {
     return () => {
-      if (addPositionOnboardingSuccessTimerRef.current) {
-        window.clearTimeout(addPositionOnboardingSuccessTimerRef.current);
-      }
+      clearAddPositionOnboardingSuccessTimers();
     };
-  }, []);
+  }, [clearAddPositionOnboardingSuccessTimers]);
 
   useEffect(() => {
     if (!postmortemOnboardingActive) return;
@@ -3010,17 +3016,14 @@ export default function TrainPage(props: TrainPageProps) {
     setPostmortemNotesToggleInstructionAcknowledged(false);
     setPostmortemNotesToggleActionDone(false);
     setPostmortemNotesToggleTransitioning(false);
-    if (addPositionOnboardingSuccessTimerRef.current) {
-      window.clearTimeout(addPositionOnboardingSuccessTimerRef.current);
-      addPositionOnboardingSuccessTimerRef.current = null;
-    }
+    clearAddPositionOnboardingSuccessTimers();
     setPostmortemOnboardingStep((current) => {
       if (postmortemAddPositionCheckpointReached && afterAddBridgeStepIndex >= 0) {
         return Math.max(afterAddBridgeStepIndex, current - 1);
       }
       return Math.max(0, current - 1);
     });
-  }, [postmortemAddPositionCheckpointReached]);
+  }, [clearAddPositionOnboardingSuccessTimers, postmortemAddPositionCheckpointReached]);
 
   const handlePostmortemTourNext = useCallback(() => {
     const currentStep = POSTMORTEM_TOUR_STEPS[postmortemOnboardingStep] as PostmortemTourStep | undefined;
@@ -3603,6 +3606,19 @@ export default function TrainPage(props: TrainPageProps) {
     userMoveSide,
     visibleSequencePositions,
   ]);
+  const learningQueueAddTargetFen = learningQueueAddTarget?.decisionFen
+    ? normalizeDecisionFen(learningQueueAddTarget.decisionFen)
+    : null;
+  const isLearningQueueAddTargetQueued = Boolean(
+    learningQueueAddTargetFen && queuedLearningPositionFens.has(learningQueueAddTargetFen),
+  );
+  const isAddPositionSuccessState =
+    addPositionOnboardingPhase.startsWith("success-") || isLearningQueueAddTargetQueued;
+  const copyFenPreview = boardFen
+    ? boardFen.length > 34
+      ? `${boardFen.slice(0, 34)}...`
+      : boardFen
+    : "No FEN available";
   const boardRailMoves = useMemo(
     () => displayMoves.map((move, index) => ({ move, index })),
     [displayMoves],
@@ -4212,9 +4228,6 @@ export default function TrainPage(props: TrainPageProps) {
   // ── Train Onboarding Intro Overlay ─────────────────────────────────
 // Show (and animate) the intro overlay while it is still visible.
 // Once done, fade it out then unmount so it stops blocking interaction.
-const playUiClick = useCallback(() => {
-  playTrainUiSound("uiClick", 0.6);
-}, []);
 const introOverlay = trainOnboardingIntroVisible ? (
     <div
       ref={introOverlayRef}
@@ -4449,12 +4462,6 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 }
               }
 
-              const copyFenPreview = boardFen
-                ? boardFen.length > 34
-                  ? `${boardFen.slice(0, 34)}...`
-                  : boardFen
-                : "No FEN available";
-
               const copyFenButton = (
                 <button
                   type="button"
@@ -4529,7 +4536,6 @@ const introOverlay = trainOnboardingIntroVisible ? (
                         : "",
                     ].join(" ")}
                     onClick={() => {
-                      playUiClick();
                       if (isPostmortemNotesToggleWaiting && item === "memory") {
                         setPostmortemNotesToggleTransitioning(true);
                         setPostmortemSidePanel("memory");
@@ -4567,6 +4573,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 mode={resultMode}
                 positions={visibleSequencePositions}
                 canonicalMoves={canonicalPostmortemMoves}
+                queuedLearningPositionFens={queuedLearningPositionFens}
                 currentIndex={activeExploreIndex}
                 engineLines={classifiedDisplayLines}
                 isEngineLinesLoading={isDisplayLoading}
@@ -4605,14 +4612,14 @@ const introOverlay = trainOnboardingIntroVisible ? (
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <button
                 type="button"
-                disabled={addingPositionToQueue || !learningQueueAddTarget?.decisionFen}
+                disabled={addingPositionToQueue || !learningQueueAddTarget?.decisionFen || isLearningQueueAddTargetQueued}
                 onClick={async () => {
                   if (addingPositionToQueue) return;
-                  if (addPositionOnboardingPhase === "success") return;
-                  playUiClick();
+                  if (isAddPositionSuccessState) return;
                   const addTarget = learningQueueAddTarget;
                   const fenToAdd = addTarget?.decisionFen;
                   if (!fenToAdd) return;
+                  const normalizedFenToAdd = normalizeDecisionFen(fenToAdd);
                   const preludeMove = addTarget.setupMove;
                   setAddingPositionToQueue(true);
                   if (isPostmortemAddPositionActionStep) {
@@ -4630,20 +4637,31 @@ const introOverlay = trainOnboardingIntroVisible ? (
                       }),
                     });
                     if (!res.ok) throw new Error(`Add failed: ${res.status}`);
+                    setQueuedLearningPositionFens((prev) => {
+                      const next = new Set(prev);
+                      next.add(normalizedFenToAdd);
+                      return next;
+                    });
                     if (isPostmortemAddPositionActionStep) {
-                      setAddPositionOnboardingPhase("success");
-                      playTrainUiSound("addPositionConfirm", 0.7);
-                      if (addPositionOnboardingSuccessTimerRef.current) {
-                        window.clearTimeout(addPositionOnboardingSuccessTimerRef.current);
-                      }
+                      clearAddPositionOnboardingSuccessTimers();
+                      setAddPositionOnboardingPhase("success-entering");
                       addPositionOnboardingSuccessTimerRef.current = window.setTimeout(() => {
+                        setAddPositionOnboardingPhase("success-visible");
+                        addPositionOnboardingSuccessTimerRef.current = null;
+                      }, 120);
+                      addPositionOnboardingSuccessTimerRef2.current = window.setTimeout(() => {
+                        setAddPositionOnboardingPhase("success-leaving");
+                        addPositionOnboardingSuccessTimerRef2.current = null;
+                      }, 900);
+                      addPositionOnboardingSuccessTimerRef3.current = window.setTimeout(() => {
                         setPostmortemAddPositionActionDone(true);
                         setPostmortemAddPositionCheckpointReached(true);
                         setPostmortemOnboardingStep((step) =>
                           Math.min(step + 1, POSTMORTEM_TOUR_STEPS.length - 1),
                         );
-                        addPositionOnboardingSuccessTimerRef.current = null;
-                      }, 1200);
+                        setAddPositionOnboardingPhase("idle");
+                        addPositionOnboardingSuccessTimerRef3.current = null;
+                      }, 1120);
                       return;
                     }
                     showAlert({
@@ -4672,25 +4690,29 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 data-tour="add-position-to-learning-queue"
                 className={[
                   secondaryActionClassName,
-                  "min-h-12 w-full justify-center px-5 disabled:opacity-60",
+                  "min-h-12 w-full justify-center px-5",
+                  !isAddPositionSuccessState ? "disabled:opacity-60" : "",
                   isPostmortemAddPositionWaiting
                     ? "train-add-position-glow ring-2 ring-[var(--app-accent)] transition-all duration-300 ease-out"
                     : "",
-                  addPositionOnboardingPhase === "success"
-                    ? "border-[var(--app-class-good)] text-[var(--app-class-good)] shadow-[0_0_24px_color-mix(in_srgb,var(--app-class-good)_55%,transparent)] transition-all duration-300 ease-out"
+                  isAddPositionSuccessState
+                    ? "train-add-position-success transition-all duration-300 ease-out"
+                    : "",
+                  addPositionOnboardingPhase === "success-leaving"
+                    ? "opacity-0 scale-[0.98]"
                     : "",
                 ].join(" ")}
               >
                 <span className={postmortemActionTextClassName}>
                   {addPositionOnboardingPhase === "saving"
                     ? "Saving..."
-                    : addPositionOnboardingPhase === "success"
+                    : isAddPositionSuccessState
                       ? (
-                        <span className="inline-flex items-center gap-2">
-                          <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor" aria-hidden="true">
-                            <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                        <span className="inline-flex items-center justify-center gap-2">
+                          <svg viewBox="0 0 20 20" className="h-4 w-4 shrink-0" fill="currentColor" aria-hidden="true">
+                            <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
                           </svg>
-                          Added to Learning Queue
+                          Position added
                         </span>
                       )
                       : "Add Position to Learning Queue"}
@@ -4702,7 +4724,6 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 onClick={async () => {
                   const fenToCopy = boardFen;
                   if (!fenToCopy) return;
-                  playUiClick();
                   try {
                     await navigator.clipboard.writeText(fenToCopy);
                     setFenCopied(true);
@@ -4719,11 +4740,28 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 }}
                 className={[
                   secondaryActionClassName,
-                  "min-h-12 w-full justify-center px-5 disabled:opacity-60",
+                  "min-h-12 w-full justify-center gap-2 px-5 disabled:opacity-60",
                 ].join(" ")}
               >
+                <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
+                  <svg
+                    aria-hidden="true"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="shrink-0"
+                  >
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                </span>
                 <span className={postmortemActionTextClassName}>
-                  {fenCopied ? "Copied FEN ✓" : "Copy FEN"}
+                  {fenCopied ? "Copied FEN" : "Copy FEN"}
                 </span>
               </button>
             </div>
@@ -4785,7 +4823,6 @@ const introOverlay = trainOnboardingIntroVisible ? (
           actionInstructionAcknowledged={postmortemAddPositionInstructionAcknowledged}
           centerCard={false}
           postmortemTourSoftSwitching={postmortemTourSoftSwitching}
-          onUiClick={playUiClick}
           backDisabled={
             postmortemOnboardingStep <= 0 ||
             (
@@ -4806,6 +4843,22 @@ const introOverlay = trainOnboardingIntroVisible ? (
           box-shadow:
             0 0 0 1px color-mix(in srgb, var(--app-accent) 80%, transparent),
             0 0 24px color-mix(in srgb, var(--app-accent) 70%, transparent);
+        }
+        .train-add-position-success {
+          border-color: color-mix(in srgb, var(--app-class-good) 52%, black) !important;
+          background: color-mix(in srgb, var(--app-class-good) 38%, black) !important;
+          color: #ffffff !important;
+          box-shadow: 3px 3px 0 var(--app-brutal-shadow) !important;
+        }
+        .train-add-position-success svg,
+        .train-add-position-success span {
+          color: #ffffff !important;
+        }
+        .train-move-row-learning-queued {
+          background: color-mix(in srgb, var(--app-text) 6%, transparent) !important;
+        }
+        .train-move-row-learning-icon {
+          color: color-mix(in srgb, var(--app-class-good) 76%, white);
         }
         @media (prefers-reduced-motion: no-preference) {
           .train-add-position-glow {
@@ -4926,7 +4979,6 @@ function TrainPostmortemTourOverlay({
   centerCard = false,
   postmortemTourSoftSwitching = false,
   backDisabled = false,
-  onUiClick = () => {},
 }: {
   steps: readonly PostmortemTourStep[];
   step: number;
@@ -4941,7 +4993,6 @@ function TrainPostmortemTourOverlay({
   centerCard?: boolean;
   postmortemTourSoftSwitching?: boolean;
   backDisabled?: boolean;
-  onUiClick?: () => void;
 }) {
   const [resolvedStepIndex, setResolvedStepIndex] = useState(step);
   const [targetRect, setTargetRect] = useState<{
@@ -5030,6 +5081,14 @@ function TrainPostmortemTourOverlay({
 
       const currentStep = allSteps[step];
       if (!currentStep) {
+        setIsPositioningSpotlight(false);
+        return;
+      }
+
+      if (currentStep.centerCard) {
+        setMissingTarget(false);
+        setTargetRect(null);
+        setResolvedStepIndex(step);
         setIsPositioningSpotlight(false);
         return;
       }
@@ -5506,7 +5565,7 @@ function TrainPostmortemTourOverlay({
       >
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); onUiClick(); onSkip(); }}
+          onClick={(e) => { e.stopPropagation(); onSkip(); }}
           className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center text-[var(--app-muted)] transition hover:text-[var(--app-text)]"
           aria-label="Close postmortem tour"
           disabled={completionInFlight}
@@ -5553,7 +5612,7 @@ function TrainPostmortemTourOverlay({
         <div className="mt-4 flex shrink-0 items-center justify-between gap-3 pt-4">
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight && !isFirst && !backDisabled) { onUiClick(); onBack(); } }}
+            onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight && !isFirst && !backDisabled) { onBack(); } }}
             aria-disabled={isFirst || isPositioningSpotlight || backDisabled}
             disabled={backDisabled}
             className="min-h-11 border border-[var(--app-border)] px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)] aria-disabled:cursor-not-allowed aria-disabled:opacity-40 disabled:cursor-not-allowed disabled:opacity-40"
@@ -5563,7 +5622,7 @@ function TrainPostmortemTourOverlay({
 
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight) { onUiClick(); onNext(); } }}
+            onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight) { onNext(); } }}
             className="app-brutal-button train-tour-primary-button min-h-11 px-6 text-xs"
             disabled={completionInFlight || isPositioningSpotlight || (isActionStep && actionInstructionAcknowledged && !actionCompleted)}
           >
@@ -6751,6 +6810,7 @@ function ResultsPanel({
   mode,
   positions,
   canonicalMoves,
+  queuedLearningPositionFens,
   currentIndex,
   engineLines,
   currentEngineEval,
@@ -6782,6 +6842,7 @@ function ResultsPanel({
   mode: ResultMode;
   positions: SequencePosition[];
   canonicalMoves: CanonicalPostmortemMove[];
+  queuedLearningPositionFens: ReadonlySet<string>;
   currentIndex: number;
   engineLines: EngineLineResult[];
   currentEngineEval?: number;
@@ -6844,6 +6905,7 @@ function ResultsPanel({
         <AnalysisMoveTable
           moves={userMoves}
           canonicalMoves={canonicalMoves}
+          queuedLearningPositionFens={queuedLearningPositionFens}
           currentIndex={currentIndex}
           selectedMoveIndex={selectedMoveIndex}
           isManualPostmortemExploration={isManualPostmortemExploration}
@@ -6865,7 +6927,7 @@ function ResultsPanel({
     <div className="flex min-h-0 flex-1 flex-col gap-[var(--pm-gap)] opacity-80 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">
       <EloResultCard result={eloResult} isLoading={isSaving} hideDelta={hideDelta} subtext={subtext} />
       <EvalGraph points={graphPoints} currentIndex={positions.length - 1} compact engineCp={currentEngineEval} />
-      <AnalysisMoveTable moves={userMoves} canonicalMoves={canonicalMoves} isAnalyzing={isSaving} compact showEvaluations={true} asyncMoveEvaluations={asyncMoveEvaluations} />
+      <AnalysisMoveTable moves={userMoves} canonicalMoves={canonicalMoves} queuedLearningPositionFens={queuedLearningPositionFens} isAnalyzing={isSaving} compact showEvaluations={true} asyncMoveEvaluations={asyncMoveEvaluations} />
     </div>
   );
 }
@@ -6998,6 +7060,7 @@ function EvalGraph({
 function AnalysisMoveTable({
   moves,
   canonicalMoves,
+  queuedLearningPositionFens,
   currentIndex,
   selectedMoveIndex,
   isAnalyzing,
@@ -7010,6 +7073,7 @@ function AnalysisMoveTable({
 }: {
   moves: Array<TrainingMove & { absoluteIndex?: number }>;
   canonicalMoves?: CanonicalPostmortemMove[];
+  queuedLearningPositionFens?: ReadonlySet<string>;
   currentIndex?: number;
   selectedMoveIndex?: number | null;
   isAnalyzing?: boolean;
@@ -7039,8 +7103,18 @@ function AnalysisMoveTable({
           <div className="px-3 py-4 text-sm text-[var(--app-muted)]">No move grades yet.</div>
         ) : null}
         {moves.map((move, index) => {
-        const positionIndex = move.absoluteIndex ?? index;
-        const canonicalMove = canonicalMoves?.find((entry) => entry.positionIndex === positionIndex) ?? null;
+        const rawPositionIndex = move.absoluteIndex ?? index;
+        const moveDecisionFen = move.fenBefore ? normalizeDecisionFen(move.fenBefore) : null;
+        const canonicalMove =
+          canonicalMoves?.find((entry) => (
+            Boolean(moveDecisionFen) &&
+            entry.uci === move.uci &&
+            Boolean(entry.move?.fenBefore) &&
+            normalizeDecisionFen(entry.move!.fenBefore!) === moveDecisionFen
+          )) ??
+          canonicalMoves?.find((entry) => entry.positionIndex === rawPositionIndex) ??
+          null;
+        const positionIndex = canonicalMove?.positionIndex ?? rawPositionIndex;
         const canonicalRow = canonicalMove?.tableRow ?? null;
         const isSelected =
           !isManualPostmortemExploration &&
@@ -7059,6 +7133,10 @@ function AnalysisMoveTable({
         const evalAfter = canonicalRow?.evalAfter ?? move.evalAfter;
         const mateBefore = canonicalRow?.mateBefore ?? move.mateBefore;
         const mateAfter = canonicalRow?.mateAfter ?? move.mateAfter;
+        const learningDecisionFen = canonicalMove?.move?.fenBefore ?? move.fenBefore;
+        const isQueuedForLearning = Boolean(
+          learningDecisionFen && queuedLearningPositionFens?.has(normalizeDecisionFen(learningDecisionFen)),
+        );
         return (
         <button
           type="button"
@@ -7068,6 +7146,7 @@ function AnalysisMoveTable({
             compact ? "h-[var(--pm-move-row-h)] text-sm min-[1500px]:text-base" : "min-h-10 text-sm",
             onSelectPosition ? "cursor-pointer transition" : "cursor-default",
             isCurrentPosition || isSelected ? "bg-[var(--app-highlight-soft)]" : "",
+            isQueuedForLearning ? "train-move-row-learning-queued" : "",
           ].join(" ")}
           disabled={!onSelectPosition}
           onClick={(event) => {
@@ -7085,6 +7164,29 @@ function AnalysisMoveTable({
             <span className="truncate" style={{ color: classificationColor(visibleClassification) }}>
               {move.san}
             </span>
+            {isQueuedForLearning ? (
+              <span
+                className="train-move-row-learning-icon inline-flex h-5 w-5 shrink-0 items-center justify-center"
+                aria-label="In Learning queue"
+                title="In Learning queue"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 6.5v14" />
+                  <path d="M4 5.2c2.6-.8 5.3-.3 8 1.3v14c-2.7-1.6-5.4-2.1-8-1.3v-14Z" />
+                  <path d="M20 5.2c-2.6-.8-5.3-.3-8 1.3v14c2.7-1.6 5.4-2.1 8-1.3v-14Z" />
+                </svg>
+              </span>
+            ) : null}
           </span>
           <span className="overflow-hidden whitespace-nowrap text-left tabular-nums text-[var(--app-muted-soft)]">
             {typeof evalBefore === "number" ? formatEvalLabel(evalBefore, mateBefore) : pendingValue}
@@ -7247,7 +7349,7 @@ function TrainOnboardingIntroOverlay({
       >
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); onUiClick(); onSkip(); }}
+          onClick={(e) => { e.stopPropagation(); onSkip(); }}
           className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center text-[var(--app-muted)] transition hover:text-[var(--app-text)]"
           aria-label="Close onboarding"
         >

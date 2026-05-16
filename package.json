@@ -16,6 +16,7 @@
     "generate:training-corpus": "node scripts/generate-training-corpus.mjs",
     "audit:generated-training-corpus": "node scripts/audit-generated-training-corpus.mjs",
     "db:query": "node --env-file=.env.agent.local scripts/db-query.mjs",
+    "auth:agent-link": "node scripts/generate-agent-magic-link.mjs",
     "test:performance-time-management": "node --test --experimental-strip-types tests/performance-time-management.test.ts",
     "test:performance-client-analysis": "node --test --experimental-strip-types tests/performance-client-analysis.test.ts",
     "test:auth-magic-link": "node --test --experimental-strip-types tests/auth-magic-link.test.ts",

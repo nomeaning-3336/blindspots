@@ -38,6 +38,23 @@ test("postmortem tour card does not animate max-height during target transitions
   assert.doesNotMatch(source, /transition-\[[^\]]*max-height[^\]]*\]/);
 });
 
+test("postmortem tour overlay cannot create viewport scrollbars during transitions", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
+
+  assert.match(overlaySource, /className="fixed inset-0 z-\[80\] overflow-hidden"/);
+  assert.doesNotMatch(overlaySource, /left-\[-9999px\]/);
+  assert.match(overlaySource, /"pointer-events-none fixed left-0 top-0 opacity-0"/);
+});
+
+test("postmortem centered saved step uses the tour overlay viewport clip", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
+
+  assert.match(overlaySource, /className="fixed inset-0 z-\[80\] overflow-hidden"/);
+  assert.match(overlaySource, /if \(currentStep\.centerCard\) \{/);
+});
+
 test("postmortem tour target geometry is not live-resized during card transitions", () => {
   const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
   const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
@@ -106,6 +123,199 @@ test("add-position Okay button remains clickable before the action instruction i
     overlaySource,
     /disabled=\{completionInFlight \|\| isPositioningSpotlight \|\| \(isActionStep && !actionCompleted && !shouldCenterCard\)\}/,
   );
+});
+
+test("add-position action transition does not show a Waiting fallback CTA", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
+
+  assert.match(overlaySource, /const primaryButtonLabel =/);
+  assert.match(overlaySource, /isActionStep && !actionCompleted\s*\?\s*currentStep\.cta \?\? "Next"/);
+  assert.doesNotMatch(overlaySource, /displayedTourStep\.cta \?\? "Waiting\.\.\."/);
+});
+
+test("postmortem tour primary button keeps a stable hit target on hover and active", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
+
+  assert.match(overlaySource, /className="app-brutal-button train-tour-primary-button min-h-11 px-6 text-xs"/);
+  assert.match(source, /\.train-tour-primary-button:hover,/);
+  assert.match(source, /\.train-tour-primary-button:focus-visible,/);
+  assert.match(source, /\.train-tour-primary-button:active/);
+  assert.match(source, /transform: none;/);
+});
+
+test("add-position onboarding action uses staged saving and success phases", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const addButtonSource = source.slice(
+    source.indexOf('data-tour="add-position-to-learning-queue"') - 2400,
+    source.indexOf('data-tour="add-position-to-learning-queue"') + 1200,
+  );
+
+  assert.match(source, /type AddPositionOnboardingPhase =\s*\|\s*"idle"\s*\|\s*"waiting-for-click"\s*\|\s*"saving"\s*\|\s*"success-entering"\s*\|\s*"success-visible"\s*\|\s*"success-leaving"/);
+  assert.match(source, /const shouldHideTourForAddPosition =/);
+  assert.match(source, /addPositionOnboardingPhase !== "idle"/);
+  assert.match(source, /setAddPositionOnboardingPhase\("saving"\)/);
+  assert.match(source, /setAddPositionOnboardingPhase\("success-entering"\)/);
+  assert.match(addButtonSource, /setAddPositionOnboardingPhase\("success-visible"\)/);
+  assert.match(addButtonSource, /setAddPositionOnboardingPhase\("success-leaving"\)/);
+  assert.match(addButtonSource, /window\.setTimeout\(\(\) => \{/);
+  assert.match(addButtonSource, /setPostmortemAddPositionActionDone\(true\)/);
+  assert.match(addButtonSource, /"Saving\.\.\."/);
+  assert.doesNotMatch(addButtonSource, /"Adding\.\.\."/);
+  assert.doesNotMatch(addButtonSource, /"Position added successfully"/);
+  assert.doesNotMatch(addButtonSource, /addPositionOnboardingPhase === "success"/);
+});
+
+test("add-position onboarding success uses the button before showing the saved step", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const addHandlerSource = source.slice(
+    source.indexOf('data-tour="add-position-to-learning-queue"') - 3600,
+    source.indexOf('data-tour="add-position-to-learning-queue"'),
+  );
+  const addButtonSource = source.slice(
+    source.indexOf('data-tour="add-position-to-learning-queue"') - 600,
+    source.indexOf('data-tour="add-position-to-learning-queue"') + 2200,
+  );
+  const onboardingSuccessIndex = addHandlerSource.indexOf("if (isPostmortemAddPositionActionStep)");
+  const alertIndex = addHandlerSource.indexOf("showAlert({");
+
+  assert.notEqual(onboardingSuccessIndex, -1);
+  assert.notEqual(alertIndex, -1);
+  assert.ok(onboardingSuccessIndex < alertIndex);
+  assert.match(addButtonSource, /train-add-position-success/);
+  assert.match(source, /\.train-add-position-success \{/);
+  assert.match(source, /background: color-mix\(in srgb, var\(--app-class-good\) 38%, black\) !important;/);
+  assert.match(source, /color: #ffffff !important;/);
+  assert.match(source, /box-shadow: 3px 3px 0 var\(--app-brutal-shadow\) !important;/);
+  assert.match(addButtonSource, /viewBox="0 0 20 20"/);
+  assert.match(addButtonSource, /Position added/);
+  assert.match(source, /headline: "Position saved\."/);
+});
+
+test("add-position success button has a checkmark and leaving phase", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const addButtonSource = source.slice(
+    source.indexOf('data-tour="add-position-to-learning-queue"') - 600,
+    source.indexOf('data-tour="add-position-to-learning-queue"') + 2200,
+  );
+
+  assert.match(addButtonSource, /addPositionOnboardingPhase === "success-leaving"/);
+  assert.match(addButtonSource, /opacity-0 scale-\[0\.98\]/);
+  assert.match(addButtonSource, /<svg viewBox="0 0 20 20"/);
+  assert.match(addButtonSource, /fillRule="evenodd"/);
+});
+
+test("added learning queue positions stay disabled and checked for that FEN", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const addButtonSource = source.slice(
+    source.indexOf('data-tour="add-position-to-learning-queue"') - 900,
+    source.indexOf('data-tour="add-position-to-learning-queue"') + 2200,
+  );
+
+  assert.match(source, /const \[queuedLearningPositionFens, setQueuedLearningPositionFens\]/);
+  assert.match(source, /const learningQueueAddTargetFen = learningQueueAddTarget\?\.decisionFen/);
+  assert.match(source, /queuedLearningPositionFens\.has\(learningQueueAddTargetFen\)/);
+  assert.match(source, /disabled=\{addingPositionToQueue \|\| !learningQueueAddTarget\?\.decisionFen \|\| isLearningQueueAddTargetQueued\}/);
+  assert.match(source, /if \(isAddPositionSuccessState\) return;/);
+  assert.match(source, /next\.add\(normalizedFenToAdd\)/);
+  assert.match(addButtonSource, /!isAddPositionSuccessState \? "disabled:opacity-60" : ""/);
+});
+
+test("postmortem copy fen button uses icon plus action-sized label", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const postmortemCopySource = source.slice(
+    source.indexOf('disabled={!boardFen}'),
+    source.indexOf("{/* ── Postmortem action footer"),
+  );
+
+  assert.match(postmortemCopySource, /secondaryActionClassName/);
+  assert.match(postmortemCopySource, /"min-h-12 w-full justify-center gap-2 px-5 disabled:opacity-60"/);
+  assert.match(postmortemCopySource, /<rect x="9" y="9" width="13" height="13" rx="2" ry="2" \/>/);
+  assert.match(postmortemCopySource, /\{fenCopied \? "Copied FEN" : "Copy FEN"\}/);
+  assert.match(postmortemCopySource, /className=\{postmortemActionTextClassName\}/);
+  assert.doesNotMatch(postmortemCopySource, /\{copyFenPreview\}/);
+  assert.doesNotMatch(postmortemCopySource, /Copied FEN ✓/);
+});
+
+test("queued learning positions are marked in the postmortem move table", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const resultsPanelSource = source.slice(
+    source.indexOf("function ResultsPanel"),
+    source.indexOf("function EvalGraph"),
+  );
+  const tableSource = source.slice(
+    source.indexOf("function AnalysisMoveTable"),
+    source.indexOf("function MoveList"),
+  );
+
+  assert.match(resultsPanelSource, /queuedLearningPositionFens=\{queuedLearningPositionFens\}/);
+  assert.match(tableSource, /queuedLearningPositionFens\?: ReadonlySet<string>/);
+  assert.match(tableSource, /entry\.uci === move\.uci/);
+  assert.match(tableSource, /normalizeDecisionFen\(entry\.move!\.fenBefore!\) === moveDecisionFen/);
+  assert.match(tableSource, /const positionIndex = canonicalMove\?\.positionIndex \?\? rawPositionIndex/);
+  assert.match(tableSource, /queuedLearningPositionFens\?\.has\(normalizeDecisionFen\(learningDecisionFen\)\)/);
+  assert.match(tableSource, /train-move-row-learning-queued/);
+  assert.match(tableSource, /train-move-row-learning-icon/);
+  assert.match(tableSource, /inline-flex h-5 w-5/);
+  assert.match(tableSource, /width="18"/);
+  assert.match(tableSource, /<path d="M12 6\.5v14" \/>/);
+  assert.match(tableSource, /aria-label="In Learning queue"/);
+  assert.match(source, /\.train-move-row-learning-queued \{/);
+  assert.match(source, /background: color-mix\(in srgb, var\(--app-text\) 6%, transparent\) !important;/);
+  assert.doesNotMatch(source, /box-shadow: inset 3px 0 0 color-mix\(in srgb, var\(--app-class-good\)/);
+  assert.match(source, /\.train-move-row-learning-icon \{/);
+});
+
+test("postmortem tour teaches the Notes toggle before switching to the notes panel", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const stepsSource = source.slice(
+    source.indexOf("const POSTMORTEM_TOUR_STEPS"),
+    source.indexOf("] as const satisfies readonly PostmortemTourStep[]"),
+  );
+  const toggleButtonSource = source.slice(
+    source.indexOf("Compact toggle: Analysis | Notes"),
+    source.indexOf("Panel content"),
+  );
+
+  assert.match(stepsSource, /target: "notes-toggle"/);
+  assert.match(stepsSource, /headline: "The Notes toggle\."/);
+  assert.doesNotMatch(stepsSource, /target: "postmortem-panel",\s*headline: "Notes",[\s\S]*?centerCard: true/);
+  assert.match(toggleButtonSource, /data-tour=\{item === "memory" \? "notes-toggle" : undefined\}/);
+});
+
+test("postmortem tour centered steps do not auto-skip when their target is absent", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const resolverSource = source.slice(
+    source.indexOf("// \u2500\u2500 Resolve step: find target"),
+    source.indexOf("const selector = `[data-tour=\"${currentStep.target}\"]`;"),
+  );
+
+  assert.match(resolverSource, /if \(currentStep\.centerCard\) \{/);
+  assert.match(resolverSource, /setResolvedStepIndex\(step\)/);
+  assert.match(resolverSource, /setIsPositioningSpotlight\(false\)/);
+  assert.doesNotMatch(resolverSource, /onMissingTarget\(\)/);
+});
+
+test("notes toggle transition switches the side panel during the soft handoff", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const nextHandlerSource = source.slice(
+    source.indexOf("const handlePostmortemTourNext"),
+    source.indexOf("const handlePostmortemTourSkip"),
+  );
+
+  assert.match(nextHandlerSource, /currentStep\?\.requiresAction === "notes-toggle"/);
+  assert.match(source, /setPostmortemNotesToggleTransitioning\(true\)/);
+  assert.match(source, /setPostmortemSidePanel\("memory"\)/);
+  assert.doesNotMatch(nextHandlerSource, /currentStep\?\.centerCard && currentStep\?\.sidePanel === "analysis"/);
+});
+
+test("postmortem add-position checkpoint locks back navigation at the notes toggle", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+
+  assert.match(source, /requiresAction: "notes-toggle"/);
+  assert.doesNotMatch(source, /headline === "Notes" && step\.centerCard === true/);
+  assert.doesNotMatch(source, /s\.headline === "Notes" && s\.centerCard === true/);
 });
 
 test("preplay onboarding and active training share the playing grid geometry", () => {
