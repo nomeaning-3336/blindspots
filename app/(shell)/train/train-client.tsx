@@ -1010,7 +1010,10 @@ export default function TrainPage(props: TrainPageProps) {
     isPostmortemAddPositionActionStep &&
     postmortemAddPositionInstructionAcknowledged &&
     !postmortemAddPositionActionDone &&
-    addPositionOnboardingPhase === "waiting-for-click";
+    (
+      addPositionOnboardingPhase === "waiting-for-click" ||
+      addPositionOnboardingPhase === "saving"
+    );
   const shouldHideTourForAddPosition =
     isPostmortemAddPositionActionStep &&
     postmortemAddPositionInstructionAcknowledged &&
@@ -5013,12 +5016,6 @@ function TrainPostmortemTourOverlay({
   const [isPositioningSpotlight, setIsPositioningSpotlight] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const [cardSize, setCardSize] = useState<{ width: number; height: number } | null>(null);
-  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
-  const [displayedStep, setDisplayedStep] = useState(step);
-  const [previousDisplayedStep, setPreviousDisplayedStep] = useState<number | null>(null);
-  const [isCardSwitching, setIsCardSwitching] = useState(false);
-  const cardSwitchingTimersRef = useRef<number[]>([]);
-  const transitionTokenRef = useRef(0);
   const previousTourGeometryRef = useRef<{
     card: { top: number; left: number } | null;
     spotlight: { top: number; left: number; width: number; height: number } | null;
@@ -5026,18 +5023,10 @@ function TrainPostmortemTourOverlay({
     card: null,
     spotlight: null,
   });
-  const measureCardRef = useRef<HTMLDivElement>(null);
-  const [measuredIncomingCard, setMeasuredIncomingCard] = useState<{
-    step: number;
-    height: number;
-  } | null>(null);
   const allSteps = steps as readonly PostmortemTourStep[];
-  const displayedTourStep = allSteps[displayedStep] ?? allSteps[0];
-  const previousTourStep = previousDisplayedStep === null ? null : allSteps[previousDisplayedStep] ?? null;
   const currentStep = allSteps[step] ?? allSteps[0];
   const shouldCenterCard = centerCard || currentStep.centerCard === true;
   const isFirst = step <= 0;
-  const isLast = step >= steps.length - 1;
 
   const VIEWPORT_PAD = 16;
   const GAP = 16;
@@ -5212,48 +5201,6 @@ function TrainPostmortemTourOverlay({
     };
   }, [resolvedStepIndex]);
 
-  // ── Track viewport size ──
-  useEffect(() => {
-    function updateViewportSize() {
-      setViewportSize({ width: window.innerWidth, height: window.innerHeight });
-    }
-    updateViewportSize();
-    window.addEventListener("resize", updateViewportSize);
-    return () => window.removeEventListener("resize", updateViewportSize);
-  }, []);
-
-  // ── Crossfade card content between steps ──
-  function clearSwitchingTimers() {
-    cardSwitchingTimersRef.current.forEach((t) => window.clearTimeout(t));
-    cardSwitchingTimersRef.current = [];
-  }
-
-  useEffect(() => {
-    return clearSwitchingTimers;
-  }, []);
-
-  useEffect(() => {
-    if (step === displayedStep) return;
-
-    const previous = displayedStep;
-    clearSwitchingTimers();
-    setPreviousDisplayedStep(previous);
-    setIsCardSwitching(true);
-
-    const swapTimer = window.setTimeout(() => {
-      setDisplayedStep(step);
-    }, 180);
-
-    const doneTimer = window.setTimeout(() => {
-      setPreviousDisplayedStep(null);
-      setIsCardSwitching(false);
-    }, 520);
-
-    cardSwitchingTimersRef.current.push(swapTimer, doneTimer);
-
-    return clearSwitchingTimers;
-  }, [step]);
-
   const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
   const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
   const margin = 16;
@@ -5310,31 +5257,7 @@ function TrainPostmortemTourOverlay({
     cardWidth = cardMaxWidth;
   }
 
-  // Pre-measure incoming step card height so positioning uses the right size before animation starts.
-  const incomingCardHeight =
-    measuredIncomingCard?.step === step ? measuredIncomingCard.height : null;
-
-  const positioningCardHeight =
-    isCardSwitching && incomingCardHeight
-      ? Math.max(measuredCardHeight, incomingCardHeight)
-      : incomingCardHeight ?? measuredCardHeight;
-
-  const effectiveCardHeight = Math.min(positioningCardHeight, maxCardHeight);
-
-  useLayoutEffect(() => {
-    const el = measureCardRef.current;
-    if (!el) return;
-
-    const rect = el.getBoundingClientRect();
-    const nextHeight = Math.ceil(rect.height);
-
-    setMeasuredIncomingCard((prev) => {
-      if (prev?.step === step && Math.abs(prev.height - nextHeight) < 1) {
-        return prev;
-      }
-      return { step, height: nextHeight };
-    });
-  }, [step, cardWidth, maxCardHeight, currentStep.headline, currentStep.body, currentStep.cta]);
+  const effectiveCardHeight = Math.min(measuredCardHeight, maxCardHeight);
 
   // Determine preferred top-left per placement strategy.
   let preferredLeft: number;
@@ -5459,7 +5382,7 @@ function TrainPostmortemTourOverlay({
     ? "Saving..."
     : isActionStep && !actionCompleted
       ? currentStep.cta ?? "Next"
-      : displayedTourStep.cta ?? "Next";
+      : currentStep.cta ?? "Next";
 
   if (!hasInitialTourGeometry) {
     return null;
@@ -5505,14 +5428,14 @@ function TrainPostmortemTourOverlay({
             width={viewportWidth}
             height={viewportHeight}
             fill="black"
-            fillOpacity="0.68"
+            fillOpacity="0.35"
             mask="url(#train-postmortem-spotlight-mask)"
           />
         </svg>
       ) : null}
       {/* Full-screen dim for centered/action instruction modal, or while resolving a target without a reusable spotlight. */}
       {shouldShowFullScreenTourDim ? (
-        <div className="pointer-events-none fixed inset-0 bg-black/68 transition-opacity duration-[520ms]" />
+        <div className="pointer-events-none fixed inset-0 bg-black/35 backdrop-blur-[1px] transition-opacity duration-[520ms]" />
       ) : null}
       {/* Click catcher — always transparent, dim layer handled separately */}
       <button
@@ -5534,39 +5457,6 @@ function TrainPostmortemTourOverlay({
           }}
         />
       ) : null}
-      {/* Hidden measurement card — renders content offscreen to pre-measure height for positioning */}
-      <div
-        ref={measureCardRef}
-        aria-hidden="true"
-        className={[
-          "pointer-events-none fixed left-0 top-0 opacity-0",
-          "flex flex-col overflow-hidden rounded-[8px] border-2 border-white/80",
-          "bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)]",
-          "shadow-[4px_4px_0_var(--app-brutal-edge)]",
-        ].join(" ")}
-        style={{
-          width: cardWidth,
-          maxHeight: maxCardHeight,
-        }}
-      >
-        <div className="shrink-0 pb-6" />
-        <div className="relative min-h-0 flex-1 overflow-y-auto pr-1">
-          <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
-            {currentStep.headline}
-          </h2>
-          <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
-            {currentStep.body}
-          </p>
-        </div>
-        <div className="mt-4 flex shrink-0 items-center justify-between gap-3 pt-4">
-          <div className="min-h-11 border border-[var(--app-border)] px-5 py-3 text-xs font-bold uppercase tracking-[0.12em]">
-            Back
-          </div>
-          <div className="app-brutal-button min-h-11 px-6 text-xs">
-            {currentStep.cta ?? "Next"}
-          </div>
-        </div>
-      </div>
       <div
         className={[
           "fixed flex flex-col overflow-hidden rounded-[8px] border-2 border-white/80 bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)]",
@@ -5593,28 +5483,15 @@ function TrainPostmortemTourOverlay({
         <div className="shrink-0 pb-6" />
 
         <div className="relative min-h-0 flex-1 overflow-y-auto pr-1">
-          {previousTourStep ? (
-            <div
-              key={`prev-${previousDisplayedStep}`}
-              className="pointer-events-none absolute inset-x-0 top-0 opacity-0 -translate-y-2 blur-[1px] transition-all duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none motion-reduce:opacity-100 motion-reduce:translate-y-0 motion-reduce:blur-0"
-            >
-              <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
-                {previousTourStep.headline}
-              </h2>
-              <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
-                {previousTourStep.body}
-              </p>
-            </div>
-          ) : null}
           <div
-            key={`current-${displayedStep}`}
+            key={`current-${step}`}
             className="relative opacity-100"
           >
             <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
-              {displayedTourStep.headline}
+              {currentStep.headline}
             </h2>
             <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
-              {missingTarget ? "Finding the section..." : displayedTourStep.body}
+              {missingTarget ? "Finding the section..." : currentStep.body}
             </p>
           </div>
         </div>
