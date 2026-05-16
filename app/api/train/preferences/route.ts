@@ -15,8 +15,27 @@ type TrainingPreferencesPayload = {
 
 const VALID_DAILY_LEVELS = ["easy", "balanced", "hard", "extreme"];
 const VALID_THRESHOLD_LEVELS = ["lenient", "balanced", "sensitive", "strict"];
-const VALID_POSITIONS = [5, 10, 20, 50];
 const VALID_CP = [25, 50, 75, 100];
+const VALID_SRS_LEVELS = ["easy", "balanced", "hard", "extreme", "custom"];
+
+function isValidSrsConfig(cfg: unknown): cfg is {
+  firstReviewDelayDays: number;
+  passIntervalsDays: number[];
+  failDelayDays: number;
+  assumedPassRate: number;
+} {
+  if (typeof cfg !== "object" || cfg === null) return false;
+  const c = cfg as Record<string, unknown>;
+  if (typeof c.firstReviewDelayDays !== "number" || c.firstReviewDelayDays < 0 || c.firstReviewDelayDays > 365) return false;
+  if (typeof c.failDelayDays !== "number" || c.failDelayDays < 0 || c.failDelayDays > 365) return false;
+  if (typeof c.assumedPassRate !== "number" || c.assumedPassRate < 0.05 || c.assumedPassRate > 0.98) return false;
+  if (!Array.isArray(c.passIntervalsDays)) return false;
+  if (c.passIntervalsDays.length < 1 || c.passIntervalsDays.length > 12) return false;
+  for (const v of c.passIntervalsDays) {
+    if (typeof v !== "number" || v < 0 || v > 3650 || !Number.isFinite(v)) return false;
+  }
+  return true;
+}
 
 export async function PATCH(request: Request) {
   const userId = await requireAppAuth("/train");
@@ -28,14 +47,23 @@ export async function PATCH(request: Request) {
   if (typeof body.dailyTargetLevel === "string" && VALID_DAILY_LEVELS.includes(body.dailyTargetLevel)) {
     updates.daily_target_level = body.dailyTargetLevel;
   }
-  if (typeof body.dailyTargetPositions === "number" && VALID_POSITIONS.includes(body.dailyTargetPositions)) {
-    updates.daily_target_positions = body.dailyTargetPositions;
+  if (typeof body.dailyTargetPositions === "number" && Number.isFinite(body.dailyTargetPositions)) {
+    const positions = Math.round(body.dailyTargetPositions);
+    if (positions >= 1 && positions <= 300) {
+      updates.daily_target_positions = positions;
+    }
   }
   if (typeof body.mistakeCaptureThresholdLevel === "string" && VALID_THRESHOLD_LEVELS.includes(body.mistakeCaptureThresholdLevel)) {
     updates.mistake_capture_threshold_level = body.mistakeCaptureThresholdLevel;
   }
   if (typeof body.mistakeCaptureThresholdCp === "number" && VALID_CP.includes(body.mistakeCaptureThresholdCp)) {
     updates.mistake_capture_threshold_cp = body.mistakeCaptureThresholdCp;
+  }
+  if (typeof body.srsProfileLevel === "string" && VALID_SRS_LEVELS.includes(body.srsProfileLevel)) {
+    updates.srs_profile_level = body.srsProfileLevel;
+  }
+  if (isValidSrsConfig(body.srsConfig)) {
+    updates.srs_config = body.srsConfig;
   }
 
   if (Object.keys(updates).length === 0) {
