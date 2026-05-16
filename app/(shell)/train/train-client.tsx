@@ -5251,9 +5251,10 @@ function TrainPostmortemTourOverlay({
     Boolean(previousTourGeometry.card) &&
     !previousTourGeometry.spotlight;
   const shouldShowFullScreenTourDim =
-    shouldCenterCard ||
-    shouldDimSuppressedSpotlight ||
-    isResolvingTargetWithoutReusableSpotlight;
+    !(isActionStep && actionInstructionAcknowledged && !actionCompleted) &&
+    (shouldCenterCard ||
+      shouldDimSuppressedSpotlight ||
+      isResolvingTargetWithoutReusableSpotlight);
   const hasResolvedCurrentTourGeometry =
     !waitsForTargetGeometry || Boolean(spotlight);
   const isResolvingTargetGeometry =
