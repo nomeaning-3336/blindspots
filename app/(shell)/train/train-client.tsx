@@ -3250,11 +3250,14 @@ export default function TrainPage(props: TrainPageProps) {
   }, [isPostMortemVisible, visibleSequencePositions, completedMoveScoreByUserMoveIndex]);
 
   // ── Move notes: derive annotatable user moves ─────────────────────
-  // Show all user moves from the canonical postmortem moves table.
+  // Notes are only allowed for positions explicitly added to the Learning Queue.
   const annotatableMoves = useMemo(() => {
     if (!isPostMortemVisible) return [];
     return canonicalPostmortemMoves
-      .filter((cm) => cm.kind === "user" && cm.uci && cm.move?.fenBefore)
+      .filter((cm) => {
+        if (cm.kind !== "user" || !cm.uci || !cm.move?.fenBefore) return false;
+        return queuedLearningPositionFens.has(normalizeDecisionFen(cm.move.fenBefore));
+      })
       .map((cm) => ({
         moveKey: buildMoveKey(cm.move!.fenBefore!, cm.uci!),
         san: cm.san ?? "",
@@ -3265,7 +3268,7 @@ export default function TrainPage(props: TrainPageProps) {
         cpLoss: cm.cpLoss as number | undefined,
         mateAfter: cm.mateAfter as number | null | undefined,
       }));
-  }, [isPostMortemVisible, canonicalPostmortemMoves]);
+  }, [isPostMortemVisible, canonicalPostmortemMoves, queuedLearningPositionFens]);
 
   // Dev-only: log annotation state
   useEffect(() => {
@@ -3291,6 +3294,8 @@ export default function TrainPage(props: TrainPageProps) {
   }
 
   function handleUpdateNote(moveKey: string, text: string) {
+    if (!annotatableMoves.some((move) => move.moveKey === moveKey)) return;
+
     if (process.env.NODE_ENV !== "production") {
       console.log("[move-notes] update-note", moveKey);
     }
@@ -3306,9 +3311,19 @@ export default function TrainPage(props: TrainPageProps) {
       (m) => m.positionIndex === selectedMoveIndex,
     );
     if (!canonicalMove?.move?.fenBefore || !canonicalMove.uci) return;
+
+    const isQueuedForLearning = queuedLearningPositionFens.has(
+      normalizeDecisionFen(canonicalMove.move.fenBefore),
+    );
+
+    if (!isQueuedForLearning) {
+      setSelectedMoveKey(null);
+      return;
+    }
+
     const key = buildMoveKey(canonicalMove.move.fenBefore, canonicalMove.uci);
     setSelectedMoveKey((current) => (current === key ? current : key));
-  }, [selectedMoveIndex, canonicalPostmortemMoves, isPostMortemVisible]);
+  }, [selectedMoveIndex, canonicalPostmortemMoves, isPostMortemVisible, queuedLearningPositionFens]);
 
   // ── Persist notes to Supabase with debounce ──────────────────────
   const dirtyMoveNoteKeysRef = useRef<Set<string>>(new Set());
