@@ -929,46 +929,7 @@ export default function TrainPage(props: TrainPageProps) {
 
   const [fenCopied, setFenCopied] = useState(false);
   const [addingPositionToQueue, setAddingPositionToQueue] = useState(false);
-  const [removingPositionFromQueue, setRemovingPositionFromQueue] = useState(false);
   const fenCopyTimerRef = useRef<number | null>(null);
-
-  async function removePositionFromLearningQueue() {
-    if (removingPositionFromQueue) return;
-
-    const fenToRemove = learningQueueAddTarget?.decisionFen;
-    if (!fenToRemove) return;
-
-    const normalizedFenToRemove = normalizeDecisionFen(fenToRemove);
-
-    setRemovingPositionFromQueue(true);
-
-    try {
-      const res = await fetch("/api/dashboard/mistakes/remove", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decisionFen: fenToRemove }),
-      });
-
-      if (!res.ok) throw new Error(`Remove failed: ${res.status}`);
-
-      setQueuedLearningPositionFens((prev) => {
-        const next = new Set(prev);
-        next.delete(normalizedFenToRemove);
-        return next;
-      });
-
-      setAddPositionOnboardingPhase("idle");
-    } catch (err) {
-      console.error("[train] failed to remove position from queue", err);
-      showAlert({
-        kind: "error",
-        title: "Could not undo",
-        message: "Try again in a moment.",
-      });
-    } finally {
-      setRemovingPositionFromQueue(false);
-    }
-  }
 
   async function addPositionToLearningQueue() {
     if (addingPositionToQueue) return;
@@ -4758,44 +4719,25 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 <div
                   data-tour="add-position-to-learning-queue"
                   className={[
-                    "min-h-12 w-full rounded-lg border border-[var(--app-border)]",
-                    "bg-[color-mix(in_srgb,var(--app-bg)_86%,black_14%)]",
-                    "px-4 py-3 text-[var(--app-text)]",
-                    "flex flex-col items-center justify-center gap-1",
-                    "transition-all duration-300 ease-out",
+                    secondaryActionClassName,
+                    "min-h-12 w-full justify-center gap-2 px-5",
                   ].join(" ")}
                 >
-                  <div className="inline-flex items-center justify-center gap-2">
-                    <svg
-                      viewBox="0 0 20 20"
-                      className="h-4 w-4 shrink-0 text-[var(--app-accent)]"
-                      fill="currentColor"
-                      aria-hidden="true"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-
-                    <span className="font-mono text-sm font-bold uppercase tracking-[0.14em]">
-                      Added to Queue
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--app-muted)]">
-                    <span>Next review queued</span>
-                    <span aria-hidden="true">·</span>
-                    <button
-                      type="button"
-                      onClick={removePositionFromLearningQueue}
-                      disabled={removingPositionFromQueue}
-                      className="underline underline-offset-4 transition hover:text-[var(--app-text)] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {removingPositionFromQueue ? "Undoing..." : "Undo"}
-                    </button>
-                  </div>
+                  <svg
+                    viewBox="0 0 20 20"
+                    className="h-4 w-4 shrink-0 text-[var(--app-accent)]"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <span className={postmortemActionTextClassName}>
+                    Added to Queue
+                  </span>
                 </div>
               ) : (
                 <button
