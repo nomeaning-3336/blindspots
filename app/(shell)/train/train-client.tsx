@@ -4827,6 +4827,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
       {postmortemOnboardingActive ? (
         <div
           className={[
+            "relative z-[80]",
             shouldHidePostmortemTour
               ? "opacity-0 pointer-events-none"
               : "opacity-100",
