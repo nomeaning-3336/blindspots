@@ -4341,7 +4341,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                         <AnalysisBoard
                           fen={boardFen}
                           mode="training"
-                          pieceAnimation={shouldAnimatePieces}
+                          pieceAnimation={shouldAnimatePieces && !postmortemOnboardingActive}
                           orientation={boardOrientation}
                           coordinates
                           showLegalTargets={false}
@@ -4376,7 +4376,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                       <AnalysisBoard
                         fen={boardFen}
                         mode="training"
-                        pieceAnimation={shouldAnimatePieces}
+                        pieceAnimation={shouldAnimatePieces && !postmortemOnboardingActive}
                         orientation={boardOrientation}
                         coordinates
                         showLegalTargets
@@ -4553,7 +4553,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                           );
                           window.setTimeout(() => {
                             setPostmortemNotesToggleTransitioning(false);
-                          }, 120);
+                          }, 560);
                         }, 260);
                         return;
                       }
@@ -5608,11 +5608,7 @@ function TrainPostmortemTourOverlay({
           ) : null}
           <div
             key={`current-${displayedStep}`}
-            className={[
-              "relative transition-opacity duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
-              isCardSwitching ? "opacity-0" : "opacity-100",
-              "motion-reduce:transition-none motion-reduce:opacity-100",
-            ].join(" ")}
+            className="relative opacity-100"
           >
             <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
               {displayedTourStep.headline}
