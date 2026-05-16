@@ -4826,13 +4826,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
 
       {postmortemOnboardingActive ? (
         <div
-          className={[
-            "relative z-[80]",
-            shouldHidePostmortemTour
-              ? "opacity-0 pointer-events-none"
-              : "opacity-100",
-            "transition-opacity duration-[520ms] ease-[var(--tour-geometry-ease)] motion-reduce:transition-none",
-          ].join(" ")}
+          className="relative z-[80] opacity-100"
         >
         <TrainPostmortemTourOverlay
           steps={POSTMORTEM_TOUR_STEPS}
@@ -4859,6 +4853,8 @@ const introOverlay = trainOnboardingIntroVisible ? (
               )
             )
           }
+          hideCard={shouldHidePostmortemTour}
+          allowTargetInteraction={isPostmortemAddPositionActionStep && !postmortemAddPositionInstructionAcknowledged}
         />
         </div>
       ) : null}
@@ -5003,6 +4999,8 @@ function TrainPostmortemTourOverlay({
   centerCard = false,
   postmortemTourSoftSwitching = false,
   backDisabled = false,
+  hideCard = false,
+  allowTargetInteraction = false,
 }: {
   steps: readonly PostmortemTourStep[];
   step: number;
@@ -5017,6 +5015,8 @@ function TrainPostmortemTourOverlay({
   centerCard?: boolean;
   postmortemTourSoftSwitching?: boolean;
   backDisabled?: boolean;
+  hideCard?: boolean;
+  allowTargetInteraction?: boolean;
 }) {
   const [resolvedStepIndex, setResolvedStepIndex] = useState(step);
   const [targetRect, setTargetRect] = useState<{
@@ -5242,6 +5242,9 @@ function TrainPostmortemTourOverlay({
     currentStep.suppressSpotlight &&
     isActionStep &&
     !actionInstructionAcknowledged;
+  const effectiveSuppressSpotlight =
+    currentStep.suppressSpotlight &&
+    !(isActionStep && actionInstructionAcknowledged && !actionCompleted);
   const isResolvingTargetWithoutReusableSpotlight =
     waitsForTargetGeometry &&
     !spotlight &&
@@ -5406,14 +5409,14 @@ function TrainPostmortemTourOverlay({
 
   return (
     <div
-      className="fixed inset-0 z-[80] overflow-hidden"
+      className="fixed inset-0 z-[80] overflow-hidden pointer-events-none"
       role="dialog"
       aria-modal="true"
       aria-label="Postmortem onboarding"
       style={tourOverlayStyle}
     >
       {/* Single SVG mask cutout avoids seams from stitched dim rectangles. */}
-      {!currentStep.suppressSpotlight && displayedSpotlight ? (
+      {!effectiveSuppressSpotlight && displayedSpotlight ? (
         <svg
           aria-hidden="true"
           data-testid="train-spotlight-dim-mask"
@@ -5451,17 +5454,19 @@ function TrainPostmortemTourOverlay({
       ) : null}
       {/* Full-screen dim for centered/action instruction modal, or while resolving a target without a reusable spotlight. */}
       {shouldShowFullScreenTourDim ? (
-        <div className="pointer-events-none fixed inset-0 bg-black/35 backdrop-blur-[1px] transition-opacity duration-[520ms]" />
+        <div className="pointer-events-none fixed inset-0 bg-black/35 transition-opacity duration-[520ms]" />
       ) : null}
-      {/* Click catcher — always transparent, dim layer handled separately */}
-      <button
-        type="button"
-        aria-label="Next tour step"
-        className="absolute inset-0 cursor-default bg-transparent"
-        onClick={() => { if (!isPositioningSpotlight) onNext(); }}
-      />
+      {/* Click catcher — only when the real UI target should be clickable */}
+      {!allowTargetInteraction && !hideCard ? (
+        <button
+          type="button"
+          aria-label="Next tour step"
+          className="absolute inset-0 cursor-default bg-transparent pointer-events-auto"
+          onClick={() => { if (!isPositioningSpotlight) onNext(); }}
+        />
+      ) : null}
       {/* Spotlight border — smooth transition between targets */}
-      {!currentStep.suppressSpotlight && displayedSpotlight ? (
+      {!effectiveSuppressSpotlight && displayedSpotlight ? (
         <div
           aria-hidden="true"
           className="pointer-events-none fixed rounded-[10px] border border-[var(--app-accent)] shadow-[0_0_0_2px_color-mix(in_srgb,var(--app-accent)_42%,transparent)] transition-[top,left,width,height] duration-[var(--tour-geometry-duration)] ease-[var(--tour-geometry-ease)]"
@@ -5475,8 +5480,10 @@ function TrainPostmortemTourOverlay({
       ) : null}
       <div
         className={[
-          "fixed flex flex-col overflow-hidden rounded-[8px] border-2 border-white/80 bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)]",
-          cardVisibilityClass,
+          "fixed flex flex-col overflow-hidden rounded-[8px] border-2 border-white/80 bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)] pointer-events-auto",
+          hideCard
+            ? "opacity-0 scale-[0.985] pointer-events-none"
+            : cardVisibilityClass,
           "transition-[opacity,transform,top,left,width] duration-[var(--tour-geometry-duration)] ease-[var(--tour-geometry-ease)] motion-reduce:transition-none motion-reduce:transform-none",
         ].join(" ")}
         ref={cardRef}
