@@ -4863,7 +4863,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
           background: color-mix(in srgb, var(--app-text) 6%, transparent) !important;
         }
         .train-move-row-learning-icon {
-          color: color-mix(in srgb, var(--app-class-good) 76%, white);
+          color: color-mix(in srgb, var(--app-accent) 85%, white);
         }
         @media (prefers-reduced-motion: no-preference) {
           .train-add-position-glow {
