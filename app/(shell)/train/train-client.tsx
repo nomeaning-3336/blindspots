@@ -5274,6 +5274,15 @@ function TrainPostmortemTourOverlay({
     currentStep.suppressSpotlight &&
     isActionStep &&
     !actionInstructionAcknowledged;
+  const isResolvingTargetWithoutReusableSpotlight =
+    waitsForTargetGeometry &&
+    !spotlight &&
+    Boolean(previousTourGeometry.card) &&
+    !previousTourGeometry.spotlight;
+  const shouldShowFullScreenTourDim =
+    shouldCenterCard ||
+    shouldDimSuppressedSpotlight ||
+    isResolvingTargetWithoutReusableSpotlight;
   const hasResolvedCurrentTourGeometry =
     !waitsForTargetGeometry || Boolean(spotlight);
   const isResolvingTargetGeometry =
@@ -5496,8 +5505,8 @@ function TrainPostmortemTourOverlay({
           />
         </svg>
       ) : null}
-      {/* Full-screen dim for centered or action instruction modal (no spotlight mask) */}
-      {shouldCenterCard || shouldDimSuppressedSpotlight ? (
+      {/* Full-screen dim for centered/action instruction modal, or while resolving a target without a reusable spotlight. */}
+      {shouldShowFullScreenTourDim ? (
         <div className="pointer-events-none fixed inset-0 bg-black/68 transition-opacity duration-[520ms]" />
       ) : null}
       {/* Click catcher — always transparent, dim layer handled separately */}
