@@ -929,7 +929,130 @@ export default function TrainPage(props: TrainPageProps) {
 
   const [fenCopied, setFenCopied] = useState(false);
   const [addingPositionToQueue, setAddingPositionToQueue] = useState(false);
+  const [removingPositionFromQueue, setRemovingPositionFromQueue] = useState(false);
   const fenCopyTimerRef = useRef<number | null>(null);
+
+  async function removePositionFromLearningQueue() {
+    if (removingPositionFromQueue) return;
+
+    const fenToRemove = learningQueueAddTarget?.decisionFen;
+    if (!fenToRemove) return;
+
+    const normalizedFenToRemove = normalizeDecisionFen(fenToRemove);
+
+    setRemovingPositionFromQueue(true);
+
+    try {
+      const res = await fetch("/api/dashboard/mistakes/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decisionFen: fenToRemove }),
+      });
+
+      if (!res.ok) throw new Error(`Remove failed: ${res.status}`);
+
+      setQueuedLearningPositionFens((prev) => {
+        const next = new Set(prev);
+        next.delete(normalizedFenToRemove);
+        return next;
+      });
+
+      setAddPositionOnboardingPhase("idle");
+    } catch (err) {
+      console.error("[train] failed to remove position from queue", err);
+      showAlert({
+        kind: "error",
+        title: "Could not undo",
+        message: "Try again in a moment.",
+      });
+    } finally {
+      setRemovingPositionFromQueue(false);
+    }
+  }
+
+  async function addPositionToLearningQueue() {
+    if (addingPositionToQueue) return;
+    if (isAddPositionSuccessFeedback) return;
+    if (isAddPositionAlreadyQueued) return;
+
+    const addTarget = learningQueueAddTarget;
+    const fenToAdd = addTarget?.decisionFen;
+    if (!fenToAdd) return;
+
+    const normalizedFenToAdd = normalizeDecisionFen(fenToAdd);
+    const preludeMove = addTarget.setupMove;
+
+    setAddingPositionToQueue(true);
+
+    if (isPostmortemAddPositionActionStep) {
+      setAddPositionOnboardingPhase("saving");
+    }
+
+    try {
+      const res = await fetch("/api/dashboard/mistakes/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          decisionFen: fenToAdd,
+          setupPreviousFen: preludeMove?.fenBefore ?? null,
+          setupPlayedMoveUci: preludeMove?.uci ?? null,
+          setupPlayedMoveSan: preludeMove?.san ?? null,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`Add failed: ${res.status}`);
+
+      setQueuedLearningPositionFens((prev) => {
+        const next = new Set(prev);
+        next.add(normalizedFenToAdd);
+        return next;
+      });
+
+      if (isPostmortemAddPositionActionStep) {
+        clearAddPositionOnboardingSuccessTimers();
+        setAddPositionOnboardingPhase("success-entering");
+
+        addPositionOnboardingSuccessTimerRef.current = window.setTimeout(() => {
+          setAddPositionOnboardingPhase("success-visible");
+          addPositionOnboardingSuccessTimerRef.current = null;
+        }, 120);
+
+        addPositionOnboardingSuccessTimerRef2.current = window.setTimeout(() => {
+          setPostmortemAddPositionActionDone(true);
+          setPostmortemAddPositionCheckpointReached(true);
+          setPostmortemOnboardingStep((step) =>
+            Math.min(step + 1, POSTMORTEM_TOUR_STEPS.length - 1),
+          );
+          setAddPositionOnboardingPhase("idle");
+          addPositionOnboardingSuccessTimerRef2.current = null;
+        }, 900);
+
+        return;
+      }
+
+      showAlert({
+        kind: "success",
+        title: addTarget.fellBackFromEnginePosition
+          ? "Added previous decision point"
+          : "Added to Learning queue",
+        message: addTarget.fellBackFromEnginePosition
+          ? "Engine-to-move positions are saved as the previous user decision."
+          : "You will see this position again soon.",
+      });
+    } catch (err) {
+      console.error("[train] failed to add position to queue", err);
+      if (isPostmortemAddPositionActionStep) {
+        setAddPositionOnboardingPhase("waiting-for-click");
+      }
+      showAlert({
+        kind: "error",
+        title: "Could not add position",
+        message: "Try again in a moment.",
+      });
+    } finally {
+      setAddingPositionToQueue(false);
+    }
+  }
 
   useEffect(() => {
     return () => {
@@ -4631,112 +4754,75 @@ const introOverlay = trainOnboardingIntroVisible ? (
 
             {/* ── Manual queue + Copy FEN row ─────────────────────────────── */}
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <button
-                type="button"
-                disabled={
-                  addingPositionToQueue ||
-                  !learningQueueAddTarget?.decisionFen ||
-                  isAddPositionAlreadyQueued
-                }
-                onClick={async () => {
-                  if (addingPositionToQueue) return;
-                  if (isAddPositionSuccessFeedback) return;
-                  if (isAddPositionAlreadyQueued) return;
-                  const addTarget = learningQueueAddTarget;
-                  const fenToAdd = addTarget?.decisionFen;
-                  if (!fenToAdd) return;
-                  const normalizedFenToAdd = normalizeDecisionFen(fenToAdd);
-                  const preludeMove = addTarget.setupMove;
-                  setAddingPositionToQueue(true);
-                  if (isPostmortemAddPositionActionStep) {
-                    setAddPositionOnboardingPhase("saving");
+              {shouldShowAddPositionAdded ? (
+                <div
+                  data-tour="add-position-to-learning-queue"
+                  className={[
+                    "min-h-12 w-full rounded-lg border border-[var(--app-border)]",
+                    "bg-[color-mix(in_srgb,var(--app-bg)_86%,black_14%)]",
+                    "px-4 py-3 text-[var(--app-text)]",
+                    "flex flex-col items-center justify-center gap-1",
+                    "transition-all duration-300 ease-out",
+                  ].join(" ")}
+                >
+                  <div className="inline-flex items-center justify-center gap-2">
+                    <svg
+                      viewBox="0 0 20 20"
+                      className="h-4 w-4 shrink-0 text-[var(--app-accent)]"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+
+                    <span className="font-mono text-sm font-bold uppercase tracking-[0.14em]">
+                      Added to Queue
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--app-muted)]">
+                    <span>Next review queued</span>
+                    <span aria-hidden="true">·</span>
+                    <button
+                      type="button"
+                      onClick={removePositionFromLearningQueue}
+                      disabled={removingPositionFromQueue}
+                      className="underline underline-offset-4 transition hover:text-[var(--app-text)] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {removingPositionFromQueue ? "Undoing..." : "Undo"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={
+                    addingPositionToQueue ||
+                    !learningQueueAddTarget?.decisionFen ||
+                    isAddPositionAlreadyQueued
                   }
-                  try {
-                    const res = await fetch("/api/dashboard/mistakes/add", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        decisionFen: fenToAdd,
-                        setupPreviousFen: preludeMove?.fenBefore ?? null,
-                        setupPlayedMoveUci: preludeMove?.uci ?? null,
-                        setupPlayedMoveSan: preludeMove?.san ?? null,
-                      }),
-                    });
-                    if (!res.ok) throw new Error(`Add failed: ${res.status}`);
-                    setQueuedLearningPositionFens((prev) => {
-                      const next = new Set(prev);
-                      next.add(normalizedFenToAdd);
-                      return next;
-                    });
-                    if (isPostmortemAddPositionActionStep) {
-                      clearAddPositionOnboardingSuccessTimers();
-                      setAddPositionOnboardingPhase("success-entering");
-                      addPositionOnboardingSuccessTimerRef.current = window.setTimeout(() => {
-                        setAddPositionOnboardingPhase("success-visible");
-                        addPositionOnboardingSuccessTimerRef.current = null;
-                      }, 120);
-                      addPositionOnboardingSuccessTimerRef2.current = window.setTimeout(() => {
-                        setPostmortemAddPositionActionDone(true);
-                        setPostmortemAddPositionCheckpointReached(true);
-                        setPostmortemOnboardingStep((step) =>
-                          Math.min(step + 1, POSTMORTEM_TOUR_STEPS.length - 1),
-                        );
-                        setAddPositionOnboardingPhase("idle");
-                        addPositionOnboardingSuccessTimerRef2.current = null;
-                      }, 900);
-                      return;
-                    }
-                    showAlert({
-                      kind: "success",
-                      title: addTarget.fellBackFromEnginePosition
-                        ? "Added previous decision point"
-                        : "Added to Learning queue",
-                      message: addTarget.fellBackFromEnginePosition
-                        ? "Engine-to-move positions are saved as the previous user decision."
-                        : "You will see this position again soon.",
-                    });
-                  } catch (err) {
-                    console.error("[train] failed to add position to queue", err);
-                    if (isPostmortemAddPositionActionStep) {
-                      setAddPositionOnboardingPhase("waiting-for-click");
-                    }
-                    showAlert({
-                      kind: "error",
-                      title: "Could not add position",
-                      message: "Try again in a moment.",
-                    });
-                  } finally {
-                    setAddingPositionToQueue(false);
-                  }
-                }}
-                data-tour="add-position-to-learning-queue"
-                className={[
-                  secondaryActionClassName,
-                  "min-h-12 w-full justify-center px-5 transition-all duration-300 ease-out",
-                  !shouldShowAddPositionAdded ? "disabled:opacity-60" : "",
-                  isPostmortemAddPositionWaiting
-                    ? "train-add-position-glow ring-2 ring-[var(--app-accent)]"
-                    : "",
-                  shouldShowAddPositionAdded
-                    ? "train-add-position-success"
-                    : "",
-                ].join(" ")}
-              >
-                <span className={postmortemActionTextClassName}>
-                  {addPositionOnboardingPhase === "saving"
-                    ? "Saving..."
-                    : shouldShowAddPositionAdded
-                      ? (
-                        <span className="inline-flex items-center justify-center gap-2 underline decoration-[2px] underline-offset-2 text-[var(--app-muted)]">
-                          <svg viewBox="0 0 20 20" className="h-4 w-4 shrink-0" fill="currentColor" aria-hidden="true">
-                            <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
-                          </svg>
-                          ADDED TO QUEUE&nbsp;&bull;&nbsp;CLICK TO REMOVE
-                        </span>
-                      )
+                  onClick={addPositionToLearningQueue}
+                  data-tour="add-position-to-learning-queue"
+                  className={[
+                    secondaryActionClassName,
+                    "min-h-12 w-full justify-center px-5 transition-all duration-300 ease-out",
+                    "disabled:opacity-60",
+                    isPostmortemAddPositionWaiting
+                      ? "train-add-position-glow ring-2 ring-[var(--app-accent)]"
+                      : "",
+                  ].join(" ")}
+                >
+                  <span className={postmortemActionTextClassName}>
+                    {addPositionOnboardingPhase === "saving"
+                      ? "Saving..."
                       : "Add Position to Learning Queue"}
-                </span>
-              </button>
+                  </span>
+                </button>
+              )}
               <button
                 type="button"
                 disabled={!boardFen}
