@@ -1273,6 +1273,19 @@ export default function TrainPage(props: TrainPageProps) {
   const [srsProfileLevel, setSrsProfileLevel] = useState<SrsProfileLevel>("balanced");
   const [srsConfig, setSrsConfig] = useState<SrsConfig>(cloneSrsConfig(SRS_PROFILES.balanced));
 
+  // Local text state for daily target input — avoids clamping on every keystroke
+  const [dailyTargetText, setDailyTargetText] = useState(String(selectedDailyTargetPositions));
+  useEffect(() => {
+    setDailyTargetText(String(selectedDailyTargetPositions));
+  }, [selectedDailyTargetPositions]);
+
+  function commitDailyTargetText(text: string) {
+    const parsed = Math.round(Number(text));
+    const next = Number.isFinite(parsed) ? Math.max(1, Math.min(300, parsed)) : 10;
+    setSelectedDailyTargetPositions(next);
+    setDailyTargetText(String(next));
+  }
+
   function cloneSrsConfig(config: SrsConfig): SrsConfig {
     return {
       ...config,
@@ -5237,6 +5250,19 @@ function OnboardingPreferencesModal({
     srsConfig.passIntervalsDays.join(", "),
   );
 
+  // Local text state for daily target input — avoids clamping on every keystroke
+  const [dailyTargetText, setDailyTargetText] = useState(String(selectedDailyTargetPositions));
+  useEffect(() => {
+    setDailyTargetText(String(selectedDailyTargetPositions));
+  }, [selectedDailyTargetPositions]);
+
+  function commitDailyTargetText(text: string) {
+    const parsed = Math.round(Number(text));
+    const next = Number.isFinite(parsed) ? Math.max(1, Math.min(300, parsed)) : 10;
+    onDailyTargetChange(next);
+    setDailyTargetText(String(next));
+  }
+
   // Sync custom intervals text when profile changes to non-custom
   const prevSrsProfileLevel = usePrevious(srsProfileLevel);
   useEffect(() => {
@@ -5321,10 +5347,14 @@ function OnboardingPreferencesModal({
                 type="number"
                 min={1}
                 max={300}
-                value={selectedDailyTargetPositions}
-                onChange={(e) => {
-                  const val = Math.round(Number(e.target.value));
-                  onDailyTargetChange(Number.isFinite(val) ? Math.max(1, Math.min(300, val)) : 10);
+                value={dailyTargetText}
+                onChange={(e) => setDailyTargetText(e.target.value)}
+                onBlur={(e) => commitDailyTargetText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    commitDailyTargetText(e.currentTarget.value);
+                    e.currentTarget.blur();
+                  }
                 }}
                 className="w-24 rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)] px-3 py-2 text-sm text-[var(--app-text)] outline-none focus:border-[var(--app-accent)]"
               />
