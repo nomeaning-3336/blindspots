@@ -28,6 +28,7 @@ type MoveNotesPanelProps = {
   onSelectMove: (moveKey: string) => void;
   onUpdateNote: (moveKey: string, text: string) => void;
   savedMoveKey?: string | null;
+  tourTarget?: string;
 };
 
 export function MoveNotesPanel({
@@ -37,6 +38,7 @@ export function MoveNotesPanel({
   onSelectMove,
   onUpdateNote,
   savedMoveKey = null,
+  tourTarget,
 }: MoveNotesPanelProps) {
   const [localNote, setLocalNote] = useState("");
   const onUpdateNoteRef = useRef(onUpdateNote);
@@ -94,8 +96,9 @@ export function MoveNotesPanel({
   // ── Main panel ─────────────────────────────────────────────────
   return (
     <div className="flex flex-col gap-2">
-      {/* ── Top row: compact move table ──────────────────────────── */}
-      <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)]">
+      <div data-tour={tourTarget} className="flex flex-col gap-2">
+        {/* ── Top row: compact move table ──────────────────────────── */}
+        <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)]">
         <div className="grid min-h-8 grid-cols-[1fr_auto] items-center border-b border-[var(--app-border-soft)] px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
           <span>Move</span>
           <span className="text-left">Loss</span>
@@ -159,11 +162,6 @@ export function MoveNotesPanel({
             onChange={(e) => handleNoteChange(e.target.value)}
             data-ignore-train-shortcuts="true"
           />
-          {savedMoveKey === selectedMoveKey ? (
-            <div className="mt-2 text-xs font-bold text-[var(--app-class-good)]">
-              Note saved ✓
-            </div>
-          ) : null}
         </div>
       ) : (
         <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-3">
@@ -172,6 +170,12 @@ export function MoveNotesPanel({
           </p>
         </div>
       )}
+      </div>
+      {savedMoveKey === selectedMoveKey ? (
+        <div className="text-xs font-bold text-[var(--app-class-good)]">
+          Note saved ✓
+        </div>
+      ) : null}
     </div>
   );
 }
