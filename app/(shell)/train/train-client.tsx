@@ -4491,33 +4491,29 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 <button
                   type="button"
                   onClick={copyCurrentFen}
-                  className="mb-4 group grid w-full grid-cols-[20px_minmax(0,1fr)] items-center gap-2.5 rounded-lg border border-[var(--app-border-soft)] bg-[color-mix(in_srgb,var(--app-panel-solid)_92%,var(--app-bg)_8%)] px-3 py-2.5 text-left transition hover:border-[var(--app-border)] hover:bg-[var(--app-surface-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-border)]"
+                  className={[
+                    secondaryActionClassName,
+                    "min-h-12 w-full justify-center gap-2 px-5 disabled:opacity-60",
+                  ].join(" ")}
                 >
-                  <span className="inline-flex h-5 w-5 items-center justify-center text-[var(--app-muted-soft)] transition group-hover:text-[var(--app-muted)]">
+                  <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
                     <svg
                       aria-hidden="true"
-                      width="13"
-                      height="13"
+                      width="16"
+                      height="16"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
-                      strokeWidth="2.3"
+                      strokeWidth="2.5"
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                      className="shrink-0"
                     >
                       <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                     </svg>
                   </span>
-
-                  <span className="min-w-0">
-                    <span className="block text-[10px] font-black uppercase tracking-[0.11em] text-[var(--app-muted)]">
-                      {fenCopied ? "Copied FEN" : "Copy FEN"}
-                    </span>
-                    <span className="mt-1 block truncate font-mono text-[9px] leading-none tracking-normal text-[var(--app-muted-soft)]">
-                      {copyFenPreview}
-                    </span>
+                  <span className={postmortemActionTextClassName}>
+                    {fenCopied ? "Copied FEN" : "Copy FEN"}
                   </span>
                 </button>
               );
