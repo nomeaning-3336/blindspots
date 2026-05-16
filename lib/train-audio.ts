@@ -1,6 +1,6 @@
 // Train audio manager — single shared AudioContext, pre-decoded buffers, no hot-path waits.
 
-export type TrainSoundName = "move" | "capture" | "addPositionConfirm" | "uiClick";
+export type TrainSoundName = "move" | "capture";
 
 export type PlayTrainSoundOptions = {
   move: TrainSoundMove;
@@ -48,8 +48,6 @@ export type TrainAudioEvent = {
 const TRAIN_SOUND_SOURCES: Record<TrainSoundName, string> = {
   move: "/analyze/sounds/move-self.mp3",
   capture: "/analyze/sounds/capture.mp3",
-  addPositionConfirm: "/analyze/sounds/add-position-confirm.wav",
-  uiClick: "/analyze/sounds/ui-click.wav",
 };
 
 const MOVE_SCALE_RATIOS = [
@@ -263,52 +261,6 @@ export function playTrainMoveSound(options: PlayTrainSoundOptions): boolean {
   }
 
   return true;
-}
-
-export function playTrainUiSound(soundName: TrainSoundName, volume = 0.85): boolean {
-  _instance._playCalls += 1;
-
-  const ctx = _getOrCreateContext();
-  if (!ctx) return false;
-
-  const buffer = _instance._buffers.get(soundName);
-
-  if (!buffer) {
-    _instance._skippedBufferMissing += 1;
-    void primeTrainAudio().then(() => {
-      playTrainUiSound(soundName, volume);
-    }).catch(() => {});
-    return false;
-  }
-
-  if (ctx.state === "suspended") {
-    _instance._skippedContextSuspended += 1;
-    void ctx.resume()
-      .then(() => primeTrainAudio())
-      .then(() => {
-        playTrainUiSound(soundName, volume);
-      })
-      .catch(() => {});
-    return false;
-  }
-
-  if (ctx.state !== "running") return false;
-
-  try {
-    const gainNode = ctx.createGain();
-    gainNode.gain.value = volume;
-
-    const node = ctx.createBufferSource();
-    node.buffer = buffer;
-    node.connect(gainNode);
-    gainNode.connect(ctx.destination);
-    node.start();
-
-    _instance._startedCalls += 1;
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export function getTrainAudioStats(): TrainAudioStats {
