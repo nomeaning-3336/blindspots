@@ -236,7 +236,7 @@ const POSTMORTEM_TOUR_STEPS = [
   {
     target: "notes-panel",
     headline: "Write a note to your future self.",
-    body: "Select any of the moves you made, and write any note you want to see in the future. When the position comes back for review, this note might be shown to you, or hidden to see if you will perform well without it. This part is optional, but useful to remember things such as \"I played queen to a4 here but totally forgot the knight can fork the queen and king.\" Also useful to see commonly recurring patterns in your play, or rather, your \"blindspots\".",
+    body: "Select any of the moves you made, and write any note you want to see in the future. When the position comes back for review, this note might be shown to you, or hidden to see if you will perform well without it.",
   },
   {
     target: "postmortem-actions",
