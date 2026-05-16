@@ -5537,7 +5537,7 @@ function TrainPostmortemTourOverlay({
         aria-hidden="true"
         className={[
           "pointer-events-none fixed left-0 top-0 opacity-0",
-          "flex flex-col overflow-hidden rounded-[8px] border border-[var(--app-border)]",
+          "flex flex-col overflow-hidden rounded-[8px] border-2 border-white/80",
           "bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)]",
           "shadow-[4px_4px_0_var(--app-brutal-edge)]",
         ].join(" ")}
@@ -5566,7 +5566,7 @@ function TrainPostmortemTourOverlay({
       </div>
       <div
         className={[
-          "fixed flex flex-col overflow-hidden rounded-[8px] border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)]",
+          "fixed flex flex-col overflow-hidden rounded-[8px] border-2 border-white/80 bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)]",
           cardVisibilityClass,
           "transition-[opacity,transform,top,left,width] duration-[var(--tour-geometry-duration)] ease-[var(--tour-geometry-ease)] motion-reduce:transition-none motion-reduce:transform-none",
         ].join(" ")}
