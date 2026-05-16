@@ -4513,7 +4513,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                     </svg>
                   </span>
                   <span className={postmortemActionTextClassName}>
-                    {fenCopied ? "Copied FEN" : "Copy FEN"}
+                    {fenCopied ? "Fen Copied to clipboard" : "Copy FEN"}
                   </span>
                 </button>
               );
@@ -4780,7 +4780,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                   </svg>
                 </span>
                 <span className={postmortemActionTextClassName}>
-                  {fenCopied ? "Copied FEN" : "Copy FEN"}
+                  {fenCopied ? "Fen Copied to clipboard" : "Copy FEN"}
                 </span>
               </button>
             </div>
