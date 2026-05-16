@@ -5299,7 +5299,7 @@ function TrainPostmortemTourOverlay({
   let cardWidth: number;
   if (shouldCenterCard) {
     cardWidth = Math.min(520, viewportWidth - VIEWPORT_PAD * 2);
-  } else if (isSmallScreen || (!spotlight && !previousTourGeometry.spotlight)) {
+  } else if (isSmallScreen) {
     cardWidth = viewportWidth - VIEWPORT_PAD * 2;
   } else {
     cardWidth = cardMaxWidth;
