@@ -169,7 +169,7 @@ type PostmortemTourStep = {
   headline: string;
   body: string;
   cta?: string;
-  requiresAction?: "add-position-to-learning-queue";
+  requiresAction?: "add-position-to-learning-queue" | "notes-toggle";
   suppressSpotlight?: boolean;
   centerCard?: boolean;
   sidePanel?: "analysis" | "memory" | "keep";
@@ -216,9 +216,28 @@ const POSTMORTEM_TOUR_STEPS = [
     suppressSpotlight: true,
   },
   {
+    target: "postmortem-panel",
+    headline: "Position saved.",
+    body: "Great, now you know how to add new positions to the Learning queue. Next, let's learn how to add notes.",
+    cta: "Next",
+    centerCard: true,
+    suppressSpotlight: true,
+    sidePanel: "analysis",
+  },
+  {
     target: "notes-toggle",
     headline: "The Notes toggle.",
-    body: "This Notes toggle switches the panel from Analysis to Notes.",
+    body: "To access the Notes section, press the Notes toggle on the top right.",
+    cta: "Okay",
+    sidePanel: "analysis",
+  },
+  {
+    target: "notes-toggle",
+    headline: "Open the Notes section.",
+    body: "Now press the Notes toggle.",
+    cta: "Okay",
+    requiresAction: "notes-toggle",
+    suppressSpotlight: true,
     sidePanel: "analysis",
   },
   {
@@ -986,6 +1005,20 @@ export default function TrainPage(props: TrainPageProps) {
     postmortemAddPositionInstructionAcknowledged &&
     !postmortemAddPositionActionDone &&
     addPositionOnboardingPhase !== "idle";
+  const [postmortemNotesToggleInstructionAcknowledged, setPostmortemNotesToggleInstructionAcknowledged] = useState(false);
+  const [postmortemNotesToggleActionDone, setPostmortemNotesToggleActionDone] = useState(false);
+  const [postmortemNotesToggleTransitioning, setPostmortemNotesToggleTransitioning] = useState(false);
+  const isPostmortemNotesToggleActionStep =
+    postmortemOnboardingActive &&
+    (currentPostmortemTourStep?.requiresAction ?? null) === "notes-toggle";
+  const isPostmortemNotesToggleWaiting =
+    isPostmortemNotesToggleActionStep &&
+    postmortemNotesToggleInstructionAcknowledged &&
+    !postmortemNotesToggleActionDone;
+  const shouldHideTourForNotesToggle =
+    isPostmortemNotesToggleWaiting || postmortemNotesToggleTransitioning;
+  const shouldHidePostmortemTour =
+    shouldHideTourForAddPosition || shouldHideTourForNotesToggle;
   const [onboardingCompletionInFlight, setOnboardingCompletionInFlight] = useState(false);
   const [postmortemTourSoftSwitching, setPostmortemTourSoftSwitching] = useState(false);
   const [postmortemAddPositionCheckpointReached, setPostmortemAddPositionCheckpointReached] = useState(false);
@@ -1272,6 +1305,9 @@ export default function TrainPage(props: TrainPageProps) {
     setPostmortemAddPositionInstructionAcknowledged(false);
     setAddPositionOnboardingPhase("idle");
     setPostmortemAddPositionCheckpointReached(false);
+    setPostmortemNotesToggleInstructionAcknowledged(false);
+    setPostmortemNotesToggleActionDone(false);
+    setPostmortemNotesToggleTransitioning(false);
 
     return true;
   }
@@ -1401,6 +1437,9 @@ export default function TrainPage(props: TrainPageProps) {
             setPostmortemAddPositionInstructionAcknowledged(false);
             setAddPositionOnboardingPhase("idle");
             setPostmortemAddPositionCheckpointReached(false);
+            setPostmortemNotesToggleInstructionAcknowledged(false);
+            setPostmortemNotesToggleActionDone(false);
+            setPostmortemNotesToggleTransitioning(false);
           }
           return;
         }
@@ -1415,6 +1454,9 @@ export default function TrainPage(props: TrainPageProps) {
         setPostmortemAddPositionInstructionAcknowledged(false);
         setAddPositionOnboardingPhase("idle");
         setPostmortemAddPositionCheckpointReached(false);
+        setPostmortemNotesToggleInstructionAcknowledged(false);
+        setPostmortemNotesToggleActionDone(false);
+        setPostmortemNotesToggleTransitioning(false);
       }
     }
 
@@ -2916,7 +2958,9 @@ export default function TrainPage(props: TrainPageProps) {
 
   function completeTrainingOnboarding() {
     if (onboardingCompletionInFlight) return;
-    // Show preferences modal after spotlights instead of completing immediately
+    setPostmortemNotesToggleInstructionAcknowledged(false);
+    setPostmortemNotesToggleActionDone(false);
+    setPostmortemNotesToggleTransitioning(false);
     setShowOnboardingPreferencesModal(true);
     setPostmortemOnboardingFinished(true);
     setPostmortemOnboardingActive(false);
@@ -2958,18 +3002,21 @@ export default function TrainPage(props: TrainPageProps) {
   }
 
   const handlePostmortemTourBack = useCallback(() => {
-    const notesBridgeStepIndex = POSTMORTEM_TOUR_STEPS.findIndex(
-      (step) => step.target === "notes-toggle"
+    const afterAddBridgeStepIndex = POSTMORTEM_TOUR_STEPS.findIndex(
+      (step) => step.headline === "Position saved."
     );
     setPostmortemAddPositionInstructionAcknowledged(false);
     setAddPositionOnboardingPhase("idle");
+    setPostmortemNotesToggleInstructionAcknowledged(false);
+    setPostmortemNotesToggleActionDone(false);
+    setPostmortemNotesToggleTransitioning(false);
     if (addPositionOnboardingSuccessTimerRef.current) {
       window.clearTimeout(addPositionOnboardingSuccessTimerRef.current);
       addPositionOnboardingSuccessTimerRef.current = null;
     }
     setPostmortemOnboardingStep((current) => {
-      if (postmortemAddPositionCheckpointReached && notesBridgeStepIndex >= 0) {
-        return Math.max(notesBridgeStepIndex, current - 1);
+      if (postmortemAddPositionCheckpointReached && afterAddBridgeStepIndex >= 0) {
+        return Math.max(afterAddBridgeStepIndex, current - 1);
       }
       return Math.max(0, current - 1);
     });
@@ -2988,24 +3035,12 @@ export default function TrainPage(props: TrainPageProps) {
       }
     }
 
-    // Notes toggle -> Notes panel: fade card first, switch panel, then advance.
-    if (currentStep?.target === "notes-toggle") {
-      const nextStep = POSTMORTEM_TOUR_STEPS[postmortemOnboardingStep + 1];
-      if (nextStep?.target === "notes-panel") {
-        setPostmortemTourSoftSwitching(true);
-        setTimeout(() => {
-          setPostmortemSidePanel("memory");
-          setPostmortemOnboardingStep((current) => {
-            if (current < POSTMORTEM_TOUR_STEPS.length - 1) {
-              return current + 1;
-            }
-            void completeTrainingOnboarding();
-            return current;
-          });
-          window.setTimeout(() => {
-            setPostmortemTourSoftSwitching(false);
-          }, 180);
-        }, 180);
+    if (currentStep?.requiresAction === "notes-toggle") {
+      if (!postmortemNotesToggleInstructionAcknowledged) {
+        setPostmortemNotesToggleInstructionAcknowledged(true);
+        return;
+      }
+      if (!postmortemNotesToggleActionDone) {
         return;
       }
     }
@@ -4177,6 +4212,9 @@ export default function TrainPage(props: TrainPageProps) {
   // ── Train Onboarding Intro Overlay ─────────────────────────────────
 // Show (and animate) the intro overlay while it is still visible.
 // Once done, fade it out then unmount so it stops blocking interaction.
+function playUiClick(volume = 0.6) {
+  playTrainUiSound("uiClick", volume);
+}
 const introOverlay = trainOnboardingIntroVisible ? (
     <div
       ref={introOverlayRef}
@@ -4486,8 +4524,28 @@ const introOverlay = trainOnboardingIntroVisible ? (
                         ? "relative z-10 border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
                         : "cursor-pointer border-[var(--app-border)] bg-transparent text-[var(--app-muted)] hover:border-[var(--app-accent)] hover:text-[var(--app-text)]",
                       "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]",
+                      isPostmortemNotesToggleWaiting && item === "memory"
+                        ? "train-add-position-glow ring-2 ring-[var(--app-accent)]"
+                        : "",
                     ].join(" ")}
-                    onClick={() => setPostmortemSidePanel(item)}
+                    onClick={() => {
+                      playUiClick();
+                      if (isPostmortemNotesToggleWaiting && item === "memory") {
+                        setPostmortemNotesToggleTransitioning(true);
+                        setPostmortemSidePanel("memory");
+                        window.setTimeout(() => {
+                          setPostmortemNotesToggleActionDone(true);
+                          setPostmortemOnboardingStep((step) =>
+                            Math.min(step + 1, POSTMORTEM_TOUR_STEPS.length - 1),
+                          );
+                          window.setTimeout(() => {
+                            setPostmortemNotesToggleTransitioning(false);
+                          }, 120);
+                        }, 260);
+                        return;
+                      }
+                      setPostmortemSidePanel(item);
+                    }}
                   >
                     {item === "analysis" ? "Analysis" : "Notes"}
                   </button>
@@ -4551,6 +4609,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 onClick={async () => {
                   if (addingPositionToQueue) return;
                   if (addPositionOnboardingPhase === "success") return;
+                  playUiClick();
                   const addTarget = learningQueueAddTarget;
                   const fenToAdd = addTarget?.decisionFen;
                   if (!fenToAdd) return;
@@ -4643,6 +4702,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 onClick={async () => {
                   const fenToCopy = boardFen;
                   if (!fenToCopy) return;
+                  playUiClick();
                   try {
                     await navigator.clipboard.writeText(fenToCopy);
                     setFenCopied(true);
@@ -4706,7 +4766,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
       {postmortemOnboardingActive ? (
         <div
           className={[
-            shouldHideTourForAddPosition
+            shouldHidePostmortemTour
               ? "opacity-0 pointer-events-none"
               : "opacity-100",
             "transition-opacity duration-[520ms] ease-[var(--tour-geometry-ease)] motion-reduce:transition-none",
@@ -4730,10 +4790,10 @@ const introOverlay = trainOnboardingIntroVisible ? (
             (
               postmortemAddPositionCheckpointReached &&
               POSTMORTEM_TOUR_STEPS.findIndex(
-                (s) => s.target === "notes-toggle"
+                (s) => s.headline === "Position saved."
               ) >= 0 &&
               postmortemOnboardingStep <= POSTMORTEM_TOUR_STEPS.findIndex(
-                (s) => s.target === "notes-toggle"
+                (s) => s.headline === "Position saved."
               )
             )
           }
@@ -5443,7 +5503,7 @@ function TrainPostmortemTourOverlay({
       >
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); onSkip(); }}
+          onClick={(e) => { e.stopPropagation(); playUiClick(); onSkip(); }}
           className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center text-[var(--app-muted)] transition hover:text-[var(--app-text)]"
           aria-label="Close postmortem tour"
           disabled={completionInFlight}
@@ -5490,7 +5550,7 @@ function TrainPostmortemTourOverlay({
         <div className="mt-4 flex shrink-0 items-center justify-between gap-3 pt-4">
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight && !isFirst && !backDisabled) onBack(); }}
+            onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight && !isFirst && !backDisabled) { playUiClick(); onBack(); } }}
             aria-disabled={isFirst || isPositioningSpotlight || backDisabled}
             disabled={backDisabled}
             className="min-h-11 border border-[var(--app-border)] px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)] aria-disabled:cursor-not-allowed aria-disabled:opacity-40 disabled:cursor-not-allowed disabled:opacity-40"
@@ -5500,7 +5560,7 @@ function TrainPostmortemTourOverlay({
 
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight) onNext(); }}
+            onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight) { playUiClick(); onNext(); } }}
             className="app-brutal-button train-tour-primary-button min-h-11 px-6 text-xs"
             disabled={completionInFlight || isPositioningSpotlight || (isActionStep && actionInstructionAcknowledged && !actionCompleted)}
           >
@@ -7184,7 +7244,7 @@ function TrainOnboardingIntroOverlay({
       >
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); onSkip(); }}
+          onClick={(e) => { e.stopPropagation(); playUiClick(); onSkip(); }}
           className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center text-[var(--app-muted)] transition hover:text-[var(--app-text)]"
           aria-label="Close onboarding"
         >
