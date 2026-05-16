@@ -941,7 +941,9 @@ export default function TrainPage(props: TrainPageProps) {
 
   const [fen, setFen] = useState<string>(
     initialCheckpointState?.startingFen ??
-      (shouldRunPreplayOnboarding ? ONBOARDING_PREVIEW_POSITION.previousFen : DEFAULT_TRAINING_FEN),
+      (shouldRunPreplayOnboarding
+        ? "r2qk2r/3bbp2/p1np3p/2p1p3/1p2P3/2PP2Pp/PPB1QP1B/RN2K2R w KQkq - 0 18"
+        : DEFAULT_TRAINING_FEN),
   );
 
   const PREPLAY_TOUR_STEPS = [
