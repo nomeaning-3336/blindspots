@@ -7194,11 +7194,11 @@ function AnalysisMoveTable({
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   aria-hidden="true"
-                  className="shrink-0"
+                  className="h-[18px] w-[18px] shrink-0"
                 >
                   <path d="M12 6.5v14" />
                   <path d="M4 5.2c2.6-.8 5.3-.3 8 1.3v14c-2.7-1.6-5.4-2.1-8-1.3v-14Z" />
-                  <path d="M20 5.2c-2.6-.8-5.3-.3 8 1.3v14c2.7-1.6 5.4-2.1 8-1.3v-14Z" />
+                  <path d="M20 5.2c-2.6-.8-5.3-.3-8 1.3v14c2.7-1.6 5.4-2.1 8-1.3v-14Z" />
                 </svg>
                 <span className="whitespace-nowrap">Added to Learning Queue</span>
               </span>
