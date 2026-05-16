@@ -966,7 +966,9 @@ export default function TrainPage(props: TrainPageProps) {
 
   const [trainOnboardingIntroStep, setTrainOnboardingIntroStep] = useState(0);
   const [trainOnboardingIntroDone, setTrainOnboardingIntroDone] = useState(Boolean(initialCheckpointState));
-  const [trainOnboardingIntroVisible, setTrainOnboardingIntroVisible] = useState(false);
+  const [trainOnboardingIntroVisible, setTrainOnboardingIntroVisible] = useState(
+    shouldRunPreplayOnboarding && !initialCheckpointState,
+  );
   const [trainOnboardingIntroExiting, setTrainOnboardingIntroExiting] = useState(false);
   const [isStartingPreplayPosition, setIsStartingPreplayPosition] = useState(false);
   const trainOnboardingIntroActive =
