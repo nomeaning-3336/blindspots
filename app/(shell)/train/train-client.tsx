@@ -4212,9 +4212,9 @@ export default function TrainPage(props: TrainPageProps) {
   // ── Train Onboarding Intro Overlay ─────────────────────────────────
 // Show (and animate) the intro overlay while it is still visible.
 // Once done, fade it out then unmount so it stops blocking interaction.
-function playUiClick(volume = 0.6) {
-  playTrainUiSound("uiClick", volume);
-}
+const playUiClick = useCallback(() => {
+  playTrainUiSound("uiClick", 0.6);
+}, []);
 const introOverlay = trainOnboardingIntroVisible ? (
     <div
       ref={introOverlayRef}
@@ -4785,6 +4785,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
           actionInstructionAcknowledged={postmortemAddPositionInstructionAcknowledged}
           centerCard={false}
           postmortemTourSoftSwitching={postmortemTourSoftSwitching}
+          onUiClick={playUiClick}
           backDisabled={
             postmortemOnboardingStep <= 0 ||
             (
@@ -4925,6 +4926,7 @@ function TrainPostmortemTourOverlay({
   centerCard = false,
   postmortemTourSoftSwitching = false,
   backDisabled = false,
+  onUiClick = () => {},
 }: {
   steps: readonly PostmortemTourStep[];
   step: number;
@@ -4939,6 +4941,7 @@ function TrainPostmortemTourOverlay({
   centerCard?: boolean;
   postmortemTourSoftSwitching?: boolean;
   backDisabled?: boolean;
+  onUiClick?: () => void;
 }) {
   const [resolvedStepIndex, setResolvedStepIndex] = useState(step);
   const [targetRect, setTargetRect] = useState<{
@@ -5503,7 +5506,7 @@ function TrainPostmortemTourOverlay({
       >
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); playUiClick(); onSkip(); }}
+          onClick={(e) => { e.stopPropagation(); onUiClick(); onSkip(); }}
           className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center text-[var(--app-muted)] transition hover:text-[var(--app-text)]"
           aria-label="Close postmortem tour"
           disabled={completionInFlight}
@@ -5550,7 +5553,7 @@ function TrainPostmortemTourOverlay({
         <div className="mt-4 flex shrink-0 items-center justify-between gap-3 pt-4">
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight && !isFirst && !backDisabled) { playUiClick(); onBack(); } }}
+            onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight && !isFirst && !backDisabled) { onUiClick(); onBack(); } }}
             aria-disabled={isFirst || isPositioningSpotlight || backDisabled}
             disabled={backDisabled}
             className="min-h-11 border border-[var(--app-border)] px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)] aria-disabled:cursor-not-allowed aria-disabled:opacity-40 disabled:cursor-not-allowed disabled:opacity-40"
@@ -5560,7 +5563,7 @@ function TrainPostmortemTourOverlay({
 
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight) { playUiClick(); onNext(); } }}
+            onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight) { onUiClick(); onNext(); } }}
             className="app-brutal-button train-tour-primary-button min-h-11 px-6 text-xs"
             disabled={completionInFlight || isPositioningSpotlight || (isActionStep && actionInstructionAcknowledged && !actionCompleted)}
           >
@@ -7244,7 +7247,7 @@ function TrainOnboardingIntroOverlay({
       >
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); playUiClick(); onSkip(); }}
+          onClick={(e) => { e.stopPropagation(); onUiClick(); onSkip(); }}
           className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center text-[var(--app-muted)] transition hover:text-[var(--app-text)]"
           aria-label="Close onboarding"
         >
