@@ -4616,6 +4616,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 onClick={async () => {
                   if (addingPositionToQueue) return;
                   if (isAddPositionSuccessFeedback) return;
+                  if (isAddPositionAlreadyQueued) return;
                   const addTarget = learningQueueAddTarget;
                   const fenToAdd = addTarget?.decisionFen;
                   if (!fenToAdd) return;
@@ -4686,13 +4687,13 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 data-tour="add-position-to-learning-queue"
                 className={[
                   secondaryActionClassName,
-                  "min-h-12 w-full justify-center px-5",
+                  "min-h-12 w-full justify-center px-5 transition-all duration-300 ease-out",
                   !isAddPositionSuccessFeedback && !isAddPositionAlreadyQueued ? "disabled:opacity-60" : "",
                   isPostmortemAddPositionWaiting
-                    ? "train-add-position-glow ring-2 ring-[var(--app-accent)] transition-all duration-300 ease-out"
+                    ? "train-add-position-glow ring-2 ring-[var(--app-accent)]"
                     : "",
                   isAddPositionSuccessFeedback
-                    ? "train-add-position-success transition-all duration-300 ease-out"
+                    ? "train-add-position-success"
                     : "",
                 ].join(" ")}
               >
