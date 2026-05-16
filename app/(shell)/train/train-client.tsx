@@ -3614,6 +3614,8 @@ export default function TrainPage(props: TrainPageProps) {
   const isAddPositionSuccessFeedback =
     addPositionOnboardingPhase.startsWith("success-");
   const isAddPositionAlreadyQueued = isLearningQueueAddTargetQueued;
+  const shouldShowAddPositionAdded =
+    isAddPositionSuccessFeedback || isAddPositionAlreadyQueued;
   const copyFenPreview = boardFen
     ? boardFen.length > 34
       ? `${boardFen.slice(0, 34)}...`
@@ -4612,7 +4614,11 @@ const introOverlay = trainOnboardingIntroVisible ? (
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <button
                 type="button"
-                disabled={addingPositionToQueue || !learningQueueAddTarget?.decisionFen || isLearningQueueAddTargetQueued}
+                disabled={
+                  addingPositionToQueue ||
+                  !learningQueueAddTarget?.decisionFen ||
+                  isAddPositionAlreadyQueued
+                }
                 onClick={async () => {
                   if (addingPositionToQueue) return;
                   if (isAddPositionSuccessFeedback) return;
@@ -4688,11 +4694,11 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 className={[
                   secondaryActionClassName,
                   "min-h-12 w-full justify-center px-5 transition-all duration-300 ease-out",
-                  !isAddPositionSuccessFeedback && !isAddPositionAlreadyQueued ? "disabled:opacity-60" : "",
+                  !shouldShowAddPositionAdded ? "disabled:opacity-60" : "",
                   isPostmortemAddPositionWaiting
                     ? "train-add-position-glow ring-2 ring-[var(--app-accent)]"
                     : "",
-                  isAddPositionSuccessFeedback
+                  shouldShowAddPositionAdded
                     ? "train-add-position-success"
                     : "",
                 ].join(" ")}
@@ -4700,7 +4706,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 <span className={postmortemActionTextClassName}>
                   {addPositionOnboardingPhase === "saving"
                     ? "Saving..."
-                    : isAddPositionSuccessFeedback
+                    : shouldShowAddPositionAdded
                       ? (
                         <span className="inline-flex items-center justify-center gap-2">
                           <svg viewBox="0 0 20 20" className="h-4 w-4 shrink-0" fill="currentColor" aria-hidden="true">
@@ -4709,9 +4715,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                           Position added
                         </span>
                       )
-                      : isAddPositionAlreadyQueued
-                        ? "Already in Learning Queue"
-                        : "Add Position to Learning Queue"}
+                      : "Add Position to Learning Queue"}
                 </span>
               </button>
               <button
