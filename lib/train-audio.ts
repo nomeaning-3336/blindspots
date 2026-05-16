@@ -1,6 +1,6 @@
 // Train audio manager — single shared AudioContext, pre-decoded buffers, no hot-path waits.
 
-export type TrainSoundName = "move" | "capture" | "addPositionConfirm";
+export type TrainSoundName = "move" | "capture" | "addPositionConfirm" | "uiClick";
 
 export type PlayTrainSoundOptions = {
   move: TrainSoundMove;
@@ -49,6 +49,7 @@ const TRAIN_SOUND_SOURCES: Record<TrainSoundName, string> = {
   move: "/analyze/sounds/move-self.mp3",
   capture: "/analyze/sounds/capture.mp3",
   addPositionConfirm: "/analyze/sounds/add-position-confirm.wav",
+  uiClick: "/analyze/sounds/ui-click.wav",
 };
 
 const MOVE_SCALE_RATIOS = [
