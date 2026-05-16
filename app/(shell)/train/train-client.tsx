@@ -1305,6 +1305,7 @@ export default function TrainPage(props: TrainPageProps) {
         setOnboardingScreen("done");
 
         if (
+          !initialCheckpointState &&
           shouldRunPreplayOnboarding &&
           restoreTrainingTourCheckpoint(payload.trainingTourCheckpoint)
         ) {
@@ -4580,9 +4581,8 @@ const introOverlay = trainOnboardingIntroVisible ? (
                         setPostmortemOnboardingStep((step) =>
                           Math.min(step + 1, POSTMORTEM_TOUR_STEPS.length - 1),
                         );
-                        setAddPositionOnboardingPhase("idle");
                         addPositionOnboardingSuccessTimerRef.current = null;
-                      }, 1050);
+                      }, 1200);
                       return;
                     }
                     showAlert({
@@ -4624,8 +4624,15 @@ const introOverlay = trainOnboardingIntroVisible ? (
                   {addPositionOnboardingPhase === "saving"
                     ? "Saving..."
                     : addPositionOnboardingPhase === "success"
-                      ? "Position added successfully"
-                    : "Add Position to Learning Queue"}
+                      ? (
+                        <span className="inline-flex items-center gap-2">
+                          <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+                            <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                          </svg>
+                          Added to Learning Queue
+                        </span>
+                      )
+                      : "Add Position to Learning Queue"}
                 </span>
               </button>
               <button
@@ -4753,6 +4760,11 @@ const introOverlay = trainOnboardingIntroVisible ? (
               0 0 0 2px color-mix(in srgb, var(--app-accent) 95%, transparent),
               0 0 30px color-mix(in srgb, var(--app-accent) 85%, transparent);
           }
+        }
+        .train-tour-primary-button:hover,
+        .train-tour-primary-button:focus-visible,
+        .train-tour-primary-button:active {
+          transform: none;
         }
       `}</style>
 
@@ -5305,6 +5317,11 @@ function TrainPostmortemTourOverlay({
   const cardVisibilityClass = postmortemTourSoftSwitching
     ? "opacity-0 scale-[0.985] translate-y-0.5"
     : "opacity-100 scale-100 translate-y-0";
+  const primaryButtonLabel = completionInFlight
+    ? "Saving..."
+    : isActionStep && !actionCompleted
+      ? currentStep.cta ?? "Next"
+      : displayedTourStep.cta ?? "Next";
 
   if (!hasInitialTourGeometry) {
     return null;
@@ -5312,7 +5329,7 @@ function TrainPostmortemTourOverlay({
 
   return (
     <div
-      className="fixed inset-0 z-[80]"
+      className="fixed inset-0 z-[80] overflow-hidden"
       role="dialog"
       aria-modal="true"
       aria-label="Postmortem onboarding"
@@ -5384,7 +5401,7 @@ function TrainPostmortemTourOverlay({
         ref={measureCardRef}
         aria-hidden="true"
         className={[
-          "pointer-events-none invisible fixed left-[-9999px] top-0",
+          "pointer-events-none fixed left-0 top-0 opacity-0",
           "flex flex-col overflow-hidden rounded-[8px] border border-[var(--app-border)]",
           "bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)]",
           "shadow-[4px_4px_0_var(--app-brutal-edge)]",
@@ -5482,10 +5499,10 @@ function TrainPostmortemTourOverlay({
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); if (!isPositioningSpotlight) onNext(); }}
-            className="app-brutal-button min-h-11 px-6 text-xs"
+            className="app-brutal-button train-tour-primary-button min-h-11 px-6 text-xs"
             disabled={completionInFlight || isPositioningSpotlight || (isActionStep && actionInstructionAcknowledged && !actionCompleted)}
           >
-            {completionInFlight ? "Saving..." : (isActionStep && !actionCompleted ? displayedTourStep.cta ?? "Waiting..." : displayedTourStep.cta ?? "Next")}
+            {primaryButtonLabel}
           </button>
         </div>
       </div>
