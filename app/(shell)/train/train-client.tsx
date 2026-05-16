@@ -4649,10 +4649,11 @@ const introOverlay = trainOnboardingIntroVisible ? (
                           setPostmortemOnboardingStep((step) =>
                             Math.min(step + 1, POSTMORTEM_TOUR_STEPS.length - 1),
                           );
+
                           window.setTimeout(() => {
                             setPostmortemNotesToggleTransitioning(false);
-                          }, 560);
-                        }, 260);
+                          }, 120);
+                        }, 560);
                         return;
                       }
                       setPostmortemSidePanel(item);
@@ -4700,7 +4701,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 }}
               />
               ) : (
-                <div data-tour="notes-panel" className="min-h-0 flex-1">
+                <div className="min-h-0 flex-1">
                   <MoveNotesPanel
                     moves={annotatableMoves}
                     annotations={moveAnnotations}
@@ -4708,6 +4709,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                     onSelectMove={handleSelectMove}
                     onUpdateNote={handleUpdateNote}
                     savedMoveKey={savedMoveNoteKey}
+                    tourTarget="notes-panel"
                   />
                 </div>
               )}
@@ -4725,7 +4727,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 >
                   <svg
                     viewBox="0 0 20 20"
-                    className="h-4 w-4 shrink-0 text-[var(--app-accent)]"
+                    className="h-4 w-4 shrink-0 text-white"
                     fill="currentColor"
                     aria-hidden="true"
                   >
@@ -5372,9 +5374,21 @@ function TrainPostmortemTourOverlay({
         spotlight.top - previousTourGeometry.spotlight.top,
       )
     : 0;
+  const spotlightResizeDistance = previousTourGeometry.spotlight && spotlight
+    ? Math.hypot(
+        spotlight.width - previousTourGeometry.spotlight.width,
+        spotlight.height - previousTourGeometry.spotlight.height,
+      )
+    : 0;
   const tourGeometryTravelDistance = Math.max(cardTravelDistance, spotlightTravelDistance);
   const tourGeometryDurationMs = Math.round(
-    clamp(700 + tourGeometryTravelDistance * 0.18, 760, 1180),
+    clamp(
+      700 +
+        tourGeometryTravelDistance * 0.18 +
+        spotlightResizeDistance * 0.6,
+      760,
+      1400,
+    ),
   );
 
   useLayoutEffect(() => {
