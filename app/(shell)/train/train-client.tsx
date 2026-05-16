@@ -7180,7 +7180,7 @@ function AnalysisMoveTable({
             </span>
             {isQueuedForLearning ? (
               <span
-                className="train-move-row-learning-icon inline-flex shrink-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+                className="train-move-row-learning-icon inline-flex shrink-0 items-center gap-1.5 text-[10px] font-bold uppercase leading-none tracking-[0.1em]"
                 aria-label="Added to Learning Queue"
                 title="Added to Learning Queue"
               >
@@ -7200,7 +7200,7 @@ function AnalysisMoveTable({
                   <path d="M4 5.2c2.6-.8 5.3-.3 8 1.3v14c-2.7-1.6-5.4-2.1-8-1.3v-14Z" />
                   <path d="M20 5.2c-2.6-.8-5.3-.3-8 1.3v14c2.7-1.6 5.4-2.1 8-1.3v-14Z" />
                 </svg>
-                <span className="whitespace-nowrap">Added to Learning Queue</span>
+                <span className="relative top-px whitespace-nowrap">Added to Learning Queue</span>
               </span>
             ) : null}
           </span>
