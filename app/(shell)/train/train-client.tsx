@@ -4727,7 +4727,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                     ? "Saving..."
                     : shouldShowAddPositionAdded
                       ? (
-                        <span className="inline-flex items-center justify-center gap-2 underline decoration-[3px] underline-offset-2">
+                        <span className="inline-flex items-center justify-center gap-2 underline decoration-[2px] underline-offset-2 text-[var(--app-muted)]">
                           <svg viewBox="0 0 20 20" className="h-4 w-4 shrink-0" fill="currentColor" aria-hidden="true">
                             <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
                           </svg>
@@ -4850,7 +4850,11 @@ const introOverlay = trainOnboardingIntroVisible ? (
             )
           }
           hideCard={shouldHidePostmortemTour}
-          allowTargetInteraction={isPostmortemAddPositionActionStep && !postmortemAddPositionInstructionAcknowledged}
+          allowTargetInteraction={
+            isPostmortemAddPositionActionStep &&
+            postmortemAddPositionInstructionAcknowledged &&
+            !postmortemAddPositionActionDone
+          }
         />
         </div>
       ) : null}
@@ -5238,16 +5242,17 @@ function TrainPostmortemTourOverlay({
     currentStep.suppressSpotlight &&
     isActionStep &&
     !actionInstructionAcknowledged;
+  const isWaitingForActionCompletion =
+    isActionStep && actionInstructionAcknowledged && !actionCompleted;
   const effectiveSuppressSpotlight =
-    currentStep.suppressSpotlight &&
-    !(isActionStep && actionInstructionAcknowledged && !actionCompleted);
+    currentStep.suppressSpotlight || isWaitingForActionCompletion;
   const isResolvingTargetWithoutReusableSpotlight =
     waitsForTargetGeometry &&
     !spotlight &&
     Boolean(previousTourGeometry.card) &&
     !previousTourGeometry.spotlight;
   const shouldShowFullScreenTourDim =
-    !(isActionStep && actionInstructionAcknowledged && !actionCompleted) &&
+    !isWaitingForActionCompletion &&
     (shouldCenterCard ||
       shouldDimSuppressedSpotlight ||
       isResolvingTargetWithoutReusableSpotlight);
@@ -5413,7 +5418,7 @@ function TrainPostmortemTourOverlay({
       style={tourOverlayStyle}
     >
       {/* Single SVG mask cutout avoids seams from stitched dim rectangles. */}
-      {!effectiveSuppressSpotlight && displayedSpotlight ? (
+      {!isWaitingForActionCompletion && !effectiveSuppressSpotlight && displayedSpotlight ? (
         <svg
           aria-hidden="true"
           data-testid="train-spotlight-dim-mask"
