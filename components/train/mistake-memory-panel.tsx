@@ -8,7 +8,7 @@ import {
   classificationIcon,
   type MoveClassification,
 } from "@/lib/training-board-ui";
-import { formatLossLabel } from "@/lib/training/eval-format";
+import { formatLossLabel, formatEvalLabel } from "@/lib/training/eval-format";
 
 export type AnnotatableMoveRow = {
   moveKey: string;
@@ -18,6 +18,9 @@ export type AnnotatableMoveRow = {
   to: string | null;
   classification?: string;
   cpLoss?: number;
+  evalBefore?: number | null;
+  evalAfter?: number | null;
+  mateBefore?: number | null;
   mateAfter?: number | null;
 };
 
@@ -99,9 +102,11 @@ export function MoveNotesPanel({
       <div data-tour={tourTarget} className="flex flex-col gap-2">
         {/* ── Top row: compact move table ──────────────────────────── */}
         <div className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)]">
-        <div className="grid min-h-8 grid-cols-[1fr_auto] items-center border-b border-[var(--app-border-soft)] px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
+        <div className="grid min-h-8 grid-cols-[minmax(0,1fr)_4.5rem_4.5rem_4.5rem] items-center border-b border-[var(--app-border-soft)] px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
           <span>Move</span>
-          <span className="text-left">Loss</span>
+          <span className="text-right">Before</span>
+          <span className="text-right">After</span>
+          <span className="text-right">Loss</span>
         </div>
         <div className="max-h-48 overflow-y-auto">
           {moves.map((move) => {
@@ -112,7 +117,7 @@ export function MoveNotesPanel({
                 key={move.moveKey}
                 type="button"
                 className={[
-                  "grid w-full grid-cols-[1fr_auto] items-center border-b border-[var(--app-border-soft)] px-3 text-left last:border-b-0 min-h-9 text-xs transition",
+                  "grid w-full grid-cols-[minmax(0,1fr)_4.5rem_4.5rem_4.5rem] items-center border-b border-[var(--app-border-soft)] px-3 text-left last:border-b-0 min-h-9 text-xs transition",
                   isSelected
                     ? "bg-[var(--app-highlight-soft)]"
                     : "hover:bg-[var(--app-surface-hover)]",
@@ -141,7 +146,13 @@ export function MoveNotesPanel({
                     {move.san}
                   </span>
                 </span>
-                <span className="overflow-hidden whitespace-nowrap text-left tabular-nums text-[var(--app-muted)]">
+                <span className="text-right tabular-nums text-[var(--app-muted)]">
+                  {formatEvalLabel(move.evalBefore, move.mateBefore)}
+                </span>
+                <span className="text-right tabular-nums text-[var(--app-muted)]">
+                  {formatEvalLabel(move.evalAfter, move.mateAfter)}
+                </span>
+                <span className="text-right tabular-nums text-[var(--app-muted)]">
                   {move.cpLoss != null
                     ? formatLossLabel(move.cpLoss, move.mateAfter)
                     : "--"}

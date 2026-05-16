@@ -65,9 +65,11 @@ import {
   normalizeDecisionFen,
   isFailedClassification,
   updateNoteText,
+  upsertAnnotatedMove,
   type AnnotatedMove,
 } from "@/lib/training/mistake-memory";
 import { MoveNotesPanel } from "@/components/train/mistake-memory-panel";
+import type { AnnotatableMoveRow } from "@/components/train/mistake-memory-panel";
 import { TopAlertViewport, useTopAlert } from "@/components/ui/top-alert";
 import { normalizeNotes, formatEvalCp, type NormalizedNote, type RawNoteRow } from "@/lib/notes";
 
@@ -236,13 +238,16 @@ const POSTMORTEM_TOUR_STEPS = [
   {
     target: "notes-panel",
     headline: "Write a note to your future self.",
-    body: "Select any of the moves you made, and write any note you want to see in the future. When the position comes back for review, this note might be shown to you, or hidden to see if you will perform well without it.",
+    body: "You can add a note for any of the positions that you added to the Learning queue. When the position comes back for review, this note might be shown to you, or hidden to see if you will perform well without it.",
   },
   {
     target: "postmortem-actions",
-    headline: "Keep playing, or call it a day.",
-    body: "The next position might be sampled from a random position to see how you play, or one of your positions that you added manually to the learning queue. You can proceed to start a new sequence or return to the dashboard.",
-    cta: "Set preferences",
+    headline: "Daily goal.",
+    body: "And finally, let's set your daily goal!",
+    cta: "Set goal",
+    centerCard: true,
+    suppressSpotlight: true,
+    sidePanel: "memory",
   },
 ] as const satisfies readonly PostmortemTourStep[];
 
@@ -458,7 +463,16 @@ import {
   type TrainSoundMove,
   type PlayTrainSoundOptions,
 } from "@/lib/train-audio";
-import { DAILY_TARGET_OPTIONS, MISTAKE_CAPTURE_THRESHOLD_OPTIONS } from "@/lib/training/training-preferences";
+import {
+  DAILY_TARGET_OPTIONS,
+  MISTAKE_CAPTURE_THRESHOLD_OPTIONS,
+  SRS_PROFILE_OPTIONS,
+  SRS_PROFILES,
+  simulateSrsForecast,
+  type SrsProfileLevel,
+  type SrsConfig,
+  type DailyTargetLevel,
+} from "@/lib/training/training-preferences";
 
 const postmortemActionTextClassName = "text-center text-sm font-bold uppercase leading-none tracking-[0.1em]";
 const primaryActionClassName =
@@ -931,6 +945,89 @@ export default function TrainPage(props: TrainPageProps) {
   const [addingPositionToQueue, setAddingPositionToQueue] = useState(false);
   const fenCopyTimerRef = useRef<number | null>(null);
 
+  async function evaluateMoveForAnnotationClient(move: TrainingMove): Promise<MoveScore | null> {
+    if (!move.fenBefore || !move.uci) return null;
+
+    try {
+      const [{ ClientStockfishEngine }, { clientLinesToTrainingEngineLines }] =
+        await Promise.all([
+          import("@/lib/stockfish/client-engine"),
+          import("@/lib/stockfish/client-lines-to-training-lines"),
+        ]);
+
+      const engine = new ClientStockfishEngine({ hashMb: 16 });
+      let bestResult;
+      let playedResult;
+
+      try {
+        bestResult = await engine.analyzeFen({
+          fen: move.fenBefore,
+          multiPv: 1,
+          movetimeMs: 500,
+        });
+        playedResult = await engine.analyzeFen({
+          fen: move.fenBefore,
+          multiPv: 1,
+          movetimeMs: 500,
+          searchMoves: [move.uci],
+        });
+
+        const bestLine = clientLinesToTrainingEngineLines({
+          fen: move.fenBefore,
+          lines: bestResult.lines,
+        })[0];
+        const playedLine = clientLinesToTrainingEngineLines({
+          fen: move.fenBefore,
+          lines: playedResult.lines,
+        })[0];
+
+        let evalAfter = playedLine?.cp ?? null;
+        let mateAfter = playedLine?.mate ?? null;
+
+        if ((!playedLine || evalAfter === null) && move.fenAfter) {
+          const afterResult = await engine.analyzeFen({
+            fen: move.fenAfter,
+            multiPv: 1,
+            movetimeMs: 500,
+          });
+          const afterLine = clientLinesToTrainingEngineLines({
+            fen: move.fenAfter,
+            lines: afterResult.lines,
+          })[0];
+          evalAfter = afterLine?.cp ?? null;
+          mateAfter = afterLine?.mate ?? null;
+        }
+
+        if (!bestLine || evalAfter === null) return null;
+
+        const sideToMove = move.fenBefore.split(/\s+/)[1];
+        const bestComparable = sideToMove === "b" ? -bestLine.cp : bestLine.cp;
+        const playedComparable = sideToMove === "b" ? -evalAfter : evalAfter;
+        const cpLoss = Math.max(0, Math.round(bestComparable - playedComparable));
+
+        return {
+          userMoveIndex: 0,
+          cpLoss,
+          evalBefore: Math.round(bestLine.cp),
+          evalAfter: Math.round(evalAfter),
+          mateBefore: bestLine.mate ?? null,
+          mateAfter,
+          classification:
+            classificationFromCpLoss(cpLoss) ??
+            move.classification ??
+            "okay",
+        };
+      } finally {
+        engine.dispose();
+      }
+    } catch (error) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[move-notes] client annotation eval failed", error);
+      }
+      return null;
+    }
+  }
+
   async function addPositionToLearningQueue() {
     if (addingPositionToQueue) return;
     if (isAddPositionSuccessFeedback) return;
@@ -969,6 +1066,48 @@ export default function TrainPage(props: TrainPageProps) {
         return next;
       });
 
+      const annotationMove = addTarget.annotationMove;
+
+      if (annotationMove?.fenBefore && annotationMove.uci) {
+        const moveKey = buildMoveKey(annotationMove.fenBefore, annotationMove.uci);
+
+        setMoveAnnotations((prev) =>
+          upsertAnnotatedMove(prev, {
+            moveKey,
+            decisionFen: annotationMove.fenBefore!,
+            uci: annotationMove.uci,
+            san: annotationMove.san,
+            classification: annotationMove.classification,
+            cpLoss: annotationMove.cpLoss,
+            evalBefore: annotationMove.evalBefore ?? null,
+            evalAfter: annotationMove.evalAfter ?? null,
+            mateBefore: annotationMove.mateBefore ?? null,
+            mateAfter: annotationMove.mateAfter ?? null,
+          }),
+        );
+
+        setSelectedMoveKey(moveKey);
+
+        void evaluateMoveForAnnotationClient(annotationMove).then((moveScore) => {
+          if (!moveScore) return;
+
+          setMoveAnnotations((prev) =>
+            upsertAnnotatedMove(prev, {
+              moveKey,
+              decisionFen: annotationMove.fenBefore!,
+              uci: annotationMove.uci,
+              san: annotationMove.san,
+              classification: moveScore.classification,
+              cpLoss: moveScore.cpLoss,
+              evalBefore: moveScore.evalBefore ?? null,
+              evalAfter: moveScore.evalAfter ?? null,
+              mateBefore: moveScore.mateBefore ?? null,
+              mateAfter: moveScore.mateAfter ?? null,
+            }),
+          );
+        });
+      }
+
       if (isPostmortemAddPositionActionStep) {
         clearAddPositionOnboardingSuccessTimers();
         setAddPositionOnboardingPhase("success-entering");
@@ -986,7 +1125,7 @@ export default function TrainPage(props: TrainPageProps) {
           );
           setAddPositionOnboardingPhase("idle");
           addPositionOnboardingSuccessTimerRef2.current = null;
-        }, 900);
+        }, 420);
 
         return;
       }
@@ -1115,6 +1254,11 @@ export default function TrainPage(props: TrainPageProps) {
     !postmortemNotesToggleActionDone;
   const shouldHideTourForNotesToggle =
     isPostmortemNotesToggleWaiting || postmortemNotesToggleTransitioning;
+  const isNotesToggleTourControlLockActive =
+    isPostmortemNotesToggleWaiting || postmortemNotesToggleTransitioning;
+  const postmortemFooterActionsDisabled =
+    (isPostmortemAddPositionActionStep && !postmortemAddPositionActionDone) ||
+    isNotesToggleTourControlLockActive;
   const shouldHidePostmortemTour =
     shouldHideTourForAddPosition || shouldHideTourForNotesToggle;
   const [onboardingCompletionInFlight, setOnboardingCompletionInFlight] = useState(false);
@@ -1123,6 +1267,25 @@ export default function TrainPage(props: TrainPageProps) {
   const [showOnboardingPreferencesModal, setShowOnboardingPreferencesModal] = useState(false);
   const [selectedDailyTargetLevel, setSelectedDailyTargetLevel] = useState<string>("balanced");
     const [isSavingOnboardingPreferences, setIsSavingOnboardingPreferences] = useState(false);
+
+  // ── SRS state for onboarding preferences ───────────────────────
+  const [selectedDailyTargetPositions, setSelectedDailyTargetPositions] = useState<number>(10);
+  const [srsProfileLevel, setSrsProfileLevel] = useState<SrsProfileLevel>("balanced");
+  const [srsConfig, setSrsConfig] = useState<SrsConfig>(cloneSrsConfig(SRS_PROFILES.balanced));
+
+  function cloneSrsConfig(config: SrsConfig): SrsConfig {
+    return {
+      ...config,
+      passIntervalsDays: [...config.passIntervalsDays],
+    };
+  }
+
+  function derivedDailyTargetLevel(positions: number): DailyTargetLevel {
+    if (positions <= 5) return "easy";
+    if (positions <= 10) return "balanced";
+    if (positions <= 20) return "hard";
+    return "extreme";
+  }
 
   useEffect(() => {
     engineLineCacheRef.current = engineLineCache;
@@ -3064,15 +3227,16 @@ export default function TrainPage(props: TrainPageProps) {
 
   async function finishOnboardingWithPreferences() {
     setIsSavingOnboardingPreferences(true);
-    const dailyTarget = DAILY_TARGET_OPTIONS.find((o) => o.level === selectedDailyTargetLevel) ?? DAILY_TARGET_OPTIONS[1];
 
     try {
       await fetch("/api/train/preferences", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          dailyTargetLevel: dailyTarget.level,
-          dailyTargetPositions: dailyTarget.positions,
+          dailyTargetLevel: derivedDailyTargetLevel(selectedDailyTargetPositions),
+          dailyTargetPositions: selectedDailyTargetPositions,
+          srsProfileLevel,
+          srsConfig,
         }),
       });
     } catch { /* continue even if prefs save fails */ }
@@ -3337,7 +3501,8 @@ export default function TrainPage(props: TrainPageProps) {
   // Notes are only allowed for positions explicitly added to the Learning Queue.
   const annotatableMoves = useMemo(() => {
     if (!isPostMortemVisible) return [];
-    return canonicalPostmortemMoves
+
+    const rows: AnnotatableMoveRow[] = canonicalPostmortemMoves
       .filter((cm) => {
         if (cm.kind !== "user" || !cm.uci || !cm.move?.fenBefore) return false;
         return queuedLearningPositionFens.has(normalizeDecisionFen(cm.move.fenBefore));
@@ -3350,9 +3515,51 @@ export default function TrainPage(props: TrainPageProps) {
         to: cm.to,
         classification: cm.classification,
         cpLoss: cm.cpLoss as number | undefined,
+        evalBefore: cm.evalBefore as number | null | undefined,
+        evalAfter: cm.evalAfter as number | null | undefined,
+        mateBefore: cm.mateBefore as number | null | undefined,
         mateAfter: cm.mateAfter as number | null | undefined,
       }));
-  }, [isPostMortemVisible, canonicalPostmortemMoves, queuedLearningPositionFens]);
+
+    const seen = new Set(rows.map((row) => row.moveKey));
+
+    for (const position of exploratoryHistory) {
+      const move = position.move;
+      if (!move?.fenBefore || !move.uci) continue;
+
+      const fenBefore = normalizeDecisionFen(move.fenBefore);
+      const fenAfter = move.fenAfter ? normalizeDecisionFen(move.fenAfter) : null;
+      if (
+        !queuedLearningPositionFens.has(fenBefore) &&
+        !(fenAfter && queuedLearningPositionFens.has(fenAfter))
+      ) {
+        continue;
+      }
+
+      const moveKey = buildMoveKey(move.fenBefore, move.uci);
+      if (seen.has(moveKey)) continue;
+
+      const annotation = moveAnnotations[moveKey];
+
+      rows.push({
+        moveKey,
+        san: annotation?.san ?? move.san ?? move.uci,
+        uci: annotation?.uci ?? move.uci,
+        from: move.uci.slice(0, 2),
+        to: move.uci.slice(2, 4),
+        classification: (annotation?.classification ?? move.classification) as MoveClassification | undefined,
+        cpLoss: annotation?.cpLoss ?? move.cpLoss,
+        evalBefore: annotation?.evalBefore ?? move.evalBefore,
+        evalAfter: annotation?.evalAfter ?? move.evalAfter,
+        mateBefore: annotation?.mateBefore ?? move.mateBefore,
+        mateAfter: annotation?.mateAfter ?? move.mateAfter,
+      });
+
+      seen.add(moveKey);
+    }
+
+    return rows;
+  }, [isPostMortemVisible, canonicalPostmortemMoves, exploratoryHistory, queuedLearningPositionFens, moveAnnotations]);
 
   // Dev-only: log annotation state
   useEffect(() => {
@@ -3367,13 +3574,25 @@ export default function TrainPage(props: TrainPageProps) {
       console.log("[move-notes] select-move", moveKey);
     }
     setSelectedMoveKey(moveKey);
-    // Sync board and analysis table to the same move.
+
     const canonicalMove = canonicalPostmortemMoves.find((cm) => {
       if (!cm.move?.fenBefore || !cm.uci) return false;
       return buildMoveKey(cm.move.fenBefore, cm.uci) === moveKey;
     });
+
     if (canonicalMove && canonicalMove.positionIndex != null) {
       navigateExploreTo(canonicalMove.positionIndex);
+      return;
+    }
+
+    const exploratoryIndex = exploratoryHistory.findIndex((position) => {
+      const move = position.move;
+      if (!move?.fenBefore || !move.uci) return false;
+      return buildMoveKey(move.fenBefore, move.uci) === moveKey;
+    });
+
+    if (exploratoryIndex >= 0) {
+      navigateExploratoryLine(exploratoryIndex);
     }
   }
 
@@ -3668,15 +3887,23 @@ export default function TrainPage(props: TrainPageProps) {
       return {
         decisionFen: boardFen,
         setupMove: activeExploratoryPosition?.move ?? activeSequencePosition?.move ?? null,
+        annotationMove:
+          activeExploratoryPosition?.move?.fenAfter &&
+          normalizeDecisionFen(activeExploratoryPosition.move.fenAfter) === normalizeDecisionFen(boardFen)
+            ? activeExploratoryPosition.move
+            : null,
         fellBackFromEnginePosition: false,
       };
     }
 
-    const fallbackFromExploratoryMove = activeExploratoryPosition?.move?.fenBefore;
+    const exploratoryMove = activeExploratoryPosition?.move ?? null;
+    const fallbackFromExploratoryMove = exploratoryMove?.fenBefore;
+
     if (isUserDecisionFen(fallbackFromExploratoryMove)) {
       return {
         decisionFen: fallbackFromExploratoryMove!,
         setupMove: setupMoveForDecisionFen(fallbackFromExploratoryMove!),
+        annotationMove: exploratoryMove,
         fellBackFromEnginePosition: true,
       };
     }
@@ -3686,6 +3913,7 @@ export default function TrainPage(props: TrainPageProps) {
       return {
         decisionFen: fallbackFromSequenceMove!,
         setupMove: setupMoveForDecisionFen(fallbackFromSequenceMove!),
+        annotationMove: null,
         fellBackFromEnginePosition: true,
       };
     }
@@ -3702,6 +3930,7 @@ export default function TrainPage(props: TrainPageProps) {
     return {
       decisionFen: previousUserDecisionPosition.fen,
       setupMove: previousUserDecisionPosition.move ?? null,
+      annotationMove: null,
       fellBackFromEnginePosition: true,
     };
   }, [
@@ -4625,22 +4854,30 @@ const introOverlay = trainOnboardingIntroVisible ? (
             <div className="inline-flex h-[var(--pm-tab-h)] w-full shrink-0 justify-center gap-1">
               {(["analysis", "memory"] as const).map((item) => {
                 const active = postmortemSidePanel === item;
+                const disabledByNotesToggleTour =
+                  isNotesToggleTourControlLockActive && item !== "memory";
+
                 return (
                   <button
                     key={item}
                     type="button"
                     data-tour={item === "memory" ? "notes-toggle" : undefined}
+                    disabled={disabledByNotesToggleTour}
+                    aria-disabled={disabledByNotesToggleTour || undefined}
                     className={[
                       "inline-flex h-full items-center border px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] transition min-[1500px]:text-sm",
                       active
                         ? "relative z-10 border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
                         : "cursor-pointer border-[var(--app-border)] bg-transparent text-[var(--app-muted)] hover:border-[var(--app-accent)] hover:text-[var(--app-text)]",
                       "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]",
+                      "disabled:cursor-not-allowed disabled:opacity-40",
                       isPostmortemNotesToggleWaiting && item === "memory"
                         ? "train-add-position-glow ring-2 ring-[var(--app-accent)]"
                         : "",
                     ].join(" ")}
                     onClick={() => {
+                      if (disabledByNotesToggleTour) return;
+
                       if (isPostmortemNotesToggleWaiting && item === "memory") {
                         setPostmortemNotesToggleTransitioning(true);
                         setPostmortemSidePanel("memory");
@@ -4666,7 +4903,10 @@ const introOverlay = trainOnboardingIntroVisible ? (
             </div>
 
             {/* ── Panel content ───────────────────────────────────────────── */}
-            <div className="train-postmortem-panel flex min-h-0 flex-1 flex-col gap-[var(--pm-gap)] pr-1">
+            <div className={[
+              "train-postmortem-panel flex min-h-0 flex-1 flex-col gap-[var(--pm-gap)] pr-1",
+              isNotesToggleTourControlLockActive ? "pointer-events-none select-none opacity-60" : "",
+            ].join(" ")}>
               {postmortemSidePanel === "analysis" ? (
                 <ResultsPanel
                 hideDelta={isOnboardingFirstPostmortem}
@@ -4747,7 +4987,8 @@ const introOverlay = trainOnboardingIntroVisible ? (
                   disabled={
                     addingPositionToQueue ||
                     !learningQueueAddTarget?.decisionFen ||
-                    isAddPositionAlreadyQueued
+                    isAddPositionAlreadyQueued ||
+                    isNotesToggleTourControlLockActive
                   }
                   onClick={addPositionToLearningQueue}
                   data-tour="add-position-to-learning-queue"
@@ -4769,7 +5010,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
               )}
               <button
                 type="button"
-                disabled={!boardFen}
+                disabled={!boardFen || isNotesToggleTourControlLockActive}
                 onClick={async () => {
                   const fenToCopy = boardFen;
                   if (!fenToCopy) return;
@@ -4822,24 +5063,24 @@ const introOverlay = trainOnboardingIntroVisible ? (
             >
               <a
                 href="/train"
-                onClick={isPostmortemAddPositionActionStep && !postmortemAddPositionActionDone ? (e) => e.preventDefault() : undefined}
-                aria-disabled={isPostmortemAddPositionActionStep && !postmortemAddPositionActionDone ? "true" : undefined}
+                onClick={postmortemFooterActionsDisabled ? (e) => e.preventDefault() : undefined}
+                aria-disabled={postmortemFooterActionsDisabled ? "true" : undefined}
                 className={[
                   primaryActionClassName,
                   "min-h-12 w-full justify-center px-5",
-                  isPostmortemAddPositionActionStep && !postmortemAddPositionActionDone ? "opacity-40 cursor-not-allowed pointer-events-none" : "",
+                  postmortemFooterActionsDisabled ? "opacity-40 cursor-not-allowed pointer-events-none" : "",
                 ].join(" ")}
               >
                 <span className={postmortemActionTextClassName}>Next Position</span>
               </a>
               <a
                 href="/"
-                onClick={isPostmortemAddPositionActionStep && !postmortemAddPositionActionDone ? (e) => e.preventDefault() : undefined}
-                aria-disabled={isPostmortemAddPositionActionStep && !postmortemAddPositionActionDone ? "true" : undefined}
+                onClick={postmortemFooterActionsDisabled ? (e) => e.preventDefault() : undefined}
+                aria-disabled={postmortemFooterActionsDisabled ? "true" : undefined}
                 className={[
                   secondaryActionClassName,
                   "min-h-12 w-full justify-center px-5",
-                  isPostmortemAddPositionActionStep && !postmortemAddPositionActionDone ? "opacity-40 cursor-not-allowed pointer-events-none" : "",
+                  postmortemFooterActionsDisabled ? "opacity-40 cursor-not-allowed pointer-events-none" : "",
                 ].join(" ")}
               >
                 <span className={postmortemActionTextClassName}>Return to Dashboard</span>
@@ -4881,9 +5122,12 @@ const introOverlay = trainOnboardingIntroVisible ? (
           }
           hideCard={shouldHidePostmortemTour}
           allowTargetInteraction={
-            isPostmortemAddPositionActionStep &&
-            postmortemAddPositionInstructionAcknowledged &&
-            !postmortemAddPositionActionDone
+            (
+              isPostmortemAddPositionActionStep &&
+              postmortemAddPositionInstructionAcknowledged &&
+              !postmortemAddPositionActionDone
+            ) ||
+            isPostmortemNotesToggleWaiting
           }
         />
         </div>
@@ -4932,13 +5176,35 @@ const introOverlay = trainOnboardingIntroVisible ? (
         .train-tour-primary-button:active {
           transform: none;
         }
+        .train-tour-copy-enter {
+          animation: train-tour-copy-enter 260ms cubic-bezier(0.16, 0.84, 0.32, 1) both;
+        }
+        @keyframes train-tour-copy-enter {
+          from {
+            opacity: 0;
+            transform: translateY(4px) scale(0.992);
+            filter: blur(1px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            filter: blur(0);
+          }
+        }
       `}</style>
 
       {showOnboardingPreferencesModal ? (
         <OnboardingPreferencesModal
-          selectedDailyTarget={selectedDailyTargetLevel}
+          selectedDailyTargetPositions={selectedDailyTargetPositions}
           isSaving={isSavingOnboardingPreferences}
-          onDailyTargetChange={setSelectedDailyTargetLevel}
+          onDailyTargetChange={setSelectedDailyTargetPositions}
+          srsProfileLevel={srsProfileLevel}
+          srsConfig={srsConfig}
+          onSrsProfileChange={(level) => {
+            setSrsProfileLevel(level);
+            setSrsConfig(cloneSrsConfig(SRS_PROFILES[level]));
+          }}
+          onSrsConfigChange={setSrsConfig}
           onFinish={finishOnboardingWithPreferences}
         />
       ) : null}
@@ -4949,70 +5215,311 @@ const introOverlay = trainOnboardingIntroVisible ? (
 }
 
 function OnboardingPreferencesModal({
-  selectedDailyTarget,
+  selectedDailyTargetPositions,
   isSaving,
   onDailyTargetChange,
+  srsProfileLevel,
+  srsConfig,
+  onSrsProfileChange,
+  onSrsConfigChange,
   onFinish,
 }: {
-  selectedDailyTarget: string;
+  selectedDailyTargetPositions: number;
   isSaving: boolean;
-  onDailyTargetChange: (level: string) => void;
+  onDailyTargetChange: (positions: number) => void;
+  srsProfileLevel: SrsProfileLevel;
+  srsConfig: SrsConfig;
+  onSrsProfileChange: (level: SrsProfileLevel) => void;
+  onSrsConfigChange: (config: SrsConfig) => void;
   onFinish: () => void;
 }) {
+  const [customIntervalsText, setCustomIntervalsText] = useState(
+    srsConfig.passIntervalsDays.join(", "),
+  );
+
+  // Sync custom intervals text when profile changes to non-custom
+  const prevSrsProfileLevel = usePrevious(srsProfileLevel);
+  useEffect(() => {
+    if (prevSrsProfileLevel !== "custom" && srsProfileLevel === "custom") {
+      setCustomIntervalsText(srsConfig.passIntervalsDays.join(", "));
+    }
+    if (srsProfileLevel !== "custom") {
+      setCustomIntervalsText(srsConfig.passIntervalsDays.join(", "));
+    }
+  }, [srsProfileLevel, srsConfig.passIntervalsDays]);
+
+  function parseIntervals(text: string): number[] {
+    return text
+      .split(",")
+      .map((s) => Math.round(Number(s.trim())))
+      .filter((n) => Number.isFinite(n) && n >= 0 && n <= 3650)
+      .slice(0, 12);
+  }
+
+  function handleIntervalsChange(text: string) {
+    setCustomIntervalsText(text);
+    const parsed = parseIntervals(text);
+    if (parsed.length > 0) {
+      onSrsConfigChange({ ...srsConfig, passIntervalsDays: parsed });
+    }
+  }
+
+  function handleIntervalsBlur() {
+    const parsed = parseIntervals(customIntervalsText);
+    if (parsed.length > 0) {
+      setCustomIntervalsText(parsed.join(", "));
+      onSrsConfigChange({ ...srsConfig, passIntervalsDays: parsed });
+    } else {
+      setCustomIntervalsText(srsConfig.passIntervalsDays.join(", "));
+    }
+  }
+
+  // Forecast chart data
+  const forecastData = useMemo(
+    () => simulateSrsForecast(selectedDailyTargetPositions, srsConfig, 240),
+    [selectedDailyTargetPositions, srsConfig],
+  );
+  const saturatedAvg = useMemo(() => {
+    if (forecastData.length < 30) return 0;
+    const last30 = forecastData.slice(-30);
+    const sum = last30.reduce((acc, p) => acc + p.reviewsDue, 0);
+    return Math.round(sum / last30.length);
+  }, [forecastData]);
+
+  // Chart dimensions
+  const chartW = 480;
+  const chartH = 120;
+  const maxReviews = Math.max(...forecastData.map((p) => p.reviewsDue), 1);
+  const barW = Math.max(1, Math.floor(chartW / forecastData.length));
+  const chartPoints = forecastData.filter((_, i) => i % 4 === 0);
+
   return (
     <div
       className="absolute inset-0 z-50 flex items-center justify-center"
       style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(2px)" }}
     >
-      <div className="app-brutal-card relative mx-4 w-[min(calc(100vw-2rem),64rem)] border-2 p-8" role="dialog" aria-modal="true" aria-label="Training preferences">
-        <h2 className="mb-2 text-2xl font-bold leading-tight text-[var(--app-text)]">
-          Your starting preferences.
-        </h2>
-        <p className="mb-6 text-sm leading-7 text-[var(--app-muted)]">
-          And let&apos;s finish things by setting up your training rhythm. You can change these later from the <strong>Account</strong> page.
-        </p>
+      <div
+        className="app-brutal-card relative mx-4 w-[min(calc(100vw-2rem),64rem)] border-2 p-8"
+        style={{ maxHeight: "85vh", display: "flex", flexDirection: "column" }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Training preferences"
+      >
+        <div className="overflow-y-auto flex-1 pr-2">
+          <h2 className="mb-2 text-2xl font-bold leading-tight text-[var(--app-text)]">
+            Set your daily goal.
+          </h2>
+          <p className="mb-6 text-sm leading-7 text-[var(--app-muted)]">
+            Choose how many positions you want to complete per day. You can change this later from the <strong>Account</strong> page.
+          </p>
 
-        {/* Daily target */}
-        <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Daily target</h3>
-        <p className="mb-3 text-xs text-[var(--app-muted)]">How many positions do you want to complete per day?</p>
-        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {DAILY_TARGET_OPTIONS.map((opt) => {
-            const selected = selectedDailyTarget === opt.level;
-            return (
+          {/* Positions per day */}
+          <div className="mb-6">
+            <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Positions per day</h3>
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min={1}
+                max={300}
+                value={selectedDailyTargetPositions}
+                onChange={(e) => {
+                  const val = Math.round(Number(e.target.value));
+                  onDailyTargetChange(Number.isFinite(val) ? Math.max(1, Math.min(300, val)) : 10);
+                }}
+                className="w-24 rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)] px-3 py-2 text-sm text-[var(--app-text)] outline-none focus:border-[var(--app-accent)]"
+              />
+              <span className="text-xs text-[var(--app-muted)]">positions / day</span>
+            </div>
+          </div>
+
+          {/* SRS Intensity */}
+          <div className="mb-6">
+            <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">SRS intensity</h3>
+            <p className="mb-3 text-xs text-[var(--app-muted)]">How aggressively should positions repeat?</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+              {SRS_PROFILE_OPTIONS.filter((p) => p.level !== "custom").map((profile) => {
+                const selected = srsProfileLevel === profile.level;
+                return (
+                  <button
+                    key={profile.level}
+                    type="button"
+                    onClick={() => onSrsProfileChange(profile.level)}
+                    className={[
+                      "min-h-[72px] rounded-lg border p-3 text-left transition",
+                      selected ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] ring-1 ring-[var(--app-accent)]" : "border-[var(--app-border)] hover:border-[var(--app-border-strong)]",
+                    ].join(" ")}
+                  >
+                    <span className="flex flex-col gap-0.5">
+                      <span className="text-xs font-bold text-[var(--app-text)]">{profile.label}</span>
+                      {profile.recommended ? (
+                        <span className="text-[10px] text-[var(--app-muted)]">Recommended</span>
+                      ) : (
+                        <span className="text-[10px] text-[var(--app-muted)]">{profile.description}</span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+              {/* Custom button */}
               <button
-                key={opt.level}
+                key="custom"
                 type="button"
-                onClick={() => onDailyTargetChange(opt.level)}
+                onClick={() => onSrsProfileChange("custom")}
                 className={[
-                  "min-h-[92px] rounded-lg border p-4 text-left transition",
-                  selected ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] ring-1 ring-[var(--app-accent)]" : "border-[var(--app-border)] hover:border-[var(--app-border-strong)]",
+                  "min-h-[72px] rounded-lg border p-3 text-left transition",
+                  srsProfileLevel === "custom" ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] ring-1 ring-[var(--app-accent)]" : "border-[var(--app-border)] hover:border-[var(--app-border-strong)]",
                 ].join(" ")}
               >
-                <span className="flex min-w-0 items-baseline gap-1 text-sm font-bold text-[var(--app-text)]">
-                  <span>{opt.label}</span>
-                  {(opt as any).recommended ? (
-                    <span className="whitespace-nowrap text-xs font-medium text-[var(--app-muted)]">(Recommended)</span>
-                  ) : null}
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-xs font-bold text-[var(--app-text)]">Custom</span>
+                  <span className="text-[10px] text-[var(--app-muted)]">Configure your own</span>
                 </span>
-                <div className="mt-0.5 text-xs text-[var(--app-muted)]">{opt.positions} positions/day</div>
               </button>
-            );
-          })}
+            </div>
+          </div>
+
+          {/* Custom SRS fields — only when Custom is selected */}
+          {srsProfileLevel === "custom" && (
+            <div className="mb-6 rounded-lg border border-[var(--app-border)] p-4">
+              <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--app-muted)]">Custom SRS schedule</h4>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs text-[var(--app-muted)]">First review after (days)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={365}
+                    value={srsConfig.firstReviewDelayDays}
+                    onChange={(e) => onSrsConfigChange({ ...srsConfig, firstReviewDelayDays: Math.max(0, Math.min(365, Math.round(Number(e.target.value) || 0))) })}
+                    className="w-full rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)] px-3 py-2 text-sm text-[var(--app-text)] outline-none focus:border-[var(--app-accent)]"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-[var(--app-muted)]">Failed review after (days)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={365}
+                    value={srsConfig.failDelayDays}
+                    onChange={(e) => onSrsConfigChange({ ...srsConfig, failDelayDays: Math.max(0, Math.min(365, Math.round(Number(e.target.value) || 0))) })}
+                    className="w-full rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)] px-3 py-2 text-sm text-[var(--app-text)] outline-none focus:border-[var(--app-accent)]"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-xs text-[var(--app-muted)]">Pass intervals (comma-separated, days)</label>
+                  <input
+                    type="text"
+                    value={customIntervalsText}
+                    onChange={(e) => handleIntervalsChange(e.target.value)}
+                    onBlur={handleIntervalsBlur}
+                    placeholder="1, 3, 7, 14, 30, 60"
+                    className="w-full rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)] px-3 py-2 text-sm text-[var(--app-text)] outline-none focus:border-[var(--app-accent)]"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-[var(--app-muted)]">Expected pass rate (%)</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min={5}
+                      max={98}
+                      value={Math.round(srsConfig.assumedPassRate * 100)}
+                      onChange={(e) => onSrsConfigChange({ ...srsConfig, assumedPassRate: Math.max(0.05, Math.min(0.98, Number(e.target.value) / 100)) })}
+                      className="flex-1"
+                    />
+                    <span className="w-10 text-right text-xs text-[var(--app-muted)]">{Math.round(srsConfig.assumedPassRate * 100)}%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Forecast chart */}
+          <div className="mb-4">
+            <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Review load forecast</h3>
+            <p className="mb-2 text-xs text-[var(--app-muted)]">Estimated reviews due per day after the SRS pipeline fills (240 days).</p>
+            <div className="rounded-lg border border-[var(--app-border)] p-3">
+              <svg
+                width="100%"
+                height={chartH + 32}
+                viewBox={`0 0 ${chartW} ${chartH + 32}`}
+                preserveAspectRatio="none"
+                aria-label="Review load forecast chart"
+              >
+                {/* Bars */}
+                {chartPoints.map((point, i) => {
+                  const x = (i / chartPoints.length) * chartW;
+                  const barHeight = (point.reviewsDue / maxReviews) * chartH;
+                  return (
+                    <rect
+                      key={point.day}
+                      x={x}
+                      y={chartH - barHeight}
+                      width={Math.max(1, barW - 1)}
+                      height={barHeight}
+                      fill="var(--app-accent)"
+                      opacity={0.6}
+                    />
+                  );
+                })}
+                {/* Saturated average line */}
+                <line
+                  x1={0}
+                  y1={chartH - (saturatedAvg / maxReviews) * chartH}
+                  x2={chartW}
+                  y2={chartH - (saturatedAvg / maxReviews) * chartH}
+                  stroke="var(--app-accent)"
+                  strokeWidth={1.5}
+                  strokeDasharray="4,3"
+                />
+                {/* Average label */}
+                <text
+                  x={chartW - 4}
+                  y={chartH - (saturatedAvg / maxReviews) * chartH - 4}
+                  textAnchor="end"
+                  fontSize={10}
+                  fill="var(--app-muted)"
+                >
+                  avg {saturatedAvg}/day
+                </text>
+                {/* X-axis label */}
+                <text
+                  x={chartW / 2}
+                  y={chartH + 20}
+                  textAnchor="middle"
+                  fontSize={10}
+                  fill="var(--app-muted)"
+                >
+                  Days
+                </text>
+              </svg>
+            </div>
+          </div>
         </div>
 
-        <div className="flex justify-end gap-3">
+        {/* Footer — always visible */}
+        <div className="shrink-0 flex justify-end gap-3 pt-4">
           <button
             type="button"
             onClick={onFinish}
             disabled={isSaving}
             className="app-brutal-button inline-flex min-h-11 items-center justify-center px-6 py-2.5 text-sm"
           >
-            {isSaving ? "Saving..." : "Finish"}
+            {isSaving ? "Saving..." : "Start training"}
           </button>
         </div>
       </div>
     </div>
   );
+}
+
+// eslint-disable-next-line react-hooks/exhaustive-deps
+function usePrevious<T>(value: T): T | undefined {
+  const ref = useRef<T | undefined>(undefined);
+  useEffect(() => {
+    ref.current = value;
+  });
+  return ref.current;
 }
 
 function TrainPostmortemTourOverlay({
@@ -5061,7 +5568,9 @@ function TrainPostmortemTourOverlay({
   const [missingTarget, setMissingTarget] = useState(false);
   const [isPositioningSpotlight, setIsPositioningSpotlight] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
+  const cardContentRef = useRef<HTMLDivElement>(null);
   const [cardSize, setCardSize] = useState<{ width: number; height: number } | null>(null);
+  const [animatedCardHeight, setAnimatedCardHeight] = useState<number | null>(null);
   const previousTourGeometryRef = useRef<{
     card: { top: number; left: number } | null;
     spotlight: { top: number; left: number; width: number; height: number } | null;
@@ -5250,6 +5759,50 @@ function TrainPostmortemTourOverlay({
   const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
   const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
   const margin = 16;
+  const maxCardHeight = Math.max(280, viewportHeight - VIEWPORT_PAD * 2);
+  const cardMaxWidth = Math.min(440, viewportWidth - VIEWPORT_PAD * 2);
+  const isSmallScreen = viewportWidth < 760;
+
+  // ── Measure and animate card content height ──
+  useLayoutEffect(() => {
+    let frame1 = 0;
+    let frame2 = 0;
+    let observer: ResizeObserver | null = null;
+
+    function measureCardContent() {
+      frame1 = window.requestAnimationFrame(() => {
+        frame2 = window.requestAnimationFrame(() => {
+          const content = cardContentRef.current;
+          if (!content) return;
+
+          const verticalPadding = 64;
+          const nextHeight = Math.min(
+            content.offsetHeight + verticalPadding,
+            maxCardHeight,
+          );
+
+          setAnimatedCardHeight(nextHeight);
+        });
+      });
+    }
+
+    measureCardContent();
+
+    if (cardContentRef.current) {
+      observer = new ResizeObserver(measureCardContent);
+      observer.observe(cardContentRef.current);
+    }
+
+    window.addEventListener("resize", measureCardContent);
+
+    return () => {
+      window.cancelAnimationFrame(frame1);
+      window.cancelAnimationFrame(frame2);
+      observer?.disconnect();
+      window.removeEventListener("resize", measureCardContent);
+    };
+  }, [step, resolvedStepIndex, maxCardHeight]);
+
   const currentTargetRect = targetRect?.step === step ? targetRect : null;
   const spotlight = currentTargetRect
     ? {
@@ -5293,10 +5846,7 @@ function TrainPostmortemTourOverlay({
   const hasInitialTourGeometry =
     hasResolvedCurrentTourGeometry || isResolvingTargetGeometry;
 
-  const measuredCardHeight = cardSize?.height ?? 300;
-  const maxCardHeight = Math.max(280, viewportHeight - VIEWPORT_PAD * 2);
-  const cardMaxWidth = Math.min(440, viewportWidth - VIEWPORT_PAD * 2);
-  const isSmallScreen = viewportWidth < 760;
+  const measuredCardHeight = animatedCardHeight ?? cardSize?.height ?? 300;
 
   // Determine card width per placement mode.
   let cardWidth: number;
@@ -5430,6 +5980,7 @@ function TrainPostmortemTourOverlay({
     top: cardTop,
     left: cardLeft,
     width: cardWidth,
+    height: animatedCardHeight ?? undefined,
     maxHeight: maxCardHeight,
   } satisfies React.CSSProperties;
 
@@ -5524,16 +6075,17 @@ function TrainPostmortemTourOverlay({
       ) : null}
       <div
         className={[
-          "fixed flex flex-col overflow-hidden rounded-[8px] border-2 border-white/80 bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)] pointer-events-auto",
+          "fixed overflow-hidden rounded-[8px] border-2 border-white/80 bg-[var(--app-panel-solid)] p-8 text-[var(--app-text)] shadow-[4px_4px_0_var(--app-brutal-edge)] pointer-events-auto",
           hideCard
             ? "opacity-0 scale-[0.985] pointer-events-none"
             : cardVisibilityClass,
-          "transition-[opacity,transform,top,left,width] duration-[var(--tour-geometry-duration)] ease-[var(--tour-geometry-ease)] motion-reduce:transition-none motion-reduce:transform-none",
+          "transition-[opacity,transform,top,left,width,height] duration-[var(--tour-geometry-duration)] ease-[var(--tour-geometry-ease)] motion-reduce:transition-none motion-reduce:transform-none",
         ].join(" ")}
         ref={cardRef}
         style={cardStyle}
         onClick={(event) => event.stopPropagation()}
       >
+        <div ref={cardContentRef} className="flex flex-col">
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onSkip(); }}
@@ -5552,7 +6104,7 @@ function TrainPostmortemTourOverlay({
         <div className="relative min-h-0 flex-1 overflow-y-auto pr-1">
           <div
             key={`current-${step}`}
-            className="relative opacity-100"
+            className="train-tour-copy-enter relative"
           >
             <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
               {currentStep.headline}
@@ -5582,6 +6134,7 @@ function TrainPostmortemTourOverlay({
           >
             {primaryButtonLabel}
           </button>
+        </div>
         </div>
       </div>
     </div>
