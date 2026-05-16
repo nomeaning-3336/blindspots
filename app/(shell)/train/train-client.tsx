@@ -3076,11 +3076,12 @@ export default function TrainPage(props: TrainPageProps) {
 
   const rating = state === "complete" ? (eloResult?.eloAfter ?? blindspotsElo) : blindspotsElo;
   const userMoveSide = getFenTurnSide(startingFen);
-  const isStaticOnboardingPosition =
+  const shouldUseBlackOnboardingOrientation =
     shouldRunPreplayOnboarding &&
-    hasStartedFirstOnboardingSequenceRef.current &&
-    !postmortemOnboardingFinished;
-  const boardOrientation = isStaticOnboardingPosition ? "black" : userMoveSide;
+    !postmortemOnboardingFinished &&
+    (trainOnboardingIntroActive ||
+      hasStartedFirstOnboardingSequenceRef.current);
+  const boardOrientation = shouldUseBlackOnboardingOrientation ? "black" : userMoveSide;
   const userMoveCount = moves.filter((move) => move.side === userMoveSide).length;
   const moveProgress = Math.min(userMoveCount + 1, sequenceLength);
   const displayMoves = useMemo(
