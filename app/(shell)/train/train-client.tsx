@@ -180,8 +180,7 @@ type AddPositionOnboardingPhase =
   | "waiting-for-click"
   | "saving"
   | "success-entering"
-  | "success-visible"
-  | "success-leaving";
+  | "success-visible";
 
 const POSTMORTEM_TOUR_STEPS = [
   {
@@ -3612,8 +3611,9 @@ export default function TrainPage(props: TrainPageProps) {
   const isLearningQueueAddTargetQueued = Boolean(
     learningQueueAddTargetFen && queuedLearningPositionFens.has(learningQueueAddTargetFen),
   );
-  const isAddPositionSuccessState =
-    addPositionOnboardingPhase.startsWith("success-") || isLearningQueueAddTargetQueued;
+  const isAddPositionSuccessFeedback =
+    addPositionOnboardingPhase.startsWith("success-");
+  const isAddPositionAlreadyQueued = isLearningQueueAddTargetQueued;
   const copyFenPreview = boardFen
     ? boardFen.length > 34
       ? `${boardFen.slice(0, 34)}...`
@@ -4615,7 +4615,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 disabled={addingPositionToQueue || !learningQueueAddTarget?.decisionFen || isLearningQueueAddTargetQueued}
                 onClick={async () => {
                   if (addingPositionToQueue) return;
-                  if (isAddPositionSuccessState) return;
+                  if (isAddPositionSuccessFeedback) return;
                   const addTarget = learningQueueAddTarget;
                   const fenToAdd = addTarget?.decisionFen;
                   if (!fenToAdd) return;
@@ -4650,18 +4650,14 @@ const introOverlay = trainOnboardingIntroVisible ? (
                         addPositionOnboardingSuccessTimerRef.current = null;
                       }, 120);
                       addPositionOnboardingSuccessTimerRef2.current = window.setTimeout(() => {
-                        setAddPositionOnboardingPhase("success-leaving");
-                        addPositionOnboardingSuccessTimerRef2.current = null;
-                      }, 900);
-                      addPositionOnboardingSuccessTimerRef3.current = window.setTimeout(() => {
                         setPostmortemAddPositionActionDone(true);
                         setPostmortemAddPositionCheckpointReached(true);
                         setPostmortemOnboardingStep((step) =>
                           Math.min(step + 1, POSTMORTEM_TOUR_STEPS.length - 1),
                         );
                         setAddPositionOnboardingPhase("idle");
-                        addPositionOnboardingSuccessTimerRef3.current = null;
-                      }, 1120);
+                        addPositionOnboardingSuccessTimerRef2.current = null;
+                      }, 900);
                       return;
                     }
                     showAlert({
@@ -4691,22 +4687,19 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 className={[
                   secondaryActionClassName,
                   "min-h-12 w-full justify-center px-5",
-                  !isAddPositionSuccessState ? "disabled:opacity-60" : "",
+                  !isAddPositionSuccessFeedback && !isAddPositionAlreadyQueued ? "disabled:opacity-60" : "",
                   isPostmortemAddPositionWaiting
                     ? "train-add-position-glow ring-2 ring-[var(--app-accent)] transition-all duration-300 ease-out"
                     : "",
-                  isAddPositionSuccessState
+                  isAddPositionSuccessFeedback
                     ? "train-add-position-success transition-all duration-300 ease-out"
-                    : "",
-                  addPositionOnboardingPhase === "success-leaving"
-                    ? "opacity-0 scale-[0.98]"
                     : "",
                 ].join(" ")}
               >
                 <span className={postmortemActionTextClassName}>
                   {addPositionOnboardingPhase === "saving"
                     ? "Saving..."
-                    : isAddPositionSuccessState
+                    : isAddPositionSuccessFeedback
                       ? (
                         <span className="inline-flex items-center justify-center gap-2">
                           <svg viewBox="0 0 20 20" className="h-4 w-4 shrink-0" fill="currentColor" aria-hidden="true">
@@ -4715,7 +4708,9 @@ const introOverlay = trainOnboardingIntroVisible ? (
                           Position added
                         </span>
                       )
-                      : "Add Position to Learning Queue"}
+                      : isAddPositionAlreadyQueued
+                        ? "Already in Learning Queue"
+                        : "Add Position to Learning Queue"}
                 </span>
               </button>
               <button
