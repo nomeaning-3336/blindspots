@@ -241,7 +241,7 @@ const POSTMORTEM_TOUR_STEPS = [
   {
     target: "postmortem-actions",
     headline: "Keep playing, or call it a day.",
-    body: "The next position might be sampled from a random position to see how you play, or one of your already played positions that you didn't perform very well so you can try to fix your past mistake. Or you can go back to the main dashboard.",
+    body: "The next position might be sampled from a random position to see how you play, or one of your positions that you added manually to the learning queue. You can proceed to start a new sequence or return to the dashboard.",
     cta: "Set preferences",
   },
 ] as const satisfies readonly PostmortemTourStep[];
