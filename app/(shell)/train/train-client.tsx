@@ -440,6 +440,7 @@ import {
   primeTrainAudio,
   unlockTrainAudio,
   playTrainMoveSound,
+  playTrainUiSound,
   setupTrainAudioUnlockOnGesture,
   getTrainAudioStats,
   pitchRatioForPly,
@@ -4572,6 +4573,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                     if (!res.ok) throw new Error(`Add failed: ${res.status}`);
                     if (isPostmortemAddPositionActionStep) {
                       setAddPositionOnboardingPhase("success");
+                      playTrainUiSound("addPositionConfirm", 0.7);
                       if (addPositionOnboardingSuccessTimerRef.current) {
                         window.clearTimeout(addPositionOnboardingSuccessTimerRef.current);
                       }
