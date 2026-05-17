@@ -877,6 +877,29 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   }
 }
 
+.train-eval-bar-rail {
+  animation: train-eval-bar-rail-in 260ms var(--train-motion-soft) both;
+  transform-origin: center left;
+}
+
+@keyframes train-eval-bar-rail-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px) scaleX(0.72);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .train-eval-bar-rail {
+    animation: none;
+  }
+}
+
 @keyframes train-board-slide-left {
   from {
     transform: translateX(var(--train-board-center-offset, 0px));

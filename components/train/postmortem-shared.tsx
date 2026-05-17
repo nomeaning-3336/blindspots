@@ -198,7 +198,7 @@ export function BoardWithEvalBar({
 
   return (
     <div
-      className="relative w-full overflow-visible pl-9"
+      className="relative w-full overflow-visible pl-9 transition-[padding-left] duration-300 ease-[var(--train-motion-soft)]"
       data-testid="eval-bar"
       data-white-pct={whitePct}
       data-black-pct={blackPct}
@@ -207,7 +207,7 @@ export function BoardWithEvalBar({
         ? formatPostmortemEvalLabel(displayEvalCp, displayEvalMate)
         : isLoading ? "..." : "--"}
     >
-      <div className="pointer-events-none absolute left-0 top-0 h-full w-6 shrink-0">
+      <div className="train-eval-bar-rail pointer-events-none absolute left-0 top-0 h-full w-6 shrink-0">
         <div className="relative h-full overflow-hidden rounded-[4px] border border-[var(--app-border-soft)] bg-black">
           <div
             className={[

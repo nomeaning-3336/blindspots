@@ -84,6 +84,7 @@ export type AnalysisBoardProps = {
   onEngineArrowClick?: (move: BoardMove) => void;
   className?: string;
   dataTestId?: string;
+  showEvalBarPlaceholder?: boolean;
 };
 
 const BOARD_THEMES: Record<AnalyzeBoardTheme, { light: string; dark: string; coord: string }> = {
@@ -133,6 +134,7 @@ export function AnalysisBoard({
   onEngineArrowClick,
   className = "",
   dataTestId,
+  showEvalBarPlaceholder = false,
 }: AnalysisBoardProps) {
   const chess = useMemo(() => safeChess(fen), [fen]);
 
@@ -642,7 +644,7 @@ export function AnalysisBoard({
       ? { from: annotationStart, to: annotationHover }
       : null;
 
-  return (
+  const boardNode = (
     <div
       ref={boardRef}
       data-snapshot-board
@@ -796,6 +798,39 @@ export function AnalysisBoard({
           y={dragPosition.y}
         />
       ) : null}
+    </div>
+  );
+
+  if (!showEvalBarPlaceholder) return boardNode;
+
+  return (
+    <div className="flex w-full items-stretch gap-2">
+      <EvalBarPlaceholder />
+      <div className="min-w-0 flex-1">{boardNode}</div>
+    </div>
+  );
+}
+
+function EvalBarPlaceholder() {
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none relative w-3 shrink-0 overflow-hidden rounded-full border border-[var(--app-border)] bg-[var(--app-panel-deep)] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08),0_10px_24px_rgba(0,0,0,0.32)] sm:w-4"
+    >
+      <div
+        className="absolute inset-0 opacity-90"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(160deg, #efefed 0px, #efefed 8px, #383838 8px, #383838 16px)",
+        }}
+      />
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(90deg, rgba(255,255,255,0.24), transparent 30%, transparent 70%, rgba(0,0,0,0.42))",
+        }}
+      />
     </div>
   );
 }

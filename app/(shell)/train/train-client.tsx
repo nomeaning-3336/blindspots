@@ -1977,6 +1977,7 @@ export default function TrainPage(props: TrainPageProps) {
       setLastMove(null);
       setInitialOpponentMove(null);
       initialOpponentMoveRef.current = null;
+      setActiveSetupReplayIndex(0);
       // activeSetupReplayIndex stays at 0 — boardFen remains at previousFen
 
       // ── Phase 1: Fade out the intro overlay ─────────────────────
@@ -2524,15 +2525,20 @@ export default function TrainPage(props: TrainPageProps) {
     completingRef.current = false;
     initialOpponentMoveRef.current = null;
     setInitialOpponentMove(null);
-    setActiveSetupReplayIndex(1);
     moveSoundPlyRef.current = 0;
     setPositionLoadError(null);
 
     const visibleInitialFen = payload.previousFen ?? payload.fen;
+    const setupPreviousFen = payload.previousFen;
+    const setupPlayedMove = payload.playedMove;
+    const hasSetupPrelude =
+      typeof setupPreviousFen === "string" &&
+      typeof setupPlayedMove === "string";
     setStartingFen(payload.fen);
-    initialPreludeRef.current = (payload.previousFen && payload.playedMove)
-      ? { previousFen: payload.previousFen, playedMove: payload.playedMove }
+    initialPreludeRef.current = hasSetupPrelude
+      ? { previousFen: setupPreviousFen, playedMove: setupPlayedMove }
       : null;
+    setActiveSetupReplayIndex(hasSetupPrelude ? 0 : 1);
     setDisplayStartingFen(visibleInitialFen);
     setFen(visibleInitialFen);
     setHasLoadedPosition(true);
@@ -2554,7 +2560,7 @@ export default function TrainPage(props: TrainPageProps) {
     setPieceLinesLoadingKey(null);
     setCurrentChallengeElo(typeof payload.challengeElo === "number" ? payload.challengeElo : null);
 
-    if (payload.previousFen && payload.playedMove) {
+    if (hasSetupPrelude) {
       setPendingInitialEngineMove(payload);
 
       if (options.skipPreludeAnimation) {
@@ -2665,6 +2671,7 @@ export default function TrainPage(props: TrainPageProps) {
       setIsOpponentThinking(true);
 
       // Show the "before" position briefly.
+      setActiveSetupReplayIndex(0);
       setFen(previousFen);
       await nextAnimationFrame();
       await delayMs(PRELUDE_SETUP_MOVE_DELAY_MS);
@@ -4331,17 +4338,15 @@ export default function TrainPage(props: TrainPageProps) {
     hoveredEngineLineIndex == null ? null : classifiedDisplayLines[hoveredEngineLineIndex]?.bestMove ?? null;
   const currentEngineMateCp = whitePositiveMateCp(boardFen, currentEngineMate, currentEngineEval);
   const boardFrameClassName = [
-    "app-brutal-board-frame relative max-w-full overflow-visible",
+    "app-brutal-board-frame relative max-w-full overflow-visible transition-[width] duration-300 ease-[var(--train-motion-soft)]",
     isExploringResults
       ? "w-[min(88vw,calc(100dvh-10.25rem),836px)]"
-      : state === "active" && !trainOnboardingIntroActive
-        ? "w-[min(82vw,calc(100dvh-12.5rem),800px)]"
-        : "w-[min(82vw,calc(100dvh-12.5rem),800px)]",
+      : "w-[min(82vw,calc(100dvh-12.5rem),800px)]",
   ].join(" ");
   const trainViewportClassName =
     "-mx-4 -mb-4 flex h-full min-h-0 w-[calc(100%+2rem)] flex-1 overflow-hidden px-3 py-3 md:-mx-6 md:w-[calc(100%+3rem)]";
   const playingGridClassName =
-    "mx-auto grid h-full min-h-0 w-fit max-w-[calc(100vw-32px)] min-w-0 grid-cols-1 gap-5 transition-opacity duration-200 lg:grid-cols-[auto_320px] lg:items-center lg:justify-center lg:translate-x-[5vw]";
+    "mx-auto grid h-full min-h-0 w-fit max-w-[calc(100vw-32px)] min-w-0 grid-cols-1 grid-rows-[auto_auto_auto] content-center gap-4 transition-opacity duration-200 lg:grid-cols-[auto_320px] lg:grid-rows-[auto_auto] lg:items-center lg:justify-center";
   const playingBoardSectionClassName =
     "app-brutal-section relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden p-3 sm:p-4 lg:w-fit lg:p-4";
   const preplayBoardHandoffClassName = "";
@@ -4807,6 +4812,16 @@ const introOverlay = trainOnboardingIntroVisible ? (
     </div>
   ) : null;
 
+  const boardStatusOverlayMode:
+    | "loading"
+    | "sequence-complete"
+    | null =
+    state === "resolving"
+      ? "sequence-complete"
+      : isPositionLoading && !trainOnboardingIntroActive
+        ? "loading"
+        : null;
+
   if (onboardingScreen !== "done") {
     return (
       <TrainOnboarding
@@ -4930,9 +4945,19 @@ const introOverlay = trainOnboardingIntroVisible ? (
                       </p>
                     </div>
                   ) : null}
-                  {isPositionLoading && !trainOnboardingIntroActive ? (
-                    <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center">
-                      <div className="rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-2 shadow-[3px_3px_0_var(--app-brutal-edge)]">
+                  <div
+                    aria-hidden={boardStatusOverlayMode === null}
+                    className={[
+                      "pointer-events-none absolute inset-0 z-50 grid place-items-center bg-black/20 transition-opacity duration-150",
+                      boardStatusOverlayMode ? "opacity-100" : "opacity-0",
+                    ].join(" ")}
+                  >
+                    <div className="app-brutal-section-soft flex min-h-[44px] min-w-[180px] flex-col items-center justify-center gap-2 px-4 py-3 text-center">
+                      {boardStatusOverlayMode === "sequence-complete" ? (
+                        <span className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
+                          Sequence complete
+                        </span>
+                      ) : (
                         <span className="font-mono text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-text)]">
                           Loading position
                           <span className="inline-flex w-5 justify-start">
@@ -4941,18 +4966,9 @@ const introOverlay = trainOnboardingIntroVisible ? (
                             <span className="app-loading-dot">.</span>
                           </span>
                         </span>
-                      </div>
+                      )}
                     </div>
-                  ) : null}
-                  {state === "resolving" ? (
-                    <div className="pointer-events-none absolute inset-0 z-50 grid place-items-center bg-black/20">
-                      <div className="app-brutal-section-soft flex flex-col items-center gap-2 px-4 py-3 text-center">
-                        <span className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
-                          Sequence complete
-                        </span>
-                      </div>
-                    </div>
-                  ) : null}
+                  </div>
                 </>
               ) : (
                 <div
@@ -4966,19 +4982,18 @@ const introOverlay = trainOnboardingIntroVisible ? (
           </div>
         </section>
 
-        {!isPostMortemVisible && attemptRegistry.length > 0 ? (
-          <AttemptRegistryAside
-            entries={attemptRegistry}
-            onNoteSaved={(id, note) => {
-              setAttemptRegistry((prev) =>
-                prev.map((e) => (e.id === id ? { ...e, note } : e)),
-              );
-            }}
-          />
-        ) : null}
-
         {!isPostMortemVisible ? (
-          <>
+          <aside className="flex min-h-0 w-full flex-col gap-4 lg:w-[320px]">
+            {attemptRegistry.length > 0 ? (
+              <AttemptRegistryAside
+                entries={attemptRegistry}
+                onNoteSaved={(id, note) => {
+                  setAttemptRegistry((prev) =>
+                    prev.map((e) => (e.id === id ? { ...e, note } : e)),
+                  );
+                }}
+              />
+            ) : null}
             {(() => {
               async function copyCurrentFen() {
                 const fenToCopy = boardFen;
@@ -5038,7 +5053,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 />
               );
             })()}
-          </>
+          </aside>
         ) : null}
 
         {isPostMortemVisible ? (
@@ -6854,6 +6869,7 @@ function BoardWithPlayerStrips({
   const opponentSide = userSide === "white" ? "black" : "white";
   const userLabel = userSide === "white" ? "White" : "Black";
   const opponentLabel = userSide === "white" ? "Black" : "White";
+  const evalBarGutterActive = isExploring;
 
   let isUserActive = false;
   let isOpponentActive = false;
@@ -6869,9 +6885,19 @@ function BoardWithPlayerStrips({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <PlayerTurnStrip label={opponentLabel} isActive={isOpponentActive} align="start" />
+      <PlayerTurnStrip
+        label={opponentLabel}
+        isActive={isOpponentActive}
+        align="start"
+        leftGutter={evalBarGutterActive}
+      />
       {children}
-      <PlayerTurnStrip label={userLabel} isActive={isUserActive} align="end" />
+      <PlayerTurnStrip
+        label={userLabel}
+        isActive={isUserActive}
+        align="end"
+        leftGutter={evalBarGutterActive}
+      />
     </div>
   );
 }
@@ -6882,16 +6908,19 @@ function PlayerTurnStrip({
   label,
   isActive,
   align = "start",
+  leftGutter = false,
 }: {
   label: string;
   isActive: boolean;
   align?: PlayerStripAlign;
+  leftGutter?: boolean;
 }) {
   return (
     <div
       className={[
-        "flex h-7 items-center gap-2 px-0.5",
+        "flex h-7 items-center gap-2 px-0.5 transition-[padding-left] duration-300 ease-[var(--train-motion-soft)]",
         align === "end" ? "justify-end" : "justify-start",
+        leftGutter && align === "start" ? "pl-9" : "",
       ].join(" ")}
     >
       <span
@@ -8294,17 +8323,13 @@ function TrainingNotesRail({
   dashboardButton: ReactNode;
 }) {
   return (
-    <aside className="flex min-h-[420px] w-full flex-col rounded-xl border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-4 ring-1 ring-inset ring-[var(--app-border-strong)] lg:min-h-[520px]">
+    <aside className="flex min-h-[360px] w-full flex-col rounded-xl border border-[var(--app-border)] bg-[var(--app-panel-solid)] p-4 ring-1 ring-inset ring-[var(--app-border-strong)] lg:min-h-[420px]">
       <div>
         <div className="mb-4 text-xl font-black leading-tight tracking-[-0.03em] text-[var(--app-text)]">
           Notes
         </div>
 
-        {notes.length === 0 ? (
-          <div className="mt-2 text-sm text-[var(--app-muted)]">
-            N/A
-          </div>
-        ) : (
+        {notes.length > 0 ? (
           <div className="grid gap-2">
             {notes.map((note, index) => {
               const moveLabel = note.moveSan ?? note.moveUci ?? "Previous mistake";
@@ -8353,7 +8378,7 @@ function TrainingNotesRail({
               );
             })}
           </div>
-        )}
+        ) : null}
       </div>
 
       <div className="mt-auto grid gap-3 pt-4">
