@@ -70,6 +70,7 @@ import {
 } from "@/lib/training/mistake-memory";
 import { MoveNotesPanel } from "@/components/train/mistake-memory-panel";
 import type { AnnotatableMoveRow } from "@/components/train/mistake-memory-panel";
+import { playBoardSnapshotToButton } from "@/components/train/board-snapshot";
 import { TopAlertViewport, useTopAlert } from "@/components/ui/top-alert";
 import { normalizeNotes, formatEvalCp, type NormalizedNote, type RawNoteRow } from "@/lib/notes";
 
@@ -165,6 +166,19 @@ const CLIENT_STOCKFISH_MOVETIME_MS = 800;
 const PRELUDE_SETUP_MOVE_DELAY_MS = 1000;
 const COMPLETION_EVAL_GRACE_MS = 500;
 const PREPLAY_PRELUDE_POST_FADE_DELAY_MS = 500;
+const REVERSE_GLIDE_MS = 500;
+const FORWARD_GLIDE_MS = 240;
+const STEP_GAP_MS = 40;
+
+function waitForAddPositionFeedback(ms: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 
 type PostmortemTourStep = {
   target: string;
@@ -1032,6 +1046,7 @@ export default function TrainPage(props: TrainPageProps) {
   type LearningQueueTarget = {
     decisionFen: string;
     setupMove: TrainingMove | null;
+    rollbackMove: TrainingMove | null;
     annotationMove: TrainingMove | null;
     fellBackFromEnginePosition: boolean;
     requiresConfirmation: boolean;
@@ -1046,78 +1061,125 @@ export default function TrainPage(props: TrainPageProps) {
     const target = learningQueueAddTarget;
     if (!target) return;
 
-    if (!target.requiresConfirmation) {
-      void addPositionToLearningQueue();
-      return;
-    }
-
-    // Rollback case: snapshot the target, scrub board to decision FEN, defer add
     const snapshot: LearningQueueTarget = {
       decisionFen: target.decisionFen,
       setupMove: target.setupMove,
+      rollbackMove: target.rollbackMove,
       annotationMove: target.annotationMove,
       fellBackFromEnginePosition: target.fellBackFromEnginePosition,
       requiresConfirmation: target.requiresConfirmation,
     };
 
-    const normalizedDecisionFen = normalizeDecisionFen(snapshot.decisionFen);
+    void runAddPositionFeedback(snapshot);
+  }
 
-    // Try sequence positions first
+  async function runAddPositionFeedback(snapshot: LearningQueueTarget) {
+    if (prefersReducedMotion()) {
+      void addPositionToLearningQueue(snapshot);
+      return;
+    }
+
+    setRollbackAnimating(true);
+
+    try {
+      if (snapshot.requiresConfirmation && snapshot.rollbackMove) {
+        setCurrentGlideMs(REVERSE_GLIDE_MS);
+        playTrainMoveSoundReversed({ move: snapshot.rollbackMove, source: "replay" });
+        setBoardToFeedbackFen(snapshot.decisionFen, lastMoveFromTrainingMove(snapshot.rollbackMove));
+        await waitForAddPositionFeedback(REVERSE_GLIDE_MS + STEP_GAP_MS);
+      }
+
+      await runReversePreludeLeg(snapshot);
+      await runForwardPreludeLeg(snapshot);
+
+      await playBoardSnapshotToButton({
+        boardEl: document.querySelector<HTMLElement>("[data-snapshot-board]"),
+        buttonEl: document.querySelector<HTMLElement>("[data-snapshot-target]"),
+      });
+
+      void addPositionToLearningQueue(snapshot);
+    } finally {
+      setCurrentGlideMs(FORWARD_GLIDE_MS);
+      setRollbackAnimating(false);
+    }
+  }
+
+  async function runReversePreludeLeg(snapshot: LearningQueueTarget) {
+    if (!snapshot.setupMove?.fenBefore) return;
+
+    setCurrentGlideMs(REVERSE_GLIDE_MS);
+    playTrainMoveSoundReversed({ move: snapshot.setupMove, source: "replay" });
+    setBoardToFeedbackFen(snapshot.setupMove.fenBefore, null);
+    await waitForAddPositionFeedback(REVERSE_GLIDE_MS + STEP_GAP_MS);
+  }
+
+  async function runForwardPreludeLeg(snapshot: LearningQueueTarget) {
+    if (!snapshot.setupMove) {
+      setBoardToFeedbackFen(snapshot.decisionFen, null);
+      await waitForAddPositionFeedback(FORWARD_GLIDE_MS + STEP_GAP_MS);
+      return;
+    }
+
+    setCurrentGlideMs(FORWARD_GLIDE_MS);
+    playTrainMoveSound({
+      move: snapshot.setupMove,
+      source: "replay",
+      advanceLivePitch: false,
+    });
+    setBoardToFeedbackFen(snapshot.decisionFen, lastMoveFromTrainingMove(snapshot.setupMove));
+    await waitForAddPositionFeedback(FORWARD_GLIDE_MS + STEP_GAP_MS);
+  }
+
+  function setBoardToFeedbackFen(nextFen: string, nextLastMove: { from: string; to: string } | null) {
+    const normalizedNextFen = normalizeDecisionFen(nextFen);
+
     const seqIndex = visibleSequencePositions.findIndex(
-      (position) => normalizeDecisionFen(position.fen) === normalizedDecisionFen,
+      (position) => normalizeDecisionFen(position.fen) === normalizedNextFen,
     );
 
     if (seqIndex >= 0) {
-      // Use same pattern as manual sequence navigation — no resetExploratoryLine
       const boundedIndex = Math.max(
         0,
         Math.min(Math.max(0, visibleSequencePositions.length - 1), seqIndex),
       );
-      const previousIndex = activeExploreIndex;
       setIsManualPostmortemExploration(false);
       setSelectedMoveIndex(boundedIndex);
       setExploreSelectedSquare(null);
       setHoveredEngineLineIndex(null);
       setHoveredMoveSquares(null);
+      setExploratoryHistoryIndex(-1);
+      setExploratoryFen(null);
+      setExploratoryLastMove(null);
       setExploreIndex(boundedIndex);
-    } else {
-      // Try exploratoryHistory descending
-      const histIndex = [...exploratoryHistory]
-        .reverse()
-        .findIndex(
-          (step) =>
-            (step.fen && normalizeDecisionFen(step.fen) === normalizedDecisionFen) ||
-            (step.move?.fenAfter && normalizeDecisionFen(step.move.fenAfter) === normalizedDecisionFen),
-        );
-      if (histIndex >= 0) {
-        const actualIndex = exploratoryHistory.length - 1 - histIndex;
-        // Mirror navigateExploratoryLine without resetting
-        setIsManualPostmortemExploration(false);
-        setSelectedMoveIndex(null);
-        setHoveredEngineLineIndex(null);
-        setHoveredMoveSquares(null);
-        setExploratoryHistoryIndex(actualIndex);
-        const step = exploratoryHistory[actualIndex];
-        if (step) {
-          setExploratoryFen(step.fen ?? null);
-          setExploratoryLastMove(step.lastMove ?? null);
-        }
-      }
-      // If neither found, skip scrub — just add
+      return;
     }
 
-    // Fire reversed sound and start rollback animation in the same frame
-    const reversedMove = snapshot.setupMove;
-    if (reversedMove) {
-      playTrainMoveSoundReversed({ move: reversedMove, source: "replay", playbackRate: 0.55 });
-    }
-    setRollbackAnimating(true);
+    const histIndex = [...exploratoryHistory]
+      .reverse()
+      .findIndex(
+        (step) =>
+          (step.fen && normalizeDecisionFen(step.fen) === normalizedNextFen) ||
+          (step.move?.fenAfter && normalizeDecisionFen(step.move.fenAfter) === normalizedNextFen),
+      );
 
-    // Wait for animation to complete, then add the position
-    window.setTimeout(() => {
-      setRollbackAnimating(false);
-      void addPositionToLearningQueue(snapshot);
-    }, 660);
+    setIsManualPostmortemExploration(false);
+    setSelectedMoveIndex(null);
+    setExploreSelectedSquare(null);
+    setHoveredEngineLineIndex(null);
+    setHoveredMoveSquares(null);
+
+    if (histIndex >= 0) {
+      const actualIndex = exploratoryHistory.length - 1 - histIndex;
+      setExploratoryHistoryIndex(actualIndex);
+      const step = exploratoryHistory[actualIndex];
+      setExploratoryFen(step?.fen ?? nextFen);
+      setExploratoryLastMove(step?.lastMove ?? nextLastMove);
+      return;
+    }
+
+    setExploratoryHistoryIndex(-1);
+    setExploratoryFen(nextFen);
+    setExploratoryLastMove(nextLastMove);
   }
 
   async function addPositionToLearningQueue(targetOverride?: LearningQueueTarget) {
@@ -1308,7 +1370,11 @@ export default function TrainPage(props: TrainPageProps) {
   const seededMoveKeysRef = useRef<Set<string>>(new Set());
   const [selectedMoveKey, setSelectedMoveKey] = useState<string | null>(null);
   const [savedMoveNoteKey, setSavedMoveNoteKey] = useState<string | null>(null);
+  useEffect(() => {
+    setSavedMoveNoteKey(null);
+  }, [selectedMoveKey]);
   const [rollbackAnimating, setRollbackAnimating] = useState(false);
+  const [currentGlideMs, setCurrentGlideMs] = useState(FORWARD_GLIDE_MS);
   const [postmortemSidePanel, setPostmortemSidePanel] = useState<"analysis" | "memory">("analysis");
   const [postmortemOnboardingActive, setPostmortemOnboardingActive] = useState(false);
   const shouldAnimateBoardPieces = shouldAnimatePieces && (!postmortemOnboardingActive || rollbackAnimating);
@@ -4042,6 +4108,7 @@ export default function TrainPage(props: TrainPageProps) {
       return {
         decisionFen: boardFen,
         setupMove: activeExploratoryPosition?.move ?? activeSequencePosition?.move ?? null,
+        rollbackMove: null,
         annotationMove:
           activeExploratoryPosition?.move?.fenAfter &&
           normalizeDecisionFen(activeExploratoryPosition.move.fenAfter) === normalizeDecisionFen(boardFen)
@@ -4059,6 +4126,7 @@ export default function TrainPage(props: TrainPageProps) {
       return {
         decisionFen: fallbackFromExploratoryMove!,
         setupMove: setupMoveForDecisionFen(fallbackFromExploratoryMove!),
+        rollbackMove: exploratoryMove,
         annotationMove: exploratoryMove,
         fellBackFromEnginePosition: true,
         requiresConfirmation: true,
@@ -4070,6 +4138,7 @@ export default function TrainPage(props: TrainPageProps) {
       return {
         decisionFen: fallbackFromSequenceMove!,
         setupMove: setupMoveForDecisionFen(fallbackFromSequenceMove!),
+        rollbackMove: activeSequencePosition?.move ?? null,
         annotationMove: null,
         fellBackFromEnginePosition: true,
         requiresConfirmation: true,
@@ -4088,6 +4157,7 @@ export default function TrainPage(props: TrainPageProps) {
     return {
       decisionFen: previousUserDecisionPosition.fen,
       setupMove: previousUserDecisionPosition.move ?? null,
+      rollbackMove: activeExploratoryPosition?.move ?? activeSequencePosition?.move ?? null,
       annotationMove: null,
       fellBackFromEnginePosition: true,
       requiresConfirmation: true,
@@ -4512,6 +4582,7 @@ export default function TrainPage(props: TrainPageProps) {
     nextIndex: number,
     boundary: "start" | "end" = "end",
   ) {
+    if (rollbackAnimating) return;
     const maxIndex = Math.max(0, visibleSequencePositions.length - 1);
     const boundedIndex = Math.max(0, Math.min(maxIndex, nextIndex));
     if (boundedIndex === activeExploreIndex && nextIndex !== activeExploreIndex) {
@@ -4832,7 +4903,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                           fen={boardFen}
                           mode="training"
                           pieceAnimation={shouldAnimateBoardPieces}
-                          pieceAnimationDurationMs={rollbackAnimating ? 620 : 240}
+                          pieceAnimationDurationMs={currentGlideMs}
                           orientation={boardOrientation}
                           coordinates
                           showLegalTargets={false}
@@ -4868,7 +4939,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                         fen={boardFen}
                         mode="training"
                         pieceAnimation={shouldAnimateBoardPieces}
-                        pieceAnimationDurationMs={rollbackAnimating ? 620 : 240}
+                        pieceAnimationDurationMs={currentGlideMs}
                         orientation={boardOrientation}
                         coordinates
                         showLegalTargets
@@ -5147,12 +5218,14 @@ const introOverlay = trainOnboardingIntroVisible ? (
                   type="button"
                   disabled={
                     addingPositionToQueue ||
+                    rollbackAnimating ||
                     !learningQueueAddTarget?.decisionFen ||
                     isAddPositionAlreadyQueued ||
                     isNotesToggleTourControlLockActive
                   }
                   onClick={handleAddPositionClick}
                   data-tour="add-position-to-learning-queue"
+                  data-snapshot-target
                   className={[
                     secondaryActionClassName,
                     "min-h-12 w-full justify-center px-5 transition-all duration-300 ease-out",
@@ -5315,9 +5388,32 @@ const introOverlay = trainOnboardingIntroVisible ? (
         .train-move-row-learning-icon {
           color: color-mix(in srgb, var(--app-accent) 85%, white);
         }
+        .train-add-position-chest-absorb {
+          animation: train-add-position-chest-absorb 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+        }
         @media (prefers-reduced-motion: no-preference) {
           .train-add-position-glow {
             animation: train-glow-pulse 1.4s ease-in-out infinite alternate;
+          }
+        }
+        @keyframes train-add-position-chest-absorb {
+          0% {
+            transform: scale(1);
+            box-shadow: 3px 3px 0 var(--app-brutal-shadow);
+          }
+          45% {
+            transform: scale(1.06);
+            box-shadow:
+              inset 0 0 18px color-mix(in srgb, var(--app-accent) 22%, transparent),
+              0 0 0 2px color-mix(in srgb, var(--app-accent) 70%, transparent),
+              3px 3px 0 var(--app-brutal-shadow);
+          }
+          72% {
+            transform: scale(0.96);
+          }
+          100% {
+            transform: scale(1);
+            box-shadow: 3px 3px 0 var(--app-brutal-shadow);
           }
         }
         @keyframes train-glow-pulse {
