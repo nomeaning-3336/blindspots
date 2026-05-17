@@ -28,6 +28,7 @@ type MoveNotesPanelProps = {
   onDeleteNote: (moveKey: string) => void;
   savedMoveKey?: string | null;
   tourTarget?: string;
+  onOpenPosition?: (decisionFen: string) => void;
 };
 
 function legalMovesFromFen(fen: string): string[] {
@@ -60,6 +61,7 @@ export function MoveNotesPanel({
   onDeleteNote,
   savedMoveKey = null,
   tourTarget,
+  onOpenPosition,
 }: MoveNotesPanelProps) {
   const [expandedFen, setExpandedFen] = useState<string | null>(null);
   const [draftMoveUci, setDraftMoveUci] = useState<Record<string, string>>({});
@@ -167,10 +169,14 @@ export function MoveNotesPanel({
             <div
               role="button"
               tabIndex={0}
-              onClick={() => handleExpand(row.decisionFen)}
+              onClick={() => {
+                onOpenPosition?.(row.decisionFen);
+                handleExpand(row.decisionFen);
+              }}
               onKeyDown={(event) => {
                 if (event.key !== "Enter" && event.key !== " ") return;
                 event.preventDefault();
+                onOpenPosition?.(row.decisionFen);
                 handleExpand(row.decisionFen);
               }}
               className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-[var(--app-surface-hover)]"
