@@ -489,7 +489,6 @@ import {
   REVIEW_GRADING_PROFILES,
   SRS_PROFILE_OPTIONS,
   SRS_PROFILES,
-  simulateSrsForecast,
   type ReviewGradingConfig,
   type ReviewGradingLevel,
   type SrsProfileLevel,
@@ -5511,6 +5510,7 @@ function OnboardingPreferencesModal({
   onCancel: () => void;
 }) {
   const [modalStep, setModalStep] = useState<"daily-goal" | "review-grading">("daily-goal");
+  const [reviewSpacingOpen, setReviewSpacingOpen] = useState(false);
   const [customIntervalsText, setCustomIntervalsText] = useState(
     srsConfig.passIntervalsDays.join(", "),
   );
@@ -5565,18 +5565,6 @@ function OnboardingPreferencesModal({
     }
   }
 
-  // Forecast chart data
-  const forecastData = useMemo(
-    () => simulateSrsForecast(selectedDailyTargetPositions, srsConfig, 240),
-    [selectedDailyTargetPositions, srsConfig],
-  );
-  const saturatedAvg = useMemo(() => {
-    if (forecastData.length < 30) return 0;
-    const last30 = forecastData.slice(-30);
-    const sum = last30.reduce((acc, p) => acc + p.reviewsServed, 0);
-    return Math.round(sum / last30.length);
-  }, [forecastData]);
-
   function adjustDailyTarget(delta: number) {
     const next = Math.max(1, Math.min(300, selectedDailyTargetPositions + delta));
     onDailyTargetChange(next);
@@ -5626,41 +5614,6 @@ function OnboardingPreferencesModal({
     });
   }
 
-  const chartW = 640;
-  const chartH = 220;
-  const chartPadLeft = 42;
-  const chartPadRight = 18;
-  const chartPadTop = 22;
-  const chartPadBottom = 38;
-  const plotW = chartW - chartPadLeft - chartPadRight;
-  const plotH = chartH - chartPadTop - chartPadBottom;
-  const yAxisMax = Math.max(
-    10,
-    Math.ceil(Math.max(
-      ...forecastData.map((p) => p.reviewsServed + p.fillerServed),
-      saturatedAvg,
-      selectedDailyTargetPositions,
-      1,
-    ) / 10) * 10,
-  );
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => Math.round(yAxisMax * ratio));
-  const xTicks = [30, 60, 120, 180, 240];
-  const chartPoints = forecastData.filter((_, i) => i % 6 === 0);
-  const barSlotW = plotW / Math.max(1, chartPoints.length);
-  const barW = Math.max(2, barSlotW * 0.55);
-
-  function xForDay(day: number) {
-    return chartPadLeft + (Math.max(0, Math.min(240, day)) / 240) * plotW;
-  }
-
-  function yForReviews(reviews: number) {
-    return chartPadTop + plotH - (Math.max(0, reviews) / yAxisMax) * plotH;
-  }
-
-  const avgY = yForReviews(saturatedAvg);
-  const targetY = yForReviews(selectedDailyTargetPositions);
-  const lastForecastPoint = forecastData[forecastData.length - 1];
-
   return (
     <div
       className="absolute inset-0 z-50 flex items-center justify-center"
@@ -5692,7 +5645,7 @@ function OnboardingPreferencesModal({
             Set your daily goal
           </h2>
           <p className="mb-6 text-sm leading-7 text-[var(--app-muted)]">
-            Choose how many total training positions you want to complete per day. Blindspots will fill that target with due reviews first, then new or random positions. You can change this later in{" "}
+            Choose how many total training positions you want to complete per day. Blindspots fills that target with due reviews first, then new or random positions. You can change this later in{" "}
             <a href="/account" className="font-bold text-[var(--app-accent)] underline-offset-2 hover:underline">Account</a>.
           </p>
 
@@ -5700,7 +5653,7 @@ function OnboardingPreferencesModal({
           <div className="mb-6">
             <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Total positions per day</h3>
             <p className="mb-3 text-xs leading-5 text-[var(--app-muted)]">
-              Your daily workload target. Due reviews are served first; any remaining slots are filled with new or random positions.
+              Your daily workload cap. Reviews are prioritized; any remaining slots become new or random positions.
             </p>
             <div className="flex items-center gap-2">
               <button
@@ -5735,11 +5688,24 @@ function OnboardingPreferencesModal({
             </div>
           </div>
 
-          {/* SRS Intensity — preset cards */}
           <div className="mb-6">
-            <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">SRS intensity</h3>
-            <p className="mb-3 text-xs text-[var(--app-muted)]">How aggressively should positions repeat?</p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <button
+              type="button"
+              onClick={() => setReviewSpacingOpen((open) => !open)}
+              aria-expanded={reviewSpacingOpen}
+              className="flex w-full items-center justify-between rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)] px-3 py-2 text-left text-sm font-bold text-[var(--app-text)] transition hover:border-[var(--app-border-strong)]"
+            >
+              <span>Advanced: review spacing</span>
+              <span className="text-xs text-[var(--app-muted)]">{reviewSpacingOpen ? "Hide" : "Show"}</span>
+            </button>
+
+            {reviewSpacingOpen ? (
+              <div className="mt-3">
+                {/* SRS Intensity — preset cards */}
+                <div className="mb-4">
+                  <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">SRS intensity</h3>
+                  <p className="mb-3 text-xs text-[var(--app-muted)]">How aggressively should positions repeat?</p>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {SRS_PROFILE_OPTIONS.filter((p) => p.level !== "custom").map((profile) => {
                 const selected = srsProfileLevel === profile.level;
                 return (
@@ -5763,32 +5729,32 @@ function OnboardingPreferencesModal({
                   </button>
                 );
               })}
-            </div>
-            {/* Custom button — separate dashed full-width */}
-            <button
-              key="custom"
-              type="button"
-              onClick={() => onSrsProfileChange("custom")}
-              className={[
-                "mt-2 flex w-full items-center gap-2 rounded-lg border p-3 text-left transition",
-                srsProfileLevel === "custom" ? "border-dashed border-[var(--app-accent)] bg-[var(--app-accent-soft)] ring-1 ring-[var(--app-accent)]" : "border-dashed border-[var(--app-border)] hover:border-[var(--app-border-strong)]",
-              ].join(" ")}
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--app-muted)]">
-                <circle cx="7" cy="7" r="5.5" />
-                <line x1="7" y1="4" x2="7" y2="7" />
-                <line x1="7" y1="7" x2="9.5" y2="9.5" />
-              </svg>
-              <span className="flex flex-col gap-0.5">
-                <span className="text-xs font-bold text-[var(--app-text)]">Custom</span>
-                <span className="text-[10px] text-[var(--app-muted)]">Configure your own intervals</span>
-              </span>
-            </button>
-          </div>
+                  </div>
+                  {/* Custom button — separate dashed full-width */}
+                  <button
+                    key="custom"
+                    type="button"
+                    onClick={() => onSrsProfileChange("custom")}
+                    className={[
+                      "mt-2 flex w-full items-center gap-2 rounded-lg border p-3 text-left transition",
+                      srsProfileLevel === "custom" ? "border-dashed border-[var(--app-accent)] bg-[var(--app-accent-soft)] ring-1 ring-[var(--app-accent)]" : "border-dashed border-[var(--app-border)] hover:border-[var(--app-border-strong)]",
+                    ].join(" ")}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--app-muted)]">
+                      <circle cx="7" cy="7" r="5.5" />
+                      <line x1="7" y1="4" x2="7" y2="7" />
+                      <line x1="7" y1="7" x2="9.5" y2="9.5" />
+                    </svg>
+                    <span className="flex flex-col gap-0.5">
+                      <span className="text-xs font-bold text-[var(--app-text)]">Custom</span>
+                      <span className="text-[10px] text-[var(--app-muted)]">Configure your own intervals</span>
+                    </span>
+                  </button>
+                </div>
 
-          {/* Custom SRS fields — only when Custom is selected */}
-          {srsProfileLevel === "custom" ? (
-            <div className="mb-6 rounded-lg border border-[var(--app-border)] bg-[var(--app-panel-deep)] p-4">
+                {/* Custom SRS fields — only when Custom is selected */}
+                {srsProfileLevel === "custom" ? (
+                  <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel-deep)] p-4">
               <h4 className="mb-4 text-xs font-bold uppercase tracking-wider text-[var(--app-text)]">
                 Custom SRS schedule
               </h4>
@@ -5879,154 +5845,10 @@ function OnboardingPreferencesModal({
 
                 <div className="sm:col-span-2" />
               </div>
-            </div>
-          ) : null}
-
-          {/* Forecast chart */}
-          <div className="mb-4">
-            <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Daily workload forecast</h3>
-            <p className="mb-2 text-xs text-[var(--app-muted)]">Estimated mix of due reviews and new/random positions within your daily target.</p>
-            <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel-deep)] p-4">
-              <svg
-                width="100%"
-                height={260}
-                viewBox={`0 0 ${chartW} ${chartH}`}
-                preserveAspectRatio="none"
-                aria-label="Daily workload forecast chart"
-              >
-                {/* Y-axis gridlines and labels */}
-                {yTicks.map((tick) => {
-                  const y = yForReviews(tick);
-                  return (
-                    <g key={tick}>
-                      <line
-                        x1={chartPadLeft}
-                        y1={y}
-                        x2={chartW - chartPadRight}
-                        y2={y}
-                        stroke="var(--app-border)"
-                        strokeWidth={1}
-                      />
-                      <text
-                        x={chartPadLeft - 10}
-                        y={y + 4}
-                        textAnchor="end"
-                        fontSize={10}
-                        fill="var(--app-muted)"
-                      >
-                        {tick}
-                      </text>
-                    </g>
-                  );
-                })}
-                {/* X-axis labels */}
-                {xTicks.map((tick) => (
-                  <text
-                    key={tick}
-                    x={xForDay(tick)}
-                    y={chartPadTop + plotH + 20}
-                    textAnchor="middle"
-                    fontSize={10}
-                    fill="var(--app-muted)"
-                  >
-                    {tick}
-                  </text>
-                ))}
-                {/* Bars */}
-                {chartPoints.map((point) => {
-                  const bx = xForDay(point.day) - barW / 2;
-                  const reviewY = yForReviews(point.reviewsServed);
-                  const reviewHeight = chartPadTop + plotH - reviewY;
-                  const stackedTotal = point.reviewsServed + point.fillerServed;
-                  const fillerY = yForReviews(stackedTotal);
-                  const fillerHeight = Math.max(0, reviewY - fillerY);
-                  return (
-                    <g key={point.day}>
-                      <rect
-                        x={bx}
-                        y={fillerY}
-                        width={barW}
-                        height={fillerHeight}
-                        fill="var(--app-accent)"
-                        opacity={0.22}
-                      />
-                      <rect
-                        x={bx}
-                        y={reviewY}
-                        width={barW}
-                        height={reviewHeight}
-                        fill="var(--app-accent)"
-                        opacity={0.78}
-                      />
-                    </g>
-                  );
-                })}
-                {/* Daily target dashed line */}
-                <line
-                  x1={chartPadLeft}
-                  y1={targetY}
-                  x2={chartW - chartPadRight}
-                  y2={targetY}
-                  stroke="var(--app-muted)"
-                  strokeWidth={1.2}
-                  strokeDasharray="6 5"
-                  opacity={0.7}
-                />
-                <text
-                  x={chartW - chartPadRight - 4}
-                  y={targetY - 6}
-                  textAnchor="end"
-                  fontSize={10}
-                  fontWeight={700}
-                  fill="var(--app-muted)"
-                >
-                  target {selectedDailyTargetPositions}/day
-                </text>
-                {/* Saturated average dashed line */}
-                <line
-                  x1={chartPadLeft}
-                  y1={avgY}
-                  x2={chartW - chartPadRight}
-                  y2={avgY}
-                  stroke="var(--app-accent)"
-                  strokeWidth={1.2}
-                  strokeDasharray="4 4"
-                  opacity={0.85}
-                />
-                {/* Average label chip */}
-                <rect
-                  x={chartW - chartPadRight - 94}
-                  y={avgY - 26}
-                  width={88}
-                  height={20}
-                  rx={5}
-                  fill="var(--app-panel-solid)"
-                />
-                <text
-                  x={chartW - chartPadRight - 50}
-                  y={avgY - 11}
-                  textAnchor="middle"
-                  fontSize={11}
-                  fontWeight={700}
-                  fill="var(--app-accent)"
-                >
-                  avg reviews {saturatedAvg}/day
-                </text>
-                {/* X-axis label */}
-                <text
-                  x={(chartPadLeft + chartW - chartPadRight) / 2}
-                  y={chartH - 4}
-                  textAnchor="middle"
-                  fontSize={10}
-                  fill="var(--app-muted)"
-                >
-                  Days
-                </text>
-              </svg>
-              <div className="mt-2 text-xs text-[var(--app-muted)]">
-                Review backlog by day 240: {lastForecastPoint?.backlog ?? 0}
+                  </div>
+                ) : null}
               </div>
-            </div>
+            ) : null}
           </div>
             </>
           ) : (
