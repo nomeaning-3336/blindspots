@@ -1,3 +1,5 @@
+import type { ReviewGradingConfig } from "@/lib/training/training-preferences";
+
 export type TrainingOutcome = "pass" | "acceptable" | "fail";
 
 export function classifyTrainingOutcome(input: {
@@ -8,6 +10,19 @@ export function classifyTrainingOutcome(input: {
   if (input.maxSingleCpLoss > 300) return "fail";
   if (input.averageCpLoss >= 50) return "acceptable";
   return "pass";
+}
+
+export function classifyReviewedMoveOutcome(input: {
+  cpLoss: number;
+  config: ReviewGradingConfig;
+}): TrainingOutcome {
+  const cpLoss = Math.max(0, Math.round(input.cpLoss));
+  const passCpLossMax = Math.max(0, Math.round(input.config.passCpLossMax));
+  const failCpLossMin = Math.max(passCpLossMax + 1, Math.round(input.config.failCpLossMin));
+
+  if (cpLoss <= passCpLossMax) return "pass";
+  if (cpLoss > failCpLossMin) return "fail";
+  return "acceptable";
 }
 
 export function nextIntervalDays(input: {

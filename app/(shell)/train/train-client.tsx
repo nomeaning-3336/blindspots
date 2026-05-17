@@ -485,9 +485,13 @@ import {
 import {
   DAILY_TARGET_OPTIONS,
   MISTAKE_CAPTURE_THRESHOLD_OPTIONS,
+  REVIEW_GRADING_OPTIONS,
+  REVIEW_GRADING_PROFILES,
   SRS_PROFILE_OPTIONS,
   SRS_PROFILES,
   simulateSrsForecast,
+  type ReviewGradingConfig,
+  type ReviewGradingLevel,
   type SrsProfileLevel,
   type SrsConfig,
   type DailyTargetLevel,
@@ -1374,6 +1378,10 @@ export default function TrainPage(props: TrainPageProps) {
   const [postmortemSidePanel, setPostmortemSidePanel] = useState<"analysis" | "memory">("analysis");
   const [postmortemOnboardingActive, setPostmortemOnboardingActive] = useState(false);
   const shouldAnimateBoardPieces = shouldAnimatePieces && (!postmortemOnboardingActive || rollbackAnimating);
+  const shouldAnimateDisplayedBoardPieces =
+    shouldAnimateBoardPieces &&
+    !isAwaitingStartGesture &&
+    !isPositionLoading;
   const [postmortemOnboardingStep, setPostmortemOnboardingStep] = useState(0);
   const [postmortemOnboardingFinished, setPostmortemOnboardingFinished] = useState(false);
   const [postmortemAddPositionActionDone, setPostmortemAddPositionActionDone] = useState(false);
@@ -1441,8 +1449,13 @@ export default function TrainPage(props: TrainPageProps) {
 
   // ── SRS state for onboarding preferences ───────────────────────
   const [selectedDailyTargetPositions, setSelectedDailyTargetPositions] = useState<number>(10);
+  const [selectedDailyReviewTargetPositions, setSelectedDailyReviewTargetPositions] = useState<number>(30);
   const [srsProfileLevel, setSrsProfileLevel] = useState<SrsProfileLevel>("balanced");
   const [srsConfig, setSrsConfig] = useState<SrsConfig>(cloneSrsConfig(SRS_PROFILES.balanced));
+  const [reviewGradingLevel, setReviewGradingLevel] = useState<ReviewGradingLevel>("balanced");
+  const [reviewGradingConfig, setReviewGradingConfig] = useState<ReviewGradingConfig>({
+    ...REVIEW_GRADING_PROFILES.balanced,
+  });
 
   // Local text state for daily target input — avoids clamping on every keystroke
   const [dailyTargetText, setDailyTargetText] = useState(String(selectedDailyTargetPositions));
@@ -1462,6 +1475,10 @@ export default function TrainPage(props: TrainPageProps) {
       ...config,
       passIntervalsDays: [...config.passIntervalsDays],
     };
+  }
+
+  function cloneReviewGradingConfig(config: ReviewGradingConfig): ReviewGradingConfig {
+    return { ...config };
   }
 
   function derivedDailyTargetLevel(positions: number): DailyTargetLevel {
@@ -3427,8 +3444,11 @@ export default function TrainPage(props: TrainPageProps) {
         body: JSON.stringify({
           dailyTargetLevel: derivedDailyTargetLevel(selectedDailyTargetPositions),
           dailyTargetPositions: selectedDailyTargetPositions,
+          dailyReviewTargetPositions: selectedDailyReviewTargetPositions,
           srsProfileLevel,
           srsConfig,
+          reviewGradingLevel,
+          reviewGradingConfig,
         }),
       });
     } catch { /* continue even if prefs save fails */ }
@@ -3875,10 +3895,6 @@ export default function TrainPage(props: TrainPageProps) {
           if (currentText === sentNoteText) {
             dirty.delete(key);
             setSavedMoveNoteKey(key);
-            // Auto-clear after 2s so the checkmark disappears even if user doesn't interact
-            window.setTimeout(() => {
-              setSavedMoveNoteKey((current) => (current === key ? null : current));
-            }, 2000);
           } else if (reason !== "flush") {
             retryLater();
           }
@@ -4889,7 +4905,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                         <AnalysisBoard
                           fen={displayedBoardFen}
                           mode="training"
-                          pieceAnimation={shouldAnimateBoardPieces}
+                          pieceAnimation={shouldAnimateDisplayedBoardPieces}
                           pieceAnimationDurationMs={currentGlideMs}
                           orientation={boardOrientation}
                           coordinates
@@ -4917,10 +4933,10 @@ const introOverlay = trainOnboardingIntroVisible ? (
                       </BoardWithEvalBar>
                     ) : (
                       <AnalysisBoard
-                        fen={displayedBoardFen}
-                        mode="training"
-                        pieceAnimation={shouldAnimateBoardPieces}
-                        pieceAnimationDurationMs={currentGlideMs}
+                          fen={displayedBoardFen}
+                          mode="training"
+                          pieceAnimation={shouldAnimateDisplayedBoardPieces}
+                          pieceAnimationDurationMs={currentGlideMs}
                         orientation={boardOrientation}
                         coordinates
                         showLegalTargets
@@ -5441,8 +5457,10 @@ const introOverlay = trainOnboardingIntroVisible ? (
       {showOnboardingPreferencesModal ? (
         <OnboardingPreferencesModal
           selectedDailyTargetPositions={selectedDailyTargetPositions}
+          selectedDailyReviewTargetPositions={selectedDailyReviewTargetPositions}
           isSaving={isSavingOnboardingPreferences}
           onDailyTargetChange={setSelectedDailyTargetPositions}
+          onDailyReviewTargetChange={setSelectedDailyReviewTargetPositions}
           srsProfileLevel={srsProfileLevel}
           srsConfig={srsConfig}
           onSrsProfileChange={(level) => {
@@ -5450,7 +5468,15 @@ const introOverlay = trainOnboardingIntroVisible ? (
             setSrsConfig(cloneSrsConfig(SRS_PROFILES[level]));
           }}
           onSrsConfigChange={setSrsConfig}
+          reviewGradingLevel={reviewGradingLevel}
+          reviewGradingConfig={reviewGradingConfig}
+          onReviewGradingLevelChange={(level) => {
+            setReviewGradingLevel(level);
+            setReviewGradingConfig(cloneReviewGradingConfig(REVIEW_GRADING_PROFILES[level]));
+          }}
+          onReviewGradingConfigChange={setReviewGradingConfig}
           onFinish={finishOnboardingWithPreferences}
+          onCancel={() => setShowOnboardingPreferencesModal(false)}
         />
       ) : null}
 
@@ -5461,38 +5487,64 @@ const introOverlay = trainOnboardingIntroVisible ? (
 
 function OnboardingPreferencesModal({
   selectedDailyTargetPositions,
+  selectedDailyReviewTargetPositions,
   isSaving,
   onDailyTargetChange,
+  onDailyReviewTargetChange,
   srsProfileLevel,
   srsConfig,
   onSrsProfileChange,
   onSrsConfigChange,
+  reviewGradingLevel,
+  reviewGradingConfig,
+  onReviewGradingLevelChange,
+  onReviewGradingConfigChange,
   onFinish,
+  onCancel,
 }: {
   selectedDailyTargetPositions: number;
+  selectedDailyReviewTargetPositions: number;
   isSaving: boolean;
   onDailyTargetChange: (positions: number) => void;
+  onDailyReviewTargetChange: (positions: number) => void;
   srsProfileLevel: SrsProfileLevel;
   srsConfig: SrsConfig;
   onSrsProfileChange: (level: SrsProfileLevel) => void;
   onSrsConfigChange: (config: SrsConfig) => void;
+  reviewGradingLevel: ReviewGradingLevel;
+  reviewGradingConfig: ReviewGradingConfig;
+  onReviewGradingLevelChange: (level: ReviewGradingLevel) => void;
+  onReviewGradingConfigChange: (config: ReviewGradingConfig) => void;
   onFinish: () => void;
+  onCancel: () => void;
 }) {
+  const [modalStep, setModalStep] = useState<"daily-goal" | "review-grading">("daily-goal");
   const [customIntervalsText, setCustomIntervalsText] = useState(
     srsConfig.passIntervalsDays.join(", "),
   );
 
   // Local text state for daily target input — avoids clamping on every keystroke
   const [dailyTargetText, setDailyTargetText] = useState(String(selectedDailyTargetPositions));
+  const [dailyReviewTargetText, setDailyReviewTargetText] = useState(String(selectedDailyReviewTargetPositions));
   useEffect(() => {
     setDailyTargetText(String(selectedDailyTargetPositions));
   }, [selectedDailyTargetPositions]);
+  useEffect(() => {
+    setDailyReviewTargetText(String(selectedDailyReviewTargetPositions));
+  }, [selectedDailyReviewTargetPositions]);
 
   function commitDailyTargetText(text: string) {
     const parsed = Math.round(Number(text));
     const next = Number.isFinite(parsed) ? Math.max(1, Math.min(300, parsed)) : 10;
     onDailyTargetChange(next);
     setDailyTargetText(String(next));
+  }
+
+  function commitDailyReviewTargetText(text: string) {
+    const parsed = Math.round(Number(text));
+    const next = Number.isFinite(parsed) ? Math.max(1, Math.min(500, parsed)) : 30;
+    onDailyReviewTargetChange(next);
+    setDailyReviewTargetText(String(next));
   }
 
   // Sync custom intervals text when profile changes to non-custom
@@ -5534,22 +5586,111 @@ function OnboardingPreferencesModal({
 
   // Forecast chart data
   const forecastData = useMemo(
-    () => simulateSrsForecast(selectedDailyTargetPositions, srsConfig, 240),
-    [selectedDailyTargetPositions, srsConfig],
+    () => simulateSrsForecast(
+      selectedDailyTargetPositions,
+      srsConfig,
+      240,
+      selectedDailyReviewTargetPositions,
+    ),
+    [selectedDailyTargetPositions, selectedDailyReviewTargetPositions, srsConfig],
   );
   const saturatedAvg = useMemo(() => {
     if (forecastData.length < 30) return 0;
     const last30 = forecastData.slice(-30);
-    const sum = last30.reduce((acc, p) => acc + p.reviewsDue, 0);
+    const sum = last30.reduce((acc, p) => acc + p.reviewsCompleted, 0);
     return Math.round(sum / last30.length);
   }, [forecastData]);
+  const lastForecastPoint = forecastData[forecastData.length - 1];
 
-  // Chart dimensions
-  const chartW = 480;
-  const chartH = 120;
-  const maxReviews = Math.max(...forecastData.map((p) => p.reviewsDue), 1);
-  const barW = Math.max(1, Math.floor(chartW / forecastData.length));
-  const chartPoints = forecastData.filter((_, i) => i % 4 === 0);
+  function adjustDailyTarget(delta: number) {
+    const next = Math.max(1, Math.min(300, selectedDailyTargetPositions + delta));
+    onDailyTargetChange(next);
+    setDailyTargetText(String(next));
+  }
+
+  function adjustDailyReviewTarget(delta: number) {
+    const next = Math.max(1, Math.min(500, selectedDailyReviewTargetPositions + delta));
+    onDailyReviewTargetChange(next);
+    setDailyReviewTargetText(String(next));
+  }
+
+  function updateFirstReviewDelay(delta: number) {
+    onSrsConfigChange({
+      ...srsConfig,
+      firstReviewDelayDays: Math.max(0, Math.min(365, srsConfig.firstReviewDelayDays + delta)),
+    });
+  }
+
+  function updateFailDelay(delta: number) {
+    onSrsConfigChange({
+      ...srsConfig,
+      failDelayDays: Math.max(0, Math.min(365, srsConfig.failDelayDays + delta)),
+    });
+  }
+
+  function updatePassRate(delta: number) {
+    const current = Math.round(srsConfig.assumedPassRate * 100);
+    const next = Math.max(5, Math.min(98, current + delta));
+    onSrsConfigChange({
+      ...srsConfig,
+      assumedPassRate: next / 100,
+    });
+  }
+
+  function updateReviewPassThreshold(delta: number) {
+    const nextPass = Math.max(0, Math.min(1000, reviewGradingConfig.passCpLossMax + delta));
+    const nextFail = Math.max(nextPass + 1, reviewGradingConfig.failCpLossMin);
+    onReviewGradingConfigChange({
+      passCpLossMax: nextPass,
+      failCpLossMin: Math.min(2000, nextFail),
+    });
+  }
+
+  function updateReviewFailThreshold(delta: number) {
+    const nextFail = Math.max(
+      reviewGradingConfig.passCpLossMax + 1,
+      Math.min(2000, reviewGradingConfig.failCpLossMin + delta),
+    );
+    onReviewGradingConfigChange({
+      ...reviewGradingConfig,
+      failCpLossMin: nextFail,
+    });
+  }
+
+  const chartW = 640;
+  const chartH = 220;
+  const chartPadLeft = 42;
+  const chartPadRight = 18;
+  const chartPadTop = 22;
+  const chartPadBottom = 38;
+  const plotW = chartW - chartPadLeft - chartPadRight;
+  const plotH = chartH - chartPadTop - chartPadBottom;
+  const yAxisMax = Math.max(
+    10,
+    Math.ceil(Math.max(
+      ...forecastData.map((p) => p.reviewsDue),
+      ...forecastData.map((p) => p.reviewsCompleted),
+      saturatedAvg,
+      selectedDailyReviewTargetPositions,
+      1,
+    ) / 10) * 10,
+  );
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => Math.round(yAxisMax * ratio));
+  const xTicks = [30, 60, 120, 180, 240];
+  const chartPoints = forecastData.filter((_, i) => i % 6 === 0);
+  const barSlotW = plotW / Math.max(1, chartPoints.length);
+  const barW = Math.max(2, barSlotW * 0.55);
+
+  function xForDay(day: number) {
+    return chartPadLeft + (Math.max(0, Math.min(240, day)) / 240) * plotW;
+  }
+
+  function yForReviews(reviews: number) {
+    return chartPadTop + plotH - (Math.max(0, reviews) / yAxisMax) * plotH;
+  }
+
+  const avgY = yForReviews(saturatedAvg);
+  const reviewTargetY = yForReviews(selectedDailyReviewTargetPositions);
 
   return (
     <div
@@ -5557,28 +5698,52 @@ function OnboardingPreferencesModal({
       style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(2px)" }}
     >
       <div
-        className="app-brutal-card relative mx-4 w-[min(calc(100vw-2rem),64rem)] border-2 p-8"
-        style={{ maxHeight: "85vh", display: "flex", flexDirection: "column" }}
+        className="app-brutal-card relative mx-4 flex max-h-[85vh] w-[min(calc(100vw-2rem),56rem)] flex-col border-2 p-0"
         role="dialog"
         aria-modal="true"
         aria-label="Training preferences"
       >
-        <div className="overflow-y-auto flex-1 pr-2">
+        {/* X close button */}
+        <button
+          type="button"
+          onClick={onCancel}
+          aria-label="Close daily goal modal"
+          className="absolute right-5 top-5 z-10 flex h-8 w-8 items-center justify-center rounded-md text-[var(--app-muted)] transition hover:bg-[var(--app-surface-subtle)] hover:text-[var(--app-text)]"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <line x1="1" y1="1" x2="13" y2="13" />
+            <line x1="13" y1="1" x2="1" y2="13" />
+          </svg>
+        </button>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-6 pt-8">
+          {modalStep === "daily-goal" ? (
+            <>
           <h2 className="mb-2 text-2xl font-bold leading-tight text-[var(--app-text)]">
-            Set your daily goal.
+            Set your training pace
           </h2>
           <p className="mb-6 text-sm leading-7 text-[var(--app-muted)]">
-            Choose how many positions you want to complete per day. You can change this later from the <strong>Account</strong> page.
+            Choose how many new positions to introduce and how many SRS reviews you want to handle each day. You can change this later in{" "}
+            <a href="/account" className="font-bold text-[var(--app-accent)] underline-offset-2 hover:underline">Account</a>.
           </p>
 
-          {/* Positions per day */}
-          <div className="mb-6">
-            <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Positions per day</h3>
-            <div className="flex items-center gap-3">
+          {/* Positions per day — custom stepper */}
+          <div className="mb-4">
+            <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">New positions per day</h3>
+            <p className="mb-2 text-xs text-[var(--app-muted)]">
+              Fresh positions introduced into your learning queue each day.
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => adjustDailyTarget(-1)}
+                className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)] text-[var(--app-text)] transition hover:border-[var(--app-border-strong)] active:bg-[var(--app-surface-subtle)]"
+              >
+                <svg width="12" height="2" viewBox="0 0 12 2" fill="currentColor"><rect width="12" height="2" /></svg>
+              </button>
               <input
-                type="number"
-                min={1}
-                max={300}
+                type="text"
+                inputMode="numeric"
                 value={dailyTargetText}
                 onChange={(e) => setDailyTargetText(e.target.value)}
                 onBlur={(e) => commitDailyTargetText(e.target.value)}
@@ -5588,17 +5753,62 @@ function OnboardingPreferencesModal({
                     e.currentTarget.blur();
                   }
                 }}
-                className="w-24 rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)] px-3 py-2 text-sm text-[var(--app-text)] outline-none focus:border-[var(--app-accent)]"
+                className="w-20 rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)] px-3 py-2 text-center text-sm text-[var(--app-text)] outline-none focus:border-[var(--app-accent)]"
               />
+              <button
+                type="button"
+                onClick={() => adjustDailyTarget(1)}
+                className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)] text-[var(--app-text)] transition hover:border-[var(--app-border-strong)] active:bg-[var(--app-surface-subtle)]"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="5" y="0" width="2" height="12" /><rect x="0" y="5" width="12" height="2" /></svg>
+              </button>
               <span className="text-xs text-[var(--app-muted)]">positions / day</span>
             </div>
           </div>
 
-          {/* SRS Intensity */}
+          <div className="mb-6">
+            <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Reviews per day</h3>
+            <p className="mb-2 text-xs text-[var(--app-muted)]">
+              Maximum due SRS reviews you want to complete each day. Lower values create a backlog if reviews pile up.
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => adjustDailyReviewTarget(-5)}
+                className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)] text-[var(--app-text)] transition hover:border-[var(--app-border-strong)] active:bg-[var(--app-surface-subtle)]"
+              >
+                <svg width="12" height="2" viewBox="0 0 12 2" fill="currentColor"><rect width="12" height="2" /></svg>
+              </button>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={dailyReviewTargetText}
+                onChange={(e) => setDailyReviewTargetText(e.target.value)}
+                onBlur={(e) => commitDailyReviewTargetText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    commitDailyReviewTargetText(e.currentTarget.value);
+                    e.currentTarget.blur();
+                  }
+                }}
+                className="w-20 rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)] px-3 py-2 text-center text-sm text-[var(--app-text)] outline-none focus:border-[var(--app-accent)]"
+              />
+              <button
+                type="button"
+                onClick={() => adjustDailyReviewTarget(5)}
+                className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)] text-[var(--app-text)] transition hover:border-[var(--app-border-strong)] active:bg-[var(--app-surface-subtle)]"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="5" y="0" width="2" height="12" /><rect x="0" y="5" width="12" height="2" /></svg>
+              </button>
+              <span className="text-xs text-[var(--app-muted)]">reviews / day</span>
+            </div>
+          </div>
+
+          {/* SRS Intensity — preset cards */}
           <div className="mb-6">
             <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">SRS intensity</h3>
             <p className="mb-3 text-xs text-[var(--app-muted)]">How aggressively should positions repeat?</p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {SRS_PROFILE_OPTIONS.filter((p) => p.level !== "custom").map((profile) => {
                 const selected = srsProfileLevel === profile.level;
                 return (
@@ -5607,14 +5817,14 @@ function OnboardingPreferencesModal({
                     type="button"
                     onClick={() => onSrsProfileChange(profile.level)}
                     className={[
-                      "min-h-[72px] rounded-lg border p-3 text-left transition",
+                      "min-h-[62px] rounded-lg border p-3 text-left transition",
                       selected ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] ring-1 ring-[var(--app-accent)]" : "border-[var(--app-border)] hover:border-[var(--app-border-strong)]",
                     ].join(" ")}
                   >
                     <span className="flex flex-col gap-0.5">
                       <span className="text-xs font-bold text-[var(--app-text)]">{profile.label}</span>
                       {profile.recommended ? (
-                        <span className="text-[10px] text-[var(--app-muted)]">Recommended</span>
+                        <span className="text-[10px] text-[var(--app-accent)]">Recommended</span>
                       ) : (
                         <span className="text-[10px] text-[var(--app-muted)]">{profile.description}</span>
                       )}
@@ -5622,132 +5832,254 @@ function OnboardingPreferencesModal({
                   </button>
                 );
               })}
-              {/* Custom button */}
-              <button
-                key="custom"
-                type="button"
-                onClick={() => onSrsProfileChange("custom")}
-                className={[
-                  "min-h-[72px] rounded-lg border p-3 text-left transition",
-                  srsProfileLevel === "custom" ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] ring-1 ring-[var(--app-accent)]" : "border-[var(--app-border)] hover:border-[var(--app-border-strong)]",
-                ].join(" ")}
-              >
-                <span className="flex flex-col gap-0.5">
-                  <span className="text-xs font-bold text-[var(--app-text)]">Custom</span>
-                  <span className="text-[10px] text-[var(--app-muted)]">Configure your own</span>
-                </span>
-              </button>
             </div>
+            {/* Custom button — separate dashed full-width */}
+            <button
+              key="custom"
+              type="button"
+              onClick={() => onSrsProfileChange("custom")}
+              className={[
+                "mt-2 flex w-full items-center gap-2 rounded-lg border p-3 text-left transition",
+                srsProfileLevel === "custom" ? "border-dashed border-[var(--app-accent)] bg-[var(--app-accent-soft)] ring-1 ring-[var(--app-accent)]" : "border-dashed border-[var(--app-border)] hover:border-[var(--app-border-strong)]",
+              ].join(" ")}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--app-muted)]">
+                <circle cx="7" cy="7" r="5.5" />
+                <line x1="7" y1="4" x2="7" y2="7" />
+                <line x1="7" y1="7" x2="9.5" y2="9.5" />
+              </svg>
+              <span className="flex flex-col gap-0.5">
+                <span className="text-xs font-bold text-[var(--app-text)]">Custom</span>
+                <span className="text-[10px] text-[var(--app-muted)]">Configure your own intervals</span>
+              </span>
+            </button>
           </div>
 
           {/* Custom SRS fields — only when Custom is selected */}
-          {srsProfileLevel === "custom" && (
-            <div className="mb-6 rounded-lg border border-[var(--app-border)] p-4">
-              <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--app-muted)]">Custom SRS schedule</h4>
+          {srsProfileLevel === "custom" ? (
+            <div className="mb-6 rounded-lg border border-[var(--app-border)] bg-[var(--app-panel-deep)] p-4">
+              <h4 className="mb-4 text-xs font-bold uppercase tracking-wider text-[var(--app-text)]">
+                Custom SRS schedule
+              </h4>
+
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs text-[var(--app-muted)]">First review after (days)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={365}
-                    value={srsConfig.firstReviewDelayDays}
-                    onChange={(e) => onSrsConfigChange({ ...srsConfig, firstReviewDelayDays: Math.max(0, Math.min(365, Math.round(Number(e.target.value) || 0))) })}
-                    className="w-full rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)] px-3 py-2 text-sm text-[var(--app-text)] outline-none focus:border-[var(--app-accent)]"
-                  />
+                  <label className="mb-1 block text-xs font-bold text-[var(--app-text)]">
+                    First review after
+                  </label>
+                  <p className="mb-2 text-[11px] leading-4 text-[var(--app-muted-soft)]">
+                    How soon a newly learned position comes back for its first review.
+                  </p>
+                  <div className="flex h-11 overflow-hidden rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)]">
+                    <button
+                      type="button"
+                      onClick={() => updateFirstReviewDelay(-1)}
+                      className="grid w-11 place-items-center border-r border-[var(--app-border)] text-lg font-bold text-[var(--app-text)] transition hover:bg-[var(--app-surface-subtle)]"
+                      aria-label="Decrease first review delay"
+                    >
+                      −
+                    </button>
+                    <div className="flex min-w-0 flex-1 items-center justify-center gap-2 px-3">
+                      <span className="text-lg font-bold tabular-nums text-[var(--app-text)]">
+                        {srsConfig.firstReviewDelayDays}
+                      </span>
+                      <span className="text-xs text-[var(--app-muted)]">days</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => updateFirstReviewDelay(1)}
+                      className="grid w-11 place-items-center border-l border-[var(--app-border)] text-lg font-bold text-[var(--app-text)] transition hover:bg-[var(--app-surface-subtle)]"
+                      aria-label="Increase first review delay"
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
+
                 <div>
-                  <label className="mb-1 block text-xs text-[var(--app-muted)]">Failed review after (days)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={365}
-                    value={srsConfig.failDelayDays}
-                    onChange={(e) => onSrsConfigChange({ ...srsConfig, failDelayDays: Math.max(0, Math.min(365, Math.round(Number(e.target.value) || 0))) })}
-                    className="w-full rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)] px-3 py-2 text-sm text-[var(--app-text)] outline-none focus:border-[var(--app-accent)]"
-                  />
+                  <label className="mb-1 block text-xs font-bold text-[var(--app-text)]">
+                    Failed review after
+                  </label>
+                  <p className="mb-2 text-[11px] leading-4 text-[var(--app-muted-soft)]">
+                    How quickly a failed position returns after you miss it.
+                  </p>
+                  <div className="flex h-11 overflow-hidden rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)]">
+                    <button
+                      type="button"
+                      onClick={() => updateFailDelay(-1)}
+                      className="grid w-11 place-items-center border-r border-[var(--app-border)] text-lg font-bold text-[var(--app-text)] transition hover:bg-[var(--app-surface-subtle)]"
+                      aria-label="Decrease failed review delay"
+                    >
+                      −
+                    </button>
+                    <div className="flex min-w-0 flex-1 items-center justify-center gap-2 px-3">
+                      <span className="text-lg font-bold tabular-nums text-[var(--app-text)]">
+                        {srsConfig.failDelayDays}
+                      </span>
+                      <span className="text-xs text-[var(--app-muted)]">days</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => updateFailDelay(1)}
+                      className="grid w-11 place-items-center border-l border-[var(--app-border)] text-lg font-bold text-[var(--app-text)] transition hover:bg-[var(--app-surface-subtle)]"
+                      aria-label="Increase failed review delay"
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
+
                 <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs text-[var(--app-muted)]">Pass intervals (comma-separated, days)</label>
+                  <label className="mb-1 block text-xs font-bold text-[var(--app-text)]">
+                    Pass intervals
+                  </label>
+                  <p className="mb-2 text-[11px] leading-4 text-[var(--app-muted-soft)]">
+                    The review gaps after successful reviews, in days. Later numbers mean longer spacing.
+                  </p>
                   <input
                     type="text"
                     value={customIntervalsText}
                     onChange={(e) => handleIntervalsChange(e.target.value)}
                     onBlur={handleIntervalsBlur}
                     placeholder="1, 3, 7, 14, 30, 60"
-                    className="w-full rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)] px-3 py-2 text-sm text-[var(--app-text)] outline-none focus:border-[var(--app-accent)]"
+                    className="h-11 w-full rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)] px-3 text-sm font-bold text-[var(--app-text)] outline-none transition placeholder:text-[var(--app-muted-soft)] focus:border-[var(--app-accent)]"
                   />
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs text-[var(--app-muted)]">Expected pass rate (%)</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="range"
-                      min={5}
-                      max={98}
-                      value={Math.round(srsConfig.assumedPassRate * 100)}
-                      onChange={(e) => onSrsConfigChange({ ...srsConfig, assumedPassRate: Math.max(0.05, Math.min(0.98, Number(e.target.value) / 100)) })}
-                      className="flex-1"
-                    />
-                    <span className="w-10 text-right text-xs text-[var(--app-muted)]">{Math.round(srsConfig.assumedPassRate * 100)}%</span>
-                  </div>
-                </div>
+
+                <div className="sm:col-span-2" />
               </div>
             </div>
-          )}
+          ) : null}
 
           {/* Forecast chart */}
           <div className="mb-4">
             <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Review load forecast</h3>
-            <p className="mb-2 text-xs text-[var(--app-muted)]">Estimated reviews due per day after the SRS pipeline fills (240 days).</p>
-            <div className="rounded-lg border border-[var(--app-border)] p-3">
+            <p className="mb-2 text-xs text-[var(--app-muted)]">Estimated due reviews, completed reviews, and backlog over 240 days.</p>
+            <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel-deep)] p-4">
               <svg
                 width="100%"
-                height={chartH + 32}
-                viewBox={`0 0 ${chartW} ${chartH + 32}`}
+                height={260}
+                viewBox={`0 0 ${chartW} ${chartH}`}
                 preserveAspectRatio="none"
                 aria-label="Review load forecast chart"
               >
+                {/* Y-axis gridlines and labels */}
+                {yTicks.map((tick) => {
+                  const y = yForReviews(tick);
+                  return (
+                    <g key={tick}>
+                      <line
+                        x1={chartPadLeft}
+                        y1={y}
+                        x2={chartW - chartPadRight}
+                        y2={y}
+                        stroke="var(--app-border)"
+                        strokeWidth={1}
+                      />
+                      <text
+                        x={chartPadLeft - 10}
+                        y={y + 4}
+                        textAnchor="end"
+                        fontSize={10}
+                        fill="var(--app-muted)"
+                      >
+                        {tick}
+                      </text>
+                    </g>
+                  );
+                })}
+                {/* X-axis labels */}
+                {xTicks.map((tick) => (
+                  <text
+                    key={tick}
+                    x={xForDay(tick)}
+                    y={chartPadTop + plotH + 20}
+                    textAnchor="middle"
+                    fontSize={10}
+                    fill="var(--app-muted)"
+                  >
+                    {tick}
+                  </text>
+                ))}
                 {/* Bars */}
-                {chartPoints.map((point, i) => {
-                  const x = (i / chartPoints.length) * chartW;
-                  const barHeight = (point.reviewsDue / maxReviews) * chartH;
+                {chartPoints.map((point) => {
+                  const bx = xForDay(point.day) - barW / 2;
+                  const by = yForReviews(point.reviewsDue);
+                  const bheight = chartPadTop + plotH - by;
                   return (
                     <rect
                       key={point.day}
-                      x={x}
-                      y={chartH - barHeight}
-                      width={Math.max(1, barW - 1)}
-                      height={barHeight}
+                      x={bx}
+                      y={by}
+                      width={barW}
+                      height={bheight}
                       fill="var(--app-accent)"
-                      opacity={0.6}
+                      opacity={0.72}
                     />
                   );
                 })}
-                {/* Saturated average line */}
+                {/* Saturated average dashed line */}
                 <line
-                  x1={0}
-                  y1={chartH - (saturatedAvg / maxReviews) * chartH}
-                  x2={chartW}
-                  y2={chartH - (saturatedAvg / maxReviews) * chartH}
+                  x1={chartPadLeft}
+                  y1={avgY}
+                  x2={chartW - chartPadRight}
+                  y2={avgY}
                   stroke="var(--app-accent)"
-                  strokeWidth={1.5}
-                  strokeDasharray="4,3"
+                  strokeWidth={1.2}
+                  strokeDasharray="4 4"
+                  opacity={0.85}
                 />
-                {/* Average label */}
+                <line
+                  x1={chartPadLeft}
+                  y1={reviewTargetY}
+                  x2={chartW - chartPadRight}
+                  y2={reviewTargetY}
+                  stroke="var(--app-muted)"
+                  strokeWidth={1.2}
+                  strokeDasharray="6 5"
+                  opacity={0.9}
+                />
+                <rect
+                  x={chartW - chartPadRight - 140}
+                  y={reviewTargetY + 8}
+                  width={134}
+                  height={20}
+                  rx={5}
+                  fill="var(--app-panel-solid)"
+                />
                 <text
-                  x={chartW - 4}
-                  y={chartH - (saturatedAvg / maxReviews) * chartH - 4}
-                  textAnchor="end"
+                  x={chartW - chartPadRight - 73}
+                  y={reviewTargetY + 23}
+                  textAnchor="middle"
                   fontSize={10}
+                  fontWeight={700}
                   fill="var(--app-muted)"
                 >
-                  avg {saturatedAvg}/day
+                  review target {selectedDailyReviewTargetPositions}/day
+                </text>
+                {/* Average label chip */}
+                <rect
+                  x={chartW - chartPadRight - 94}
+                  y={avgY - 26}
+                  width={88}
+                  height={20}
+                  rx={5}
+                  fill="var(--app-panel-solid)"
+                />
+                <text
+                  x={chartW - chartPadRight - 50}
+                  y={avgY - 11}
+                  textAnchor="middle"
+                  fontSize={11}
+                  fontWeight={700}
+                  fill="var(--app-accent)"
+                >
+                  avg completed {saturatedAvg} / day
                 </text>
                 {/* X-axis label */}
                 <text
-                  x={chartW / 2}
-                  y={chartH + 20}
+                  x={(chartPadLeft + chartW - chartPadRight) / 2}
+                  y={chartH - 4}
                   textAnchor="middle"
                   fontSize={10}
                   fill="var(--app-muted)"
@@ -5755,20 +6087,167 @@ function OnboardingPreferencesModal({
                   Days
                 </text>
               </svg>
+              <div className="mt-2 text-xs font-bold text-[var(--app-muted)]">
+                Backlog by day 240: {lastForecastPoint?.reviewBacklog ?? 0} reviews
+              </div>
             </div>
           </div>
+            </>
+          ) : (
+            <div>
+              <h2 className="mb-2 text-2xl font-bold leading-tight text-[var(--app-text)]">
+                Set review grading
+              </h2>
+              <p className="mb-3 text-sm leading-7 text-[var(--app-muted)]">
+                Decide how cleanly you need to solve the queued position before it advances in SRS.
+              </p>
+              <p className="mb-6 text-xs leading-6 text-[var(--app-muted-soft)]">
+                Only the first move from the queued FEN is graded. Continuation moves are for discovery; if they reveal another blindspot, add that later position manually.
+              </p>
+
+              <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {REVIEW_GRADING_OPTIONS.filter((option) => option.level !== "custom").map((option) => {
+                  const selected = reviewGradingLevel === option.level;
+                  return (
+                    <button
+                      key={option.level}
+                      type="button"
+                      onClick={() => onReviewGradingLevelChange(option.level)}
+                      className={[
+                        "min-h-[92px] rounded-lg border p-3 text-left transition",
+                        selected
+                          ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] ring-1 ring-[var(--app-accent)]"
+                          : "border-[var(--app-border)] hover:border-[var(--app-border-strong)]",
+                      ].join(" ")}
+                    >
+                      <span className="flex flex-col gap-1">
+                        <span className="text-sm font-bold text-[var(--app-text)]">{option.label}</span>
+                        {option.recommended ? (
+                          <span className="text-[10px] text-[var(--app-accent)]">Recommended</span>
+                        ) : null}
+                        <span className="text-[11px] leading-4 text-[var(--app-muted)]">{option.description}</span>
+                        <span className="font-mono text-[10px] text-[var(--app-muted-soft)]">
+                          Pass &lt;= {option.config.passCpLossMax}cp · fail &gt; {option.config.failCpLossMin}cp
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onReviewGradingLevelChange("custom")}
+                className={[
+                  "mb-5 flex w-full rounded-lg border p-3 text-left transition",
+                  reviewGradingLevel === "custom"
+                    ? "border-dashed border-[var(--app-accent)] bg-[var(--app-accent-soft)] ring-1 ring-[var(--app-accent)]"
+                    : "border-dashed border-[var(--app-border)] hover:border-[var(--app-border-strong)]",
+                ].join(" ")}
+              >
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-xs font-bold text-[var(--app-text)]">Configure your own thresholds</span>
+                  <span className="text-[10px] text-[var(--app-muted)]">Set the pass and fail centipawn loss boundaries.</span>
+                </span>
+              </button>
+
+              {reviewGradingLevel === "custom" ? (
+                <div className="grid gap-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-panel-deep)] p-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-bold text-[var(--app-text)]">
+                      Pass if move loss is at most
+                    </label>
+                    <p className="mb-2 text-[11px] leading-4 text-[var(--app-muted-soft)]">
+                      A reviewed position advances only if the move from the queued FEN stays under this centipawn loss.
+                    </p>
+                    <div className="flex h-11 overflow-hidden rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)]">
+                      <button
+                        type="button"
+                        onClick={() => updateReviewPassThreshold(-5)}
+                        className="grid w-11 place-items-center border-r border-[var(--app-border)] text-lg font-bold text-[var(--app-text)] transition hover:bg-[var(--app-surface-subtle)]"
+                      >
+                        -
+                      </button>
+                      <div className="flex min-w-0 flex-1 items-center justify-center gap-2 px-3">
+                        <span className="text-lg font-bold tabular-nums text-[var(--app-text)]">
+                          {reviewGradingConfig.passCpLossMax}
+                        </span>
+                        <span className="text-xs text-[var(--app-muted)]">cp</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => updateReviewPassThreshold(5)}
+                        className="grid w-11 place-items-center border-l border-[var(--app-border)] text-lg font-bold text-[var(--app-text)] transition hover:bg-[var(--app-surface-subtle)]"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-bold text-[var(--app-text)]">
+                      Fail if move loss is above
+                    </label>
+                    <p className="mb-2 text-[11px] leading-4 text-[var(--app-muted-soft)]">
+                      A reviewed position comes back soon when the move from the queued FEN exceeds this loss.
+                    </p>
+                    <div className="flex h-11 overflow-hidden rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)]">
+                      <button
+                        type="button"
+                        onClick={() => updateReviewFailThreshold(-5)}
+                        className="grid w-11 place-items-center border-r border-[var(--app-border)] text-lg font-bold text-[var(--app-text)] transition hover:bg-[var(--app-surface-subtle)]"
+                      >
+                        -
+                      </button>
+                      <div className="flex min-w-0 flex-1 items-center justify-center gap-2 px-3">
+                        <span className="text-lg font-bold tabular-nums text-[var(--app-text)]">
+                          {reviewGradingConfig.failCpLossMin}
+                        </span>
+                        <span className="text-xs text-[var(--app-muted)]">cp</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => updateReviewFailThreshold(5)}
+                        className="grid w-11 place-items-center border-l border-[var(--app-border)] text-lg font-bold text-[var(--app-text)] transition hover:bg-[var(--app-surface-subtle)]"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
 
         {/* Footer — always visible */}
-        <div className="shrink-0 flex justify-end gap-3 pt-4">
-          <button
-            type="button"
-            onClick={onFinish}
-            disabled={isSaving}
-            className="app-brutal-button inline-flex min-h-11 items-center justify-center px-6 py-2.5 text-sm"
-          >
-            {isSaving ? "Saving..." : "Start training"}
-          </button>
+        <div className="shrink-0 border-t border-[var(--app-border-soft)] px-8 py-5">
+          <div className="flex justify-end gap-3">
+            {modalStep === "review-grading" ? (
+              <button
+                type="button"
+                onClick={() => setModalStep("daily-goal")}
+                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[var(--app-border)] bg-transparent px-5 py-2.5 text-sm font-bold text-[var(--app-text)] transition hover:border-[var(--app-border-strong)]"
+              >
+                Back
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={onCancel}
+              className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[var(--app-border)] bg-transparent px-5 py-2.5 text-sm font-bold text-[var(--app-muted)] transition hover:border-[var(--app-border-strong)] hover:text-[var(--app-text)]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={modalStep === "daily-goal" ? () => setModalStep("review-grading") : onFinish}
+              disabled={isSaving}
+              className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[var(--app-accent)] bg-[var(--app-accent)] px-6 py-2.5 text-sm font-bold text-black transition hover:brightness-105 disabled:opacity-60"
+            >
+              {modalStep === "daily-goal" ? "Next" : isSaving ? "Saving..." : "Start training"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

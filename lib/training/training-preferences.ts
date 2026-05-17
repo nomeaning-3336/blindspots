@@ -39,7 +39,7 @@ export const SRS_PROFILE_OPTIONS: SrsProfileOption[] = [
   {
     level: "easy",
     label: "Easy",
-    description: "Relaxed schedule",
+    description: "~1.5× intervals",
     config: { firstReviewDelayDays: 2, passIntervalsDays: [2, 5, 12, 25, 60, 120], failDelayDays: 1, assumedPassRate: 0.82 },
   },
   {
@@ -52,19 +52,19 @@ export const SRS_PROFILE_OPTIONS: SrsProfileOption[] = [
   {
     level: "hard",
     label: "Hard",
-    description: "Frequent reviews",
+    description: "~0.7× intervals",
     config: { firstReviewDelayDays: 1, passIntervalsDays: [1, 2, 4, 8, 16, 32, 64], failDelayDays: 1, assumedPassRate: 0.74 },
   },
   {
     level: "extreme",
     label: "Extreme",
-    description: "Maximum intensity",
+    description: "~0.4× intervals",
     config: { firstReviewDelayDays: 0, passIntervalsDays: [0, 1, 2, 4, 7, 14, 30, 60], failDelayDays: 1, assumedPassRate: 0.7 },
   },
   {
     level: "custom",
     label: "Custom",
-    description: "Configure your own schedule",
+    description: "Configure your own intervals",
     config: { firstReviewDelayDays: 1, passIntervalsDays: [1, 3, 7, 14, 30, 60], failDelayDays: 1, assumedPassRate: 0.78 },
   },
 ];
@@ -81,14 +81,94 @@ export function getSrsProfileConfig(level: SrsProfileLevel): SrsConfig {
   );
 }
 
-export type SrsForecastPoint = { day: number; reviewsDue: number };
+export type ReviewGradingLevel = "forgiving" | "balanced" | "strict" | "custom";
+
+export interface ReviewGradingConfig {
+  passCpLossMax: number;
+  failCpLossMin: number;
+}
+
+export interface ReviewGradingOption {
+  level: ReviewGradingLevel;
+  label: string;
+  description: string;
+  recommended?: boolean;
+  config: ReviewGradingConfig;
+}
+
+export const REVIEW_GRADING_OPTIONS: ReviewGradingOption[] = [
+  {
+    level: "forgiving",
+    label: "Forgiving",
+    description: "Small mistakes still pass.",
+    config: { passCpLossMax: 75, failCpLossMin: 200 },
+  },
+  {
+    level: "balanced",
+    label: "Balanced",
+    description: "Pass clean solves, repeat shaky ones.",
+    recommended: true,
+    config: { passCpLossMax: 50, failCpLossMin: 150 },
+  },
+  {
+    level: "strict",
+    label: "Strict",
+    description: "Only near-best moves advance.",
+    config: { passCpLossMax: 25, failCpLossMin: 100 },
+  },
+  {
+    level: "custom",
+    label: "Custom",
+    description: "Set your own centipawn thresholds.",
+    config: { passCpLossMax: 50, failCpLossMin: 150 },
+  },
+];
+
+export const REVIEW_GRADING_PROFILES: Record<ReviewGradingLevel, ReviewGradingConfig> =
+  Object.fromEntries(
+    REVIEW_GRADING_OPTIONS.map((option) => [option.level, option.config]),
+  ) as Record<ReviewGradingLevel, ReviewGradingConfig>;
+
+export function normalizeReviewGradingConfig(value: unknown): ReviewGradingConfig {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return REVIEW_GRADING_PROFILES.balanced;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const passCpLossMax =
+    typeof candidate.passCpLossMax === "number" && Number.isFinite(candidate.passCpLossMax)
+      ? Math.round(candidate.passCpLossMax)
+      : REVIEW_GRADING_PROFILES.balanced.passCpLossMax;
+
+  const failCpLossMin =
+    typeof candidate.failCpLossMin === "number" && Number.isFinite(candidate.failCpLossMin)
+      ? Math.round(candidate.failCpLossMin)
+      : REVIEW_GRADING_PROFILES.balanced.failCpLossMin;
+
+  const safePass = Math.max(0, Math.min(1000, passCpLossMax));
+  const safeFail = Math.max(safePass + 1, Math.min(2000, failCpLossMin));
+
+  return {
+    passCpLossMax: safePass,
+    failCpLossMin: safeFail,
+  };
+}
+
+export type SrsForecastPoint = {
+  day: number;
+  reviewsDue: number;
+  reviewsCompleted: number;
+  reviewBacklog: number;
+};
 
 export function simulateSrsForecast(
   dailyNewPositions: number,
   srsConfig: SrsConfig,
   days = 240,
+  dailyReviewTargetPositions = 30,
 ): SrsForecastPoint[] {
   const safeDailyNew = Math.max(1, Math.min(300, Math.round(dailyNewPositions)));
+  const safeDailyReviews = Math.max(1, Math.min(500, Math.round(dailyReviewTargetPositions)));
   const dueByDay: Map<number, number>[] = Array.from(
     { length: days + 3650 },
     () => new Map<number, number>(),
@@ -110,9 +190,25 @@ export function simulateSrsForecast(
 
     for (const [stage, count] of today.entries()) {
       reviewsDue += count;
+    }
 
-      const passed = count * srsConfig.assumedPassRate;
-      const failed = count - passed;
+    const reviewsCompleted = Math.min(reviewsDue, safeDailyReviews);
+    const completionRatio = reviewsDue > 0 ? reviewsCompleted / reviewsDue : 0;
+    let reviewBacklog = 0;
+
+    for (const [stage, count] of today.entries()) {
+      const completed = count * completionRatio;
+      const carried = count - completed;
+      reviewBacklog += carried;
+
+      if (carried > 0) {
+        schedule(day + 1, stage, carried);
+      }
+
+      if (completed <= 0) continue;
+
+      const passed = completed * srsConfig.assumedPassRate;
+      const failed = completed - passed;
 
       const nextStage = Math.min(
         stage + 1,
@@ -135,6 +231,8 @@ export function simulateSrsForecast(
     points.push({
       day,
       reviewsDue: Math.round(reviewsDue),
+      reviewsCompleted: Math.round(reviewsCompleted),
+      reviewBacklog: Math.round(reviewBacklog),
     });
   }
 
@@ -146,19 +244,25 @@ export function simulateSrsForecast(
 export interface TrainingPreferences {
   dailyTargetLevel: DailyTargetLevel;
   dailyTargetPositions: number;
+  dailyReviewTargetPositions: number;
   mistakeCaptureThresholdLevel: MistakeCaptureThresholdLevel;
   mistakeCaptureThresholdCp: number;
   srsProfileLevel: SrsProfileLevel;
   srsConfig: SrsConfig;
+  reviewGradingLevel: ReviewGradingLevel;
+  reviewGradingConfig: ReviewGradingConfig;
 }
 
 export const DEFAULT_TRAINING_PREFERENCES: TrainingPreferences = {
   dailyTargetLevel: "balanced",
   dailyTargetPositions: 10,
+  dailyReviewTargetPositions: 30,
   mistakeCaptureThresholdLevel: "balanced",
   mistakeCaptureThresholdCp: 75,
   srsProfileLevel: "balanced",
   srsConfig: SRS_PROFILES.balanced,
+  reviewGradingLevel: "balanced",
+  reviewGradingConfig: REVIEW_GRADING_PROFILES.balanced,
 };
 
 export function getDailyTargetByLevel(level: DailyTargetLevel) {
