@@ -5749,13 +5749,6 @@ function OnboardingPreferencesModal({
             ) : null}
             <button
               type="button"
-              onClick={onCancel}
-              className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[var(--app-border)] bg-transparent px-5 py-2.5 text-sm font-bold text-[var(--app-muted)] transition hover:border-[var(--app-border-strong)] hover:text-[var(--app-text)]"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
               onClick={modalStep === "daily-goal" ? () => setModalStep("review-grading") : onFinish}
               disabled={isSaving}
               className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[var(--app-accent)] bg-[var(--app-accent)] px-6 py-2.5 text-sm font-bold text-black transition hover:brightness-105 disabled:opacity-60"
