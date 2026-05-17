@@ -943,6 +943,12 @@ export default function TrainPage(props: TrainPageProps) {
 
   const [fenCopied, setFenCopied] = useState(false);
   const [addingPositionToQueue, setAddingPositionToQueue] = useState(false);
+  const [pendingLearningQueueConfirm, setPendingLearningQueueConfirm] = useState<{
+    decisionFen: string;
+    setupMove: TrainingMove | null;
+    annotationMove: TrainingMove | null;
+    fellBackFromEnginePosition: boolean;
+  } | null>(null);
   const fenCopyTimerRef = useRef<number | null>(null);
 
   async function evaluateMoveForAnnotationClient(move: TrainingMove): Promise<MoveScore | null> {
@@ -1028,6 +1034,27 @@ export default function TrainPage(props: TrainPageProps) {
     }
   }
 
+  function handleAddPositionClick() {
+    if (addingPositionToQueue) return;
+    if (isAddPositionSuccessFeedback) return;
+    if (isAddPositionAlreadyQueued) return;
+
+    const addTarget = learningQueueAddTarget;
+    if (!addTarget) return;
+
+    if (addTarget.requiresConfirmation) {
+      setPendingLearningQueueConfirm({
+        decisionFen: addTarget.decisionFen,
+        setupMove: addTarget.setupMove,
+        annotationMove: addTarget.annotationMove,
+        fellBackFromEnginePosition: addTarget.fellBackFromEnginePosition,
+      });
+      return;
+    }
+
+    void addPositionToLearningQueue();
+  }
+
   async function addPositionToLearningQueue() {
     if (addingPositionToQueue) return;
     if (isAddPositionSuccessFeedback) return;
@@ -1070,6 +1097,12 @@ export default function TrainPage(props: TrainPageProps) {
 
       if (annotationMove?.fenBefore && annotationMove.uci) {
         const moveKey = buildMoveKey(annotationMove.fenBefore, annotationMove.uci);
+
+        setQueuedLearningMoveKeys((prev) => {
+          const next = new Set(prev);
+          next.add(moveKey);
+          return next;
+        });
 
         setMoveAnnotations((prev) =>
           upsertAnnotatedMove(prev, {
@@ -1210,6 +1243,7 @@ export default function TrainPage(props: TrainPageProps) {
   const [postmortemAddPositionInstructionAcknowledged, setPostmortemAddPositionInstructionAcknowledged] = useState(false);
   const [addPositionOnboardingPhase, setAddPositionOnboardingPhase] = useState<AddPositionOnboardingPhase>("idle");
   const [queuedLearningPositionFens, setQueuedLearningPositionFens] = useState<Set<string>>(() => new Set());
+  const [queuedLearningMoveKeys, setQueuedLearningMoveKeys] = useState<Set<string>>(() => new Set());
   const addPositionOnboardingSuccessTimerRef = useRef<number | null>(null);
   const addPositionOnboardingSuccessTimerRef2 = useRef<number | null>(null);
   const addPositionOnboardingSuccessTimerRef3 = useRef<number | null>(null);
@@ -3515,9 +3549,35 @@ export default function TrainPage(props: TrainPageProps) {
   const annotatableMoves = useMemo(() => {
     if (!isPostMortemVisible) return [];
 
+    const queuedExploratoryResultFens = new Set<string>();
+    const queuedExploratorySetupFens = new Set<string>();
+    for (const position of exploratoryHistory) {
+      const move = position.move;
+      if (!move?.fenAfter) continue;
+      const fenAfter = normalizeDecisionFen(move.fenAfter);
+      if (queuedLearningPositionFens.has(fenAfter)) {
+        queuedExploratoryResultFens.add(fenAfter);
+        if (move.fenBefore) {
+          queuedExploratorySetupFens.add(normalizeDecisionFen(move.fenBefore));
+        }
+      }
+    }
+
     const rows: AnnotatableMoveRow[] = canonicalPostmortemMoves
       .filter((cm) => {
         if (cm.kind !== "user" || !cm.uci || !cm.move?.fenBefore) return false;
+        if (
+          cm.move.fenAfter &&
+          queuedExploratoryResultFens.has(normalizeDecisionFen(cm.move.fenAfter))
+        ) {
+          return false;
+        }
+        if (
+          cm.move.fenAfter &&
+          queuedExploratorySetupFens.has(normalizeDecisionFen(cm.move.fenAfter))
+        ) {
+          return false;
+        }
         return queuedLearningPositionFens.has(normalizeDecisionFen(cm.move.fenBefore));
       })
       .map((cm) => ({
@@ -3540,17 +3600,20 @@ export default function TrainPage(props: TrainPageProps) {
       const move = position.move;
       if (!move?.fenBefore || !move.uci) continue;
 
+      const moveKey = buildMoveKey(move.fenBefore, move.uci);
       const fenBefore = normalizeDecisionFen(move.fenBefore);
       const fenAfter = move.fenAfter ? normalizeDecisionFen(move.fenAfter) : null;
+      if (fenAfter && queuedExploratorySetupFens.has(fenAfter)) continue;
       if (
+        !queuedLearningMoveKeys.has(moveKey) &&
         !queuedLearningPositionFens.has(fenBefore) &&
         !(fenAfter && queuedLearningPositionFens.has(fenAfter))
       ) {
         continue;
       }
 
-      const moveKey = buildMoveKey(move.fenBefore, move.uci);
       if (seen.has(moveKey)) continue;
+      if (queuedLearningMoveKeys.size > 0 && !queuedLearningMoveKeys.has(moveKey)) continue;
 
       const annotation = moveAnnotations[moveKey];
 
@@ -3572,7 +3635,7 @@ export default function TrainPage(props: TrainPageProps) {
     }
 
     return rows;
-  }, [isPostMortemVisible, canonicalPostmortemMoves, exploratoryHistory, queuedLearningPositionFens, moveAnnotations]);
+  }, [isPostMortemVisible, canonicalPostmortemMoves, exploratoryHistory, queuedLearningPositionFens, queuedLearningMoveKeys, moveAnnotations]);
 
   // Dev-only: log annotation state
   useEffect(() => {
@@ -3906,6 +3969,7 @@ export default function TrainPage(props: TrainPageProps) {
             ? activeExploratoryPosition.move
             : null,
         fellBackFromEnginePosition: false,
+        requiresConfirmation: false,
       };
     }
 
@@ -3918,6 +3982,7 @@ export default function TrainPage(props: TrainPageProps) {
         setupMove: setupMoveForDecisionFen(fallbackFromExploratoryMove!),
         annotationMove: exploratoryMove,
         fellBackFromEnginePosition: true,
+        requiresConfirmation: true,
       };
     }
 
@@ -3928,6 +3993,7 @@ export default function TrainPage(props: TrainPageProps) {
         setupMove: setupMoveForDecisionFen(fallbackFromSequenceMove!),
         annotationMove: null,
         fellBackFromEnginePosition: true,
+        requiresConfirmation: true,
       };
     }
 
@@ -3945,6 +4011,7 @@ export default function TrainPage(props: TrainPageProps) {
       setupMove: previousUserDecisionPosition.move ?? null,
       annotationMove: null,
       fellBackFromEnginePosition: true,
+      requiresConfirmation: true,
     };
   }, [
     activeExploreIndex,
@@ -5003,12 +5070,15 @@ const introOverlay = trainOnboardingIntroVisible ? (
                     isAddPositionAlreadyQueued ||
                     isNotesToggleTourControlLockActive
                   }
-                  onClick={addPositionToLearningQueue}
+                  onClick={handleAddPositionClick}
                   data-tour="add-position-to-learning-queue"
                   className={[
                     secondaryActionClassName,
                     "min-h-12 w-full justify-center px-5 transition-all duration-300 ease-out",
                     "disabled:opacity-60",
+                    learningQueueAddTarget?.requiresConfirmation
+                      ? "opacity-65 border-[var(--app-muted-soft)] text-[var(--app-muted)]"
+                      : "",
                     isPostmortemAddPositionWaiting
                       ? "train-add-position-glow ring-2 ring-[var(--app-accent)]"
                       : "",
@@ -5220,6 +5290,88 @@ const introOverlay = trainOnboardingIntroVisible ? (
           onSrsConfigChange={setSrsConfig}
           onFinish={finishOnboardingWithPreferences}
         />
+      ) : null}
+
+      {pendingLearningQueueConfirm ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4"
+          style={{ backdropFilter: "blur(2px)" }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setPendingLearningQueueConfirm(null);
+          }}
+        >
+          <div
+            className="app-brutal-section w-full max-w-sm p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="lq-confirm-title"
+          >
+            <h2
+              id="lq-confirm-title"
+              className="text-lg font-black uppercase tracking-[-0.01em] text-[var(--app-text)]"
+            >
+              This will save the position before{" "}
+              {pendingLearningQueueConfirm.setupMove?.san ?? "your move"}
+            </h2>
+            <p className="mt-3 text-sm text-[var(--app-muted)]">
+              You are currently viewing the board after your move. Reviews start before your
+              move, so Blindspots will save the decision position instead.
+            </p>
+            <div className="mt-5 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const target = pendingLearningQueueConfirm;
+                  setPendingLearningQueueConfirm(null);
+                  learningQueueAddTarget &&
+                    void (async () => {
+                      if (addingPositionToQueue) return;
+                      setAddingPositionToQueue(true);
+                      const res = await fetch("/api/dashboard/mistakes/add", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          decisionFen: target.decisionFen,
+                          setupPreviousFen: target.setupMove?.fenBefore ?? null,
+                          setupPlayedMoveUci: target.setupMove?.uci ?? null,
+                          setupPlayedMoveSan: target.setupMove?.san ?? null,
+                        }),
+                      });
+                      if (!res.ok) throw new Error(`Add failed: ${res.status}`);
+                      const normalizedFenToAdd = normalizeDecisionFen(target.decisionFen);
+                      setQueuedLearningPositionFens((prev) => {
+                        const next = new Set(prev);
+                        next.add(normalizedFenToAdd);
+                        return next;
+                      });
+                      setAddingPositionToQueue(false);
+                      showAlert({
+                        kind: "success",
+                        title: "Added previous decision point",
+                        message: "Engine-to-move positions are saved as the previous user decision.",
+                      });
+                    })();
+                }}
+                className={[
+                  secondaryActionClassName,
+                  "min-h-11 w-full justify-center px-4",
+                ].join(" ")}
+              >
+                Add to Learning Queue
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingLearningQueueConfirm(null)}
+                className={[
+                  secondaryActionClassName,
+                  "min-h-11 w-full justify-center px-4 opacity-60",
+                ].join(" ")}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       <TopAlertViewport alert={topAlert} onDismiss={dismissAlert} />
