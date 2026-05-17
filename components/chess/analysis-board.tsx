@@ -70,6 +70,7 @@ export type AnalysisBoardProps = {
   lastMove?: { from: string; to: string } | null;
   lastMoveBadge?: LastMoveBadge | null;
   pieceAnimation?: boolean;
+  pieceAnimationDurationMs?: number;
   disabled?: boolean;
   annotationsDisabled?: boolean;
   coordinates?: boolean;
@@ -117,6 +118,7 @@ export function AnalysisBoard({
   lastMove,
   lastMoveBadge,
   pieceAnimation = false,
+  pieceAnimationDurationMs = 240,
   disabled = false,
   annotationsDisabled = disabled,
   coordinates = true,
@@ -194,6 +196,8 @@ export function AnalysisBoard({
   const [annotationMode, setAnnotationMode] = useState<BoardMode>("analysis");
   const [annotationCircles, setAnnotationCircles] = useState<string[]>([]);
   const [annotationArrows, setAnnotationArrows] = useState<BoardAnnotationArrow[]>([]);
+  const pieceAnimationDurationMsRef = useRef(pieceAnimationDurationMs);
+  pieceAnimationDurationMsRef.current = pieceAnimationDurationMs;
   const [pieceGlides, setPieceGlides] = useState<PieceGlideAnimation[]>([]);
   const boardRef = useRef<HTMLDivElement | null>(null);
   const draggedPieceRef = useRef<HTMLDivElement | null>(null);
@@ -322,7 +326,7 @@ export function AnalysisBoard({
 
     const timeout = window.setTimeout(() => {
       setPieceGlides((current) => current.filter((glide) => !glideIds.has(glide.id)));
-    }, 240);
+    }, pieceAnimationDurationMsRef.current);
 
     return () => {
       window.cancelAnimationFrame(frame);
@@ -777,6 +781,7 @@ export function AnalysisBoard({
           animation={glide}
           orientation={orientation}
           pieceAssetSet={pieceAssetSet}
+          glideDurationMs={pieceAnimationDurationMsRef.current}
         />
       ))}
       {dragFrom && dragPosition ? (
@@ -877,10 +882,12 @@ function PieceGlideOverlay({
   animation,
   orientation,
   pieceAssetSet,
+  glideDurationMs,
 }: {
   animation: PieceGlideAnimation;
   orientation: BoardOrientation;
   pieceAssetSet: string;
+  glideDurationMs: number;
 }) {
   const from = animation.initialOffset ?? squareGridOffset(animation.from, orientation);
   const to = squareGridOffset(animation.to, orientation);
@@ -894,7 +901,7 @@ function PieceGlideOverlay({
       style={{
         transform: `translate(${target.col * 100}%, ${target.row * 100}%)`,
         transition: animation.started
-          ? "transform 220ms ease-out"
+          ? `transform ${glideDurationMs}ms ease-out`
           : "none",
         willChange: "transform",
       }}
