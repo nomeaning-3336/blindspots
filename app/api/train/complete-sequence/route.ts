@@ -15,12 +15,16 @@ import {
 import { normalizeBucketStats, recordBucketResult } from "@/lib/training/bandit-stats";
 import { classifyTrainingBucket, classifyTrainingPhase } from "@/lib/training/position-metadata";
 import type { TrainingBucket, TrainingPhase } from "@/lib/training/queue-core";
-import { classifyTrainingOutcome } from "@/lib/training/mistake-srs";
+import {
+  classifyReviewedMoveOutcome,
+  classifyTrainingOutcome,
+} from "@/lib/training/mistake-srs";
 import { updateMistakeAfterTraining, updateActiveMistakeAfterTraining } from "@/lib/training/mistake-store";
 import { mineMistakesFromSequence } from "@/lib/training/mistake-mining-persistence";
 import type { MineableMoveInput } from "@/lib/training/mistake-mining";
 import { buildDefaultBlindspotProfile } from "@/lib/training/default-profile";
 import { normalizeDecisionFen } from "@/lib/training/mistake-memory";
+import { normalizeReviewGradingConfig } from "@/lib/training/training-preferences";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -211,6 +215,17 @@ export async function POST(request: Request) {
   ));
   const maxSingleCpLoss = Math.max(0, ...sequenceEvaluation.moveScores.map((s) => s.cpLoss), 0);
   const trainingOutcome = classifyTrainingOutcome({ averageCpLoss, maxSingleCpLoss });
+  const reviewedMoveScore = sequenceEvaluation.moveScores[0] ?? null;
+  const reviewGradingConfig = normalizeReviewGradingConfig(
+    (profile as { review_grading_config?: unknown }).review_grading_config,
+  );
+  const reviewOutcome = reviewedMoveScore
+    ? classifyReviewedMoveOutcome({
+        cpLoss: reviewedMoveScore.cpLoss,
+        config: reviewGradingConfig,
+      })
+    : trainingOutcome;
+  const reviewedMoveCpLoss = reviewedMoveScore?.cpLoss ?? null;
 
   const selectedMistakeId = typeof payload?.selectedMistakeId === "string" ? payload.selectedMistakeId : null;
   const queueSource = typeof payload?.queueSource === "string" ? payload.queueSource : null;
@@ -352,14 +367,14 @@ export async function POST(request: Request) {
         await updateActiveMistakeAfterTraining({
           userId,
           mistakeId: selectedMistakeId,
-          wasCorrect: trainingOutcome === "pass",
+          wasCorrect: reviewOutcome === "pass",
         });
       } else {
         // Legacy row-based / imported / puzzle-filler mistake: full SRS path.
         await updateMistakeAfterTraining({
           userId,
           mistakeId: selectedMistakeId,
-          outcome: trainingOutcome,
+          outcome: reviewOutcome,
           averageCpLoss,
           maxSingleCpLoss,
         });
@@ -416,6 +431,8 @@ export async function POST(request: Request) {
         ratingDeviationAfter: eloUpdate?.ratingDeviationAfter ?? profileRatingDeviation,
       },
       trainingOutcome,
+      reviewOutcome,
+      reviewedMoveCpLoss,
       averageCpLoss,
       maxSingleCpLoss,
       selectedMistakeId: selectedMistakeId,
@@ -1235,9 +1252,9 @@ function updateRecentClusters(raw: unknown, evaluations: PositionEvaluation[], l
 
 async function getOrCreateProfile(userId: string) {
   const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from("user_blindspot_profile")
-    .select("user_id, blindspots_elo, rating_deviation, initial_skill_level, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens, bucket_stats, recent_served_modes, cluster_stats, recent_clusters")
+  const { data, error } = await (supabase
+    .from("user_blindspot_profile") as any)
+    .select("user_id, blindspots_elo, rating_deviation, initial_skill_level, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens, bucket_stats, recent_served_modes, cluster_stats, recent_clusters, review_grading_level, review_grading_config")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -1247,12 +1264,12 @@ async function getOrCreateProfile(userId: string) {
 
   if (data) return data;
 
-  const { data: inserted, error: insertError } = await supabase
-    .from("user_blindspot_profile")
+  const { data: inserted, error: insertError } = await (supabase
+    .from("user_blindspot_profile") as any)
     .insert({
       ...buildDefaultBlindspotProfile(userId),
     })
-    .select("user_id, blindspots_elo, rating_deviation, initial_skill_level, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens, bucket_stats, recent_served_modes, cluster_stats, recent_clusters")
+    .select("user_id, blindspots_elo, rating_deviation, initial_skill_level, total_sequences, exploit_queue, explore_queue, revisit_queue, mastered_queue, recent_served_fens, bucket_stats, recent_served_modes, cluster_stats, recent_clusters, review_grading_level, review_grading_config")
     .single();
 
   if (insertError) {

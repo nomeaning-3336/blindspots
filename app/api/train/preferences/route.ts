@@ -17,6 +17,7 @@ const VALID_DAILY_LEVELS = ["easy", "balanced", "hard", "extreme"];
 const VALID_THRESHOLD_LEVELS = ["lenient", "balanced", "sensitive", "strict"];
 const VALID_CP = [25, 50, 75, 100];
 const VALID_SRS_LEVELS = ["easy", "balanced", "hard", "extreme", "custom"];
+const VALID_REVIEW_GRADING_LEVELS = ["forgiving", "balanced", "strict", "custom"];
 
 function isValidSrsConfig(cfg: unknown): cfg is {
   firstReviewDelayDays: number;
@@ -37,6 +38,25 @@ function isValidSrsConfig(cfg: unknown): cfg is {
   return true;
 }
 
+function isValidReviewGradingConfig(cfg: unknown): cfg is {
+  passCpLossMax: number;
+  failCpLossMin: number;
+} {
+  if (typeof cfg !== "object" || cfg === null || Array.isArray(cfg)) return false;
+  const c = cfg as Record<string, unknown>;
+  if (typeof c.passCpLossMax !== "number" || !Number.isFinite(c.passCpLossMax)) return false;
+  if (typeof c.failCpLossMin !== "number" || !Number.isFinite(c.failCpLossMin)) return false;
+
+  const pass = Math.round(c.passCpLossMax);
+  const fail = Math.round(c.failCpLossMin);
+
+  if (pass < 0 || pass > 1000) return false;
+  if (fail < 1 || fail > 2000) return false;
+  if (pass >= fail) return false;
+
+  return true;
+}
+
 export async function PATCH(request: Request) {
   const userId = await requireAppAuth("/train");
   const body = await request.json().catch(() => ({}));
@@ -53,6 +73,12 @@ export async function PATCH(request: Request) {
       updates.daily_target_positions = positions;
     }
   }
+  if (typeof body.dailyReviewTargetPositions === "number" && Number.isFinite(body.dailyReviewTargetPositions)) {
+    const reviews = Math.round(body.dailyReviewTargetPositions);
+    if (reviews >= 1 && reviews <= 500) {
+      updates.daily_review_target_positions = reviews;
+    }
+  }
   if (typeof body.mistakeCaptureThresholdLevel === "string" && VALID_THRESHOLD_LEVELS.includes(body.mistakeCaptureThresholdLevel)) {
     updates.mistake_capture_threshold_level = body.mistakeCaptureThresholdLevel;
   }
@@ -64,6 +90,18 @@ export async function PATCH(request: Request) {
   }
   if (isValidSrsConfig(body.srsConfig)) {
     updates.srs_config = body.srsConfig;
+  }
+  if (
+    typeof body.reviewGradingLevel === "string" &&
+    VALID_REVIEW_GRADING_LEVELS.includes(body.reviewGradingLevel)
+  ) {
+    updates.review_grading_level = body.reviewGradingLevel;
+  }
+  if (isValidReviewGradingConfig(body.reviewGradingConfig)) {
+    updates.review_grading_config = {
+      passCpLossMax: Math.round(body.reviewGradingConfig.passCpLossMax),
+      failCpLossMin: Math.round(body.reviewGradingConfig.failCpLossMin),
+    };
   }
 
   if (Object.keys(updates).length === 0) {

@@ -49,6 +49,12 @@ interface SearchOptions {
   searchMoves?: string[];
 }
 
+type StockfishProcess = ReturnType<typeof createStockfishProcess>;
+
+let sharedEngineProcess: StockfishProcess | null = null;
+let sharedEngineInitPromise: Promise<StockfishProcess> | null = null;
+let sharedEngineQueue: Promise<unknown> = Promise.resolve();
+
 export const stockfishHarness: EngineHarness = {
   async isAvailable() {
     return existsSync(STOCKFISH_SCRIPT);
@@ -162,16 +168,49 @@ export const stockfishHarness: EngineHarness = {
   },
 };
 
-function withStockfish<T>(callback: (engine: ReturnType<typeof createStockfishProcess>) => Promise<T>) {
-  const engine = createStockfishProcess();
-  return (async () => {
+function resetSharedStockfishProcess() {
+  sharedEngineInitPromise = null;
+  if (sharedEngineProcess) {
     try {
-      await engine.init();
-      return await callback(engine);
-    } finally {
-      engine.dispose();
+      sharedEngineProcess.dispose();
+    } catch {
+      // ignore dispose failures during reset
     }
-  })();
+    sharedEngineProcess = null;
+  }
+}
+
+async function getSharedStockfishProcess() {
+  if (sharedEngineProcess) {
+    return sharedEngineProcess;
+  }
+  if (!sharedEngineInitPromise) {
+    const engine = createStockfishProcess();
+    sharedEngineInitPromise = engine.init()
+      .then(() => {
+        sharedEngineProcess = engine;
+        return engine;
+      })
+      .catch((error) => {
+        resetSharedStockfishProcess();
+        throw error;
+      });
+  }
+  return sharedEngineInitPromise;
+}
+
+function withStockfish<T>(callback: (engine: StockfishProcess) => Promise<T>) {
+  const run = sharedEngineQueue.then(async () => {
+    const engine = await getSharedStockfishProcess();
+    try {
+      return await callback(engine);
+    } catch (error) {
+      resetSharedStockfishProcess();
+      throw error;
+    }
+  });
+  sharedEngineQueue = run.then(() => undefined, () => undefined);
+  return run;
 }
 
 function createStockfishProcess() {

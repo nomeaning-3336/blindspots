@@ -207,6 +207,7 @@ export function MoveNotesPanel({
         const notes = notesByFen[row.decisionFen] ?? [];
         const currentUci = draftMoveUci[row.decisionFen] ?? row.playedUci ?? "";
         const currentText = draftNoteText[row.decisionFen] ?? "";
+        const currentMoveKey = currentUci ? buildMoveKey(row.decisionFen, currentUci) : null;
         const legalMoves = legalMovesFromFen(row.decisionFen);
         const legalMovesValid = currentUci === "" || legalMoves.includes(currentUci);
 
@@ -243,6 +244,12 @@ export function MoveNotesPanel({
                   {row.playedSan ? (
                     <span className="ml-1 text-[var(--app-muted)]">· {row.playedSan} played</span>
                   ) : null}
+                </span>
+                <span
+                  className="truncate font-mono text-[10px] text-[var(--app-muted-soft)]"
+                  title={row.decisionFen}
+                >
+                  FEN: {row.decisionFen}
                 </span>
               </span>
               <svg
@@ -315,7 +322,7 @@ export function MoveNotesPanel({
                 </div>
 
                 {/* Save indicator */}
-                {savedMoveKey && savedMoveKey.startsWith(row.decisionFen) ? (
+                {savedMoveKey && currentMoveKey && savedMoveKey === currentMoveKey ? (
                   <div className="text-xs font-bold text-[var(--app-class-good)]">
                     Note saved ✓
                   </div>
