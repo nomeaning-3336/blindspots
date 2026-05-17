@@ -44,7 +44,7 @@ test("postmortem tour overlay cannot create viewport scrollbars during transitio
 
   assert.match(overlaySource, /className="fixed inset-0 z-\[80\] overflow-hidden"/);
   assert.doesNotMatch(overlaySource, /left-\[-9999px\]/);
-  assert.match(overlaySource, /"pointer-events-none fixed left-0 top-0 opacity-0"/);
+  assert.doesNotMatch(overlaySource, /measureCardRef/);
 });
 
 test("postmortem centered saved step uses the tour overlay viewport clip", () => {
@@ -107,7 +107,7 @@ test("add-position action step keeps the dim layer until Okay is pressed", () =>
   assert.match(overlayUsageSource, /actionInstructionAcknowledged=\{postmortemAddPositionInstructionAcknowledged\}/);
   assert.match(overlaySource, /const shouldDimSuppressedSpotlight =/);
   assert.match(overlaySource, /currentStep\.suppressSpotlight &&\s*isActionStep &&\s*!actionInstructionAcknowledged/);
-  assert.match(overlaySource, /\{shouldCenterCard \|\| shouldDimSuppressedSpotlight \? \(/);
+  assert.match(overlaySource, /\{shouldShowFullScreenTourDim \? \(/);
   assert.match(source, /transition-opacity duration-\[520ms\] ease-\[var\(--tour-geometry-ease\)\]/);
 });
 
@@ -134,6 +134,20 @@ test("add-position action transition does not show a Waiting fallback CTA", () =
   assert.doesNotMatch(overlaySource, /displayedTourStep\.cta \?\? "Waiting\.\.\."/);
 });
 
+test("postmortem tour renders current step content without delayed displayed step state", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
+
+  assert.doesNotMatch(overlaySource, /displayedStep/);
+  assert.doesNotMatch(overlaySource, /previousDisplayedStep/);
+  assert.doesNotMatch(overlaySource, /isCardSwitching/);
+  assert.doesNotMatch(overlaySource, /previousTourStep/);
+  assert.doesNotMatch(overlaySource, /displayedTourStep/);
+  assert.match(overlaySource, /\{currentStep\.headline\}/);
+  assert.match(overlaySource, /missingTarget \? "Finding the section\.\.\." : currentStep\.body/);
+  assert.match(overlaySource, /: currentStep\.cta \?\? "Next"/);
+});
+
 test("postmortem tour primary button keeps a stable hit target on hover and active", () => {
   const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
   const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
@@ -152,19 +166,29 @@ test("add-position onboarding action uses staged saving and success phases", () 
     source.indexOf('data-tour="add-position-to-learning-queue"') + 1200,
   );
 
-  assert.match(source, /type AddPositionOnboardingPhase =\s*\|\s*"idle"\s*\|\s*"waiting-for-click"\s*\|\s*"saving"\s*\|\s*"success-entering"\s*\|\s*"success-visible"\s*\|\s*"success-leaving"/);
+  assert.match(source, /type AddPositionOnboardingPhase =\s*\|\s*"idle"\s*\|\s*"waiting-for-click"\s*\|\s*"saving"\s*\|\s*"success-entering"\s*\|\s*"success-visible"/);
   assert.match(source, /const shouldHideTourForAddPosition =/);
   assert.match(source, /addPositionOnboardingPhase !== "idle"/);
   assert.match(source, /setAddPositionOnboardingPhase\("saving"\)/);
   assert.match(source, /setAddPositionOnboardingPhase\("success-entering"\)/);
   assert.match(addButtonSource, /setAddPositionOnboardingPhase\("success-visible"\)/);
-  assert.match(addButtonSource, /setAddPositionOnboardingPhase\("success-leaving"\)/);
   assert.match(addButtonSource, /window\.setTimeout\(\(\) => \{/);
   assert.match(addButtonSource, /setPostmortemAddPositionActionDone\(true\)/);
   assert.match(addButtonSource, /"Saving\.\.\."/);
   assert.doesNotMatch(addButtonSource, /"Adding\.\.\."/);
   assert.doesNotMatch(addButtonSource, /"Position added successfully"/);
   assert.doesNotMatch(addButtonSource, /addPositionOnboardingPhase === "success"/);
+});
+
+test("add-position action keeps the highlighted state while saving", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+  const waitingSource = source.slice(
+    source.indexOf("const isPostmortemAddPositionWaiting ="),
+    source.indexOf("const shouldHideTourForAddPosition ="),
+  );
+
+  assert.match(waitingSource, /addPositionOnboardingPhase === "waiting-for-click"/);
+  assert.match(waitingSource, /addPositionOnboardingPhase === "saving"/);
 });
 
 test("add-position onboarding success uses the button before showing the saved step", () => {
@@ -193,15 +217,13 @@ test("add-position onboarding success uses the button before showing the saved s
   assert.match(source, /headline: "Position saved\."/);
 });
 
-test("add-position success button has a checkmark and leaving phase", () => {
+test("add-position success button has a checkmark", () => {
   const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
   const addButtonSource = source.slice(
     source.indexOf('data-tour="add-position-to-learning-queue"') - 600,
     source.indexOf('data-tour="add-position-to-learning-queue"') + 2200,
   );
 
-  assert.match(addButtonSource, /addPositionOnboardingPhase === "success-leaving"/);
-  assert.match(addButtonSource, /opacity-0 scale-\[0\.98\]/);
   assert.match(addButtonSource, /<svg viewBox="0 0 20 20"/);
   assert.match(addButtonSource, /fillRule="evenodd"/);
 });
@@ -216,10 +238,11 @@ test("added learning queue positions stay disabled and checked for that FEN", ()
   assert.match(source, /const \[queuedLearningPositionFens, setQueuedLearningPositionFens\]/);
   assert.match(source, /const learningQueueAddTargetFen = learningQueueAddTarget\?\.decisionFen/);
   assert.match(source, /queuedLearningPositionFens\.has\(learningQueueAddTargetFen\)/);
-  assert.match(source, /disabled=\{addingPositionToQueue \|\| !learningQueueAddTarget\?\.decisionFen \|\| isLearningQueueAddTargetQueued\}/);
-  assert.match(source, /if \(isAddPositionSuccessState\) return;/);
+  assert.match(source, /isAddPositionAlreadyQueued/);
+  assert.match(source, /if \(isAddPositionSuccessFeedback\) return;/);
+  assert.match(source, /if \(isAddPositionAlreadyQueued\) return;/);
   assert.match(source, /next\.add\(normalizedFenToAdd\)/);
-  assert.match(addButtonSource, /!isAddPositionSuccessState \? "disabled:opacity-60" : ""/);
+  assert.match(addButtonSource, /!shouldShowAddPositionAdded \? "disabled:opacity-60" : ""/);
 });
 
 test("postmortem copy fen button uses icon plus action-sized label", () => {
@@ -257,10 +280,9 @@ test("queued learning positions are marked in the postmortem move table", () => 
   assert.match(tableSource, /queuedLearningPositionFens\?\.has\(normalizeDecisionFen\(learningDecisionFen\)\)/);
   assert.match(tableSource, /train-move-row-learning-queued/);
   assert.match(tableSource, /train-move-row-learning-icon/);
-  assert.match(tableSource, /inline-flex h-5 w-5/);
   assert.match(tableSource, /width="18"/);
   assert.match(tableSource, /<path d="M12 6\.5v14" \/>/);
-  assert.match(tableSource, /aria-label="In Learning queue"/);
+  assert.match(tableSource, /aria-label="Added to Learning Queue"/);
   assert.match(source, /\.train-move-row-learning-queued \{/);
   assert.match(source, /background: color-mix\(in srgb, var\(--app-text\) 6%, transparent\) !important;/);
   assert.doesNotMatch(source, /box-shadow: inset 3px 0 0 color-mix\(in srgb, var\(--app-class-good\)/);

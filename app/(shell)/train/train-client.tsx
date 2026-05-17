@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { Chess, type Square } from "chess.js";
-import { AnalysisBoard, type BoardMove, type EngineArrow } from "@/components/chess/analysis-board";
+import { AnalysisBoard, type BoardHighlight, type BoardMove, type EngineArrow } from "@/components/chess/analysis-board";
 import {
   BoardWithEvalBar,
   ClassificationBadge,
@@ -37,6 +37,7 @@ import {
   getTrainingBoardHighlights,
   moveHighlightsForClassifiedMove,
   type MoveClassification,
+  type LastMoveBadge,
 } from "@/lib/training-board-ui";
 import {
   buildCanonicalPostmortemMoves,
@@ -1055,6 +1056,13 @@ export default function TrainPage(props: TrainPageProps) {
     requiresConfirmation: boolean;
   };
 
+  type AddPositionFeedbackBoardOverride = {
+    fen: string;
+    lastMove: BoardMove | null;
+    highlightedSquares?: BoardHighlight[];
+    lastMoveBadge?: LastMoveBadge | null;
+  };
+
   function handleAddPositionClick() {
     if (addingPositionToQueue) return;
     if (rollbackAnimating) return;
@@ -1078,6 +1086,8 @@ export default function TrainPage(props: TrainPageProps) {
 
   async function runAddPositionFeedback(snapshot: LearningQueueTarget) {
     if (prefersReducedMotion()) {
+      setAddPositionFeedbackBoardOverride(null);
+      setSuppressAddPositionFeedbackBoardChrome(false);
       void addPositionToLearningQueue(snapshot);
       return;
     }
@@ -1100,9 +1110,11 @@ export default function TrainPage(props: TrainPageProps) {
         buttonEl: document.querySelector<HTMLElement>("[data-snapshot-target]"),
       });
 
-      void addPositionToLearningQueue(snapshot);
+      await addPositionToLearningQueue(snapshot);
     } finally {
       setCurrentGlideMs(FORWARD_GLIDE_MS);
+      commitAddPositionFeedbackEndState(snapshot);
+      setAddPositionFeedbackBoardOverride(null);
       setRollbackAnimating(false);
     }
   }
@@ -1134,55 +1146,33 @@ export default function TrainPage(props: TrainPageProps) {
   }
 
   function setBoardToFeedbackFen(nextFen: string, nextLastMove: { from: string; to: string } | null) {
-    const normalizedNextFen = normalizeDecisionFen(nextFen);
+    setSuppressAddPositionFeedbackBoardChrome(true);
+    setSelectedMoveIndex(null);
+    setExploreSelectedSquare(null);
+    setHoveredEngineLineIndex(null);
+    setHoveredMoveSquares(null);
+    setAddPositionFeedbackBoardOverride({
+      fen: nextFen,
+      lastMove: nextLastMove,
+      highlightedSquares: undefined,
+      lastMoveBadge: null,
+    });
+  }
 
-    const seqIndex = visibleSequencePositions.findIndex(
-      (position) => normalizeDecisionFen(position.fen) === normalizedNextFen,
-    );
-
-    if (seqIndex >= 0) {
-      const boundedIndex = Math.max(
-        0,
-        Math.min(Math.max(0, visibleSequencePositions.length - 1), seqIndex),
-      );
-      setIsManualPostmortemExploration(false);
-      setSelectedMoveIndex(boundedIndex);
-      setExploreSelectedSquare(null);
-      setHoveredEngineLineIndex(null);
-      setHoveredMoveSquares(null);
-      setExploratoryHistoryIndex(-1);
-      setExploratoryFen(null);
-      setExploratoryLastMove(null);
-      setExploreIndex(boundedIndex);
-      return;
-    }
-
-    const histIndex = [...exploratoryHistory]
-      .reverse()
-      .findIndex(
-        (step) =>
-          (step.fen && normalizeDecisionFen(step.fen) === normalizedNextFen) ||
-          (step.move?.fenAfter && normalizeDecisionFen(step.move.fenAfter) === normalizedNextFen),
-      );
+  function commitAddPositionFeedbackEndState(snapshot: LearningQueueTarget) {
+    const finalLastMove = snapshot.setupMove
+      ? lastMoveFromTrainingMove(snapshot.setupMove)
+      : null;
 
     setIsManualPostmortemExploration(false);
     setSelectedMoveIndex(null);
     setExploreSelectedSquare(null);
     setHoveredEngineLineIndex(null);
     setHoveredMoveSquares(null);
-
-    if (histIndex >= 0) {
-      const actualIndex = exploratoryHistory.length - 1 - histIndex;
-      setExploratoryHistoryIndex(actualIndex);
-      const step = exploratoryHistory[actualIndex];
-      setExploratoryFen(step?.fen ?? nextFen);
-      setExploratoryLastMove(step?.lastMove ?? nextLastMove);
-      return;
-    }
-
     setExploratoryHistoryIndex(-1);
-    setExploratoryFen(nextFen);
-    setExploratoryLastMove(nextLastMove);
+    setExploratoryFen(snapshot.decisionFen);
+    setExploratoryLastMove(finalLastMove);
+    setSuppressAddPositionFeedbackBoardChrome(true);
   }
 
   async function addPositionToLearningQueue(targetOverride?: LearningQueueTarget) {
@@ -1377,6 +1367,9 @@ export default function TrainPage(props: TrainPageProps) {
     setSavedMoveNoteKey(null);
   }, [selectedMoveIndex]);
   const [rollbackAnimating, setRollbackAnimating] = useState(false);
+  const [addPositionFeedbackBoardOverride, setAddPositionFeedbackBoardOverride] =
+    useState<AddPositionFeedbackBoardOverride | null>(null);
+  const [suppressAddPositionFeedbackBoardChrome, setSuppressAddPositionFeedbackBoardChrome] = useState(false);
   const [currentGlideMs, setCurrentGlideMs] = useState(FORWARD_GLIDE_MS);
   const [postmortemSidePanel, setPostmortemSidePanel] = useState<"analysis" | "memory">("analysis");
   const [postmortemOnboardingActive, setPostmortemOnboardingActive] = useState(false);
@@ -3012,6 +3005,7 @@ export default function TrainPage(props: TrainPageProps) {
   function handleExploreMove(move: BoardMove) {
     if (!isExploringResults) return;
 
+    setSuppressAddPositionFeedbackBoardChrome(false);
     setIsManualPostmortemExploration(true);
     setSelectedMoveIndex(null);
     setHoveredMoveSquares(null);
@@ -4258,6 +4252,23 @@ export default function TrainPage(props: TrainPageProps) {
     : selectedMove && selectedMoveSquares
     ? { ...selectedMoveSquares, classification: selectedMoveClassification }
     : null;
+  const boardDisplayOverride = addPositionFeedbackBoardOverride;
+  const displayedBoardFen = boardDisplayOverride?.fen ?? boardFen;
+  const displayedReplayLastMove = boardDisplayOverride ? boardDisplayOverride.lastMove : replayLastMove;
+  const displayedBoardLastMoveBadge = boardDisplayOverride
+    ? boardDisplayOverride.lastMoveBadge ?? null
+    : suppressAddPositionFeedbackBoardChrome
+      ? null
+    : boardLastMoveBadge;
+  const displayedBoardHighlights = boardDisplayOverride
+    ? boardDisplayOverride.highlightedSquares
+    : suppressAddPositionFeedbackBoardChrome
+      ? undefined
+    : hoveredMoveSquares
+      ? moveHighlightsForClassifiedMove(hoveredMoveSquares, hoveredMoveSquares.classification)
+      : selectedMoveHighlight
+        ? moveHighlightsForClassifiedMove(selectedMoveHighlight, selectedMoveHighlight.classification)
+        : undefined;
   const selectedMoveUci = selectedMove?.uci ?? null;
   const userColor = getFenTurnSide(startingFen);
   const selectedMoveOwner =
@@ -4534,6 +4545,7 @@ export default function TrainPage(props: TrainPageProps) {
     const currentIndex = exploratoryHistoryIndex;
     const movingForward = nextIndex > currentIndex;
 
+    setSuppressAddPositionFeedbackBoardChrome(false);
     setIsManualPostmortemExploration(false);
     setSelectedMoveIndex(null);
     setHoveredEngineLineIndex(null);
@@ -4568,6 +4580,7 @@ export default function TrainPage(props: TrainPageProps) {
       return;
     }
     const previousIndex = activeExploreIndex;
+    setSuppressAddPositionFeedbackBoardChrome(false);
     setIsManualPostmortemExploration(false);
     setSelectedMoveIndex(boundedIndex);
     resetExploratoryLine();
@@ -4859,11 +4872,11 @@ const introOverlay = trainOnboardingIntroVisible ? (
         >
           <div className="relative flex min-h-0 w-fit max-w-full min-w-0 flex-col items-stretch justify-center self-center">
             <div ref={boardContainerRef} className={boardFrameClassName}>
-              {boardFen ? (
+              {displayedBoardFen ? (
                 <>
                   <BoardWithPlayerStrips
                     userSide={userMoveSide}
-                    boardFen={boardFen ?? ""}
+                    boardFen={displayedBoardFen ?? ""}
                     isOpponentThinking={isOpponentThinking}
                     isTrainingActive={state === "active"}
                     isExploring={isExploringResults}
@@ -4879,32 +4892,26 @@ const introOverlay = trainOnboardingIntroVisible ? (
                         orientation={boardOrientation}
                       >
                         <AnalysisBoard
-                          fen={boardFen}
+                          fen={displayedBoardFen}
                           mode="training"
                           pieceAnimation={shouldAnimateBoardPieces}
                           pieceAnimationDurationMs={currentGlideMs}
                           orientation={boardOrientation}
                           coordinates
                           showLegalTargets={false}
-                          selectedSquare={exploreSelectedSquare}
-                          lastMove={replayLastMove}
-                          lastMoveBadge={boardLastMoveBadge}
+                          selectedSquare={boardDisplayOverride ? null : exploreSelectedSquare}
+                          lastMove={displayedReplayLastMove}
+                          lastMoveBadge={displayedBoardLastMoveBadge}
                           boardTheme={visualPreferences.boardTheme}
                           pieceTheme={visualPreferences.pieceTheme}
                           disabled={isPositionLoading || !hasLoadedPosition}
-                          highlightedSquares={
-                            hoveredMoveSquares
-                              ? moveHighlightsForClassifiedMove(hoveredMoveSquares, hoveredMoveSquares.classification)
-                              : selectedMoveHighlight
-                                ? moveHighlightsForClassifiedMove(selectedMoveHighlight, selectedMoveHighlight.classification)
-                                : undefined
-                          }
-                          engineArrows={buildEngineArrows(boardEngineLines, hoveredEngineLineMove)}
+                          highlightedSquares={displayedBoardHighlights}
+                          engineArrows={boardDisplayOverride ? [] : buildEngineArrows(boardEngineLines, hoveredEngineLineMove)}
                           dataTestId="train-board"
                           onMove={(move) => { setExploreSelectedSquare(null); setSelectedMoveIndex(null); handleExploreMove(move); }}
                           onSquareClick={(square) => {
                             try {
-                              const chess = new Chess(boardFen);
+                              const chess = new Chess(displayedBoardFen);
                               const piece = chess.get(square as Square);
                               if (piece && piece.color === chess.turn() && square !== exploreSelectedSquare) { setExploreSelectedSquare(square); } else { setExploreSelectedSquare(null); }
                             } catch { setExploreSelectedSquare(null); }
@@ -4915,14 +4922,14 @@ const introOverlay = trainOnboardingIntroVisible ? (
                       </BoardWithEvalBar>
                     ) : (
                       <AnalysisBoard
-                        fen={boardFen}
+                        fen={displayedBoardFen}
                         mode="training"
                         pieceAnimation={shouldAnimateBoardPieces}
                         pieceAnimationDurationMs={currentGlideMs}
                         orientation={boardOrientation}
                         coordinates
                         showLegalTargets
-                        lastMove={replayLastMove}
+                        lastMove={displayedReplayLastMove}
                         boardTheme={visualPreferences.boardTheme}
                         pieceTheme={visualPreferences.pieceTheme}
                         disabled={isPositionLoading || !hasLoadedPosition || state !== "active" || isOpponentThinking || isAwaitingStartGesture || isViewingPreludeReplay}

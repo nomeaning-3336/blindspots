@@ -116,8 +116,15 @@ function requireEnv(name) {
   return value;
 }
 
-function buildRedirectTo(origin, nextPath) {
-  const url = new URL("/auth/callback", origin);
+function buildRedirectTo(origin, nextPath, tokenHash) {
+  const url = new URL("/auth/agent-link", origin);
+  url.searchParams.set("token_hash", tokenHash);
+  url.searchParams.set("next", nextPath);
+  return url.toString();
+}
+
+function buildProviderRedirectTo(origin, nextPath) {
+  const url = new URL("/auth/email", origin);
   url.searchParams.set("next", nextPath);
   return url.toString();
 }
@@ -152,7 +159,7 @@ async function main() {
 
   const origin = normalizeOrigin(options.origin);
   const nextPath = normalizeNextPath(options.nextPath);
-  const redirectTo = buildRedirectTo(origin, nextPath);
+  const providerRedirectTo = buildProviderRedirectTo(origin, nextPath);
 
   const supabase = createClient(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
@@ -169,7 +176,7 @@ async function main() {
     type: "magiclink",
     email,
     options: {
-      redirectTo,
+      redirectTo: providerRedirectTo,
     },
   });
 
@@ -177,15 +184,18 @@ async function main() {
     throw new Error(error.message);
   }
 
-  const actionLink = data?.properties?.action_link;
-  if (!actionLink) {
-    throw new Error("Supabase did not return properties.action_link.");
+  const tokenHash = data?.properties?.hashed_token;
+  if (!tokenHash) {
+    throw new Error("Supabase did not return properties.hashed_token.");
   }
+  const providerActionLink = data?.properties?.action_link ?? null;
+  const redirectTo = buildRedirectTo(origin, nextPath, tokenHash);
 
   printResult(
     {
       email,
-      actionLink,
+      actionLink: redirectTo,
+      providerActionLink,
       redirectTo,
       next: nextPath,
       userId: data.user?.id ?? null,

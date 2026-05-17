@@ -8,14 +8,16 @@ const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 test("agent magic link script uses Supabase admin generateLink without sending email", () => {
   assert.match(source, /auth\.admin\.generateLink\(\{/);
   assert.match(source, /type: "magiclink"/);
-  assert.match(source, /options:\s*\{\s*redirectTo,/);
-  assert.match(source, /properties\?\.action_link/);
+  assert.match(source, /options:\s*\{\s*redirectTo: providerRedirectTo,/);
+  assert.match(source, /properties\?\.hashed_token/);
+  assert.match(source, /providerActionLink/);
   assert.doesNotMatch(source, /signInWithOtp|send-magic-link/);
 });
 
 test("agent magic link script defaults to the train page callback", () => {
   assert.match(source, /nextPath: "\/train"/);
-  assert.match(source, /new URL\("\/auth\/callback", origin\)/);
+  assert.match(source, /new URL\("\/auth\/agent-link", origin\)/);
+  assert.match(source, /url\.searchParams\.set\("token_hash", tokenHash\)/);
   assert.match(source, /url\.searchParams\.set\("next", nextPath\)/);
 });
 

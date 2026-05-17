@@ -13,3 +13,16 @@ test("reversed train audio trims trailing silence before reversing", () => {
   assert.match(source, /src\[reversedLength - 1 - i\]/);
   assert.doesNotMatch(source, /const tmpCtx = new AudioContext\(\)/);
 });
+
+test("snapshot shutter sound is predecoded through train audio manager", () => {
+  const source = readFileSync("lib/train-audio.ts", "utf8");
+
+  assert.match(source, /export type TrainSoundName = "move" \| "capture" \| "shutter";/);
+  assert.match(source, /shutter: "\/analyze\/sounds\/shutter\.wav"/);
+  assert.match(source, /export async function prepareSnapshotAudio\(\)/);
+  assert.match(source, /await unlockTrainAudio\(\)/);
+  assert.match(source, /await primeTrainAudio\(\)/);
+  assert.match(source, /export function playSnapshotShutterSound\(\): boolean/);
+  assert.match(source, /soundName: "shutter"/);
+  assert.match(source, /function _playDecodedTrainSound/);
+});
