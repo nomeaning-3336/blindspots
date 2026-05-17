@@ -367,7 +367,7 @@ export async function POST(request: Request) {
         await updateActiveMistakeAfterTraining({
           userId,
           mistakeId: selectedMistakeId,
-          wasCorrect: reviewOutcome === "pass",
+          outcome: reviewOutcome,
         });
       } else {
         // Legacy row-based / imported / puzzle-filler mistake: full SRS path.

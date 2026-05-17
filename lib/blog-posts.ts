@@ -47,7 +47,8 @@ export const blogPosts: BlogPost[] = [
         heading: "The bad news",
         body: [
           "The bad news is that your brain is not going to fix this because you noticed one of them once and then went on with your day.",
-          "The game ended. You opened the analysis. You saw the game-ending blunder. Fine. Cool. Then you closed the tab, made a sandwich, grabbed a cup of coffee, checked your phone, wondered what you should do on Saturday morning, mentally planned a summer holiday you may or may not take, debated whether black trainers go with those trousers, and moved on with your life.",
+          "The game ended. You opened the analysis. You saw the game-ending blunder. Fine. Cool. Then you closed the tab, made a sandwich or a coffee and went back to doing something else.",
+          "Or, you flushed the toilet and returned back to your work desk, rewriting your short term memory with those nasty little tasks that would terrorize you up until 6pm.",
           "Mission failed.",
         ],
       },
@@ -71,9 +72,8 @@ export const blogPosts: BlogPost[] = [
       {
         heading: "The science bit",
         body: [
-          "This is not new or revolutionary.",
-          "The fancy terms are retrieval practice and spaced repetition (Cool, now we are being scientific...). Roediger and Karpicke showed that testing yourself can beat rereading for long-term retention. Ebbinghaus was poking at the forgetting curve before chess players started blaming lag or mouse slips for hanging queens.",
-          "The point is: do that enough times and the position starts to smell dangerous before you touch the bad move. That is the win. Less cinematic than people want. More useful than pretending your next middlegame course will finally give your queen basic survival instincts.",
+          "The fancy term is retrieval practice. Roediger and Karpicke ran the classic experiment in 2006: two groups studied the same passage; one reread it, one tested themselves on it without feedback. Five minutes later, rereading won — fresh material is fresh material. A week later, the tested group remembered substantially more. That gap is the entire premise behind every flashcard app you have ever ignored.",
+          "Pair that with Ebbinghaus's forgetting curve — yes, the man was charting how fast humans dump information back in the 1880s, while chess players were probably still arguing about whether the touch-move rule was for cowards — and you get the other half of the recipe: re-expose yourself right before you'd forget. Too soon and you're bored. Too late and the memory is gone. Just-in-time review is where things actually file themselves away.",
         ],
       },
       {
@@ -86,7 +86,7 @@ export const blogPosts: BlogPost[] = [
           "The useful part is what happens next. If you review the same position again, your exposure count goes up. First miss: one scar. Second miss: two scars. Fourth miss: congratulations, you have built a small personal museum of bad decisions, and now the exhibit is getting hard to ignore.",
           "That is not failure. That is data with a mean little face.",
           "Every repeat makes the pattern louder. The board stops looking like a random mess and starts looking like, \"Wait, I know this idiot trap. I have died here before.\"",
-          "That is the system we are trying to build here with blindspots.",
+          "Do that enough times and the position starts to smell dangerous before you touch the bad move. That is the win. Less cinematic than people want. More useful than pretending your next middlegame course will finally give your queen basic survival instincts.",
         ],
       },
     ],
