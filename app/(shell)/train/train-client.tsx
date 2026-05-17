@@ -3790,26 +3790,6 @@ export default function TrainPage(props: TrainPageProps) {
   }
 
   // ── Move notes: delete a note ───────────────────────────────────
-  function handleDeleteNote(moveKey: string) {
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[move-notes] delete-note", moveKey);
-    }
-    fetch("/api/train/move-notes", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ moveKey }),
-    }).catch((err: unknown) => {
-      if (process.env.NODE_ENV !== "production") {
-        console.warn("[move-notes] delete failed", err);
-      }
-    });
-    setMoveAnnotations((prev) => {
-      const next = { ...prev };
-      delete next[moveKey];
-      return next;
-    });
-  }
-
   function handleUpdateNote(moveKey: string, text: string) {
     if (process.env.NODE_ENV !== "production") {
       console.log("[move-notes] update-note", moveKey);
@@ -5164,7 +5144,6 @@ const introOverlay = trainOnboardingIntroVisible ? (
                     rows={queuedSequenceRows}
                     notesByFen={notesByFen}
                     onSaveNote={handleSaveNote}
-                    onDeleteNote={handleDeleteNote}
                     savedMoveKey={savedMoveNoteKey}
                     tourTarget="notes-panel"
                     onOpenPosition={(decisionFen) => {
