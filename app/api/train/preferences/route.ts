@@ -73,12 +73,6 @@ export async function PATCH(request: Request) {
       updates.daily_target_positions = positions;
     }
   }
-  if (typeof body.dailyReviewTargetPositions === "number" && Number.isFinite(body.dailyReviewTargetPositions)) {
-    const reviews = Math.round(body.dailyReviewTargetPositions);
-    if (reviews >= 1 && reviews <= 500) {
-      updates.daily_review_target_positions = reviews;
-    }
-  }
   if (typeof body.mistakeCaptureThresholdLevel === "string" && VALID_THRESHOLD_LEVELS.includes(body.mistakeCaptureThresholdLevel)) {
     updates.mistake_capture_threshold_level = body.mistakeCaptureThresholdLevel;
   }
