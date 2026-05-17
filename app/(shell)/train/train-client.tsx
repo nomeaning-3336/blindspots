@@ -5573,7 +5573,7 @@ function OnboardingPreferencesModal({
   const saturatedAvg = useMemo(() => {
     if (forecastData.length < 30) return 0;
     const last30 = forecastData.slice(-30);
-    const sum = last30.reduce((acc, p) => acc + p.reviewsDue, 0);
+    const sum = last30.reduce((acc, p) => acc + p.reviewsServed, 0);
     return Math.round(sum / last30.length);
   }, [forecastData]);
 
@@ -5637,8 +5637,9 @@ function OnboardingPreferencesModal({
   const yAxisMax = Math.max(
     10,
     Math.ceil(Math.max(
-      ...forecastData.map((p) => p.reviewsDue),
+      ...forecastData.map((p) => p.reviewsServed + p.fillerServed),
       saturatedAvg,
+      selectedDailyTargetPositions,
       1,
     ) / 10) * 10,
   );
@@ -5657,6 +5658,8 @@ function OnboardingPreferencesModal({
   }
 
   const avgY = yForReviews(saturatedAvg);
+  const targetY = yForReviews(selectedDailyTargetPositions);
+  const lastForecastPoint = forecastData[forecastData.length - 1];
 
   return (
     <div
@@ -5689,13 +5692,16 @@ function OnboardingPreferencesModal({
             Set your daily goal
           </h2>
           <p className="mb-6 text-sm leading-7 text-[var(--app-muted)]">
-            Choose how many positions you want to complete per day. You can change this later in{" "}
+            Choose how many total training positions you want to complete per day. Blindspots will fill that target with due reviews first, then new or random positions. You can change this later in{" "}
             <a href="/account" className="font-bold text-[var(--app-accent)] underline-offset-2 hover:underline">Account</a>.
           </p>
 
           {/* Positions per day — custom stepper */}
           <div className="mb-6">
-            <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Positions per day</h3>
+            <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Total positions per day</h3>
+            <p className="mb-3 text-xs leading-5 text-[var(--app-muted)]">
+              Your daily workload target. Due reviews are served first; any remaining slots are filled with new or random positions.
+            </p>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -5878,15 +5884,15 @@ function OnboardingPreferencesModal({
 
           {/* Forecast chart */}
           <div className="mb-4">
-            <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Review load forecast</h3>
-            <p className="mb-2 text-xs text-[var(--app-muted)]">Estimated reviews due per day after the SRS pipeline fills (240 days).</p>
+            <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Daily workload forecast</h3>
+            <p className="mb-2 text-xs text-[var(--app-muted)]">Estimated mix of due reviews and new/random positions within your daily target.</p>
             <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel-deep)] p-4">
               <svg
                 width="100%"
                 height={260}
                 viewBox={`0 0 ${chartW} ${chartH}`}
                 preserveAspectRatio="none"
-                aria-label="Review load forecast chart"
+                aria-label="Daily workload forecast chart"
               >
                 {/* Y-axis gridlines and labels */}
                 {yTicks.map((tick) => {
@@ -5929,20 +5935,53 @@ function OnboardingPreferencesModal({
                 {/* Bars */}
                 {chartPoints.map((point) => {
                   const bx = xForDay(point.day) - barW / 2;
-                  const by = yForReviews(point.reviewsDue);
-                  const bheight = chartPadTop + plotH - by;
+                  const reviewY = yForReviews(point.reviewsServed);
+                  const reviewHeight = chartPadTop + plotH - reviewY;
+                  const stackedTotal = point.reviewsServed + point.fillerServed;
+                  const fillerY = yForReviews(stackedTotal);
+                  const fillerHeight = Math.max(0, reviewY - fillerY);
                   return (
-                    <rect
-                      key={point.day}
-                      x={bx}
-                      y={by}
-                      width={barW}
-                      height={bheight}
-                      fill="var(--app-accent)"
-                      opacity={0.72}
-                    />
+                    <g key={point.day}>
+                      <rect
+                        x={bx}
+                        y={fillerY}
+                        width={barW}
+                        height={fillerHeight}
+                        fill="var(--app-accent)"
+                        opacity={0.22}
+                      />
+                      <rect
+                        x={bx}
+                        y={reviewY}
+                        width={barW}
+                        height={reviewHeight}
+                        fill="var(--app-accent)"
+                        opacity={0.78}
+                      />
+                    </g>
                   );
                 })}
+                {/* Daily target dashed line */}
+                <line
+                  x1={chartPadLeft}
+                  y1={targetY}
+                  x2={chartW - chartPadRight}
+                  y2={targetY}
+                  stroke="var(--app-muted)"
+                  strokeWidth={1.2}
+                  strokeDasharray="6 5"
+                  opacity={0.7}
+                />
+                <text
+                  x={chartW - chartPadRight - 4}
+                  y={targetY - 6}
+                  textAnchor="end"
+                  fontSize={10}
+                  fontWeight={700}
+                  fill="var(--app-muted)"
+                >
+                  target {selectedDailyTargetPositions}/day
+                </text>
                 {/* Saturated average dashed line */}
                 <line
                   x1={chartPadLeft}
@@ -5971,7 +6010,7 @@ function OnboardingPreferencesModal({
                   fontWeight={700}
                   fill="var(--app-accent)"
                 >
-                  avg {saturatedAvg} / day
+                  avg reviews {saturatedAvg}/day
                 </text>
                 {/* X-axis label */}
                 <text
@@ -5984,6 +6023,9 @@ function OnboardingPreferencesModal({
                   Days
                 </text>
               </svg>
+              <div className="mt-2 text-xs text-[var(--app-muted)]">
+                Review backlog by day 240: {lastForecastPoint?.backlog ?? 0}
+              </div>
             </div>
           </div>
             </>
