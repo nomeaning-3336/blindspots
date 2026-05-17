@@ -68,8 +68,11 @@ import {
   upsertAnnotatedMove,
   type AnnotatedMove,
 } from "@/lib/training/mistake-memory";
-import { MoveNotesPanel } from "@/components/train/mistake-memory-panel";
-import type { AnnotatableMoveRow } from "@/components/train/mistake-memory-panel";
+import {
+  MoveNotesPanel,
+  type QueuedPositionRow,
+  type ExistingNote,
+} from "@/components/train/mistake-memory-panel";
 import { playBoardSnapshotToButton } from "@/components/train/board-snapshot";
 import { TopAlertViewport, useTopAlert } from "@/components/ui/top-alert";
 import { normalizeNotes, formatEvalCp, type NormalizedNote, type RawNoteRow } from "@/lib/notes";
@@ -1372,7 +1375,7 @@ export default function TrainPage(props: TrainPageProps) {
   const [savedMoveNoteKey, setSavedMoveNoteKey] = useState<string | null>(null);
   useEffect(() => {
     setSavedMoveNoteKey(null);
-  }, [selectedMoveKey]);
+  }, [selectedMoveIndex]);
   const [rollbackAnimating, setRollbackAnimating] = useState(false);
   const [currentGlideMs, setCurrentGlideMs] = useState(FORWARD_GLIDE_MS);
   const [postmortemSidePanel, setPostmortemSidePanel] = useState<"analysis" | "memory">("analysis");
@@ -3685,137 +3688,135 @@ export default function TrainPage(props: TrainPageProps) {
     }
   }, [isPostMortemVisible, visibleSequencePositions, completedMoveScoreByUserMoveIndex]);
 
-  // ── Move notes: derive annotatable user moves ─────────────────────
-  // Notes are only allowed for positions explicitly added to the Learning Queue.
-  const annotatableMoves = useMemo(() => {
+  // ── Move notes: derive queued sequence rows ─────────────────────
+  // Only positions that are BOTH in the Learning Queue AND from this sequence.
+  const queuedSequenceRows = useMemo((): QueuedPositionRow[] => {
     if (!isPostMortemVisible) return [];
 
-    const queuedExploratoryResultFens = new Set<string>();
-    const queuedExploratorySetupFens = new Set<string>();
-    for (const position of exploratoryHistory) {
-      const move = position.move;
-      if (!move?.fenAfter) continue;
-      const fenAfter = normalizeDecisionFen(move.fenAfter);
-      if (queuedLearningPositionFens.has(fenAfter)) {
-        queuedExploratoryResultFens.add(fenAfter);
-        if (move.fenBefore) {
-          queuedExploratorySetupFens.add(normalizeDecisionFen(move.fenBefore));
-        }
-      }
+    const queuedFens = new Set<string>();
+    for (const fen of queuedLearningPositionFens) {
+      queuedFens.add(fen);
     }
 
-    const rows: AnnotatableMoveRow[] = canonicalPostmortemMoves
-      .filter((cm) => {
-        if (cm.kind !== "user" || !cm.uci || !cm.move?.fenBefore) return false;
-        if (
-          cm.move.fenAfter &&
-          queuedExploratoryResultFens.has(normalizeDecisionFen(cm.move.fenAfter))
-        ) {
-          return false;
-        }
-        if (
-          cm.move.fenAfter &&
-          queuedExploratorySetupFens.has(normalizeDecisionFen(cm.move.fenAfter))
-        ) {
-          return false;
-        }
-        return queuedLearningPositionFens.has(normalizeDecisionFen(cm.move.fenBefore));
-      })
-      .map((cm) => ({
-        moveKey: buildMoveKey(cm.move!.fenBefore!, cm.uci!),
-        san: cm.san ?? "",
-        uci: cm.uci!,
-        from: cm.from,
-        to: cm.to,
-        classification: cm.classification,
-        cpLoss: cm.cpLoss as number | undefined,
-        evalBefore: cm.evalBefore as number | null | undefined,
-        evalAfter: cm.evalAfter as number | null | undefined,
-        mateBefore: cm.mateBefore as number | null | undefined,
-        mateAfter: cm.mateAfter as number | null | undefined,
-      }));
+    const rows: QueuedPositionRow[] = [];
+    const seen = new Set<string>();
 
-    const seen = new Set(rows.map((row) => row.moveKey));
+    for (const position of visibleSequencePositions) {
+      const normalizedFen = normalizeDecisionFen(position.fen);
+      if (!queuedFens.has(normalizedFen)) continue;
+      if (seen.has(normalizedFen)) continue;
+      seen.add(normalizedFen);
 
-    for (const position of exploratoryHistory) {
-      const move = position.move;
-      if (!move?.fenBefore || !move.uci) continue;
-
-      const moveKey = buildMoveKey(move.fenBefore, move.uci);
-      const fenBefore = normalizeDecisionFen(move.fenBefore);
-      const fenAfter = move.fenAfter ? normalizeDecisionFen(move.fenAfter) : null;
-      if (fenAfter && queuedExploratorySetupFens.has(fenAfter)) continue;
-      if (
-        !queuedLearningMoveKeys.has(moveKey) &&
-        !queuedLearningPositionFens.has(fenBefore) &&
-        !(fenAfter && queuedLearningPositionFens.has(fenAfter))
-      ) {
-        continue;
-      }
-
-      if (seen.has(moveKey)) continue;
-      if (queuedLearningMoveKeys.size > 0 && !queuedLearningMoveKeys.has(moveKey)) continue;
-
-      const annotation = moveAnnotations[moveKey];
-
+      const userMove = position.userMoveIndex != null ? position.move ?? null : null;
       rows.push({
-        moveKey,
-        san: annotation?.san ?? move.san ?? move.uci,
-        uci: annotation?.uci ?? move.uci,
-        from: move.uci.slice(0, 2),
-        to: move.uci.slice(2, 4),
-        classification: (annotation?.classification ?? move.classification) as MoveClassification | undefined,
-        cpLoss: annotation?.cpLoss ?? move.cpLoss,
-        evalBefore: annotation?.evalBefore ?? move.evalBefore,
-        evalAfter: annotation?.evalAfter ?? move.evalAfter,
-        mateBefore: annotation?.mateBefore ?? move.mateBefore,
-        mateAfter: annotation?.mateAfter ?? move.mateAfter,
+        decisionFen: normalizedFen,
+        ply: position.index + 1,
+        sideToMove: new Chess(position.fen).turn() === "w" ? "white" : "black",
+        playedUci: userMove?.uci ?? null,
+        playedSan: userMove?.san ?? null,
       });
-
-      seen.add(moveKey);
     }
 
     return rows;
-  }, [isPostMortemVisible, canonicalPostmortemMoves, exploratoryHistory, queuedLearningPositionFens, queuedLearningMoveKeys, moveAnnotations]);
+  }, [isPostMortemVisible, visibleSequencePositions, queuedLearningPositionFens]);
+
+  // ── Move notes: notes grouped by normalized decision FEN ───
+  // Build notesByFen from moveAnnotations: key by decisionFen, show all notes per FEN.
+  const notesByFen = useMemo((): Record<string, ExistingNote[]> => {
+    const result: Record<string, ExistingNote[]> = {};
+    for (const entry of Object.values(moveAnnotations)) {
+      const fen = normalizeDecisionFen(entry.decisionFen);
+      if (!result[fen]) result[fen] = [];
+      result[fen].push({
+        moveKey: entry.moveKey,
+        moveUci: entry.uci,
+        moveSan: entry.san ?? null,
+        noteText: entry.noteText,
+      });
+    }
+    return result;
+  }, [moveAnnotations]);
 
   // Dev-only: log annotation state
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
-    if (annotatableMoves.length > 0) {
-      console.log("[move-notes] annotatable-moves", annotatableMoves.length);
+    if (queuedSequenceRows.length > 0) {
+      console.log("[move-notes] queued-sequence-rows", queuedSequenceRows.length);
     }
-  }, [annotatableMoves]);
+  }, [queuedSequenceRows]);
 
-  function handleSelectMove(moveKey: string) {
+  // ── Move notes: save a note for a queued position ────────────────
+  function handleSaveNote(decisionFen: string, moveUci: string, text: string) {
+    if (!moveUci) return;
+    const moveKey = buildMoveKey(decisionFen, moveUci);
+
+    // Convert UCI to SAN for display
+    let san: string | undefined;
+    try {
+      const chess = new Chess(decisionFen);
+      const from = moveUci.slice(0, 2);
+      const to = moveUci.slice(2, 4);
+      const promotion = moveUci.length > 4 ? moveUci[4] : undefined;
+      const result = chess.move({ from, to, promotion });
+      san = result?.san;
+    } catch { /* ignore */ }
+
     if (process.env.NODE_ENV !== "production") {
-      console.log("[move-notes] select-move", moveKey);
+      console.log("[move-notes] save-note", moveKey, text.slice(0, 20));
     }
-    setSelectedMoveKey(moveKey);
 
-    const canonicalMove = canonicalPostmortemMoves.find((cm) => {
-      if (!cm.move?.fenBefore || !cm.uci) return false;
-      return buildMoveKey(cm.move.fenBefore, cm.uci) === moveKey;
+    // Seed entry if it doesn't exist yet
+    if (!moveAnnotations[moveKey]) {
+      seededMoveKeysRef.current.add(moveKey);
+      setMoveAnnotations((prev) => ({
+        ...prev,
+        [moveKey]: {
+          moveKey,
+          decisionFen,
+          uci: moveUci,
+          san,
+          noteText: text,
+          classification: undefined,
+          cpLoss: undefined,
+          evalBefore: null,
+          evalAfter: null,
+          mateBefore: null,
+          mateAfter: null,
+          attemptCount: 1,
+          firstAttemptedAt: new Date().toISOString(),
+          lastAttemptedAt: new Date().toISOString(),
+        },
+      }));
+    } else {
+      setMoveAnnotations((prev) => updateNoteText(prev, moveKey, text));
+    }
+
+    setSavedMoveNoteKey((current) => (current === moveKey ? null : current));
+    dirtyMoveNoteKeysRef.current.add(moveKey);
+  }
+
+  // ── Move notes: delete a note ───────────────────────────────────
+  function handleDeleteNote(moveKey: string) {
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[move-notes] delete-note", moveKey);
+    }
+    fetch("/api/train/move-notes", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ moveKey }),
+    }).catch((err: unknown) => {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[move-notes] delete failed", err);
+      }
     });
-
-    if (canonicalMove && canonicalMove.positionIndex != null) {
-      navigateExploreTo(canonicalMove.positionIndex);
-      return;
-    }
-
-    const exploratoryIndex = exploratoryHistory.findIndex((position) => {
-      const move = position.move;
-      if (!move?.fenBefore || !move.uci) return false;
-      return buildMoveKey(move.fenBefore, move.uci) === moveKey;
+    setMoveAnnotations((prev) => {
+      const next = { ...prev };
+      delete next[moveKey];
+      return next;
     });
-
-    if (exploratoryIndex >= 0) {
-      navigateExploratoryLine(exploratoryIndex);
-    }
   }
 
   function handleUpdateNote(moveKey: string, text: string) {
-    if (!annotatableMoves.some((move) => move.moveKey === moveKey)) return;
-
     if (process.env.NODE_ENV !== "production") {
       console.log("[move-notes] update-note", moveKey);
     }
@@ -3823,27 +3824,6 @@ export default function TrainPage(props: TrainPageProps) {
     setMoveAnnotations((prev) => updateNoteText(prev, moveKey, text));
     dirtyMoveNoteKeysRef.current.add(moveKey);
   }
-
-  // ── Sync selectedMoveIndex -> selectedMoveKey for notes panel ────
-  useEffect(() => {
-    if (selectedMoveIndex == null || !isPostMortemVisible) return;
-    const canonicalMove = canonicalPostmortemMoves.find(
-      (m) => m.positionIndex === selectedMoveIndex,
-    );
-    if (!canonicalMove?.move?.fenBefore || !canonicalMove.uci) return;
-
-    const isQueuedForLearning = queuedLearningPositionFens.has(
-      normalizeDecisionFen(canonicalMove.move.fenBefore),
-    );
-
-    if (!isQueuedForLearning) {
-      setSelectedMoveKey(null);
-      return;
-    }
-
-    const key = buildMoveKey(canonicalMove.move.fenBefore, canonicalMove.uci);
-    setSelectedMoveKey((current) => (current === key ? current : key));
-  }, [selectedMoveIndex, canonicalPostmortemMoves, isPostMortemVisible, queuedLearningPositionFens]);
 
   // ── Persist notes to Supabase with debounce ──────────────────────
   const dirtyMoveNoteKeysRef = useRef<Set<string>>(new Set());
@@ -3988,9 +3968,8 @@ export default function TrainPage(props: TrainPageProps) {
   useEffect(() => {
     if (!isPostMortemVisible) return;
     const loadedFens = new Set<string>();
-    for (const move of annotatableMoves) {
-      const fen = move.moveKey.split("::")[0];
-      if (!fen || loadedFens.has(fen)) continue;
+    for (const fen of queuedLearningPositionFens) {
+      if (loadedFens.has(fen)) continue;
       loadedFens.add(fen);
     }
     if (loadedFens.size === 0) return;
@@ -5175,11 +5154,10 @@ const introOverlay = trainOnboardingIntroVisible ? (
               ) : (
                 <div className="min-h-0 flex-1">
                   <MoveNotesPanel
-                    moves={annotatableMoves}
-                    annotations={moveAnnotations}
-                    selectedMoveKey={selectedMoveKey}
-                    onSelectMove={handleSelectMove}
-                    onUpdateNote={handleUpdateNote}
+                    rows={queuedSequenceRows}
+                    notesByFen={notesByFen}
+                    onSaveNote={handleSaveNote}
+                    onDeleteNote={handleDeleteNote}
                     savedMoveKey={savedMoveNoteKey}
                     tourTarget="notes-panel"
                   />
