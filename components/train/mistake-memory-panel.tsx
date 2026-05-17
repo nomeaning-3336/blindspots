@@ -211,9 +211,6 @@ export function MoveNotesPanel({
               <div className="border-t border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-3">
                 {/* Actual move input */}
                 <div className="mb-3">
-                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
-                    The actual move
-                  </label>
                   <div className="flex flex-wrap gap-1.5">
                     {row.playedUci && (
                       <button
