@@ -59,6 +59,7 @@ const MOVE_SCALE_LABELS = ["do", "re", "mi", "fa", "sol", "la", "si", "do"] as c
 type TrainAudioManager = {
   _context: AudioContext | null;
   _buffers: Map<TrainSoundName, AudioBuffer>;
+  _reversedBuffers: Map<TrainSoundName, AudioBuffer>;
   _primePromise: Promise<void> | null;
   _primeStartedAt: number;
   _primeFinishedAt: number;
@@ -75,6 +76,7 @@ type TrainAudioManager = {
 const _instance: TrainAudioManager = {
   _context: null,
   _buffers: new Map(),
+  _reversedBuffers: new Map(),
   _primePromise: null,
   _primeStartedAt: 0,
   _primeFinishedAt: 0,
@@ -258,6 +260,84 @@ export function playTrainMoveSound(options: PlayTrainSoundOptions): boolean {
 
   if (advanceLivePitch && plyRef) {
     plyRef.current += 1;
+  }
+
+  return true;
+}
+
+export function playTrainMoveSoundReversed(
+  options: PlayTrainSoundOptions & { playbackRate?: number },
+): boolean {
+  const { move, playbackRate = 0.6 } = options;
+
+  const ctx = _getOrCreateContext();
+  if (!ctx) return false;
+
+  const isCapture = _moveIsCapture(move);
+  const soundName: TrainSoundName = isCapture ? "capture" : "move";
+  const forwardBuffer = _instance._buffers.get(soundName);
+
+  if (!forwardBuffer) {
+    _instance._skippedBufferMissing += 1;
+    return false;
+  }
+
+  if (ctx.state === "suspended") {
+    _instance._skippedContextSuspended += 1;
+    return false;
+  }
+
+  if (ctx.state !== "running") {
+    return false;
+  }
+
+  // Lazily build and cache reversed buffer
+  let reversedBuffer = _instance._reversedBuffers.get(soundName);
+  if (!reversedBuffer) {
+    try {
+      const reversedData = new ArrayBuffer(forwardBuffer.length * forwardBuffer.numberOfChannels * 4);
+      const tmpCtx = new AudioContext();
+      reversedBuffer = tmpCtx.createBuffer(
+        forwardBuffer.numberOfChannels,
+        forwardBuffer.length,
+        forwardBuffer.sampleRate,
+      );
+      for (let ch = 0; ch < forwardBuffer.numberOfChannels; ch += 1) {
+        const src = forwardBuffer.getChannelData(ch);
+        const dst = reversedBuffer.getChannelData(ch);
+        // Reverse in-place via two-pointer swap
+        let i = 0;
+        let j = src.length - 1;
+        while (i < j) {
+          const tmp = src[i]!;
+          dst[i] = src[j]!;
+          i += 1;
+          const tmp2 = dst[j]!;
+          dst[j] = tmp;
+          j -= 1;
+        }
+        if (i === j) {
+          dst[i] = src[i]!;
+        }
+      }
+      tmpCtx.close();
+      _instance._reversedBuffers.set(soundName, reversedBuffer);
+    } catch {
+      return false;
+    }
+  }
+
+  try {
+    const gainNode = ctx.createGain();
+    gainNode.gain.value = isCapture ? 1.0 : 0.85;
+    const node = ctx.createBufferSource();
+    node.buffer = reversedBuffer;
+    node.playbackRate.value = playbackRate;
+    node.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    node.start();
+  } catch {
+    return false;
   }
 
   return true;

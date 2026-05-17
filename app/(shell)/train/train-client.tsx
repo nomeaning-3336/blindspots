@@ -457,6 +457,7 @@ import {
   primeTrainAudio,
   unlockTrainAudio,
   playTrainMoveSound,
+  playTrainMoveSoundReversed,
   setupTrainAudioUnlockOnGesture,
   getTrainAudioStats,
   pitchRatioForPly,
@@ -1038,6 +1039,7 @@ export default function TrainPage(props: TrainPageProps) {
 
   function handleAddPositionClick() {
     if (addingPositionToQueue) return;
+    if (rollbackAnimating) return;
     if (isAddPositionSuccessFeedback) return;
     if (isAddPositionAlreadyQueued) return;
 
@@ -1104,9 +1106,18 @@ export default function TrainPage(props: TrainPageProps) {
       // If neither found, skip scrub — just add
     }
 
-    requestAnimationFrame(() => {
+    // Fire reversed sound and start rollback animation in the same frame
+    const reversedMove = snapshot.setupMove;
+    if (reversedMove) {
+      playTrainMoveSoundReversed({ move: reversedMove, source: "replay", playbackRate: 0.55 });
+    }
+    setRollbackAnimating(true);
+
+    // Wait for animation to complete, then add the position
+    window.setTimeout(() => {
+      setRollbackAnimating(false);
       void addPositionToLearningQueue(snapshot);
-    });
+    }, 660);
   }
 
   async function addPositionToLearningQueue(targetOverride?: LearningQueueTarget) {
@@ -1297,6 +1308,7 @@ export default function TrainPage(props: TrainPageProps) {
   const seededMoveKeysRef = useRef<Set<string>>(new Set());
   const [selectedMoveKey, setSelectedMoveKey] = useState<string | null>(null);
   const [savedMoveNoteKey, setSavedMoveNoteKey] = useState<string | null>(null);
+  const [rollbackAnimating, setRollbackAnimating] = useState(false);
   const [postmortemSidePanel, setPostmortemSidePanel] = useState<"analysis" | "memory">("analysis");
   const [postmortemOnboardingActive, setPostmortemOnboardingActive] = useState(false);
   const [postmortemOnboardingStep, setPostmortemOnboardingStep] = useState(0);
@@ -4819,6 +4831,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                           fen={boardFen}
                           mode="training"
                           pieceAnimation={shouldAnimatePieces && !postmortemOnboardingActive}
+                          pieceAnimationDurationMs={rollbackAnimating ? 620 : 240}
                           orientation={boardOrientation}
                           coordinates
                           showLegalTargets={false}
@@ -4854,6 +4867,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                         fen={boardFen}
                         mode="training"
                         pieceAnimation={shouldAnimatePieces && !postmortemOnboardingActive}
+                        pieceAnimationDurationMs={rollbackAnimating ? 620 : 240}
                         orientation={boardOrientation}
                         coordinates
                         showLegalTargets
