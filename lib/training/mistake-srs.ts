@@ -30,11 +30,13 @@ export function nextIntervalDays(input: {
   outcome: TrainingOutcome;
 }): number {
   const current = Math.max(1, input.currentIntervalDays);
+  const passInterval = Math.max(1, Math.round(current * 2.5));
+
   switch (input.outcome) {
     case "pass":
-      return Math.max(1, Math.round(current * 2.5));
+      return passInterval;
     case "acceptable":
-      return current;
+      return Math.max(1, Math.round(passInterval / 2));
     case "fail":
       return 1;
   }

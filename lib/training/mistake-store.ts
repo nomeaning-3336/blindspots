@@ -444,7 +444,7 @@ export function normalizeUserMistakeForTraining(row: UserMistakeRow): {
 export async function updateActiveMistakeAfterTraining(input: {
   userId: string;
   mistakeId: string;
-  wasCorrect: boolean;
+  outcome: TrainingOutcome;
   now?: Date;
 }): Promise<UserMistakeRow> {
   const supabase = getSupabaseAdminClient();
@@ -453,7 +453,7 @@ export async function updateActiveMistakeAfterTraining(input: {
   // Load current row
   const { data: row, error } = await supabase
     .from("user_mistakes" as any)
-    .select("id, consecutive_correct_count, review_count, fail_count, pass_count")
+    .select("id, consecutive_correct_count, review_count, fail_count, pass_count, acceptable_count")
     .eq("id", input.mistakeId)
     .eq("user_id", input.userId)
     .maybeSingle();
@@ -469,9 +469,9 @@ export async function updateActiveMistakeAfterTraining(input: {
     ? existingRow.consecutive_correct_count
     : 0;
 
-  const nextStreak = input.wasCorrect ? prevStreak + 1 : 0;
+  const nextStreak = nextConsecutiveCorrectCount(input.outcome, prevStreak);
   const nextReviewAt = getNextReviewAtForActiveMistake({
-    wasCorrect: input.wasCorrect,
+    outcome: input.outcome,
     consecutiveCorrectCountBefore: prevStreak,
     now,
   }).toISOString();
@@ -483,8 +483,10 @@ export async function updateActiveMistakeAfterTraining(input: {
     review_count: ((existingRow.review_count ?? 0) + 1),
   };
 
-  if (input.wasCorrect) {
+  if (input.outcome === "pass") {
     updates.pass_count = ((existingRow.pass_count ?? 0) + 1);
+  } else if (input.outcome === "acceptable") {
+    updates.acceptable_count = ((existingRow.acceptable_count ?? 0) + 1);
   } else {
     updates.fail_count = ((existingRow.fail_count ?? 0) + 1);
   }

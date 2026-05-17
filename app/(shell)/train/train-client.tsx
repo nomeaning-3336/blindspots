@@ -5565,7 +5565,7 @@ function OnboardingPreferencesModal({
             Set your daily goal
           </h2>
           <p className="mb-6 text-sm leading-7 text-[var(--app-muted)]">
-            Choose how many total training positions you want to complete per day. Blindspots fills that target with due reviews first, then new or random positions. You can change this later in{" "}
+            Choose how many training positions you want to complete per day. You can change this later in{" "}
             <a href="/account" className="font-bold text-[var(--app-accent)] underline-offset-2 hover:underline">Account</a>.
           </p>
 
@@ -5615,9 +5615,6 @@ function OnboardingPreferencesModal({
               </h2>
               <p className="mb-3 text-sm leading-7 text-[var(--app-muted)]">
                 Decide how cleanly you need to solve the queued position before it advances in SRS.
-              </p>
-              <p className="mb-6 text-xs leading-6 text-[var(--app-muted-soft)]">
-                Only the first move from the queued FEN is graded. Continuation moves are for discovery; if they reveal another blindspot, add that later position manually.
               </p>
 
               <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
