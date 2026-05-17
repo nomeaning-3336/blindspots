@@ -39,8 +39,8 @@ export const SRS_PROFILE_OPTIONS: SrsProfileOption[] = [
   {
     level: "easy",
     label: "Easy",
-    description: "~1.5× intervals",
-    config: { firstReviewDelayDays: 2, passIntervalsDays: [2, 5, 12, 25, 60, 120], failDelayDays: 1, assumedPassRate: 0.82 },
+    description: "~3× intervals",
+    config: { firstReviewDelayDays: 3, passIntervalsDays: [3, 9, 21, 42, 90, 180], failDelayDays: 1, assumedPassRate: 0.82 },
   },
   {
     level: "balanced",
@@ -154,21 +154,14 @@ export function normalizeReviewGradingConfig(value: unknown): ReviewGradingConfi
   };
 }
 
-export type SrsForecastPoint = {
-  day: number;
-  reviewsDue: number;
-  reviewsCompleted: number;
-  reviewBacklog: number;
-};
+export type SrsForecastPoint = { day: number; reviewsDue: number };
 
 export function simulateSrsForecast(
   dailyNewPositions: number,
   srsConfig: SrsConfig,
   days = 240,
-  dailyReviewTargetPositions = 30,
 ): SrsForecastPoint[] {
   const safeDailyNew = Math.max(1, Math.min(300, Math.round(dailyNewPositions)));
-  const safeDailyReviews = Math.max(1, Math.min(500, Math.round(dailyReviewTargetPositions)));
   const dueByDay: Map<number, number>[] = Array.from(
     { length: days + 3650 },
     () => new Map<number, number>(),
@@ -190,25 +183,9 @@ export function simulateSrsForecast(
 
     for (const [stage, count] of today.entries()) {
       reviewsDue += count;
-    }
 
-    const reviewsCompleted = Math.min(reviewsDue, safeDailyReviews);
-    const completionRatio = reviewsDue > 0 ? reviewsCompleted / reviewsDue : 0;
-    let reviewBacklog = 0;
-
-    for (const [stage, count] of today.entries()) {
-      const completed = count * completionRatio;
-      const carried = count - completed;
-      reviewBacklog += carried;
-
-      if (carried > 0) {
-        schedule(day + 1, stage, carried);
-      }
-
-      if (completed <= 0) continue;
-
-      const passed = completed * srsConfig.assumedPassRate;
-      const failed = completed - passed;
+      const passed = count * srsConfig.assumedPassRate;
+      const failed = count - passed;
 
       const nextStage = Math.min(
         stage + 1,
@@ -231,8 +208,6 @@ export function simulateSrsForecast(
     points.push({
       day,
       reviewsDue: Math.round(reviewsDue),
-      reviewsCompleted: Math.round(reviewsCompleted),
-      reviewBacklog: Math.round(reviewBacklog),
     });
   }
 
@@ -244,7 +219,6 @@ export function simulateSrsForecast(
 export interface TrainingPreferences {
   dailyTargetLevel: DailyTargetLevel;
   dailyTargetPositions: number;
-  dailyReviewTargetPositions: number;
   mistakeCaptureThresholdLevel: MistakeCaptureThresholdLevel;
   mistakeCaptureThresholdCp: number;
   srsProfileLevel: SrsProfileLevel;
@@ -256,7 +230,6 @@ export interface TrainingPreferences {
 export const DEFAULT_TRAINING_PREFERENCES: TrainingPreferences = {
   dailyTargetLevel: "balanced",
   dailyTargetPositions: 10,
-  dailyReviewTargetPositions: 30,
   mistakeCaptureThresholdLevel: "balanced",
   mistakeCaptureThresholdCp: 75,
   srsProfileLevel: "balanced",

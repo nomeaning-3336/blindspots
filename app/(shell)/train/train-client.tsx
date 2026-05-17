@@ -1449,7 +1449,6 @@ export default function TrainPage(props: TrainPageProps) {
 
   // ── SRS state for onboarding preferences ───────────────────────
   const [selectedDailyTargetPositions, setSelectedDailyTargetPositions] = useState<number>(10);
-  const [selectedDailyReviewTargetPositions, setSelectedDailyReviewTargetPositions] = useState<number>(30);
   const [srsProfileLevel, setSrsProfileLevel] = useState<SrsProfileLevel>("balanced");
   const [srsConfig, setSrsConfig] = useState<SrsConfig>(cloneSrsConfig(SRS_PROFILES.balanced));
   const [reviewGradingLevel, setReviewGradingLevel] = useState<ReviewGradingLevel>("balanced");
@@ -3444,7 +3443,6 @@ export default function TrainPage(props: TrainPageProps) {
         body: JSON.stringify({
           dailyTargetLevel: derivedDailyTargetLevel(selectedDailyTargetPositions),
           dailyTargetPositions: selectedDailyTargetPositions,
-          dailyReviewTargetPositions: selectedDailyReviewTargetPositions,
           srsProfileLevel,
           srsConfig,
           reviewGradingLevel,
@@ -5457,10 +5455,8 @@ const introOverlay = trainOnboardingIntroVisible ? (
       {showOnboardingPreferencesModal ? (
         <OnboardingPreferencesModal
           selectedDailyTargetPositions={selectedDailyTargetPositions}
-          selectedDailyReviewTargetPositions={selectedDailyReviewTargetPositions}
           isSaving={isSavingOnboardingPreferences}
           onDailyTargetChange={setSelectedDailyTargetPositions}
-          onDailyReviewTargetChange={setSelectedDailyReviewTargetPositions}
           srsProfileLevel={srsProfileLevel}
           srsConfig={srsConfig}
           onSrsProfileChange={(level) => {
@@ -5487,10 +5483,8 @@ const introOverlay = trainOnboardingIntroVisible ? (
 
 function OnboardingPreferencesModal({
   selectedDailyTargetPositions,
-  selectedDailyReviewTargetPositions,
   isSaving,
   onDailyTargetChange,
-  onDailyReviewTargetChange,
   srsProfileLevel,
   srsConfig,
   onSrsProfileChange,
@@ -5503,10 +5497,8 @@ function OnboardingPreferencesModal({
   onCancel,
 }: {
   selectedDailyTargetPositions: number;
-  selectedDailyReviewTargetPositions: number;
   isSaving: boolean;
   onDailyTargetChange: (positions: number) => void;
-  onDailyReviewTargetChange: (positions: number) => void;
   srsProfileLevel: SrsProfileLevel;
   srsConfig: SrsConfig;
   onSrsProfileChange: (level: SrsProfileLevel) => void;
@@ -5525,26 +5517,15 @@ function OnboardingPreferencesModal({
 
   // Local text state for daily target input — avoids clamping on every keystroke
   const [dailyTargetText, setDailyTargetText] = useState(String(selectedDailyTargetPositions));
-  const [dailyReviewTargetText, setDailyReviewTargetText] = useState(String(selectedDailyReviewTargetPositions));
   useEffect(() => {
     setDailyTargetText(String(selectedDailyTargetPositions));
   }, [selectedDailyTargetPositions]);
-  useEffect(() => {
-    setDailyReviewTargetText(String(selectedDailyReviewTargetPositions));
-  }, [selectedDailyReviewTargetPositions]);
 
   function commitDailyTargetText(text: string) {
     const parsed = Math.round(Number(text));
     const next = Number.isFinite(parsed) ? Math.max(1, Math.min(300, parsed)) : 10;
     onDailyTargetChange(next);
     setDailyTargetText(String(next));
-  }
-
-  function commitDailyReviewTargetText(text: string) {
-    const parsed = Math.round(Number(text));
-    const next = Number.isFinite(parsed) ? Math.max(1, Math.min(500, parsed)) : 30;
-    onDailyReviewTargetChange(next);
-    setDailyReviewTargetText(String(next));
   }
 
   // Sync custom intervals text when profile changes to non-custom
@@ -5586,32 +5567,20 @@ function OnboardingPreferencesModal({
 
   // Forecast chart data
   const forecastData = useMemo(
-    () => simulateSrsForecast(
-      selectedDailyTargetPositions,
-      srsConfig,
-      240,
-      selectedDailyReviewTargetPositions,
-    ),
-    [selectedDailyTargetPositions, selectedDailyReviewTargetPositions, srsConfig],
+    () => simulateSrsForecast(selectedDailyTargetPositions, srsConfig, 240),
+    [selectedDailyTargetPositions, srsConfig],
   );
   const saturatedAvg = useMemo(() => {
     if (forecastData.length < 30) return 0;
     const last30 = forecastData.slice(-30);
-    const sum = last30.reduce((acc, p) => acc + p.reviewsCompleted, 0);
+    const sum = last30.reduce((acc, p) => acc + p.reviewsDue, 0);
     return Math.round(sum / last30.length);
   }, [forecastData]);
-  const lastForecastPoint = forecastData[forecastData.length - 1];
 
   function adjustDailyTarget(delta: number) {
     const next = Math.max(1, Math.min(300, selectedDailyTargetPositions + delta));
     onDailyTargetChange(next);
     setDailyTargetText(String(next));
-  }
-
-  function adjustDailyReviewTarget(delta: number) {
-    const next = Math.max(1, Math.min(500, selectedDailyReviewTargetPositions + delta));
-    onDailyReviewTargetChange(next);
-    setDailyReviewTargetText(String(next));
   }
 
   function updateFirstReviewDelay(delta: number) {
@@ -5669,9 +5638,7 @@ function OnboardingPreferencesModal({
     10,
     Math.ceil(Math.max(
       ...forecastData.map((p) => p.reviewsDue),
-      ...forecastData.map((p) => p.reviewsCompleted),
       saturatedAvg,
-      selectedDailyReviewTargetPositions,
       1,
     ) / 10) * 10,
   );
@@ -5690,7 +5657,6 @@ function OnboardingPreferencesModal({
   }
 
   const avgY = yForReviews(saturatedAvg);
-  const reviewTargetY = yForReviews(selectedDailyReviewTargetPositions);
 
   return (
     <div
@@ -5720,19 +5686,16 @@ function OnboardingPreferencesModal({
           {modalStep === "daily-goal" ? (
             <>
           <h2 className="mb-2 text-2xl font-bold leading-tight text-[var(--app-text)]">
-            Set your training pace
+            Set your daily goal
           </h2>
           <p className="mb-6 text-sm leading-7 text-[var(--app-muted)]">
-            Choose how many new positions to introduce and how many SRS reviews you want to handle each day. You can change this later in{" "}
+            Choose how many positions you want to complete per day. You can change this later in{" "}
             <a href="/account" className="font-bold text-[var(--app-accent)] underline-offset-2 hover:underline">Account</a>.
           </p>
 
           {/* Positions per day — custom stepper */}
-          <div className="mb-4">
-            <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">New positions per day</h3>
-            <p className="mb-2 text-xs text-[var(--app-muted)]">
-              Fresh positions introduced into your learning queue each day.
-            </p>
+          <div className="mb-6">
+            <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Positions per day</h3>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -5763,44 +5726,6 @@ function OnboardingPreferencesModal({
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="5" y="0" width="2" height="12" /><rect x="0" y="5" width="12" height="2" /></svg>
               </button>
               <span className="text-xs text-[var(--app-muted)]">positions / day</span>
-            </div>
-          </div>
-
-          <div className="mb-6">
-            <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Reviews per day</h3>
-            <p className="mb-2 text-xs text-[var(--app-muted)]">
-              Maximum due SRS reviews you want to complete each day. Lower values create a backlog if reviews pile up.
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => adjustDailyReviewTarget(-5)}
-                className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)] text-[var(--app-text)] transition hover:border-[var(--app-border-strong)] active:bg-[var(--app-surface-subtle)]"
-              >
-                <svg width="12" height="2" viewBox="0 0 12 2" fill="currentColor"><rect width="12" height="2" /></svg>
-              </button>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={dailyReviewTargetText}
-                onChange={(e) => setDailyReviewTargetText(e.target.value)}
-                onBlur={(e) => commitDailyReviewTargetText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    commitDailyReviewTargetText(e.currentTarget.value);
-                    e.currentTarget.blur();
-                  }
-                }}
-                className="w-20 rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)] px-3 py-2 text-center text-sm text-[var(--app-text)] outline-none focus:border-[var(--app-accent)]"
-              />
-              <button
-                type="button"
-                onClick={() => adjustDailyReviewTarget(5)}
-                className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)] text-[var(--app-text)] transition hover:border-[var(--app-border-strong)] active:bg-[var(--app-surface-subtle)]"
-              >
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="5" y="0" width="2" height="12" /><rect x="0" y="5" width="12" height="2" /></svg>
-              </button>
-              <span className="text-xs text-[var(--app-muted)]">reviews / day</span>
             </div>
           </div>
 
@@ -5954,7 +5879,7 @@ function OnboardingPreferencesModal({
           {/* Forecast chart */}
           <div className="mb-4">
             <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Review load forecast</h3>
-            <p className="mb-2 text-xs text-[var(--app-muted)]">Estimated due reviews, completed reviews, and backlog over 240 days.</p>
+            <p className="mb-2 text-xs text-[var(--app-muted)]">Estimated reviews due per day after the SRS pipeline fills (240 days).</p>
             <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel-deep)] p-4">
               <svg
                 width="100%"
@@ -6029,34 +5954,6 @@ function OnboardingPreferencesModal({
                   strokeDasharray="4 4"
                   opacity={0.85}
                 />
-                <line
-                  x1={chartPadLeft}
-                  y1={reviewTargetY}
-                  x2={chartW - chartPadRight}
-                  y2={reviewTargetY}
-                  stroke="var(--app-muted)"
-                  strokeWidth={1.2}
-                  strokeDasharray="6 5"
-                  opacity={0.9}
-                />
-                <rect
-                  x={chartW - chartPadRight - 140}
-                  y={reviewTargetY + 8}
-                  width={134}
-                  height={20}
-                  rx={5}
-                  fill="var(--app-panel-solid)"
-                />
-                <text
-                  x={chartW - chartPadRight - 73}
-                  y={reviewTargetY + 23}
-                  textAnchor="middle"
-                  fontSize={10}
-                  fontWeight={700}
-                  fill="var(--app-muted)"
-                >
-                  review target {selectedDailyReviewTargetPositions}/day
-                </text>
                 {/* Average label chip */}
                 <rect
                   x={chartW - chartPadRight - 94}
@@ -6074,7 +5971,7 @@ function OnboardingPreferencesModal({
                   fontWeight={700}
                   fill="var(--app-accent)"
                 >
-                  avg completed {saturatedAvg} / day
+                  avg {saturatedAvg} / day
                 </text>
                 {/* X-axis label */}
                 <text
@@ -6087,9 +5984,6 @@ function OnboardingPreferencesModal({
                   Days
                 </text>
               </svg>
-              <div className="mt-2 text-xs font-bold text-[var(--app-muted)]">
-                Backlog by day 240: {lastForecastPoint?.reviewBacklog ?? 0} reviews
-              </div>
             </div>
           </div>
             </>
