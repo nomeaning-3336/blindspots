@@ -25,7 +25,6 @@ type MoveNotesPanelProps = {
   rows: QueuedPositionRow[];
   notesByFen: Record<string, ExistingNote[]>;
   onSaveNote: (decisionFen: string, moveUci: string, text: string) => void;
-  onDeleteNote: (moveKey: string) => void;
   savedMoveKey?: string | null;
   tourTarget?: string;
   onOpenPosition?: (decisionFen: string) => void;
@@ -54,11 +53,57 @@ function uciToSan(fen: string, uci: string): string {
   }
 }
 
+function MoveChip({
+  fen,
+  uci,
+  san,
+  currentUci,
+  currentText,
+  notes,
+  onChange,
+}: {
+  fen: string;
+  uci: string;
+  san: string;
+  currentUci: string;
+  currentText: string;
+  notes: ExistingNote[];
+  onChange: (fen: string, uci: string) => void;
+}) {
+  const isSelected = currentUci === uci;
+  const noteForMove = notes.find((n) => n.moveUci === uci);
+  const draftTextForSelectedMove = isSelected ? currentText : noteForMove?.noteText ?? "";
+  const hasNote = draftTextForSelectedMove.trim().length > 0;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(fen, uci)}
+      className={[
+        "relative rounded-[6px] border px-2.5 py-1.5 text-xs font-bold transition",
+        isSelected
+          ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-text)]"
+          : "border-[var(--app-border)] text-[var(--app-muted)] hover:border-[var(--app-border-strong)]",
+        hasNote && !isSelected
+          ? "ring-1 ring-[var(--app-class-good)] text-[var(--app-text)]"
+          : "",
+      ].join(" ")}
+    >
+      {san}
+      {hasNote && !isSelected ? (
+        <span
+          aria-hidden="true"
+          className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-[var(--app-class-good)] align-middle"
+        />
+      ) : null}
+    </button>
+  );
+}
+
 export function MoveNotesPanel({
   rows,
   notesByFen,
   onSaveNote,
-  onDeleteNote,
   savedMoveKey = null,
   tourTarget,
   onOpenPosition,
@@ -127,14 +172,19 @@ export function MoveNotesPanel({
   }
 
   function handleMoveUciChange(fen: string, uci: string) {
+    const existingText =
+      (notesByFen[fen] ?? []).find((note) => note.moveUci === uci)?.noteText ?? "";
+
     setDraftMoveUci((prev) => ({ ...prev, [fen]: uci }));
+    setDraftNoteText((prev) => ({ ...prev, [fen]: existingText }));
+
     pendingKeyRef.current = fen;
-    const currentText = draftNoteTextRef.current[fen] ?? "";
-    onSaveNote(fen, uci, currentText);
+    pendingTextRef.current = null;
+    pendingEditedRef.current = false;
   }
 
   function handleDelete(moveKey: string) {
-    onDeleteNote(moveKey);
+    // noop — edit/delete removed
   }
 
   if (rows.length === 0) {
@@ -219,36 +269,30 @@ export function MoveNotesPanel({
                 <div className="mb-3">
                   <div className="flex flex-wrap gap-1.5">
                     {row.playedUci && (
-                      <button
-                        type="button"
-                        onClick={() => handleMoveUciChange(row.decisionFen, row.playedUci!)}
-                        className={[
-                          "rounded-[6px] border px-2.5 py-1.5 text-xs font-bold transition",
-                          currentUci === row.playedUci
-                            ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-text)]"
-                            : "border-[var(--app-border)] text-[var(--app-muted)] hover:border-[var(--app-border-strong)]",
-                        ].join(" ")}
-                      >
-                        {row.playedSan ?? row.playedUci}
-                      </button>
+                      <MoveChip
+                        fen={row.decisionFen}
+                        uci={row.playedUci}
+                        san={row.playedSan ?? row.playedUci}
+                        currentUci={currentUci}
+                        currentText={currentText}
+                        notes={notes}
+                        onChange={handleMoveUciChange}
+                      />
                     )}
                     {legalMoves.map((uci) => {
                       if (uci === row.playedUci) return null;
                       const san = uciToSan(row.decisionFen, uci);
                       return (
-                        <button
+                        <MoveChip
                           key={uci}
-                          type="button"
-                          onClick={() => handleMoveUciChange(row.decisionFen, uci)}
-                          className={[
-                            "rounded-[6px] border border-[var(--app-border)] px-2.5 py-1.5 text-xs text-[var(--app-muted)] transition hover:border-[var(--app-border-strong)]",
-                            currentUci === uci
-                              ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-text)]"
-                              : "",
-                          ].join(" ")}
-                        >
-                          {san}
-                        </button>
+                          fen={row.decisionFen}
+                          uci={uci}
+                          san={san}
+                          currentUci={currentUci}
+                          currentText={currentText}
+                          notes={notes}
+                          onChange={handleMoveUciChange}
+                        />
                       );
                     })}
                   </div>
@@ -263,7 +307,7 @@ export function MoveNotesPanel({
                 <div className="mb-2">
                   <textarea
                     className="min-h-[120px] w-full resize-y rounded-[6px] border border-[var(--app-border)] bg-[var(--app-surface-input)] px-2.5 py-2 text-xs text-[var(--app-text)] outline-none transition placeholder:text-[var(--app-muted-soft)] focus:border-[var(--app-accent)]"
-                    placeholder="Add a note for this move..."
+                    placeholder={currentUci ? "Add a note for this move..." : "Select a move to add a note..."}
                     value={currentText}
                     onChange={(e) => handleNoteTextChange(row.decisionFen, e.target.value)}
                     data-ignore-train-shortcuts="true"
@@ -274,47 +318,6 @@ export function MoveNotesPanel({
                 {savedMoveKey && savedMoveKey.startsWith(row.decisionFen) ? (
                   <div className="text-xs font-bold text-[var(--app-class-good)]">
                     Note saved ✓
-                  </div>
-                ) : null}
-
-                {/* Existing notes */}
-                {notes.length > 0 ? (
-                  <div className="mt-3 flex flex-col gap-2 border-t border-[var(--app-border-soft)] pt-3">
-                    {notes.map((note) => (
-                      <div
-                        key={note.moveKey}
-                        className="flex flex-col gap-1 rounded-[6px] border border-[var(--app-border-soft)] bg-[var(--app-surface)] p-2.5"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-[var(--app-muted)]">
-                            {note.moveSan ?? note.moveUci}
-                          </span>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setDraftMoveUci((prev) => ({ ...prev, [row.decisionFen]: note.moveUci }));
-                                setDraftNoteText((prev) => ({ ...prev, [row.decisionFen]: note.noteText }));
-                                onSaveNote(row.decisionFen, note.moveUci, note.noteText);
-                              }}
-                              className="text-[10px] text-[var(--app-accent)] hover:underline"
-                            >
-                              edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(note.moveKey)}
-                              className="text-[10px] text-[var(--app-class-mistake)] hover:underline"
-                            >
-                              delete
-                            </button>
-                          </div>
-                        </div>
-                        <p className="text-xs text-[var(--app-text)]">
-                          {note.noteText || <span className="text-[var(--app-muted-soft)]">(no text)</span>}
-                        </p>
-                      </div>
-                    ))}
                   </div>
                 ) : null}
               </div>
