@@ -154,18 +154,25 @@ export function normalizeReviewGradingConfig(value: unknown): ReviewGradingConfi
   };
 }
 
-export type SrsForecastPoint = { day: number; reviewsDue: number };
+export type SrsForecastPoint = {
+  day: number;
+  reviewsDue: number;
+  reviewsServed: number;
+  fillerServed: number;
+  backlog: number;
+};
 
 export function simulateSrsForecast(
   dailyNewPositions: number,
   srsConfig: SrsConfig,
   days = 240,
 ): SrsForecastPoint[] {
-  const safeDailyNew = Math.max(1, Math.min(300, Math.round(dailyNewPositions)));
+  const safeDailyTarget = Math.max(1, Math.min(300, Math.round(dailyNewPositions)));
   const dueByDay: Map<number, number>[] = Array.from(
     { length: days + 3650 },
     () => new Map<number, number>(),
   );
+  const backlogByStage = new Map<number, number>();
   const points: SrsForecastPoint[] = [];
 
   function schedule(day: number, stage: number, count: number) {
@@ -176,16 +183,35 @@ export function simulateSrsForecast(
   }
 
   for (let day = 0; day < days; day += 1) {
-    schedule(day + srsConfig.firstReviewDelayDays, 0, safeDailyNew);
-
     const today = dueByDay[day];
+    for (const [stage, count] of backlogByStage.entries()) {
+      today.set(stage, (today.get(stage) ?? 0) + count);
+    }
+    backlogByStage.clear();
+
     let reviewsDue = 0;
 
-    for (const [stage, count] of today.entries()) {
+    for (const count of today.values()) {
       reviewsDue += count;
+    }
 
-      const passed = count * srsConfig.assumedPassRate;
-      const failed = count - passed;
+    const reviewsServed = Math.min(reviewsDue, safeDailyTarget);
+    const fillerServed = safeDailyTarget - reviewsServed;
+    const serveRatio = reviewsDue > 0 ? reviewsServed / reviewsDue : 0;
+
+    for (const [stage, count] of today.entries()) {
+      const completedAtStage = count * serveRatio;
+      const unservedAtStage = count - completedAtStage;
+
+      if (unservedAtStage > 0) {
+        backlogByStage.set(
+          stage,
+          (backlogByStage.get(stage) ?? 0) + unservedAtStage,
+        );
+      }
+
+      const passed = completedAtStage * srsConfig.assumedPassRate;
+      const failed = completedAtStage - passed;
 
       const nextStage = Math.min(
         stage + 1,
@@ -205,9 +231,19 @@ export function simulateSrsForecast(
       schedule(day + safeFailDelay, stage, failed);
     }
 
+    schedule(day + Math.max(1, srsConfig.firstReviewDelayDays), 0, fillerServed);
+
+    const backlog = Array.from(backlogByStage.values()).reduce(
+      (acc, count) => acc + count,
+      0,
+    );
+
     points.push({
       day,
       reviewsDue: Math.round(reviewsDue),
+      reviewsServed: Math.round(reviewsServed),
+      fillerServed: Math.round(fillerServed),
+      backlog: Math.round(backlog),
     });
   }
 
