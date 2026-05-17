@@ -645,6 +645,7 @@ export function AnalysisBoard({
   return (
     <div
       ref={boardRef}
+      data-snapshot-board
       data-testid={dataTestId}
       className={[
         "relative aspect-square w-full overflow-hidden rounded-[10px] border border-[var(--app-border)] bg-[var(--app-panel-deep)] shadow-[var(--app-shadow)]",

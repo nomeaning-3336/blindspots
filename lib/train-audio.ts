@@ -270,7 +270,7 @@ export function playTrainMoveSound(options: PlayTrainSoundOptions): boolean {
 export function playTrainMoveSoundReversed(
   options: PlayTrainSoundOptions & { playbackRate?: number },
 ): boolean {
-  const { move, playbackRate = 0.6 } = options;
+  const { move, playbackRate = 0.65 } = options;
 
   const ctx = _getOrCreateContext();
   if (!ctx) return false;
