@@ -11,6 +11,7 @@ export type AnalyzeFenInput = {
   fen: string;
   multiPv?: number;
   movetimeMs?: number;
+  searchMoves?: string[];
   onUpdate?: (lines: ClientEngineLine[]) => void;
 };
 

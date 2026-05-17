@@ -164,9 +164,15 @@ export function MoveNotesPanel({
             className="overflow-hidden rounded-[8px] border border-[var(--app-border-soft)]"
           >
             {/* Row header — always visible */}
-            <button
-              type="button"
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => handleExpand(row.decisionFen)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                handleExpand(row.decisionFen);
+              }}
               className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-[var(--app-surface-hover)]"
             >
               <PositionThumbnail
@@ -198,7 +204,7 @@ export function MoveNotesPanel({
                   clipRule="evenodd"
                 />
               </svg>
-            </button>
+            </div>
 
             {/* Expanded editor */}
             {isExpanded ? (

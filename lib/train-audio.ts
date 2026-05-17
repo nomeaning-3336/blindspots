@@ -1,6 +1,6 @@
 // Train audio manager — single shared AudioContext, pre-decoded buffers, no hot-path waits.
 
-export type TrainSoundName = "move" | "capture";
+export type TrainSoundName = "move" | "capture" | "shutter";
 
 export type PlayTrainSoundOptions = {
   move: TrainSoundMove;
@@ -48,6 +48,7 @@ export type TrainAudioEvent = {
 const TRAIN_SOUND_SOURCES: Record<TrainSoundName, string> = {
   move: "/analyze/sounds/move-self.mp3",
   capture: "/analyze/sounds/capture.mp3",
+  shutter: "/analyze/sounds/shutter.wav",
 };
 const REVERSE_TRIM_THRESHOLD = 10 ** (-50 / 20);
 const REVERSE_TRIM_TAIL_PAD_MS = 8;
@@ -162,40 +163,90 @@ export function unlockTrainAudio(): Promise<void> {
   return Promise.resolve();
 }
 
+export async function prepareSnapshotAudio(): Promise<void> {
+  await unlockTrainAudio();
+  await primeTrainAudio();
+}
+
+export function playSnapshotShutterSound(): boolean {
+  return _playDecodedTrainSound({
+    soundName: "shutter",
+    gain: 0.9,
+    playbackRate: 1.0,
+    source: "replay",
+  });
+}
+
 export function playTrainMoveSound(options: PlayTrainSoundOptions): boolean {
   const { move, pitchIndex, advanceLivePitch = true, plyRef, source } = options;
 
   _instance._playCalls += 1;
   const requestedAt = performance.now();
 
+  const isCapture = _moveIsCapture(move);
+  const soundName: TrainSoundName = isCapture ? "capture" : "move";
+
+  const started = _playDecodedTrainSound({
+    soundName,
+    gain: isCapture ? 1.0 : 0.85,
+    playbackRate: 1.0,
+    source: source ?? "live",
+    move,
+    requestedAt,
+    retryAfterPrime: options._retryAfterPrime,
+    retry: () => {
+      playTrainMoveSound({ ...options, advanceLivePitch: false, _retryAfterPrime: true });
+    },
+  });
+
+  if (started && advanceLivePitch && plyRef) {
+    plyRef.current += 1;
+  }
+
+  return started;
+}
+
+type PlayDecodedTrainSoundInput = {
+  soundName: TrainSoundName;
+  gain: number;
+  playbackRate: number;
+  source: "live" | "replay" | "initial-engine";
+  move?: TrainSoundMove | null;
+  requestedAt?: number;
+  retryAfterPrime?: boolean;
+  retry?: () => void;
+};
+
+function _playDecodedTrainSound(input: PlayDecodedTrainSoundInput): boolean {
+  _instance._playCalls += input.requestedAt == null ? 1 : 0;
+  const requestedAt = input.requestedAt ?? performance.now();
+
   const ctx = _getOrCreateContext();
   if (!ctx) return false;
 
-  const isCapture = _moveIsCapture(move);
-  const soundName: TrainSoundName = isCapture ? "capture" : "move";
-  const buffer = _instance._buffers.get(soundName);
+  const buffer = _instance._buffers.get(input.soundName);
 
   if (!buffer) {
     _instance._skippedBufferMissing += 1;
-    if (!options._retryAfterPrime) {
+    if (!input.retryAfterPrime && input.retry) {
       void primeTrainAudio().then(() => {
-        playTrainMoveSound({ ...options, advanceLivePitch: false, _retryAfterPrime: true });
+        input.retry?.();
       }).catch(() => {});
     }
     if (process.env.NODE_ENV !== "production") {
       // eslint-disable-next-line no-console
-      console.warn(`[train-audio] buffer missing for "${soundName}", queued one retry`);
+      console.warn(`[train-audio] buffer missing for "${input.soundName}", queued one retry`);
     }
     return false;
   }
 
   if (ctx.state === "suspended") {
     _instance._skippedContextSuspended += 1;
-    if (!options._retryAfterPrime) {
+    if (!input.retryAfterPrime && input.retry) {
       void ctx.resume()
         .then(() => primeTrainAudio())
         .then(() => {
-          playTrainMoveSound({ ...options, advanceLivePitch: false, _retryAfterPrime: true });
+          input.retry?.();
         })
         .catch(() => {});
     }
@@ -208,7 +259,6 @@ export function playTrainMoveSound(options: PlayTrainSoundOptions): boolean {
 
   const effectivePitchIndex = 0;
   const scaleIdx = 0;
-  const playbackRate = 1.0;
   const startedAt = performance.now();
   const setupMs = startedAt - requestedAt;
 
@@ -217,14 +267,14 @@ export function playTrainMoveSound(options: PlayTrainSoundOptions): boolean {
   _instance._eventCount += 1;
 
   const event: TrainAudioEvent = {
-    san: typeof move.san === "string" ? move.san : undefined,
-    uci: typeof move.uci === "string" ? move.uci : undefined,
-    soundName,
+    san: typeof input.move?.san === "string" ? input.move.san : undefined,
+    uci: typeof input.move?.uci === "string" ? input.move.uci : undefined,
+    soundName: input.soundName,
     pitchIndex: effectivePitchIndex,
     scaleIndex: scaleIdx,
     scaleLabel: MOVE_SCALE_LABELS[scaleIdx],
-    playbackRate,
-    source: source ?? "live",
+    playbackRate: input.playbackRate,
+    source: input.source,
     requestedAt,
     startedAt,
     setupMs,
@@ -249,19 +299,15 @@ export function playTrainMoveSound(options: PlayTrainSoundOptions): boolean {
 
   try {
     const gainNode = ctx.createGain();
-    gainNode.gain.value = isCapture ? 1.0 : 0.85;
+    gainNode.gain.value = input.gain;
     const node = ctx.createBufferSource();
     node.buffer = buffer;
-    node.playbackRate.value = playbackRate;
+    node.playbackRate.value = input.playbackRate;
     node.connect(gainNode);
     gainNode.connect(ctx.destination);
     node.start();
   } catch {
     return false;
-  }
-
-  if (advanceLivePitch && plyRef) {
-    plyRef.current += 1;
   }
 
   return true;

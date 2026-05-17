@@ -82,7 +82,11 @@ export class ClientStockfishEngine {
         timer,
       };
 
-      this.post(`go movetime ${movetimeMs}`);
+      const searchMovesClause = input.searchMoves?.length
+        ? ` searchmoves ${input.searchMoves.join(" ")}`
+        : "";
+
+      this.post(`go movetime ${movetimeMs}${searchMovesClause}`);
     });
   }
 
