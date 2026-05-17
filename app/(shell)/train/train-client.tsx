@@ -487,7 +487,6 @@ import {
   MISTAKE_CAPTURE_THRESHOLD_OPTIONS,
   REVIEW_GRADING_OPTIONS,
   REVIEW_GRADING_PROFILES,
-  SRS_PROFILE_OPTIONS,
   SRS_PROFILES,
   type ReviewGradingConfig,
   type ReviewGradingLevel,
@@ -5456,13 +5455,6 @@ const introOverlay = trainOnboardingIntroVisible ? (
           selectedDailyTargetPositions={selectedDailyTargetPositions}
           isSaving={isSavingOnboardingPreferences}
           onDailyTargetChange={setSelectedDailyTargetPositions}
-          srsProfileLevel={srsProfileLevel}
-          srsConfig={srsConfig}
-          onSrsProfileChange={(level) => {
-            setSrsProfileLevel(level);
-            setSrsConfig(cloneSrsConfig(SRS_PROFILES[level]));
-          }}
-          onSrsConfigChange={setSrsConfig}
           reviewGradingLevel={reviewGradingLevel}
           reviewGradingConfig={reviewGradingConfig}
           onReviewGradingLevelChange={(level) => {
@@ -5484,10 +5476,6 @@ function OnboardingPreferencesModal({
   selectedDailyTargetPositions,
   isSaving,
   onDailyTargetChange,
-  srsProfileLevel,
-  srsConfig,
-  onSrsProfileChange,
-  onSrsConfigChange,
   reviewGradingLevel,
   reviewGradingConfig,
   onReviewGradingLevelChange,
@@ -5498,10 +5486,6 @@ function OnboardingPreferencesModal({
   selectedDailyTargetPositions: number;
   isSaving: boolean;
   onDailyTargetChange: (positions: number) => void;
-  srsProfileLevel: SrsProfileLevel;
-  srsConfig: SrsConfig;
-  onSrsProfileChange: (level: SrsProfileLevel) => void;
-  onSrsConfigChange: (config: SrsConfig) => void;
   reviewGradingLevel: ReviewGradingLevel;
   reviewGradingConfig: ReviewGradingConfig;
   onReviewGradingLevelChange: (level: ReviewGradingLevel) => void;
@@ -5510,10 +5494,6 @@ function OnboardingPreferencesModal({
   onCancel: () => void;
 }) {
   const [modalStep, setModalStep] = useState<"daily-goal" | "review-grading">("daily-goal");
-  const [reviewSpacingOpen, setReviewSpacingOpen] = useState(false);
-  const [customIntervalsText, setCustomIntervalsText] = useState(
-    srsConfig.passIntervalsDays.join(", "),
-  );
 
   // Local text state for daily target input — avoids clamping on every keystroke
   const [dailyTargetText, setDailyTargetText] = useState(String(selectedDailyTargetPositions));
@@ -5528,70 +5508,10 @@ function OnboardingPreferencesModal({
     setDailyTargetText(String(next));
   }
 
-  // Sync custom intervals text when profile changes to non-custom
-  const prevSrsProfileLevel = usePrevious(srsProfileLevel);
-  useEffect(() => {
-    if (prevSrsProfileLevel !== "custom" && srsProfileLevel === "custom") {
-      setCustomIntervalsText(srsConfig.passIntervalsDays.join(", "));
-    }
-    if (srsProfileLevel !== "custom") {
-      setCustomIntervalsText(srsConfig.passIntervalsDays.join(", "));
-    }
-  }, [srsProfileLevel, srsConfig.passIntervalsDays]);
-
-  function parseIntervals(text: string): number[] {
-    return text
-      .split(",")
-      .map((s) => Math.round(Number(s.trim())))
-      .filter((n) => Number.isFinite(n) && n >= 0 && n <= 3650)
-      .slice(0, 12);
-  }
-
-  function handleIntervalsChange(text: string) {
-    setCustomIntervalsText(text);
-    const parsed = parseIntervals(text);
-    if (parsed.length > 0) {
-      onSrsConfigChange({ ...srsConfig, passIntervalsDays: parsed });
-    }
-  }
-
-  function handleIntervalsBlur() {
-    const parsed = parseIntervals(customIntervalsText);
-    if (parsed.length > 0) {
-      setCustomIntervalsText(parsed.join(", "));
-      onSrsConfigChange({ ...srsConfig, passIntervalsDays: parsed });
-    } else {
-      setCustomIntervalsText(srsConfig.passIntervalsDays.join(", "));
-    }
-  }
-
   function adjustDailyTarget(delta: number) {
     const next = Math.max(1, Math.min(300, selectedDailyTargetPositions + delta));
     onDailyTargetChange(next);
     setDailyTargetText(String(next));
-  }
-
-  function updateFirstReviewDelay(delta: number) {
-    onSrsConfigChange({
-      ...srsConfig,
-      firstReviewDelayDays: Math.max(0, Math.min(365, srsConfig.firstReviewDelayDays + delta)),
-    });
-  }
-
-  function updateFailDelay(delta: number) {
-    onSrsConfigChange({
-      ...srsConfig,
-      failDelayDays: Math.max(0, Math.min(365, srsConfig.failDelayDays + delta)),
-    });
-  }
-
-  function updatePassRate(delta: number) {
-    const current = Math.round(srsConfig.assumedPassRate * 100);
-    const next = Math.max(5, Math.min(98, current + delta));
-    onSrsConfigChange({
-      ...srsConfig,
-      assumedPassRate: next / 100,
-    });
   }
 
   function updateReviewPassThreshold(delta: number) {
@@ -5686,169 +5606,6 @@ function OnboardingPreferencesModal({
               </button>
               <span className="text-xs text-[var(--app-muted)]">positions / day</span>
             </div>
-          </div>
-
-          <div className="mb-6">
-            <button
-              type="button"
-              onClick={() => setReviewSpacingOpen((open) => !open)}
-              aria-expanded={reviewSpacingOpen}
-              className="flex w-full items-center justify-between rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)] px-3 py-2 text-left text-sm font-bold text-[var(--app-text)] transition hover:border-[var(--app-border-strong)]"
-            >
-              <span>Advanced: review spacing</span>
-              <span className="text-xs text-[var(--app-muted)]">{reviewSpacingOpen ? "Hide" : "Show"}</span>
-            </button>
-
-            {reviewSpacingOpen ? (
-              <div className="mt-3">
-                {/* SRS Intensity — preset cards */}
-                <div className="mb-4">
-                  <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">SRS intensity</h3>
-                  <p className="mb-3 text-xs text-[var(--app-muted)]">How aggressively should positions repeat?</p>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {SRS_PROFILE_OPTIONS.filter((p) => p.level !== "custom").map((profile) => {
-                const selected = srsProfileLevel === profile.level;
-                return (
-                  <button
-                    key={profile.level}
-                    type="button"
-                    onClick={() => onSrsProfileChange(profile.level)}
-                    className={[
-                      "min-h-[62px] rounded-lg border p-3 text-left transition",
-                      selected ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] ring-1 ring-[var(--app-accent)]" : "border-[var(--app-border)] hover:border-[var(--app-border-strong)]",
-                    ].join(" ")}
-                  >
-                    <span className="flex flex-col gap-0.5">
-                      <span className="text-xs font-bold text-[var(--app-text)]">{profile.label}</span>
-                      {profile.recommended ? (
-                        <span className="text-[10px] text-[var(--app-accent)]">Recommended</span>
-                      ) : (
-                        <span className="text-[10px] text-[var(--app-muted)]">{profile.description}</span>
-                      )}
-                    </span>
-                  </button>
-                );
-              })}
-                  </div>
-                  {/* Custom button — separate dashed full-width */}
-                  <button
-                    key="custom"
-                    type="button"
-                    onClick={() => onSrsProfileChange("custom")}
-                    className={[
-                      "mt-2 flex w-full items-center gap-2 rounded-lg border p-3 text-left transition",
-                      srsProfileLevel === "custom" ? "border-dashed border-[var(--app-accent)] bg-[var(--app-accent-soft)] ring-1 ring-[var(--app-accent)]" : "border-dashed border-[var(--app-border)] hover:border-[var(--app-border-strong)]",
-                    ].join(" ")}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--app-muted)]">
-                      <circle cx="7" cy="7" r="5.5" />
-                      <line x1="7" y1="4" x2="7" y2="7" />
-                      <line x1="7" y1="7" x2="9.5" y2="9.5" />
-                    </svg>
-                    <span className="flex flex-col gap-0.5">
-                      <span className="text-xs font-bold text-[var(--app-text)]">Custom</span>
-                      <span className="text-[10px] text-[var(--app-muted)]">Configure your own intervals</span>
-                    </span>
-                  </button>
-                </div>
-
-                {/* Custom SRS fields — only when Custom is selected */}
-                {srsProfileLevel === "custom" ? (
-                  <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel-deep)] p-4">
-              <h4 className="mb-4 text-xs font-bold uppercase tracking-wider text-[var(--app-text)]">
-                Custom SRS schedule
-              </h4>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-xs font-bold text-[var(--app-text)]">
-                    First review after
-                  </label>
-                  <p className="mb-2 text-[11px] leading-4 text-[var(--app-muted-soft)]">
-                    How soon a newly learned position comes back for its first review.
-                  </p>
-                  <div className="flex h-11 overflow-hidden rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)]">
-                    <button
-                      type="button"
-                      onClick={() => updateFirstReviewDelay(-1)}
-                      className="grid w-11 place-items-center border-r border-[var(--app-border)] text-lg font-bold text-[var(--app-text)] transition hover:bg-[var(--app-surface-subtle)]"
-                      aria-label="Decrease first review delay"
-                    >
-                      −
-                    </button>
-                    <div className="flex min-w-0 flex-1 items-center justify-center gap-2 px-3">
-                      <span className="text-lg font-bold tabular-nums text-[var(--app-text)]">
-                        {srsConfig.firstReviewDelayDays}
-                      </span>
-                      <span className="text-xs text-[var(--app-muted)]">days</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => updateFirstReviewDelay(1)}
-                      className="grid w-11 place-items-center border-l border-[var(--app-border)] text-lg font-bold text-[var(--app-text)] transition hover:bg-[var(--app-surface-subtle)]"
-                      aria-label="Increase first review delay"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-bold text-[var(--app-text)]">
-                    Failed review after
-                  </label>
-                  <p className="mb-2 text-[11px] leading-4 text-[var(--app-muted-soft)]">
-                    How quickly a failed position returns after you miss it.
-                  </p>
-                  <div className="flex h-11 overflow-hidden rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)]">
-                    <button
-                      type="button"
-                      onClick={() => updateFailDelay(-1)}
-                      className="grid w-11 place-items-center border-r border-[var(--app-border)] text-lg font-bold text-[var(--app-text)] transition hover:bg-[var(--app-surface-subtle)]"
-                      aria-label="Decrease failed review delay"
-                    >
-                      −
-                    </button>
-                    <div className="flex min-w-0 flex-1 items-center justify-center gap-2 px-3">
-                      <span className="text-lg font-bold tabular-nums text-[var(--app-text)]">
-                        {srsConfig.failDelayDays}
-                      </span>
-                      <span className="text-xs text-[var(--app-muted)]">days</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => updateFailDelay(1)}
-                      className="grid w-11 place-items-center border-l border-[var(--app-border)] text-lg font-bold text-[var(--app-text)] transition hover:bg-[var(--app-surface-subtle)]"
-                      aria-label="Increase failed review delay"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs font-bold text-[var(--app-text)]">
-                    Pass intervals
-                  </label>
-                  <p className="mb-2 text-[11px] leading-4 text-[var(--app-muted-soft)]">
-                    The review gaps after successful reviews, in days. Later numbers mean longer spacing.
-                  </p>
-                  <input
-                    type="text"
-                    value={customIntervalsText}
-                    onChange={(e) => handleIntervalsChange(e.target.value)}
-                    onBlur={handleIntervalsBlur}
-                    placeholder="1, 3, 7, 14, 30, 60"
-                    className="h-11 w-full rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-input)] px-3 text-sm font-bold text-[var(--app-text)] outline-none transition placeholder:text-[var(--app-muted-soft)] focus:border-[var(--app-accent)]"
-                  />
-                </div>
-
-                <div className="sm:col-span-2" />
-              </div>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
           </div>
             </>
           ) : (
