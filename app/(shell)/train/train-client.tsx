@@ -5167,6 +5167,15 @@ const introOverlay = trainOnboardingIntroVisible ? (
                     onDeleteNote={handleDeleteNote}
                     savedMoveKey={savedMoveNoteKey}
                     tourTarget="notes-panel"
+                    onOpenPosition={(decisionFen) => {
+                      const normalized = normalizeDecisionFen(decisionFen);
+                      const index = visibleSequencePositions.findIndex(
+                        (position) => normalizeDecisionFen(position.fen) === normalized,
+                      );
+                      if (index >= 0) {
+                        navigateExploreTo(index);
+                      }
+                    }}
                   />
                 </div>
               )}
