@@ -1311,6 +1311,7 @@ export default function TrainPage(props: TrainPageProps) {
   const [rollbackAnimating, setRollbackAnimating] = useState(false);
   const [postmortemSidePanel, setPostmortemSidePanel] = useState<"analysis" | "memory">("analysis");
   const [postmortemOnboardingActive, setPostmortemOnboardingActive] = useState(false);
+  const shouldAnimateBoardPieces = shouldAnimatePieces && (!postmortemOnboardingActive || rollbackAnimating);
   const [postmortemOnboardingStep, setPostmortemOnboardingStep] = useState(0);
   const [postmortemOnboardingFinished, setPostmortemOnboardingFinished] = useState(false);
   const [postmortemAddPositionActionDone, setPostmortemAddPositionActionDone] = useState(false);
@@ -4830,7 +4831,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                         <AnalysisBoard
                           fen={boardFen}
                           mode="training"
-                          pieceAnimation={shouldAnimatePieces && !postmortemOnboardingActive}
+                          pieceAnimation={shouldAnimateBoardPieces}
                           pieceAnimationDurationMs={rollbackAnimating ? 620 : 240}
                           orientation={boardOrientation}
                           coordinates
@@ -4866,7 +4867,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                       <AnalysisBoard
                         fen={boardFen}
                         mode="training"
-                        pieceAnimation={shouldAnimatePieces && !postmortemOnboardingActive}
+                        pieceAnimation={shouldAnimateBoardPieces}
                         pieceAnimationDurationMs={rollbackAnimating ? 620 : 240}
                         orientation={boardOrientation}
                         coordinates

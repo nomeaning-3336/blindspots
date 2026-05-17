@@ -49,6 +49,8 @@ const TRAIN_SOUND_SOURCES: Record<TrainSoundName, string> = {
   move: "/analyze/sounds/move-self.mp3",
   capture: "/analyze/sounds/capture.mp3",
 };
+const REVERSE_TRIM_THRESHOLD = 10 ** (-50 / 20);
+const REVERSE_TRIM_TAIL_PAD_MS = 8;
 
 const MOVE_SCALE_RATIOS = [
   1.0, 1.12246, 1.25992, 1.33484, 1.49831, 1.68179, 1.88775, 2.0,
@@ -295,32 +297,25 @@ export function playTrainMoveSoundReversed(
   let reversedBuffer = _instance._reversedBuffers.get(soundName);
   if (!reversedBuffer) {
     try {
-      const reversedData = new ArrayBuffer(forwardBuffer.length * forwardBuffer.numberOfChannels * 4);
-      const tmpCtx = new AudioContext();
-      reversedBuffer = tmpCtx.createBuffer(
+      const activeEndSample = _activeAudioEndSample(forwardBuffer);
+      const tailPadSamples = Math.round(
+        (forwardBuffer.sampleRate * REVERSE_TRIM_TAIL_PAD_MS) / 1000,
+      );
+      const reversedLength = Math.min(forwardBuffer.length, activeEndSample + tailPadSamples);
+
+      reversedBuffer = ctx.createBuffer(
         forwardBuffer.numberOfChannels,
-        forwardBuffer.length,
+        reversedLength,
         forwardBuffer.sampleRate,
       );
       for (let ch = 0; ch < forwardBuffer.numberOfChannels; ch += 1) {
         const src = forwardBuffer.getChannelData(ch);
         const dst = reversedBuffer.getChannelData(ch);
-        // Reverse in-place via two-pointer swap
-        let i = 0;
-        let j = src.length - 1;
-        while (i < j) {
-          const tmp = src[i]!;
-          dst[i] = src[j]!;
-          i += 1;
-          const tmp2 = dst[j]!;
-          dst[j] = tmp;
-          j -= 1;
-        }
-        if (i === j) {
-          dst[i] = src[i]!;
+
+        for (let i = 0; i < reversedLength; i += 1) {
+          dst[i] = src[reversedLength - 1 - i] ?? 0;
         }
       }
-      tmpCtx.close();
       _instance._reversedBuffers.set(soundName, reversedBuffer);
     } catch {
       return false;
@@ -383,6 +378,18 @@ function _decodeAudioBuffer(ctx: AudioContext, arrayBuffer: ArrayBuffer): Promis
       maybePromise.then(resolve, reject);
     }
   });
+}
+
+function _activeAudioEndSample(buffer: AudioBuffer): number {
+  for (let i = buffer.length - 1; i >= 0; i -= 1) {
+    for (let ch = 0; ch < buffer.numberOfChannels; ch += 1) {
+      if (Math.abs(buffer.getChannelData(ch)[i] ?? 0) > REVERSE_TRIM_THRESHOLD) {
+        return i + 1;
+      }
+    }
+  }
+
+  return buffer.length;
 }
 
 function _moveIsCapture(move?: TrainSoundMove | null): boolean {
