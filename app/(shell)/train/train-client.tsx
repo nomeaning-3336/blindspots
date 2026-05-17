@@ -1060,13 +1060,24 @@ export default function TrainPage(props: TrainPageProps) {
 
     const normalizedDecisionFen = normalizeDecisionFen(snapshot.decisionFen);
 
-    // Try to find the decision FEN in visibleSequencePositions
+    // Try sequence positions first
     const seqIndex = visibleSequencePositions.findIndex(
       (position) => normalizeDecisionFen(position.fen) === normalizedDecisionFen,
     );
 
     if (seqIndex >= 0) {
-      navigateExploreTo(seqIndex);
+      // Use same pattern as manual sequence navigation — no resetExploratoryLine
+      const boundedIndex = Math.max(
+        0,
+        Math.min(Math.max(0, visibleSequencePositions.length - 1), seqIndex),
+      );
+      const previousIndex = activeExploreIndex;
+      setIsManualPostmortemExploration(false);
+      setSelectedMoveIndex(boundedIndex);
+      setExploreSelectedSquare(null);
+      setHoveredEngineLineIndex(null);
+      setHoveredMoveSquares(null);
+      setExploreIndex(boundedIndex);
     } else {
       // Try exploratoryHistory descending
       const histIndex = [...exploratoryHistory]
@@ -1078,6 +1089,11 @@ export default function TrainPage(props: TrainPageProps) {
         );
       if (histIndex >= 0) {
         const actualIndex = exploratoryHistory.length - 1 - histIndex;
+        // Mirror navigateExploratoryLine without resetting
+        setIsManualPostmortemExploration(false);
+        setSelectedMoveIndex(null);
+        setHoveredEngineLineIndex(null);
+        setHoveredMoveSquares(null);
         setExploratoryHistoryIndex(actualIndex);
         const step = exploratoryHistory[actualIndex];
         if (step) {
