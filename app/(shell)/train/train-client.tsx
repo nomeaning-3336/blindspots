@@ -3835,6 +3835,10 @@ export default function TrainPage(props: TrainPageProps) {
           if (currentText === sentNoteText) {
             dirty.delete(key);
             setSavedMoveNoteKey(key);
+            // Auto-clear after 2s so the checkmark disappears even if user doesn't interact
+            window.setTimeout(() => {
+              setSavedMoveNoteKey((current) => (current === key ? null : current));
+            }, 2000);
           } else if (reason !== "flush") {
             retryLater();
           }
