@@ -1,10 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Chess } from "chess.js";
+import { useEffect, useRef, useState } from "react";
 import { PositionThumbnail } from "@/components/position-thumbnail";
 import { buildMoveKey } from "@/lib/training/mistake-memory";
-import type { AnnotatedMove } from "@/lib/training/mistake-memory";
 
 export type QueuedPositionRow = {
   decisionFen: string;
@@ -30,76 +28,6 @@ type MoveNotesPanelProps = {
   onOpenPosition?: (decisionFen: string) => void;
 };
 
-function legalMovesFromFen(fen: string): string[] {
-  try {
-    const chess = new Chess(fen);
-    const moves = chess.moves({ verbose: true });
-    return moves.map((m) => m.from + m.to + (m.promotion ? m.promotion : ""));
-  } catch {
-    return [];
-  }
-}
-
-function uciToSan(fen: string, uci: string): string {
-  try {
-    const chess = new Chess(fen);
-    const from = uci.slice(0, 2);
-    const to = uci.slice(2, 4);
-    const promotion = uci.length > 4 ? uci[4] : undefined;
-    const move = chess.move({ from, to, promotion });
-    return move ? move.san : "";
-  } catch {
-    return "";
-  }
-}
-
-function MoveChip({
-  fen,
-  uci,
-  san,
-  currentUci,
-  currentText,
-  notes,
-  onChange,
-}: {
-  fen: string;
-  uci: string;
-  san: string;
-  currentUci: string;
-  currentText: string;
-  notes: ExistingNote[];
-  onChange: (fen: string, uci: string) => void;
-}) {
-  const isSelected = currentUci === uci;
-  const noteForMove = notes.find((n) => n.moveUci === uci);
-  const draftTextForSelectedMove = isSelected ? currentText : noteForMove?.noteText ?? "";
-  const hasNote = draftTextForSelectedMove.trim().length > 0;
-
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(fen, uci)}
-      className={[
-        "relative rounded-[6px] border px-2.5 py-1.5 text-xs font-bold transition",
-        isSelected
-          ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-text)]"
-          : "border-[var(--app-border)] text-[var(--app-muted)] hover:border-[var(--app-border-strong)]",
-        hasNote && !isSelected
-          ? "ring-1 ring-[var(--app-class-good)] text-[var(--app-text)]"
-          : "",
-      ].join(" ")}
-    >
-      {san}
-      {hasNote && !isSelected ? (
-        <span
-          aria-hidden="true"
-          className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-[var(--app-class-good)] align-middle"
-        />
-      ) : null}
-    </button>
-  );
-}
-
 export function MoveNotesPanel({
   rows,
   notesByFen,
@@ -109,82 +37,69 @@ export function MoveNotesPanel({
   onOpenPosition,
 }: MoveNotesPanelProps) {
   const [expandedFen, setExpandedFen] = useState<string | null>(null);
-  const [draftMoveUci, setDraftMoveUci] = useState<Record<string, string>>({});
   const [draftNoteText, setDraftNoteText] = useState<Record<string, string>>({});
 
   const draftNoteTextRef = useRef<Record<string, string>>({});
   draftNoteTextRef.current = draftNoteText;
 
   const pendingKeyRef = useRef<string | null>(null);
+  const pendingMoveUciRef = useRef<string | null>(null);
   const pendingTextRef = useRef<string | null>(null);
   const pendingEditedRef = useRef(false);
 
   // Reset draft when row expands
   useEffect(() => {
     if (expandedFen) {
+      const row = rows.find((candidate) => candidate.decisionFen === expandedFen);
       const notes = notesByFen[expandedFen] ?? [];
-      const firstNote = notes[0];
-      setDraftMoveUci((prev) => {
-        const next = { ...prev };
-        next[expandedFen] = prev[expandedFen] ?? firstNote?.moveUci ?? "";
-        return next;
-      });
+      const primaryNote =
+        notes.find((note) => note.moveUci === row?.playedUci) ?? notes[0];
       setDraftNoteText((prev) => {
         const next = { ...prev };
-        next[expandedFen] = prev[expandedFen] ?? firstNote?.noteText ?? "";
+        next[expandedFen] = prev[expandedFen] ?? primaryNote?.noteText ?? "";
         return next;
       });
     }
-  }, [expandedFen, notesByFen]);
+  }, [expandedFen, notesByFen, rows]);
 
   function handleExpand(fen: string) {
     if (expandedFen === fen) {
       // Collapse
-      if (pendingKeyRef.current && pendingTextRef.current !== null && pendingEditedRef.current) {
-        onSaveNote(pendingKeyRef.current, draftMoveUci[pendingKeyRef.current] ?? "", pendingTextRef.current);
+      if (pendingKeyRef.current && pendingMoveUciRef.current && pendingTextRef.current !== null && pendingEditedRef.current) {
+        onSaveNote(pendingKeyRef.current, pendingMoveUciRef.current, pendingTextRef.current);
       }
       pendingKeyRef.current = null;
+      pendingMoveUciRef.current = null;
       pendingTextRef.current = null;
       pendingEditedRef.current = false;
       setExpandedFen(null);
     } else {
       // Switch — flush previous
-      if (pendingKeyRef.current && pendingTextRef.current !== null && pendingEditedRef.current) {
-        onSaveNote(pendingKeyRef.current, draftMoveUci[pendingKeyRef.current] ?? "", pendingTextRef.current);
+      if (pendingKeyRef.current && pendingMoveUciRef.current && pendingTextRef.current !== null && pendingEditedRef.current) {
+        onSaveNote(pendingKeyRef.current, pendingMoveUciRef.current, pendingTextRef.current);
       }
+      const row = rows.find((candidate) => candidate.decisionFen === fen);
       const notes = notesByFen[fen] ?? [];
-      const firstNote = notes[0];
+      const primaryNote =
+        notes.find((note) => note.moveUci === row?.playedUci) ?? notes[0];
       pendingKeyRef.current = fen;
+      pendingMoveUciRef.current = null;
       pendingTextRef.current = null;
       pendingEditedRef.current = false;
-      setDraftMoveUci((prev) => ({ ...prev, [fen]: firstNote?.moveUci ?? "" }));
-      setDraftNoteText((prev) => ({ ...prev, [fen]: firstNote?.noteText ?? "" }));
+      setDraftNoteText((prev) => ({ ...prev, [fen]: primaryNote?.noteText ?? "" }));
       setExpandedFen(fen);
     }
   }
 
-  function handleNoteTextChange(fen: string, text: string) {
+  function handleNoteTextChange(fen: string, moveUci: string, text: string) {
     setDraftNoteText((prev) => ({ ...prev, [fen]: text }));
     pendingKeyRef.current = fen;
+    pendingMoveUciRef.current = moveUci;
     pendingTextRef.current = text;
     pendingEditedRef.current = true;
-    onSaveNote(fen, draftMoveUci[fen] ?? "", text);
-  }
-
-  function handleMoveUciChange(fen: string, uci: string) {
-    const existingText =
-      (notesByFen[fen] ?? []).find((note) => note.moveUci === uci)?.noteText ?? "";
-
-    setDraftMoveUci((prev) => ({ ...prev, [fen]: uci }));
-    setDraftNoteText((prev) => ({ ...prev, [fen]: existingText }));
-
-    pendingKeyRef.current = fen;
-    pendingTextRef.current = null;
-    pendingEditedRef.current = false;
-  }
-
-  function handleDelete(moveKey: string) {
-    // noop — edit/delete removed
+    if (moveUci) {
+      onSaveNote(fen, moveUci, text);
+    }
   }
 
   if (rows.length === 0) {
@@ -205,11 +120,11 @@ export function MoveNotesPanel({
       {rows.map((row) => {
         const isExpanded = expandedFen === row.decisionFen;
         const notes = notesByFen[row.decisionFen] ?? [];
-        const currentUci = draftMoveUci[row.decisionFen] ?? row.playedUci ?? "";
-        const currentText = draftNoteText[row.decisionFen] ?? "";
-        const currentMoveKey = currentUci ? buildMoveKey(row.decisionFen, currentUci) : null;
-        const legalMoves = legalMovesFromFen(row.decisionFen);
-        const legalMovesValid = currentUci === "" || legalMoves.includes(currentUci);
+        const primaryNote =
+          notes.find((note) => note.moveUci === row.playedUci) ?? notes[0] ?? null;
+        const noteMoveUci = row.playedUci ?? primaryNote?.moveUci ?? "";
+        const currentText = draftNoteText[row.decisionFen] ?? primaryNote?.noteText ?? "";
+        const currentMoveKey = noteMoveUci ? buildMoveKey(row.decisionFen, noteMoveUci) : null;
 
         return (
           <div
@@ -272,51 +187,12 @@ export function MoveNotesPanel({
             {/* Expanded editor */}
             {isExpanded ? (
               <div className="border-t border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] p-3">
-                {/* Actual move input */}
-                <div className="mb-3">
-                  <div className="flex flex-wrap gap-1.5">
-                    {row.playedUci && (
-                      <MoveChip
-                        fen={row.decisionFen}
-                        uci={row.playedUci}
-                        san={row.playedSan ?? row.playedUci}
-                        currentUci={currentUci}
-                        currentText={currentText}
-                        notes={notes}
-                        onChange={handleMoveUciChange}
-                      />
-                    )}
-                    {legalMoves.map((uci) => {
-                      if (uci === row.playedUci) return null;
-                      const san = uciToSan(row.decisionFen, uci);
-                      return (
-                        <MoveChip
-                          key={uci}
-                          fen={row.decisionFen}
-                          uci={uci}
-                          san={san}
-                          currentUci={currentUci}
-                          currentText={currentText}
-                          notes={notes}
-                          onChange={handleMoveUciChange}
-                        />
-                      );
-                    })}
-                  </div>
-                  {!legalMovesValid && currentUci !== "" ? (
-                    <p className="mt-1 text-[10px] text-[var(--app-class-mistake)]">
-                      Not a legal move from this position.
-                    </p>
-                  ) : null}
-                </div>
-
-                {/* Note textarea */}
                 <div className="mb-2">
                   <textarea
                     className="min-h-[120px] w-full resize-y rounded-[6px] border border-[var(--app-border)] bg-[var(--app-surface-input)] px-2.5 py-2 text-xs text-[var(--app-text)] outline-none transition placeholder:text-[var(--app-muted-soft)] focus:border-[var(--app-accent)]"
-                    placeholder={currentUci ? "Add a note for this move..." : "Select a move to add a note..."}
+                    placeholder="Add notes for this position..."
                     value={currentText}
-                    onChange={(e) => handleNoteTextChange(row.decisionFen, e.target.value)}
+                    onChange={(e) => handleNoteTextChange(row.decisionFen, noteMoveUci, e.target.value)}
                     data-ignore-train-shortcuts="true"
                   />
                 </div>
