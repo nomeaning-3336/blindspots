@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
     actualMoveUci: (m.actual_move_uci as string) ?? undefined,
     actualMoveSan: (m.actual_move_san as string) ?? undefined,
     queueSource: m.source_type === "app_training" ? "active_mistake" : m.source_type,
+    reviewCount: (m.review_count as number) ?? 0,
     cpLoss: (m.cp_loss as number) ?? undefined,
     openingName: (m.opening_name as string) ?? undefined,
     source: m.source_type,

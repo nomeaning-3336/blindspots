@@ -170,6 +170,8 @@ const CLIENT_STOCKFISH_MOVETIME_MS = 800;
 const PRELUDE_SETUP_MOVE_DELAY_MS = 1000;
 const COMPLETION_EVAL_GRACE_MS = 500;
 const PREPLAY_PRELUDE_POST_FADE_DELAY_MS = 500;
+const POSTMORTEM_NEXT_POSITION_TRANSITION_MS = 1000;
+const POSTMORTEM_NEXT_POSITION_PRELUDE_DELAY_MS = 500;
 const REVERSE_GLIDE_MS = 500;
 const FORWARD_GLIDE_MS = 240;
 const STEP_GAP_MS = 40;
@@ -182,6 +184,14 @@ function waitForAddPositionFeedback(ms: number) {
 
 function prefersReducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function syncTrainPositionUrl(positionId: string | null | undefined) {
+  if (!positionId || typeof window === "undefined") return;
+  const nextUrl = `/train?positionId=${encodeURIComponent(positionId)}`;
+  const currentUrl = `${window.location.pathname}${window.location.search}`;
+  if (currentUrl === nextUrl) return;
+  window.history.replaceState(null, "", nextUrl);
 }
 
 type PostmortemTourStep = {
@@ -397,6 +407,7 @@ type NextPositionResponse = {
   challengeElo?: number;
   mistakeId?: string;
   queueSource?: string;
+  reviewCount?: number;
   cpLoss?: number;
   error?: string;
   attemptRegistry?: Array<{
@@ -895,7 +906,9 @@ export default function TrainPage(props: TrainPageProps) {
   const [cachedNextPosition, setCachedNextPosition] = useState<NextPositionResponse | null>(null);
   const [surfacedNotesForFen, setSurfacedNotesForFen] = useState<{ fen: string; notes: RawNoteRow[] }>({ fen: "", notes: [] });
   const [currentPositionNotes, setCurrentPositionNotes] = useState<unknown[]>([]);
+  const [currentPositionReviewCount, setCurrentPositionReviewCount] = useState(0);
   const [currentChallengeElo, setCurrentChallengeElo] = useState<number | null>(null);
+  const [isPostmortemNextPositionTransitioning, setIsPostmortemNextPositionTransitioning] = useState(false);
   const [isOpponentThinking, setIsOpponentThinking] = useState(false);
   const [isCompletingSequence, setIsCompletingSequence] = useState(false);
   const [isPositionLoading, setIsPositionLoading] = useState(!initialCheckpointState);
@@ -957,6 +970,7 @@ export default function TrainPage(props: TrainPageProps) {
   const [activeSetupReplayIndex, setActiveSetupReplayIndex] = useState<0 | 1>(1);
   const [activeReplayIndex, setActiveReplayIndex] = useState<number | null>(null);
   const nextPositionPrefetchRef = useRef<Promise<NextPositionResponse | null> | null>(null);
+  const delayedPreludeTimerRef = useRef<number | null>(null);
   const engineLineCacheRef = useRef<Record<string, EngineLineResult[]>>({});
   const engineLinePrefetchRef = useRef<Map<string, Promise<void>>>(new Map());
   const completedEngineLineFensRef = useRef<Set<string>>(new Set());
@@ -1320,6 +1334,10 @@ export default function TrainPage(props: TrainPageProps) {
       if (fenCopyTimerRef.current) {
         window.clearTimeout(fenCopyTimerRef.current);
       }
+      if (delayedPreludeTimerRef.current) {
+        window.clearTimeout(delayedPreludeTimerRef.current);
+        delayedPreludeTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -1433,7 +1451,8 @@ export default function TrainPage(props: TrainPageProps) {
     isPostmortemNotesToggleWaiting || postmortemNotesToggleTransitioning;
   const postmortemFooterActionsDisabled =
     (isPostmortemAddPositionActionStep && !postmortemAddPositionActionDone) ||
-    isNotesToggleTourControlLockActive;
+    isNotesToggleTourControlLockActive ||
+    isPostmortemNextPositionTransitioning;
   const shouldHidePostmortemTour =
     shouldHideTourForAddPosition || shouldHideTourForNotesToggle;
   const [onboardingCompletionInFlight, setOnboardingCompletionInFlight] = useState(false);
@@ -2317,6 +2336,7 @@ export default function TrainPage(props: TrainPageProps) {
     setFen(previousFen ?? finalFen);
     setMoves([]);
     setCurrentPositionNotes([]);
+    setCurrentPositionReviewCount(0);
     setLastMove(null);
     setInitialOpponentMove(null);
     initialOpponentMoveRef.current = null;
@@ -2355,6 +2375,10 @@ export default function TrainPage(props: TrainPageProps) {
       return;
     }
     const payload = await res.json();
+    const reviewCount =
+      typeof payload.reviewCount === "number" && Number.isFinite(payload.reviewCount)
+        ? Math.max(0, Math.round(payload.reviewCount))
+        : 0;
     currentMistakeIdRef.current =
       typeof payload.mistakeId === "string" ? payload.mistakeId : mistakeId;
     currentQueueSourceRef.current =
@@ -2363,7 +2387,12 @@ export default function TrainPage(props: TrainPageProps) {
     setDisplayStartingFen(payload.previousFen ?? payload.fen);
     setFen(payload.previousFen ?? payload.fen);
     setMoves([]);
-    setCurrentPositionNotes(normalizeTrainingNotes(payload.moveNotes));
+    setCurrentPositionReviewCount(reviewCount);
+    setCurrentPositionNotes(
+      mode === "postmortem" || reviewCount === 0
+        ? normalizeTrainingNotes(payload.moveNotes)
+        : [],
+    );
     setLastMove(null);
     setInitialOpponentMove(null);
     initialOpponentMoveRef.current = null;
@@ -2399,7 +2428,7 @@ export default function TrainPage(props: TrainPageProps) {
     }
   }, [onboardingScreen, initialMistakeId, initialMode, trainOnboardingIntroActive]);
 
-  async function loadNextPosition(options: { autoStart?: boolean; mistakeId?: string } = {}) {
+  async function loadNextPosition(options: { autoStart?: boolean; mistakeId?: string; preludeDelayMs?: number } = {}) {
     const cachedPosition = cachedNextPosition;
     if (cachedPosition?.fen) {
       const skipPreludeAnimation =
@@ -2409,6 +2438,7 @@ export default function TrainPage(props: TrainPageProps) {
       applyNextPosition(cachedPosition, {
         autoStart: options.autoStart,
         skipPreludeAnimation,
+        preludeDelayMs: options.preludeDelayMs,
       });
       setIsPositionLoading(false);
       return;
@@ -2451,6 +2481,7 @@ export default function TrainPage(props: TrainPageProps) {
       applyNextPosition(payload, {
         autoStart: options.autoStart,
         skipPreludeAnimation,
+        preludeDelayMs: options.preludeDelayMs,
       });
     } finally {
       setIsPositionLoading(false);
@@ -2469,7 +2500,7 @@ export default function TrainPage(props: TrainPageProps) {
 
   function applyNextPosition(
     payload: NextPositionResponse,
-    options: { autoStart?: boolean; skipPreludeAnimation?: boolean } = {},
+    options: { autoStart?: boolean; skipPreludeAnimation?: boolean; preludeDelayMs?: number } = {},
   ) {
     if (!payload.fen) return;
 
@@ -2531,6 +2562,7 @@ export default function TrainPage(props: TrainPageProps) {
       typeof payload.mistakeId === "string" ? payload.mistakeId : null;
     currentQueueSourceRef.current =
       typeof payload.queueSource === "string" ? payload.queueSource : null;
+    syncTrainPositionUrl(currentMistakeIdRef.current);
 
     if (Array.isArray(payload.attemptRegistry)) {
       setAttemptRegistry(payload.attemptRegistry as AttemptRegistryEntry[]);
@@ -2559,7 +2591,12 @@ export default function TrainPage(props: TrainPageProps) {
     setFen(visibleInitialFen);
     setHasLoadedPosition(true);
     setMoves([]);
-    setCurrentPositionNotes(normalizeTrainingNotes(payload.moveNotes));
+    const reviewCount =
+      typeof payload.reviewCount === "number" && Number.isFinite(payload.reviewCount)
+        ? Math.max(0, Math.round(payload.reviewCount))
+        : 0;
+    setCurrentPositionReviewCount(reviewCount);
+    setCurrentPositionNotes(reviewCount === 0 ? normalizeTrainingNotes(payload.moveNotes) : []);
     setLastMove(null);
     setResultMode("results");
     setExploreIndex(0);
@@ -2590,7 +2627,18 @@ export default function TrainPage(props: TrainPageProps) {
             playedMove: payload.playedMove,
           });
         }
-        void startPendingInitialEngineMove(payload);
+        const startPrelude = () => void startPendingInitialEngineMove(payload);
+        if (typeof options.preludeDelayMs === "number" && options.preludeDelayMs > 0) {
+          if (delayedPreludeTimerRef.current) {
+            window.clearTimeout(delayedPreludeTimerRef.current);
+          }
+          delayedPreludeTimerRef.current = window.setTimeout(() => {
+            delayedPreludeTimerRef.current = null;
+            startPrelude();
+          }, options.preludeDelayMs);
+        } else {
+          startPrelude();
+        }
       } else {
         if (process.env.NODE_ENV !== "production") {
           console.log("[train-start-gesture] cold-load-awaiting-gesture", {
@@ -2655,6 +2703,40 @@ export default function TrainPage(props: TrainPageProps) {
     }
 
     setFen(payload.fen);
+  }
+
+  async function handleAdvanceTrainingPosition() {
+    if (postmortemFooterActionsDisabled || isPostmortemNextPositionTransitioning) return;
+
+    setIsPostmortemNextPositionTransitioning(true);
+    void unlockTrainAudio();
+    void primeTrainAudio();
+
+    try {
+      if (!prefersReducedMotion()) {
+        await delayMs(POSTMORTEM_NEXT_POSITION_TRANSITION_MS);
+      }
+      setState("active");
+      setResultMode("results");
+      setPostmortemSidePanel("analysis");
+      setExploreIndex(0);
+      resetExploratoryLine();
+      setExploreSelectedSquare(null);
+      setSelectedMoveIndex(null);
+      setActiveReplayIndex(null);
+      setIsManualPostmortemExploration(false);
+      setEloResult(null);
+      setIsCompletingSequence(false);
+      setIsAwaitingStartGesture(false);
+      startTrainingGestureConsumedRef.current = true;
+
+      await loadNextPosition({
+        autoStart: true,
+        preludeDelayMs: prefersReducedMotion() ? 0 : POSTMORTEM_NEXT_POSITION_PRELUDE_DELAY_MS,
+      });
+    } finally {
+      setIsPostmortemNextPositionTransitioning(false);
+    }
   }
 
   async function playInitialOpponentMoveFromPayload(payload: NextPositionResponse) {
@@ -3930,11 +4012,17 @@ export default function TrainPage(props: TrainPageProps) {
   const currentDecisionFen = normalizeDecisionFen(
     activeSequencePosition?.move?.fenBefore ?? startingFen,
   );
+  const shouldHideReviewNotesUntilPostmortem =
+    currentPositionReviewCount > 0 && !isPostMortemVisible;
 
   // Load surfaced notes for the current decision position so the
   // training "Notes" rail can show what the user has previously noted
   // about this exact FEN, matching the dashboard view.
   useEffect(() => {
+    if (shouldHideReviewNotesUntilPostmortem) {
+      setSurfacedNotesForFen({ fen: "", notes: [] });
+      return;
+    }
     const fen = currentDecisionFen;
     if (!fen) {
       setSurfacedNotesForFen({ fen: "", notes: [] });
@@ -3957,7 +4045,7 @@ export default function TrainPage(props: TrainPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [currentDecisionFen]);
+  }, [currentDecisionFen, shouldHideReviewNotesUntilPostmortem]);
 
   // Load existing notes from Supabase when postmortem opens.
   useEffect(() => {
@@ -4173,6 +4261,7 @@ export default function TrainPage(props: TrainPageProps) {
     [boardRailMoves, userMoveSide],
   );
   const resurfacedNotes = useMemo(() => {
+    if (shouldHideReviewNotesUntilPostmortem) return [];
     const position = activeSequencePosition as
       | (VisibleSequencePosition & {
           surfacedNotes?: unknown;
@@ -4198,7 +4287,7 @@ export default function TrainPage(props: TrainPageProps) {
       return normalizeTrainingNotes(surfacedNotesForFen.notes);
     }
     return [];
-  }, [activeSequencePosition, surfacedNotesForFen, currentDecisionFen]);
+  }, [activeSequencePosition, surfacedNotesForFen, currentDecisionFen, shouldHideReviewNotesUntilPostmortem]);
 
   if (process.env.NODE_ENV === "development") {
     const posAny = activeSequencePosition as Record<string, unknown> | undefined;
@@ -4865,11 +4954,15 @@ const introOverlay = trainOnboardingIntroVisible ? (
       <div
         ref={trainLayoutGridRef}
         data-train-layout-state={isPostMortemVisible ? "results" : "playing"}
-        className={
+        className={[
           isPostMortemVisible
-            ? "mx-auto grid h-full min-h-0 w-full max-w-[100rem] min-w-0 gap-4 transition-opacity duration-200 lg:grid-cols-[minmax(0,1.22fr)_minmax(28rem,0.92fr)] lg:items-stretch"
-            : playingGridClassName
-        }
+            ? "mx-auto grid h-full min-h-0 w-full max-w-[100rem] min-w-0 gap-4 lg:grid-cols-[minmax(0,1.22fr)_minmax(28rem,0.92fr)] lg:items-stretch"
+            : playingGridClassName,
+          "transition-[opacity,transform] ease-[cubic-bezier(0.22,1,0.36,1)]",
+          isPostmortemNextPositionTransitioning
+            ? "pointer-events-none opacity-0 duration-1000 translate-y-3 scale-[0.985]"
+            : "opacity-100 duration-300 translate-y-0 scale-100",
+        ].join(" ")}
       >
         <section
           className={[
@@ -5062,7 +5155,19 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 <TrainingNotesRail
                   notes={resurfacedNotes}
                   copyFenButton={copyFenButton}
-                  skipButton={<a href="/train" className={primaryActionClassName}>Next position</a>}
+                  skipButton={
+                    <button
+                      type="button"
+                      onClick={() => void handleAdvanceTrainingPosition()}
+                      disabled={postmortemFooterActionsDisabled}
+                      className={[
+                        primaryActionClassName,
+                        "disabled:cursor-not-allowed disabled:opacity-40",
+                      ].join(" ")}
+                    >
+                      {isPostmortemNextPositionTransitioning ? "Loading Position" : "Skip Position"}
+                    </button>
+                  }
                   dashboardButton={<a href="/" className={secondaryActionClassName}>Return to Dashboard</a>}
                 />
               );
@@ -5297,18 +5402,20 @@ const introOverlay = trainOnboardingIntroVisible ? (
               data-tour="postmortem-actions"
               className="mt-3 grid grid-cols-1 gap-3 pb-4 sm:grid-cols-2"
             >
-              <a
-                href="/train"
-                onClick={postmortemFooterActionsDisabled ? (e) => e.preventDefault() : undefined}
-                aria-disabled={postmortemFooterActionsDisabled ? "true" : undefined}
+              <button
+                type="button"
+                onClick={() => void handleAdvanceTrainingPosition()}
+                disabled={postmortemFooterActionsDisabled}
                 className={[
                   primaryActionClassName,
                   "min-h-12 w-full justify-center px-5",
                   postmortemFooterActionsDisabled ? "opacity-40 cursor-not-allowed pointer-events-none" : "",
                 ].join(" ")}
               >
-                <span className={postmortemActionTextClassName}>Next Position</span>
-              </a>
+                <span className={postmortemActionTextClassName}>
+                  {isPostmortemNextPositionTransitioning ? "Loading Position" : "Next Position"}
+                </span>
+              </button>
               <a
                 href="/"
                 onClick={postmortemFooterActionsDisabled ? (e) => e.preventDefault() : undefined}
