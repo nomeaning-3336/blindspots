@@ -24,8 +24,8 @@ export function ProtectedAppShell({
         <div className="flex items-center justify-between gap-4">
           <h1 className="flex items-center leading-none">
             <Link
-              href="/"
-              prefetch
+              href="/landing"
+              prefetch={false}
               className="inline-flex items-center gap-3 leading-none transition hover:text-[var(--app-accent)]"
             >
               <svg

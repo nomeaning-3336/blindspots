@@ -96,7 +96,16 @@ export async function createSupabaseRouteHandlerClient() {
 
 export async function getSupabaseServerUser(): Promise<User | null> {
   const supabase = await getSupabaseServerClient();
-  const { data, error } = await supabase.auth.getUser();
+  let result: Awaited<ReturnType<typeof supabase.auth.getUser>>;
+
+  try {
+    result = await supabase.auth.getUser();
+  } catch (err) {
+    console.error("Failed to reach Supabase auth user endpoint", err);
+    return null;
+  }
+
+  const { data, error } = result;
 
   if (error) {
     const message = error.message.toLowerCase();
