@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { getOptionalAppUserId } from "@/lib/app-auth";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
-import { normalizeDecisionFen, buildMoveKey } from "@/lib/training/mistake-memory";
-import { computeMoveNoteMetadata, moveNoteMoverColor } from "@/lib/training/move-note-metadata";
+import { normalizeDecisionFen } from "@/lib/training/mistake-memory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,21 +14,22 @@ export async function POST(request: Request) {
 
   const payload = (await request.json().catch(() => null)) as {
     decisionFen?: unknown;
-    moveUci?: unknown;
     noteText?: unknown;
   } | null;
 
   const decisionFen = typeof payload?.decisionFen === "string" ? payload.decisionFen : "";
-  const moveUci = typeof payload?.moveUci === "string" ? payload.moveUci : "";
   const noteText = typeof payload?.noteText === "string" ? payload.noteText : "";
 
-  if (!decisionFen || !moveUci) {
-    return NextResponse.json({ error: "Missing decisionFen or moveUci" }, { status: 400 });
+  if (!decisionFen) {
+    return NextResponse.json({ error: "Missing decisionFen" }, { status: 400 });
+  }
+
+  if (!noteText.trim()) {
+    return NextResponse.json({ error: "Missing noteText" }, { status: 400 });
   }
 
   const canonicalFen = normalizeDecisionFen(decisionFen);
-  const moveKey = buildMoveKey(canonicalFen, moveUci);
-  const metadata = await computeMoveNoteMetadata(canonicalFen, moveUci);
+  const moveKey = `position:${canonicalFen}`;
 
   const supabase = getSupabaseAdminClient();
   const { error } = await supabase.from("training_move_notes" as any).upsert(
@@ -37,12 +37,12 @@ export async function POST(request: Request) {
       user_id: userId,
       move_key: moveKey,
       decision_fen: canonicalFen,
-      move_uci: moveUci,
-      move_san: metadata.moveSan,
-      note_text: noteText,
-      classification: metadata.classification,
-      eval_before_cp: metadata.evalBeforeCp,
-      eval_after_cp: metadata.evalAfterCp,
+      move_uci: "",
+      move_san: null,
+      note_text: noteText.trim(),
+      classification: null,
+      eval_before_cp: null,
+      eval_after_cp: null,
     },
     { onConflict: "user_id, move_key" },
   );
@@ -54,10 +54,5 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     moveKey,
-    moveSan: metadata.moveSan,
-    classification: metadata.classification,
-    evalBeforeCp: metadata.evalBeforeCp,
-    evalAfterCp: metadata.evalAfterCp,
-    moverColor: moveNoteMoverColor(canonicalFen),
   });
 }

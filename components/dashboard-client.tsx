@@ -1,12 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Chess } from "chess.js";
 import type { DashboardClassifications, DashboardPosition, DashboardSummary, EloHistoryPoint } from "@/lib/dashboard";
 import { buildLastMoveBadge, classificationColor, type MoveClassification } from "@/lib/training-board-ui";
-import { buildMoveKey } from "@/lib/training/mistake-memory";
-import { ReplayThumbnail, type ThumbnailMovePreview } from "@/components/position-thumbnail";
+import { ReplayThumbnail } from "@/components/position-thumbnail";
 import { DAILY_TARGET_OPTIONS } from "@/lib/training/training-preferences";
 
 
@@ -39,18 +38,69 @@ const CLASS_COLORS: Record<string, string> = {
   blunder: classificationColor("blunder"),
 };
 
+const DASHBOARD_TRAIN_EXIT_MS = 320;
+
+function prefersReducedMotion() {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
 export function DashboardClient({ summary }: { summary: DashboardSummary }) {
   const hasData = summary.totalSequences > 0 || summary.recentSessions.length > 0;
+  const router = useRouter();
+  const [exitingToTrain, setExitingToTrain] = useState(false);
+  const exitTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (exitTimerRef.current) {
+        window.clearTimeout(exitTimerRef.current);
+        exitTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const navigateToTrain = useCallback(
+    (href: string) => {
+      if (exitingToTrain) return;
+      if (prefersReducedMotion()) {
+        router.push(href);
+        return;
+      }
+
+      setExitingToTrain(true);
+      exitTimerRef.current = window.setTimeout(() => {
+        exitTimerRef.current = null;
+        router.push(href);
+      }, DASHBOARD_TRAIN_EXIT_MS);
+    },
+    [exitingToTrain, router],
+  );
 
   return (
-    <main className="app-paper-shell min-h-[calc(100dvh-64px)] overflow-x-hidden px-4 py-5 md:px-8">
+    <main
+      className={[
+        "app-paper-shell min-h-[calc(100dvh-64px)] overflow-x-hidden px-4 py-5 md:px-8",
+        "transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+        exitingToTrain
+          ? "pointer-events-none opacity-0 translate-y-2 scale-[0.992]"
+          : "opacity-100 translate-y-0 scale-100",
+      ].join(" ")}
+    >
       <div className="mx-auto grid w-full max-w-[1180px] gap-5">
         <DashboardHero
           summary={summary}
           hasData={hasData}
         />
 
-        <SummaryTab summary={summary} hasData={hasData} />
+        <SummaryTab
+          summary={summary}
+          hasData={hasData}
+          onNavigateToTrain={navigateToTrain}
+          trainNavigationDisabled={exitingToTrain}
+        />
       </div>
     </main>
   );
@@ -61,9 +111,13 @@ export function DashboardClient({ summary }: { summary: DashboardSummary }) {
 function DailyGoalSection({
   summary,
   hasData,
+  onNavigateToTrain,
+  trainNavigationDisabled,
 }: {
   summary: DashboardSummary;
   hasData: boolean;
+  onNavigateToTrain: (href: string) => void;
+  trainNavigationDisabled: boolean;
 }) {
   const [mounted, setMounted] = useState(false);
   const prefersReducedMotion =
@@ -110,12 +164,14 @@ function DailyGoalSection({
         </div>
 
         {hasData && (
-          <Link
-            href="/train"
+          <button
+            type="button"
+            onClick={() => onNavigateToTrain("/train")}
+            disabled={trainNavigationDisabled}
             className="app-brutal-button inline-flex min-h-11 items-center justify-center px-5 py-2.5 text-sm"
           >
             Continue training
-          </Link>
+          </button>
         )}
       </div>
 
@@ -181,13 +237,30 @@ function DashboardHero({
   );
 }
 
-function SummaryTab({ summary, hasData }: { summary: DashboardSummary; hasData: boolean }) {
+function SummaryTab({
+  summary,
+  hasData,
+  onNavigateToTrain,
+  trainNavigationDisabled,
+}: {
+  summary: DashboardSummary;
+  hasData: boolean;
+  onNavigateToTrain: (href: string) => void;
+  trainNavigationDisabled: boolean;
+}) {
   return (
     <div className="grid gap-5">
-      <DailyGoalSection summary={summary} hasData={hasData} />
+      <DailyGoalSection
+        summary={summary}
+        hasData={hasData}
+        onNavigateToTrain={onNavigateToTrain}
+        trainNavigationDisabled={trainNavigationDisabled}
+      />
 
       <QueueOverviewSection
         positions={summary.positions}
+        onNavigateToTrain={onNavigateToTrain}
+        trainNavigationDisabled={trainNavigationDisabled}
       />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(260px,0.44fr)_minmax(0,0.56fr)] lg:items-start">
@@ -411,8 +484,12 @@ const QUEUE_DEFS: Array<{
 
 function QueueOverviewSection({
   positions,
+  onNavigateToTrain,
+  trainNavigationDisabled,
 }: {
   positions: DashboardPosition[];
+  onNavigateToTrain: (href: string) => void;
+  trainNavigationDisabled: boolean;
 }) {
   const [selectedBucket, setSelectedBucket] = useState<QueueBucket | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -520,6 +597,8 @@ function QueueOverviewSection({
                   key={pos.id}
                   position={pos}
                   nowMs={nowMs}
+                  onNavigateToTrain={onNavigateToTrain}
+                  trainNavigationDisabled={trainNavigationDisabled}
                   onDelete={(id) =>
                     setDeletedIds((prev) => {
                       const next = new Set(prev);
@@ -554,75 +633,6 @@ const QUEUE_DESCRIPTIONS: Record<QueueBucket, React.ReactNode> = {
 function getFenTurnSide(fen: string): "white" | "black" {
   const parts = fen.trim().split(/\s+/);
   return parts[1] === "b" ? "black" : "white";
-}
-
-function buildNoteMovePreview(
-  fenBefore: string,
-  moveUci: string | null | undefined,
-  classification: string | null | undefined,
-): ThumbnailMovePreview | null {
-  if (!moveUci || moveUci.length < 4) return null;
-
-  const from = moveUci.slice(0, 2);
-  const to = moveUci.slice(2, 4);
-  const promotion = moveUci.length > 4 ? moveUci.slice(4, 5) : undefined;
-
-  try {
-    const chess = new Chess(fenBefore);
-    const move = chess.move({ from, to, promotion });
-    if (!move) return null;
-
-    return {
-      fenBefore,
-      fenAfter: chess.fen(),
-      move: { from, to },
-      badge: classificationBadgeFor(classification),
-    };
-  } catch {
-    return null;
-  }
-}
-
-function parseMoveInputForFen(fen: string, input: string): { uci: string; san: string } | null {
-  const trimmed = input.trim();
-  if (!trimmed) return null;
-
-  // Try SAN first
-  try {
-    const chess = new Chess(fen);
-    const move = chess.move(trimmed);
-    if (move) {
-      return {
-        uci: move.from + move.to + (move.promotion ?? ""),
-        san: move.san,
-      };
-    }
-  } catch {
-    // SAN parse failed — fall through to UCI
-  }
-
-  // Try UCI (4 or 5 chars: from(2) + to(2) + optional promotion(1))
-  if (trimmed.length === 4 || trimmed.length === 5) {
-    const lower = trimmed.toLowerCase();
-    try {
-      const chess = new Chess(fen);
-      const move = chess.move({
-        from: lower.slice(0, 2),
-        to: lower.slice(2, 4),
-        promotion: trimmed.length === 5 ? lower[4] : undefined,
-      });
-      if (move) {
-        return {
-          uci: lower,
-          san: move.san,
-        };
-      }
-    } catch {
-      // UCI parse failed
-    }
-  }
-
-  return null;
 }
 
 function classificationBadgeFor(classification: string | null | undefined) {
@@ -688,18 +698,18 @@ const noteMoveTextClassName =
 function QueuePositionRow({
   position,
   nowMs,
+  onNavigateToTrain,
+  trainNavigationDisabled,
   onDelete,
 }: {
   position: DashboardPosition;
   nowMs: number;
+  onNavigateToTrain: (href: string) => void;
+  trainNavigationDisabled: boolean;
   onDelete: (id: string) => void;
 }) {
-  const [noteMovePreview, setNoteMovePreview] = useState<ThumbnailMovePreview | null>(null);
-  const noteHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const NOTE_HOVER_DELAY_MS = 100;
   const [notes, setNotes] = useState(position.moveNotes);
   const [editingMoveKey, setEditingMoveKey] = useState<string | null>(null);
-  const [editingMoveInput, setEditingMoveInput] = useState("");
   const [editingNoteText, setEditingNoteText] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const [pendingNoteKeys, setPendingNoteKeys] = useState<Set<string>>(() => new Set());
@@ -755,7 +765,6 @@ function QueuePositionRow({
   }, [editingMoveKey]);
 
   const [adding, setAdding] = useState(false);
-  const [newMoveInput, setNewMoveInput] = useState("");
   const [newNoteText, setNewNoteText] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -931,14 +940,12 @@ function QueuePositionRow({
     setAdding(false);
     setAddError(null);
     setEditingMoveKey(note.moveKey);
-    setEditingMoveInput(note.moveSan ?? note.moveUci ?? "");
     setEditingNoteText(note.note ?? "");
     setEditError(null);
   }
 
   function discardEdit() {
     setEditingMoveKey(null);
-    setEditingMoveInput("");
     setEditingNoteText("");
     setEditError(null);
   }
@@ -948,17 +955,12 @@ function QueuePositionRow({
     if (pendingNoteKeys.has(editingMoveKey)) return;
 
     const noteText = editingNoteText.trim();
-    const parsed = parseMoveInputForFen(position.startingFen, editingMoveInput);
-    if (!parsed) {
-      setEditError("Illegal move for this position.");
+    if (!noteText) {
+      setEditError("Note text is required.");
       return;
     }
 
-    const hasChanges =
-      noteText !== (note.note ?? "") ||
-      parsed.uci !== (note.moveUci ?? "") ||
-      parsed.san !== (note.moveSan ?? "");
-
+    const hasChanges = noteText !== (note.note ?? "");
     if (!hasChanges) {
       discardEdit();
       return;
@@ -966,23 +968,11 @@ function QueuePositionRow({
 
     setPendingNoteKeys((prev) => new Set(prev).add(editingMoveKey));
     const prevNotes = notes;
-    const newMoveKey = buildMoveKey(position.startingFen, parsed.uci);
-    const moveUci = parsed.uci;
-    const moveSan = parsed.san;
 
     setNotes((prev) =>
       prev.map((n) =>
         n.moveKey === editingMoveKey
-          ? {
-              ...n,
-              moveUci,
-              moveSan,
-              moveKey: newMoveKey,
-              note: noteText,
-              classification: null,
-              evalBeforeCp: null,
-              evalAfterCp: null,
-            }
+          ? { ...n, note: noteText }
           : n,
       ),
     );
@@ -990,52 +980,37 @@ function QueuePositionRow({
 
     void (async () => {
       try {
-        const res = await fetch("/api/train/move-notes", {
+        const res = await fetch("/api/dashboard/notes/upsert", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            moveKey: newMoveKey,
             decisionFen: position.startingFen,
-            moveUci,
-            moveSan,
-            noteText: noteText,
+            noteText,
           }),
         });
         if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+
         const body = (await res.json().catch(() => null)) as {
           moveKey?: string;
-          moveSan?: string | null;
-          classification?: string | null;
-          evalBeforeCp?: number | null;
-          evalAfterCp?: number | null;
-          moverColor?: "white" | "black" | null;
         } | null;
 
         setNotes((prev) =>
           prev.map((n) =>
-            n.moveKey === newMoveKey
+            n.moveKey === editingMoveKey
               ? {
                   ...n,
-                  moveKey: body?.moveKey ?? newMoveKey,
-                  moveUci,
-                  moveSan: body?.moveSan ?? moveSan,
+                  moveKey: body?.moveKey ?? n.moveKey,
                   note: noteText,
-                  classification: (body?.classification ?? null) as typeof n.classification,
-                  evalBeforeCp: body?.evalBeforeCp ?? null,
-                  evalAfterCp: body?.evalAfterCp ?? null,
-                  moverColor: body?.moverColor ?? n.moverColor,
+                  moveUci: null,
+                  moveSan: null,
+                  classification: null,
+                  evalBeforeCp: null,
+                  evalAfterCp: null,
+                  moverColor: null,
                 }
               : n,
           ),
         );
-
-        if (newMoveKey !== note.moveKey) {
-          await fetch("/api/dashboard/mistakes/delete-note", {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ moveKey: note.moveKey }),
-          });
-        }
       } catch (err) {
         console.error("[dashboard] failed to save note edit", err);
         setNotes(prevNotes);
@@ -1071,14 +1046,12 @@ function QueuePositionRow({
   function openAddComposer() {
     discardEdit();
     setAdding(true);
-    setNewMoveInput("");
     setNewNoteText("");
     setAddError(null);
   }
 
   function closeAddComposer() {
     setAdding(false);
-    setNewMoveInput("");
     setNewNoteText("");
     setAddError(null);
   }
@@ -1087,12 +1060,8 @@ function QueuePositionRow({
     if (savingNote) return;
     setAddError(null);
 
-    const parsed = parseMoveInputForFen(position.startingFen, newMoveInput);
-    if (!parsed) {
-      setAddError("Invalid move. Use SAN (e.g. Nxg3) or UCI (e.g. g4g3).");
-      return;
-    }
-    if (!newNoteText.trim()) {
+    const noteText = newNoteText.trim();
+    if (!noteText) {
       setAddError("Note text is required.");
       return;
     }
@@ -1104,48 +1073,40 @@ function QueuePositionRow({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           decisionFen: position.startingFen,
-          moveUci: parsed.uci,
-          noteText: newNoteText,
+          noteText,
         }),
       });
       if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+
       const body = (await res.json().catch(() => null)) as {
         moveKey?: string;
-        moveSan?: string | null;
-        classification?: string | null;
-        evalBeforeCp?: number | null;
-        evalAfterCp?: number | null;
-        moverColor?: "white" | "black" | null;
       } | null;
-      const moveKey = body?.moveKey ?? "";
+
+      const moveKey = body?.moveKey ?? `position:${position.startingFen}`;
 
       setNotes((prev) => {
         const existingIdx = prev.findIndex((n) => n.moveKey === moveKey);
         const newFields = {
-          moveSan: body?.moveSan ?? parsed.san,
-          classification: (body?.classification ?? null) as (typeof prev)[number]["classification"],
-          evalBeforeCp: body?.evalBeforeCp ?? null,
-          evalAfterCp: body?.evalAfterCp ?? null,
-          moverColor: (body?.moverColor ?? null) as (typeof prev)[number]["moverColor"],
-        };
+          moveKey,
+          moveUci: null,
+          moveSan: null,
+          classification: null,
+          evalBeforeCp: null,
+          evalAfterCp: null,
+          moverColor: null,
+          note: noteText,
+        } as (typeof prev)[number];
+
         if (existingIdx >= 0) {
           const next = [...prev];
           next[existingIdx] = {
             ...next[existingIdx],
             ...newFields,
-            note: newNoteText,
           };
           return next;
         }
-        return [
-          {
-            moveKey,
-            moveUci: parsed.uci,
-            ...newFields,
-            note: newNoteText,
-          } as (typeof prev)[number],
-          ...prev,
-        ];
+
+        return [newFields, ...prev];
       });
 
       closeAddComposer();
@@ -1197,7 +1158,6 @@ function QueuePositionRow({
           previousFen={position.previousFen}
           finalFen={position.startingFen}
           playedMove={position.playedMoveUci}
-          movePreview={noteMovePreview}
           orientation={userOrientation}
           size={360}
         />
@@ -1267,18 +1227,22 @@ function QueuePositionRow({
 
         {/* Actions */}
         <div className="mt-5 flex flex-wrap gap-3">
-          <Link
-            href={`/train?positionId=${encodeURIComponent(position.id)}`}
+          <button
+            type="button"
+            onClick={() => onNavigateToTrain(`/train?positionId=${encodeURIComponent(position.id)}`)}
+            disabled={trainNavigationDisabled}
             className="app-brutal-button inline-flex min-h-12 min-w-0 items-center justify-center px-4 py-2.5 text-sm"
           >
             Start
-          </Link>
-          <Link
-            href={`/train?positionId=${encodeURIComponent(position.id)}&mode=postmortem`}
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigateToTrain(`/train?positionId=${encodeURIComponent(position.id)}&mode=postmortem`)}
+            disabled={trainNavigationDisabled}
             className="app-brutal-button-secondary inline-flex min-h-12 min-w-0 items-center justify-center px-6 py-3 text-sm"
           >
             Analyze
-          </Link>
+          </button>
         </div>
       </div>
 
@@ -1316,16 +1280,6 @@ function QueuePositionRow({
 
         {adding && (
           <div className="mt-3 grid gap-2 rounded-md border border-[var(--app-border)] bg-[var(--app-panel-deep)] p-3">
-            <label className="grid gap-1 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
-              Move
-              <input
-                type="text"
-                value={newMoveInput}
-                onChange={(e) => setNewMoveInput(e.target.value)}
-                placeholder="e.g. Nxg3 or g4g3"
-                className="rounded border border-[var(--app-border)] bg-[var(--app-panel-solid)] px-2 py-1.5 text-sm font-normal normal-case tracking-normal text-[var(--app-text)] focus-visible:border-[var(--app-accent)] focus-visible:outline-none"
-              />
-            </label>
             <label className="grid gap-1 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
               Note
               <textarea
@@ -1366,47 +1320,19 @@ function QueuePositionRow({
         ) : (
           <div className="mt-3 grid gap-2">
             {notes.map((note) => {
-              const moveLabel = note.moveSan || note.moveUci || "Move";
-              const evalDeltaCp =
-                note.evalBeforeCp != null && note.evalAfterCp != null
-                  ? note.evalAfterCp - note.evalBeforeCp
-                  : null;
-              const isMoverImprovement =
-                evalDeltaCp == null
-                  ? null
-                  : note.moverColor === "black"
-                    ? evalDeltaCp < 0
-                    : evalDeltaCp > 0;
-
               return (
                 <div
                   key={note.moveKey}
-                  onPointerEnter={() => {
-                    if (noteHoverTimerRef.current) clearTimeout(noteHoverTimerRef.current);
-                    const preview = buildNoteMovePreview(position.startingFen, note.moveUci, note.classification);
-                    noteHoverTimerRef.current = setTimeout(() => setNoteMovePreview(preview), NOTE_HOVER_DELAY_MS);
-                  }}
-                  onPointerLeave={() => {
-                    if (noteHoverTimerRef.current) clearTimeout(noteHoverTimerRef.current);
-                    setNoteMovePreview(null);
-                  }}
                   className={[
                     "group relative border border-[var(--app-border-soft)] bg-[var(--app-panel-deep)] px-4 py-3 transition-colors hover:border-[var(--app-border-strong)] hover:bg-[var(--app-panel-solid)] focus-within:border-[var(--app-border-strong)] focus-within:bg-[var(--app-panel-solid)]",
                     editingMoveKey !== note.moveKey && !adding ? "pr-20" : "",
                   ].filter(Boolean).join(" ")}
                 >
-                  <span
-                    aria-hidden="true"
-                    className={[
-                      "absolute left-0 top-0 bottom-0 w-[3px]",
-                      classificationStripeBgClass(note.classification),
-                    ].join(" ")}
-                  />
                   {editingMoveKey !== note.moveKey && (
                     <div className="absolute right-2 top-2 flex opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                       <button
                         type="button"
-                        aria-label={`Edit note for ${moveLabel}`}
+                        aria-label="Edit note"
                         title="Edit note"
                         onClick={(e) => {
                           e.preventDefault();
@@ -1422,7 +1348,7 @@ function QueuePositionRow({
                       </button>
                       <button
                         type="button"
-                        aria-label={`Delete note for ${moveLabel}`}
+                        aria-label="Delete note"
                         title="Delete note"
                         onClick={(e) => {
                           e.preventDefault();
@@ -1437,51 +1363,14 @@ function QueuePositionRow({
                       </button>
                     </div>
                   )}
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <div className="flex flex-wrap items-baseline gap-2">
-                      <span className="font-mono text-sm font-bold text-[var(--app-text)]">
-                        {moveLabel}
-                      </span>
-                      {note.classification && (
-                        <span className={[
-                          "rounded px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.08em] bg-[var(--app-surface-subtle)]",
-                          classificationTextClass(note.classification),
-                        ].join(" ")}>
-                          {note.classification}
-                        </span>
-                      )}
-                    </div>
-                    {evalDeltaCp != null && (
-                      <span className={[
-                        "font-mono text-xs font-bold tabular-nums",
-                        isMoverImprovement
-                          ? "text-[var(--app-class-good)]"
-                          : "text-[var(--app-class-blunder)]",
-                      ].join(" ")}>
-                        {formatEvalCp(evalDeltaCp)}
-                      </span>
-                    )}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">
+                      Position note
+                    </span>
                   </div>
 
                   {editingMoveKey === note.moveKey ? (
                     <div ref={editContainerRef} className="mt-3 w-full min-w-0 pr-0 grid gap-3">
-                      <label className="grid w-full min-w-0 gap-1.5">
-                        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">
-                          Move
-                        </span>
-                        <input
-                          type="text"
-                          value={editingMoveInput}
-                          onChange={(e) => setEditingMoveInput(e.target.value)}
-                          placeholder="Move, e.g. Nf3 or g1f3"
-                          className={[
-                            "box-border block w-full min-w-0 rounded-md border border-[var(--app-border)]",
-                            "bg-[var(--app-bg)] px-3 py-2 outline-none transition",
-                            "focus:border-[var(--app-border-strong)] focus:ring-1 focus:ring-[var(--app-accent)]",
-                            noteMoveTextClassName,
-                          ].join(" ")}
-                        />
-                      </label>
                       <label className="grid w-full min-w-0 gap-1.5">
                         <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">
                           Note
