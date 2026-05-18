@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Chess, type Square } from "chess.js";
 import { AnalysisBoard, type BoardHighlight, type BoardMove, type EngineArrow } from "@/components/chess/analysis-board";
 import {
@@ -877,6 +877,7 @@ export default function TrainPage(props: TrainPageProps) {
   const initialMistakeIdConsumedRef = useRef(false);
   const [state, setState] = useState<TrainingState>(initialCheckpointState ? "complete" : "active");
   const [startingFen, setStartingFen] = useState<string>(initialCheckpointState?.startingFen ?? "");
+  const router = useRouter();
   const searchParams = useSearchParams();
   const initialPreludeRef = useRef<{ previousFen: string; playedMove: string } | null>(
     initialCheckpointState?.initialPrelude ?? null,
@@ -909,6 +910,7 @@ export default function TrainPage(props: TrainPageProps) {
   const [currentPositionReviewCount, setCurrentPositionReviewCount] = useState(0);
   const [currentChallengeElo, setCurrentChallengeElo] = useState<number | null>(null);
   const [isPostmortemNextPositionTransitioning, setIsPostmortemNextPositionTransitioning] = useState(false);
+  const [isTrainDashboardExitTransitioning, setIsTrainDashboardExitTransitioning] = useState(false);
   const [isOpponentThinking, setIsOpponentThinking] = useState(false);
   const [isCompletingSequence, setIsCompletingSequence] = useState(false);
   const [isPositionLoading, setIsPositionLoading] = useState(!initialCheckpointState);
@@ -1452,7 +1454,10 @@ export default function TrainPage(props: TrainPageProps) {
   const postmortemFooterActionsDisabled =
     (isPostmortemAddPositionActionStep && !postmortemAddPositionActionDone) ||
     isNotesToggleTourControlLockActive ||
-    isPostmortemNextPositionTransitioning;
+    isPostmortemNextPositionTransitioning ||
+    isTrainDashboardExitTransitioning;
+  const isTrainLayoutExiting =
+    isPostmortemNextPositionTransitioning || isTrainDashboardExitTransitioning;
   const shouldHidePostmortemTour =
     shouldHideTourForAddPosition || shouldHideTourForNotesToggle;
   const [onboardingCompletionInFlight, setOnboardingCompletionInFlight] = useState(false);
@@ -2737,6 +2742,18 @@ export default function TrainPage(props: TrainPageProps) {
     } finally {
       setIsPostmortemNextPositionTransitioning(false);
     }
+  }
+
+  async function handleReturnToDashboard() {
+    if (postmortemFooterActionsDisabled || isTrainDashboardExitTransitioning) return;
+
+    setIsTrainDashboardExitTransitioning(true);
+
+    if (!prefersReducedMotion()) {
+      await delayMs(POSTMORTEM_NEXT_POSITION_TRANSITION_MS);
+    }
+
+    router.push("/");
   }
 
   async function playInitialOpponentMoveFromPayload(payload: NextPositionResponse) {
@@ -4959,7 +4976,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
             ? "mx-auto grid h-full min-h-0 w-full max-w-[100rem] min-w-0 gap-4 lg:grid-cols-[minmax(0,1.22fr)_minmax(28rem,0.92fr)] lg:items-stretch"
             : playingGridClassName,
           "transition-[opacity,transform] ease-[cubic-bezier(0.22,1,0.36,1)]",
-          isPostmortemNextPositionTransitioning
+          isTrainLayoutExiting
             ? "pointer-events-none opacity-0 duration-1000 translate-y-3 scale-[0.985]"
             : "opacity-100 duration-300 translate-y-0 scale-100",
         ].join(" ")}
@@ -5161,14 +5178,29 @@ const introOverlay = trainOnboardingIntroVisible ? (
                       onClick={() => void handleAdvanceTrainingPosition()}
                       disabled={postmortemFooterActionsDisabled}
                       className={[
-                        primaryActionClassName,
+                        secondaryActionClassName,
+                        "min-h-12 w-full justify-center px-5",
+                        postmortemFooterActionsDisabled ? "opacity-40 cursor-not-allowed pointer-events-none" : "",
+                      ].join(" ")}
+                    >
+                      <span className={postmortemActionTextClassName}>
+                        {isPostmortemNextPositionTransitioning ? "Loading Position" : "Skip Position"}
+                      </span>
+                    </button>
+                  }
+                  dashboardButton={
+                    <button
+                      type="button"
+                      onClick={() => void handleReturnToDashboard()}
+                      disabled={postmortemFooterActionsDisabled}
+                      className={[
+                        secondaryActionClassName,
                         "disabled:cursor-not-allowed disabled:opacity-40",
                       ].join(" ")}
                     >
-                      {isPostmortemNextPositionTransitioning ? "Loading Position" : "Skip Position"}
+                      {isTrainDashboardExitTransitioning ? "Returning..." : "Return to Dashboard"}
                     </button>
                   }
-                  dashboardButton={<a href="/" className={secondaryActionClassName}>Return to Dashboard</a>}
                 />
               );
             })()}
@@ -5416,18 +5448,20 @@ const introOverlay = trainOnboardingIntroVisible ? (
                   {isPostmortemNextPositionTransitioning ? "Loading Position" : "Next Position"}
                 </span>
               </button>
-              <a
-                href="/"
-                onClick={postmortemFooterActionsDisabled ? (e) => e.preventDefault() : undefined}
-                aria-disabled={postmortemFooterActionsDisabled ? "true" : undefined}
+              <button
+                type="button"
+                onClick={() => void handleReturnToDashboard()}
+                disabled={postmortemFooterActionsDisabled}
                 className={[
                   secondaryActionClassName,
                   "min-h-12 w-full justify-center px-5",
                   postmortemFooterActionsDisabled ? "opacity-40 cursor-not-allowed pointer-events-none" : "",
                 ].join(" ")}
               >
-                <span className={postmortemActionTextClassName}>Return to Dashboard</span>
-              </a>
+                <span className={postmortemActionTextClassName}>
+                  {isTrainDashboardExitTransitioning ? "Returning..." : "Return to Dashboard"}
+                </span>
+              </button>
             </div>
           </aside>
         ) : null}
