@@ -911,6 +911,7 @@ export default function TrainPage(props: TrainPageProps) {
   const [currentChallengeElo, setCurrentChallengeElo] = useState<number | null>(null);
   const [isPostmortemNextPositionTransitioning, setIsPostmortemNextPositionTransitioning] = useState(false);
   const [isTrainDashboardExitTransitioning, setIsTrainDashboardExitTransitioning] = useState(false);
+  const [isTrainPageEntered, setIsTrainPageEntered] = useState(false);
   const [isOpponentThinking, setIsOpponentThinking] = useState(false);
   const [isCompletingSequence, setIsCompletingSequence] = useState(false);
   const [isPositionLoading, setIsPositionLoading] = useState(!initialCheckpointState);
@@ -1341,6 +1342,15 @@ export default function TrainPage(props: TrainPageProps) {
         delayedPreludeTimerRef.current = null;
       }
     };
+  }, []);
+
+  useEffect(() => {
+    if (prefersReducedMotion()) {
+      setIsTrainPageEntered(true);
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => setIsTrainPageEntered(true));
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   const [fen, setFen] = useState<string>(
@@ -4464,7 +4474,11 @@ export default function TrainPage(props: TrainPageProps) {
       : "w-[min(82vw,calc(100dvh-12.5rem),800px)]",
   ].join(" ");
   const trainViewportClassName =
-    "-mx-4 -mb-4 flex h-full min-h-0 w-[calc(100%+2rem)] flex-1 overflow-hidden px-3 py-3 md:-mx-6 md:w-[calc(100%+3rem)]";
+    [
+      "-mx-4 -mb-4 flex h-full min-h-0 w-[calc(100%+2rem)] flex-1 overflow-hidden px-3 py-3 md:-mx-6 md:w-[calc(100%+3rem)]",
+      "transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+      isTrainPageEntered ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2",
+    ].join(" ");
   const playingGridClassName =
     "mx-auto grid h-full min-h-0 w-fit max-w-[calc(100vw-32px)] min-w-0 grid-cols-1 grid-rows-[auto_auto_auto] content-center gap-4 transition-opacity duration-200 lg:grid-cols-[auto_320px] lg:grid-rows-[auto_auto] lg:items-center lg:justify-center";
   const playingBoardSectionClassName =
@@ -5108,16 +5122,6 @@ const introOverlay = trainOnboardingIntroVisible ? (
 
         {!isPostMortemVisible ? (
           <aside className="flex min-h-0 w-full flex-col gap-4 lg:w-[320px]">
-            {attemptRegistry.length > 0 ? (
-              <AttemptRegistryAside
-                entries={attemptRegistry}
-                onNoteSaved={(id, note) => {
-                  setAttemptRegistry((prev) =>
-                    prev.map((e) => (e.id === id ? { ...e, note } : e)),
-                  );
-                }}
-              />
-            ) : null}
             {(() => {
               async function copyCurrentFen() {
                 const fenToCopy = boardFen;
@@ -5178,7 +5182,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                       onClick={() => void handleAdvanceTrainingPosition()}
                       disabled={postmortemFooterActionsDisabled}
                       className={[
-                        secondaryActionClassName,
+                        primaryActionClassName,
                         "min-h-12 w-full justify-center px-5",
                         postmortemFooterActionsDisabled ? "opacity-40 cursor-not-allowed pointer-events-none" : "",
                       ].join(" ")}
@@ -5195,10 +5199,13 @@ const introOverlay = trainOnboardingIntroVisible ? (
                       disabled={postmortemFooterActionsDisabled}
                       className={[
                         secondaryActionClassName,
-                        "disabled:cursor-not-allowed disabled:opacity-40",
+                        "min-h-12 w-full justify-center px-5",
+                        postmortemFooterActionsDisabled ? "opacity-40 cursor-not-allowed pointer-events-none" : "",
                       ].join(" ")}
                     >
-                      {isTrainDashboardExitTransitioning ? "Returning..." : "Return to Dashboard"}
+                      <span className={postmortemActionTextClassName}>
+                        {isTrainDashboardExitTransitioning ? "Returning..." : "Return to Dashboard"}
+                      </span>
                     </button>
                   }
                 />

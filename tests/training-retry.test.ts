@@ -4,19 +4,18 @@ import test from "node:test";
 
 const require = createRequire(import.meta.url);
 
-test("dashboard Retry link includes positionId in href", () => {
-  // Verify the dashboard client renders Retry links with ?positionId=
+test("dashboard Start action navigates with positionId through dashboard fade transition", () => {
   const fs = require("node:fs");
   const source = fs.readFileSync("components/dashboard-client.tsx", "utf8");
 
-  // The Retry button must link to /train?positionId=... (no mode param)
-  const retryMatches = source.match(/href=\{`\/train\?positionId=\$\{encodeURIComponent\(position\.id\)\}`\}/g);
-  assert.ok(retryMatches, "Retry link must use /train?positionId=<id>");
-  assert.equal(retryMatches.length, 1, "exactly one Retry link expected");
+  const startMatches = source.match(/onNavigateToTrain\(`\/train\?positionId=\$\{encodeURIComponent\(position\.id\)\}`\)/g);
+  assert.ok(startMatches, "Start action must navigate to /train?positionId=<id>");
+  assert.equal(startMatches.length, 1, "exactly one Start navigation expected");
+  assert.match(source, /setExitingToTrain\(true\)/);
+  assert.match(source, /router\.push\(href\)/);
 
-  // The Analyze button must still use mode=postmortem
-  const analyzeMatch = source.match(/href=\{`\/train\?positionId=\$\{encodeURIComponent\(position\.id\)\}&mode=postmortem`\}/);
-  assert.ok(analyzeMatch, "Analyze link must still include mode=postmortem");
+  const analyzeMatch = source.match(/onNavigateToTrain\(`\/train\?positionId=\$\{encodeURIComponent\(position\.id\)\}&mode=postmortem`\)/);
+  assert.ok(analyzeMatch, "Analyze action must still include mode=postmortem");
 });
 
 test("page.tsx forwards positionId to TrainPage", () => {
