@@ -1260,7 +1260,6 @@ async function loadMoveNotesForDecisionFen(
     .select("move_key, decision_fen, move_san, move_uci, classification, note_text, eval_before_cp, eval_after_cp")
     .eq("user_id", userId)
     .eq("decision_fen", decisionFen)
-    .neq("note_text", "")
     .order("last_attempted_at", { ascending: false });
 
   const directMatches = (data as any[] | null) ?? [];
@@ -1271,7 +1270,6 @@ async function loadMoveNotesForDecisionFen(
     .select("move_key, decision_fen, move_san, move_uci, classification, note_text, eval_before_cp, eval_after_cp")
     .eq("user_id", userId)
     .like("move_key", `${moveKeyPrefix}%`)
-    .neq("note_text", "")
     .order("last_attempted_at", { ascending: false });
 
   return normalizeNotes((keyMatches as any[] | null) ?? []);

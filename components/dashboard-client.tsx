@@ -1271,7 +1271,7 @@ function QueuePositionRow({
             href={`/train?positionId=${encodeURIComponent(position.id)}`}
             className="app-brutal-button inline-flex min-h-12 min-w-0 items-center justify-center px-4 py-2.5 text-sm"
           >
-            {position.attempts > 0 ? "Retry" : "Start"}
+            Start
           </Link>
           <Link
             href={`/train?positionId=${encodeURIComponent(position.id)}&mode=postmortem`}

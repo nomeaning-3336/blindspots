@@ -38,7 +38,6 @@ export async function GET(request: NextRequest) {
     .select("move_key, decision_fen, move_san, move_uci, classification, note_text, eval_before_cp, eval_after_cp")
     .eq("user_id", userId)
     .eq("decision_fen", decisionFen)
-    .neq("note_text", "")
     .order("last_attempted_at", { ascending: false });
 
   return NextResponse.json({
@@ -49,7 +48,7 @@ export async function GET(request: NextRequest) {
     playedMove: (m.setup_played_move_uci as string) ?? undefined,
     actualMoveUci: (m.actual_move_uci as string) ?? undefined,
     actualMoveSan: (m.actual_move_san as string) ?? undefined,
-    queueSource: m.source_type,
+    queueSource: m.source_type === "app_training" ? "active_mistake" : m.source_type,
     cpLoss: (m.cp_loss as number) ?? undefined,
     openingName: (m.opening_name as string) ?? undefined,
     source: m.source_type,

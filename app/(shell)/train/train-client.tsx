@@ -1285,13 +1285,7 @@ export default function TrainPage(props: TrainPageProps) {
         return;
       }
 
-      if (targetOverride) {
-        showAlert({
-          kind: "info",
-          title: "Stepped back to your decision",
-          message: `Saved position before ${(targetOverride.setupMove?.san ?? "your move")}.`,
-        });
-      } else {
+      if (!targetOverride) {
         showAlert({
           kind: "success",
           title: addTarget.fellBackFromEnginePosition
@@ -2357,6 +2351,10 @@ export default function TrainPage(props: TrainPageProps) {
       return;
     }
     const payload = await res.json();
+    currentMistakeIdRef.current =
+      typeof payload.mistakeId === "string" ? payload.mistakeId : mistakeId;
+    currentQueueSourceRef.current =
+      typeof payload.queueSource === "string" ? payload.queueSource : null;
     setStartingFen(payload.fen);
     setDisplayStartingFen(payload.previousFen ?? payload.fen);
     setFen(payload.previousFen ?? payload.fen);
@@ -8317,7 +8315,7 @@ function TrainingNotesRail({
           <div className="grid gap-2">
             {notes.map((note, index) => {
               const moveLabel = note.moveSan ?? note.moveUci ?? "Previous mistake";
-              const text = note.noteText || "No note text.";
+              const hasText = note.noteText.trim().length > 0;
               const evalBefore = note.evalBeforeCp;
               const evalAfter = note.evalAfterCp;
               const moverColor = note.moverColor ?? moverColorFromFen(note.decisionFen);
@@ -8355,14 +8353,24 @@ function TrainingNotesRail({
                       )}
                     </div>
                   ) : null}
-                  <div className="font-sans text-sm leading-5 text-[var(--app-text)]">
-                    {text}
-                  </div>
+                  {hasText ? (
+                    <div className="font-sans text-sm leading-5 text-[var(--app-text)]">
+                      {note.noteText}
+                    </div>
+                  ) : (
+                    <div className="font-sans text-sm leading-5 text-[var(--app-muted)]">
+                      Note shown. No content yet.
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
-        ) : null}
+        ) : (
+          <div className="border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-3 py-2 font-sans text-sm leading-5 text-[var(--app-muted)]">
+            Notes hidden.
+          </div>
+        )}
       </div>
 
       <div className="mt-auto grid gap-3 pt-4">
