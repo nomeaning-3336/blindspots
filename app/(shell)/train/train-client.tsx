@@ -6055,6 +6055,8 @@ function TrainPostmortemTourOverlay({
 
     async function resolveStep() {
       setIsPositioningSpotlight(true);
+      setTargetRect(null);
+      setMissingTarget(false);
 
       const currentStep = allSteps[step];
       if (!currentStep) {
@@ -6246,9 +6248,7 @@ function TrainPostmortemTourOverlay({
   const waitsForTargetGeometry =
     !shouldCenterCard;
   const previousTourGeometry = previousTourGeometryRef.current;
-  const displayedSpotlight = spotlight ?? (
-    waitsForTargetGeometry ? previousTourGeometry.spotlight : null
-  );
+  const displayedSpotlight = spotlight;
   const shouldDimSuppressedSpotlight =
     currentStep.suppressSpotlight &&
     isActionStep &&
@@ -6258,10 +6258,7 @@ function TrainPostmortemTourOverlay({
   const effectiveSuppressSpotlight =
     currentStep.suppressSpotlight || isWaitingForActionCompletion;
   const isResolvingTargetWithoutReusableSpotlight =
-    waitsForTargetGeometry &&
-    !spotlight &&
-    Boolean(previousTourGeometry.card) &&
-    !previousTourGeometry.spotlight;
+    waitsForTargetGeometry && !spotlight;
   const shouldShowFullScreenTourDim =
     !isWaitingForActionCompletion &&
     (shouldCenterCard ||
@@ -6270,9 +6267,9 @@ function TrainPostmortemTourOverlay({
   const hasResolvedCurrentTourGeometry =
     !waitsForTargetGeometry || Boolean(spotlight);
   const isResolvingTargetGeometry =
-    waitsForTargetGeometry && !spotlight && Boolean(previousTourGeometry.card);
+    waitsForTargetGeometry && !spotlight;
   const hasInitialTourGeometry =
-    hasResolvedCurrentTourGeometry || isResolvingTargetGeometry;
+    hasResolvedCurrentTourGeometry;
 
   const measuredCardHeight = animatedCardHeight ?? cardSize?.height ?? 300;
 
