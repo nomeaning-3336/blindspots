@@ -28,7 +28,16 @@ export type GetVerifiedUserResult =
  */
 export async function getVerifiedAppUserId(): Promise<GetVerifiedUserResult> {
   const supabase = await getSupabaseServerClient();
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  let sessionResult: Awaited<ReturnType<typeof supabase.auth.getSession>>;
+
+  try {
+    sessionResult = await supabase.auth.getSession();
+  } catch (err) {
+    console.error("[auth:getVerifiedAppUserId] failed to reach Supabase session endpoint:", err);
+    return { status: "error" };
+  }
+
+  const { data: sessionData, error: sessionError } = sessionResult;
 
   if (process.env.NODE_ENV !== "production") {
     const cookieStore = await cookies();

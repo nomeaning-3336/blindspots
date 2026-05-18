@@ -70,7 +70,7 @@ function AppShellLink({
   return (
     <Link
       href={href}
-      prefetch
+      prefetch={false}
       className={linkClassName(isActive)}
       style={isForcedHover ? forcedHoverStyle : undefined}
       onMouseEnter={() => setIsForcedHover(true)}
@@ -97,7 +97,7 @@ function AppShellSignInLink({ nextPath }: { nextPath: string }) {
   return (
     <Link
       href={`/sign-in?next=${encodeURIComponent(nextPath)}`}
-      prefetch
+      prefetch={false}
       className="inline-flex min-h-9 items-center justify-center rounded border border-[var(--app-accent)] bg-[var(--app-accent)] px-4 py-2 text-xs font-bold uppercase !text-black transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
       style={isForcedHover ? forcedHoverStyle : undefined}
       onMouseEnter={() => setIsForcedHover(true)}

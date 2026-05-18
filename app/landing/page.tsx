@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PublicHeaderClient } from "@/components/public-header";
 import { PublicFaq } from "@/components/public-faq";
-import { getOptionalAppUserId } from "@/lib/app-auth";
+import { getShellAuthHint } from "@/lib/app-auth";
 import { AnalysisBoard } from "@/components/chess/analysis-board";
 
 const loopSteps = [
@@ -211,8 +211,7 @@ function DifferenceCard({
 }
 
 export default async function LandingPage() {
-  const userId = await getOptionalAppUserId();
-  const isSignedIn = Boolean(userId);
+  const isSignedIn = await getShellAuthHint();
 
   const startHref = isSignedIn ? "/train" : "/sign-up?next=%2Ftrain";
 

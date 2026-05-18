@@ -6,9 +6,21 @@ import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
 import { isSupabaseSessionCookie } from "@/lib/supabase/auth-cookies";
 
 const PROTECTED_ROUTES = ["/train", "/performance", "/account"];
+const PUBLIC_ROUTES_WITHOUT_SESSION_REFRESH = [
+  "/landing",
+  "/blog",
+  "/sign-in",
+  "/sign-up",
+];
 
 function isProtectedRoute(pathname: string): boolean {
   return PROTECTED_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+}
+
+function isPublicRouteWithoutSessionRefresh(pathname: string): boolean {
+  return PUBLIC_ROUTES_WITHOUT_SESSION_REFRESH.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`),
+  );
 }
 
 export default async function proxy(request: NextRequest) {
@@ -62,7 +74,16 @@ export default async function proxy(request: NextRequest) {
         },
       );
 
-      const { data, error } = await supabase.auth.getUser();
+      let data: { user: unknown } | null = null;
+      let error: { message?: string } | null = null;
+      try {
+        const result = await supabase.auth.getUser();
+        data = result.data;
+        error = result.error;
+      } catch (err) {
+        console.error("[proxy] Supabase auth verification failed", err);
+        return response;
+      }
       const msg = error?.message?.toLowerCase() ?? "";
       const isInvalidSession =
         !data?.user ||
@@ -90,6 +111,10 @@ export default async function proxy(request: NextRequest) {
     // No auth cookies — redirect immediately
     const redirectUrl = new URL(`/sign-in?next=${encodeURIComponent(pathname + search)}`, request.url);
     return NextResponse.redirect(redirectUrl, 302);
+  }
+
+  if (isPublicRouteWithoutSessionRefresh(pathname)) {
+    return NextResponse.next({ request });
   }
 
   return updateSupabaseSession(request);
