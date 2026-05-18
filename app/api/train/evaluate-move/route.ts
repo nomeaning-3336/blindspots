@@ -191,9 +191,16 @@ export async function POST(request: Request) {
 
     if (bestLine && candidateLine) {
       const comparableEvalBefore = comparableEval(bestLine, decisionFen);
-      const comparableEvalAfter = comparableEval(candidateLine, decisionFen);
+      const directEvalAfter = await getPositionEval(fenAfterUserMove, {
+        timeLimitMs: evaluationTimeLimitMs,
+      }).catch(() => null);
+      const displayEvalAfter = Math.round(
+        typeof directEvalAfter?.cp === "number"
+          ? directEvalAfter.cp
+          : Number(candidateLine.cp) || 0,
+      );
+      const comparableEvalAfter = userColor === "w" ? displayEvalAfter : -displayEvalAfter;
       const displayEvalBefore = Math.round(Number(bestLine.cp) || 0);
-      const displayEvalAfter = Math.round(Number(candidateLine.cp) || 0);
       const cpLoss = Math.max(0, Math.round(comparableEvalBefore - comparableEvalAfter));
 
       const winChanceClassification =
@@ -216,7 +223,7 @@ export async function POST(request: Request) {
           evalBefore: displayEvalBefore,
           evalAfter: displayEvalAfter,
           mateBefore: bestLine.mate ?? null,
-          mateAfter: candidateLine.mate ?? null,
+          mateAfter: directEvalAfter?.mate ?? candidateLine.mate ?? null,
           classification,
         },
         positionEvaluation: {
@@ -225,7 +232,7 @@ export async function POST(request: Request) {
           evalBefore: displayEvalBefore,
           evalAfter: displayEvalAfter,
           mateBefore: bestLine.mate ?? null,
-          mateAfter: candidateLine.mate ?? null,
+          mateAfter: directEvalAfter?.mate ?? candidateLine.mate ?? null,
           cpLoss,
           classification,
           banditResult: getBanditResult(classification),

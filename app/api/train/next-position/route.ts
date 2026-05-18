@@ -60,6 +60,7 @@ type NextPositionResponse = {
   challengeElo?: number;
   mistakeId?: string;
   queueSource?: string;
+  reviewCount?: number;
   randomExplorationProbability?: number;
   randomExplorationRoll?: number;
   selectedByRandomExploration?: boolean;
@@ -256,6 +257,7 @@ if (!optionalError && optionalData) {
           bestMoveSan: normalized.bestMoveSan ?? undefined,
           source: normalized.source,
           queueSource: mistakeResult.queueSource ?? undefined,
+          reviewCount: mistake.review_count ?? 0,
           selectedServeMode: mistakeResult.queueSource ?? undefined,
           randomExplorationProbability: randomProbability,
           randomExplorationRoll,
@@ -633,6 +635,7 @@ function buildRowMistakeResponse({
     bestMoveSan: normalized.bestMoveSan ?? undefined,
     source: normalized.source,
     queueSource: mistakeResult.queueSource ?? undefined,
+    reviewCount: mistake.review_count ?? 0,
     selectedServeMode: mistakeResult.queueSource ?? undefined,
     randomExplorationProbability: randomProbability,
     randomExplorationRoll,
