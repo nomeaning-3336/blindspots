@@ -1391,6 +1391,8 @@ export default function TrainPage(props: TrainPageProps) {
     shouldRunPreplayOnboarding && onboardingScreen === "done" && !trainOnboardingIntroDone;
   const [moveAnnotations, setMoveAnnotations] = useState<Record<string, AnnotatedMove>>({});
   const seededMoveKeysRef = useRef<Set<string>>(new Set());
+  // Tombstoned move keys — notes that were deleted and must not reappear in UI
+  const deletedMoveNoteKeysRef = useRef<Set<string>>(new Set());
   const [selectedMoveKey, setSelectedMoveKey] = useState<string | null>(null);
   const [savedMoveNoteKey, setSavedMoveNoteKey] = useState<string | null>(null);
   useEffect(() => {
@@ -3853,6 +3855,8 @@ export default function TrainPage(props: TrainPageProps) {
   const notesByFen = useMemo((): Record<string, ExistingNote[]> => {
     const result: Record<string, ExistingNote[]> = {};
     for (const entry of Object.values(moveAnnotations)) {
+      // Skip tombstones — deleted notes must not reappear
+      if (deletedMoveNoteKeysRef.current.has(entry.moveKey)) continue;
       const fen = normalizeDecisionFen(entry.decisionFen);
       if (!result[fen]) result[fen] = [];
       result[fen].push({
@@ -3893,6 +3897,11 @@ export default function TrainPage(props: TrainPageProps) {
       console.log("[move-notes] save-note", moveKey, text.slice(0, 20));
     }
 
+    // If saving non-empty text for a tombstoned key, remove the tombstone — user is explicitly re-saving
+    if (text.trim().length > 0) {
+      deletedMoveNoteKeysRef.current.delete(moveKey);
+    }
+
     // Seed entry if it doesn't exist yet
     if (!moveAnnotations[moveKey]) {
       seededMoveKeysRef.current.add(moveKey);
@@ -3928,6 +3937,10 @@ export default function TrainPage(props: TrainPageProps) {
     if (process.env.NODE_ENV !== "production") {
       console.log("[move-notes] update-note", moveKey);
     }
+    // If non-empty text, remove tombstone (user explicitly re-editing a deleted note)
+    if (text.trim().length > 0) {
+      deletedMoveNoteKeysRef.current.delete(moveKey);
+    }
     setSavedMoveNoteKey((current) => (current === moveKey ? null : current));
     setMoveAnnotations((prev) => updateNoteText(prev, moveKey, text));
     dirtyMoveNoteKeysRef.current.add(moveKey);
@@ -3951,6 +3964,11 @@ export default function TrainPage(props: TrainPageProps) {
     if (dirty.size === 0) return;
     const snapshot = moveAnnotationsRef.current;
     for (const key of dirty) {
+      // Skip keys that have been tombstoned (deleted) — do not resurrect
+      if (deletedMoveNoteKeysRef.current.has(key)) {
+        dirty.delete(key);
+        continue;
+      }
       const entry = snapshot[key];
       if (!entry) { dirty.delete(key); continue; }
       const sentNoteText = entry.noteText;
@@ -4060,7 +4078,14 @@ export default function TrainPage(props: TrainPageProps) {
       .then((res) => (res.ok ? res.json() : { notes: [] }))
       .then((data: { notes?: RawNoteRow[] }) => {
         if (cancelled) return;
-        setSurfacedNotesForFen({ fen, notes: Array.isArray(data.notes) ? data.notes : [] });
+        // Filter out tombstoned (deleted) notes so they don't reappear in the UI
+        const filtered = Array.isArray(data.notes)
+          ? data.notes.filter((note) => {
+              const key = typeof note.move_key === "string" ? note.move_key : null;
+              return !key || !deletedMoveNoteKeysRef.current.has(key);
+            })
+          : [];
+        setSurfacedNotesForFen({ fen, notes: filtered });
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -4091,6 +4116,8 @@ export default function TrainPage(props: TrainPageProps) {
           const loaded: Record<string, AnnotatedMove> = {};
           for (const row of data.notes) {
             const moveKey = row.move_key as string;
+            // Skip tombstoned keys — deleted notes must not be merged back into state
+            if (deletedMoveNoteKeysRef.current.has(moveKey)) continue;
             loaded[moveKey] = {
               moveKey,
               decisionFen: row.decision_fen as string,
@@ -4152,7 +4179,12 @@ export default function TrainPage(props: TrainPageProps) {
       eval_before_cp: note.evalBeforeCp ?? note.eval_before_cp ?? null,
       eval_after_cp: note.evalAfterCp ?? note.eval_after_cp ?? null,
     }));
-    return normalizeNotes(rows);
+    // Filter out any rows whose moveKey is tombstoned (deleted)
+    const filteredRows = rows.filter((row) => {
+      const key = typeof row.move_key === "string" ? row.move_key : null;
+      return !key || !deletedMoveNoteKeysRef.current.has(key);
+    });
+    return normalizeNotes(filteredRows);
   }
 
   const isExploringResults = state === "complete" && resultMode === "explore";

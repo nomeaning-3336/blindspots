@@ -114,7 +114,7 @@ export async function DELETE(request: Request) {
     );
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, moveKey: payload.moveKey });
 }
 
 export async function GET(request: Request) {

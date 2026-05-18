@@ -63,3 +63,38 @@ test("active board no longer has placeholder eval-bar gutter", () => {
   assert.doesNotMatch(source, /data-testid="active-board-size-reserve"/);
   assert.doesNotMatch(source, /data-testid="active-eval-bar-placeholder"/);
 });
+
+test("deleted move note keys are tombstoned and prevented from reappearing", () => {
+  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
+
+  // deletedMoveNoteKeysRef exists as a tombstone set
+  assert.match(source, /deletedMoveNoteKeysRef\s*=\s*useRef<Set<string>>\(new Set\(\)\)/);
+
+  // syncDirtyMoveNoteKeys skips tombstoned keys before POST
+  assert.match(source, /deletedMoveNoteKeysRef\.current\.has\(key\)[^]*?dirty\.delete\(key\)[^]*?continue;/);
+
+  // notesByFen skips tombstones
+  assert.match(source, /deletedMoveNoteKeysRef\.current\.has\(entry\.moveKey\)/);
+
+  // normalizeTrainingNotes filters tombstoned rows
+  assert.match(source, /deletedMoveNoteKeysRef\.current\.has\(key\)[^]*?return false/);
+
+  // surfacedNotesForFen fetch filters tombstones
+  assert.match(source, /deletedMoveNoteKeysRef\.current\.has\(key\)[^]*?return !key \|\| !deletedMoveNoteKeysRef\.current\.has\(key\)/);
+
+  // Postmortem load-existing-notes skips tombstones
+  assert.match(source, /deletedMoveNoteKeysRef\.current\.has\(moveKey\)/);
+
+  // handleSaveNote removes tombstone when saving non-empty text
+  assert.match(source, /deletedMoveNoteKeysRef\.current\.delete\(moveKey\)/);
+
+  // handleUpdateNote removes tombstone when saving non-empty text
+  assert.match(source, /function handleUpdateNote[^]*?deletedMoveNoteKeysRef\.current\.delete\(moveKey\)/);
+
+  // syncDirtyMoveNoteKeys has tombstone check before POST
+  const syncFnStart = source.indexOf("function syncDirtyMoveNoteKeys");
+  const syncFnBody = source.slice(syncFnStart, syncFnStart + 800);
+  assert.match(syncFnBody, /deletedMoveNoteKeysRef\.current\.has\(key\)/);
+  assert.match(syncFnBody, /dirty\.delete\(key\)/);
+  assert.match(syncFnBody, /continue/);
+});
