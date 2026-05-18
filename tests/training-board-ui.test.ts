@@ -70,46 +70,12 @@ test("postmortem tour placement ignores stale target geometry from another step"
   assert.match(overlaySource, /setTargetRect\(\{ step, \.\.\.snapshot \}\)/);
 });
 
-test("postmortem tour does not show a stale spotlight while the current target resolves", () => {
+test("postmortem tour keeps the dim spotlight mounted while next target resolves", () => {
   const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
   const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
 
-  assert.match(overlaySource, /const previousTourGeometry = previousTourGeometryRef\.current;/);
-  assert.match(overlaySource, /const displayedSpotlight = spotlight;/);
-  assert.doesNotMatch(overlaySource, /spotlight \?\? \(/);
-  assert.doesNotMatch(overlaySource, /const displayedSpotlight = spotlight \?\? \(/);
-  assert.doesNotMatch(overlaySource, /previousTourGeometry\.spotlight : null/);
-});
-
-test("postmortem tour clears stale target geometry before resolving a new target", () => {
-  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
-  const resolveSource = source.slice(
-    source.indexOf("async function resolveStep()"),
-    source.indexOf("const currentStep = allSteps[step];"),
-  );
-
-  assert.match(resolveSource, /setIsPositioningSpotlight\(true\);/);
-  assert.match(resolveSource, /setTargetRect\(null\);/);
-  assert.match(resolveSource, /setMissingTarget\(false\);/);
-  assert.ok(
-    resolveSource.indexOf("setIsPositioningSpotlight(true);") <
-      resolveSource.indexOf("setTargetRect(null);"),
-  );
-});
-
-test("postmortem tour initial render waits for current target geometry", () => {
-  const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
-  const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
-
-  assert.match(overlaySource, /const hasInitialTourGeometry =\s*hasResolvedCurrentTourGeometry;/);
-  assert.doesNotMatch(
-    overlaySource,
-    /const hasInitialTourGeometry =\s*hasResolvedCurrentTourGeometry \|\| isResolvingTargetGeometry;/,
-  );
-  assert.match(
-    overlaySource,
-    /const isResolvingTargetGeometry =\s*waitsForTargetGeometry && !spotlight;/,
-  );
+  assert.match(overlaySource, /const displayedSpotlight = spotlight \?\? \(/);
+  assert.match(overlaySource, /!currentStep\.suppressSpotlight && displayedSpotlight \? \(/);
 });
 
 test("postmortem tour geometry uses a gentle timing curve", () => {
