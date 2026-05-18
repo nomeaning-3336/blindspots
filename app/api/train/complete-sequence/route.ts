@@ -7,10 +7,12 @@ import type { Json } from "@/lib/supabase/database";
 import { normalizeQueue, normalizeRecentServedFens, updateQueuesAfterSequence } from "@/lib/training/queues";
 import {
   calculateEloUpdate,
+  calculateMatchedEngineCplEloUpdate,
   calculateExpectedScore,
   getKFactor,
   getOpponentElo,
   normalizeRatingDeviation,
+  type CplAnalyzedMove,
 } from "@/lib/training/elo";
 import { normalizeBucketStats, recordBucketResult } from "@/lib/training/bandit-stats";
 import { classifyTrainingBucket, classifyTrainingPhase } from "@/lib/training/position-metadata";
@@ -160,8 +162,6 @@ export async function POST(request: Request) {
 
   const sequenceLength = 4;
   const reflectionNote = typeof payload?.reflectionNote === "string" ? payload.reflectionNote : null;
-  const challengeElo = normalizeOptionalNumber(payload?.challengeElo);
-
   const precomputedInputCount = Array.isArray(payload?.precomputedEvaluations)
     ? payload.precomputedEvaluations.length
     : 0;
@@ -230,18 +230,34 @@ export async function POST(request: Request) {
   const selectedMistakeId = typeof payload?.selectedMistakeId === "string" ? payload.selectedMistakeId : null;
   const queueSource = typeof payload?.queueSource === "string" ? payload.queueSource : null;
 
-  const eloUpdate = calculateEloUpdate({
+  const humanRatingMoves = buildHumanRatingMoves(sequenceEvaluation.positionEvaluations);
+  const engineRatingMoves = humanRatingMoves.length >= 4
+    ? await calculateEngineRatingMoves({
+        startingFen,
+        moves,
+      })
+    : [];
+  const cplEloUpdate = calculateMatchedEngineCplEloUpdate({
+    userEloAtGameStart: profile.blindspots_elo,
+    ratingDeviation: profileRatingDeviation,
+    totalSequences: profile.total_sequences,
+    humanMoves: humanRatingMoves,
+    engineMoves: engineRatingMoves,
+  });
+
+  const legacyEloUpdate = calculateEloUpdate({
     currentElo: profile.blindspots_elo,
     ratingDeviation: profileRatingDeviation,
     totalSequences: profile.total_sequences,
     evalPreservationScore,
     totalCpLoss: sequenceEvaluation.totalCpLoss,
-    opponentElo: challengeElo ?? undefined,
+    opponentElo: profile.blindspots_elo,
     averageCpDelta: sequenceEvaluation.averageCpDelta,
     worstCpDelta: sequenceEvaluation.worstCpDelta,
   });
+  const eloUpdate = cplEloUpdate ?? legacyEloUpdate;
 
-  const fallbackOpponentElo = challengeElo ?? eloUpdate?.opponentElo ?? getOpponentElo(profile.blindspots_elo);
+  const fallbackOpponentElo = eloUpdate?.opponentElo ?? getOpponentElo(profile.blindspots_elo);
   const fallbackExpectedScore = calculateExpectedScore(profile.blindspots_elo, fallbackOpponentElo);
   const kFactor = eloUpdate?.kFactor ?? getKFactor(profile.total_sequences, profileRatingDeviation);
   const completedAt = new Date().toISOString();
@@ -316,6 +332,10 @@ export async function POST(request: Request) {
         skipped: evalPreservationScore === null,
         ratingDeviationBefore: eloUpdate?.ratingDeviationBefore ?? profileRatingDeviation,
         ratingDeviationAfter: eloUpdate?.ratingDeviationAfter ?? profileRatingDeviation,
+        humanAvgCpl: eloUpdate?.humanAvgCpl ?? null,
+        engineAvgCpl: eloUpdate?.engineAvgCpl ?? null,
+        cplDiff: eloUpdate?.cplDiff ?? null,
+        ratingMethod: eloUpdate?.ratingMethod ?? "legacy",
       },
       trainingOutcome,
       averageCpLoss,
@@ -429,6 +449,10 @@ export async function POST(request: Request) {
         skipped: evalPreservationScore === null,
         ratingDeviationBefore: eloUpdate?.ratingDeviationBefore ?? profileRatingDeviation,
         ratingDeviationAfter: eloUpdate?.ratingDeviationAfter ?? profileRatingDeviation,
+        humanAvgCpl: eloUpdate?.humanAvgCpl ?? null,
+        engineAvgCpl: eloUpdate?.engineAvgCpl ?? null,
+        cplDiff: eloUpdate?.cplDiff ?? null,
+        ratingMethod: eloUpdate?.ratingMethod ?? "legacy",
       },
       trainingOutcome,
       reviewOutcome,
@@ -548,12 +572,94 @@ export async function POST(request: Request) {
       skipped: evalPreservationScore === null,
       ratingDeviationBefore: eloUpdate?.ratingDeviationBefore ?? profileRatingDeviation,
       ratingDeviationAfter: eloUpdate?.ratingDeviationAfter ?? profileRatingDeviation,
+      humanAvgCpl: eloUpdate?.humanAvgCpl ?? null,
+      engineAvgCpl: eloUpdate?.engineAvgCpl ?? null,
+      cplDiff: eloUpdate?.cplDiff ?? null,
+      ratingMethod: eloUpdate?.ratingMethod ?? "legacy",
     },
     trainingOutcome,
     averageCpLoss,
     maxSingleCpLoss,
     selectedMistakeId: selectedMistakeId ?? undefined,
   });
+}
+
+function buildHumanRatingMoves(positionEvaluations: PositionEvaluation[]): CplAnalyzedMove[] {
+  return positionEvaluations.flatMap((positionEvaluation) => {
+    const sideToMove = sideToMoveFromFen(positionEvaluation.decisionFen);
+    if (!sideToMove) return [];
+
+    return [{
+      sideToMove,
+      bestEvalCp: positionEvaluation.evalBefore,
+      playedEvalCp: positionEvaluation.evalAfter,
+    }];
+  });
+}
+
+async function calculateEngineRatingMoves({
+  startingFen,
+  moves,
+}: {
+  startingFen: string;
+  moves: Array<{ san: string; uci: string; side: string }>;
+}): Promise<CplAnalyzedMove[]> {
+  const chess = new Chess(startingFen);
+  const userColor = chess.turn();
+  const analyzedMoves: CplAnalyzedMove[] = [];
+
+  for (const move of moves) {
+    const sideToMove = chess.turn();
+    const isEngineMove = sideToMove !== userColor;
+    const decisionFen = chess.fen();
+    const evalBefore = isEngineMove
+      ? await getPositionEval(decisionFen, {
+          timeLimitMs: COMPLETE_SEQUENCE_MISSING_EVAL_TIME_LIMIT_MS,
+        }).catch(() => null)
+      : null;
+
+    const played = chess.move({
+      from: move.uci.slice(0, 2),
+      to: move.uci.slice(2, 4),
+      promotion: move.uci[4],
+    });
+    if (!played) break;
+
+    if (!isEngineMove || !evalBefore) continue;
+
+    const evalAfter = await getPositionEval(chess.fen(), {
+      timeLimitMs: COMPLETE_SEQUENCE_MISSING_EVAL_TIME_LIMIT_MS,
+    }).catch(() => null);
+    if (!evalAfter) continue;
+
+    analyzedMoves.push({
+      sideToMove,
+      bestEvalCp: Math.round(evalBefore.cp),
+      playedEvalCp: Math.round(evalAfter.cp),
+    });
+  }
+
+  return analyzedMoves;
+}
+
+function sideToMoveFromFen(fen: string): "w" | "b" | null {
+  const side = fen.split(/\s+/)[1];
+  return side === "w" || side === "b" ? side : null;
+}
+
+function cpDeltaForRatingMove({
+  decisionFen,
+  evalBefore,
+  evalAfter,
+}: {
+  decisionFen: string;
+  evalBefore: number;
+  evalAfter: number;
+}) {
+  const sideToMove = sideToMoveFromFen(decisionFen);
+  const sideBefore = sideToMove === "b" ? -evalBefore : evalBefore;
+  const sideAfter = sideToMove === "b" ? -evalAfter : evalAfter;
+  return clamp(Math.round(sideBefore - sideAfter), -MAX_CP_DELTA, MAX_CP_DELTA);
 }
 
 async function calculateSequenceEvaluation({
@@ -619,7 +725,11 @@ async function calculateSequenceEvaluation({
         totalCpLoss += precomputedEntry.moveScore.cpLoss;
         moveScores.push(precomputedEntry.moveScore);
         positionEvaluations.push(precomputedEntry.positionEvaluation);
-        cappedCpDeltas.push(clamp(precomputedEntry.moveScore.evalBefore - precomputedEntry.moveScore.evalAfter, -MAX_CP_DELTA, MAX_CP_DELTA));
+        cappedCpDeltas.push(cpDeltaForRatingMove({
+          decisionFen: precomputedEntry.positionEvaluation.decisionFen,
+          evalBefore: precomputedEntry.moveScore.evalBefore,
+          evalAfter: precomputedEntry.moveScore.evalAfter,
+        }));
         userMoveCount += 1;
         continue;
       }
@@ -633,7 +743,7 @@ async function calculateSequenceEvaluation({
         moveScores.push({
           userMoveIndex: userMoveCount,
           cpLoss: 0,
-          evalBefore: Math.round(evalBeforeCp),
+          evalBefore: Math.round(evalBefore?.cp ?? evalBeforeCp),
           evalAfter: mateCpForWinningSide(userColor),
           mateBefore: mateBeforeVal,
           mateAfter: 0,
@@ -645,7 +755,7 @@ async function calculateSequenceEvaluation({
           index: userMoveCount,
           decisionFen,
           userMove: { san: move.san, uci: move.uci },
-          evalBefore: Math.round(evalBeforeCp),
+          evalBefore: Math.round(evalBefore?.cp ?? evalBeforeCp),
           evalAfter: mateCpForWinningSide(userColor),
           mateBefore: mateBeforeVal,
           mateAfter: 0,
@@ -683,8 +793,8 @@ async function calculateSequenceEvaluation({
       moveScores.push({
         userMoveIndex: userMoveCount,
         cpLoss,
-        evalBefore: Math.round(evalBeforeCp),
-        evalAfter: Math.round(afterUserEval),
+        evalBefore: Math.round(evalBefore?.cp ?? evalBeforeCp),
+        evalAfter: Math.round(evalAfter.cp),
         mateBefore: mateBeforeVal,
         mateAfter: mateAfterVal,
         classification,
@@ -698,8 +808,8 @@ async function calculateSequenceEvaluation({
         index: userMoveCount,
         decisionFen,
         userMove: { san: move.san, uci: move.uci },
-        evalBefore: Math.round(evalBeforeCp),
-        evalAfter: Math.round(afterUserEval),
+        evalBefore: Math.round(evalBefore?.cp ?? evalBeforeCp),
+        evalAfter: Math.round(evalAfter.cp),
         mateBefore: mateBeforeVal,
         mateAfter: mateAfterVal,
         cpLoss,
@@ -805,7 +915,11 @@ function buildPrecomputedSequenceEvaluation({
 
   const totalCpLoss = moveScores.reduce((sum, score) => sum + score.cpLoss, 0);
 
-  const cappedCpDeltasPrecomputed = moveScores.map((ms) => clamp(ms.evalBefore - ms.evalAfter, -MAX_CP_DELTA, MAX_CP_DELTA));
+  const cappedCpDeltasPrecomputed = moveScores.map((moveScore, index) => cpDeltaForRatingMove({
+    decisionFen: positionEvaluations[index]?.decisionFen ?? startingFen,
+    evalBefore: moveScore.evalBefore,
+    evalAfter: moveScore.evalAfter,
+  }));
 
   return {
     evalPreservationScore:

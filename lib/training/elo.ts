@@ -3,8 +3,11 @@ export type SkillLevel = "new_to_chess" | "beginner" | "intermediate" | "advance
 export const DEFAULT_RATING_DEVIATION = 650;
 export const MIN_RATING_DEVIATION = 80;
 export const MAX_RATING_DEVIATION = 700;
-const MIN_ENGINE_CHALLENGE_ELO = 800;
-const DEFAULT_CHALLENGE_ELO_OFFSET = 100;
+const MATCHED_ENGINE_MAX_DELTA = 64;
+const MATCHED_ENGINE_CPL_SCALE = 120;
+const MIN_MATCHED_ENGINE_ELO = 100;
+const MIN_CPL_MOVES_PER_SIDE = 4;
+const MAX_RATING_CPL = 1000;
 
 export function getStartingEloForSkillLevel(skillLevel: SkillLevel) {
   switch (skillLevel) {
@@ -64,7 +67,17 @@ export interface EloUpdateResult {
   clampedDelta: number;
   ratingDeviationBefore: number;
   ratingDeviationAfter: number;
+  humanAvgCpl?: number | null;
+  engineAvgCpl?: number | null;
+  cplDiff?: number | null;
+  ratingMethod?: "legacy" | "matched_engine_cpl";
 }
+
+export type CplAnalyzedMove = {
+  sideToMove: "w" | "b";
+  bestEvalCp: number;
+  playedEvalCp: number;
+};
 
 export function getSeededStartingElo(totalCpLoss: number, totalMoves: number) {
   if (totalMoves <= 0) return 1200;
@@ -85,13 +98,10 @@ export function getKFactor(totalSequences: number, ratingDeviation = DEFAULT_RAT
 
 export function getOpponentElo(userElo: number) {
   const normalizedUserElo = Number.isFinite(userElo)
-    ? Math.max(0, Math.round(userElo))
+    ? Math.max(MIN_MATCHED_ENGINE_ELO, Math.round(userElo))
     : 500;
 
-  return Math.max(
-    MIN_ENGINE_CHALLENGE_ELO,
-    normalizedUserElo + DEFAULT_CHALLENGE_ELO_OFFSET,
-  );
+  return normalizedUserElo;
 }
 
 export function getNextRatingDeviation(current: number, totalSequences: number) {
@@ -179,7 +189,75 @@ export function calculateEloUpdate(input: EloUpdateInput): EloUpdateResult | nul
     clampedDelta,
     ratingDeviationBefore,
     ratingDeviationAfter,
+    humanAvgCpl: null,
+    engineAvgCpl: null,
+    cplDiff: null,
+    ratingMethod: "legacy",
   };
+}
+
+export function calculateMoveCplFromWhiteEval(move: CplAnalyzedMove) {
+  const bestEvalCp = Number(move.bestEvalCp);
+  const playedEvalCp = Number(move.playedEvalCp);
+  if (!Number.isFinite(bestEvalCp) || !Number.isFinite(playedEvalCp)) return null;
+
+  const sideBestEval = move.sideToMove === "b" ? -bestEvalCp : bestEvalCp;
+  const sidePlayedEval = move.sideToMove === "b" ? -playedEvalCp : playedEvalCp;
+  const cpl = Math.max(0, sideBestEval - sidePlayedEval);
+  return Math.min(MAX_RATING_CPL, Math.round(cpl));
+}
+
+export function calculateMatchedEngineCplEloUpdate(input: {
+  userEloAtGameStart: number;
+  ratingDeviation?: number;
+  totalSequences: number;
+  humanMoves: CplAnalyzedMove[];
+  engineMoves: CplAnalyzedMove[];
+}): EloUpdateResult | null {
+  const humanCpls = input.humanMoves
+    .map(calculateMoveCplFromWhiteEval)
+    .filter((value): value is number => typeof value === "number");
+  const engineCpls = input.engineMoves
+    .map(calculateMoveCplFromWhiteEval)
+    .filter((value): value is number => typeof value === "number");
+
+  if (humanCpls.length < MIN_CPL_MOVES_PER_SIDE || engineCpls.length < MIN_CPL_MOVES_PER_SIDE) {
+    return null;
+  }
+
+  const eloBefore = Number.isFinite(input.userEloAtGameStart)
+    ? Math.max(MIN_MATCHED_ENGINE_ELO, Math.round(input.userEloAtGameStart))
+    : 500;
+  const ratingDeviationBefore = normalizeRatingDeviation(input.ratingDeviation);
+  const ratingDeviationAfter = getNextRatingDeviation(ratingDeviationBefore, input.totalSequences);
+  const humanAvgCpl = average(humanCpls);
+  const engineAvgCpl = average(engineCpls);
+  const cplDiff = engineAvgCpl - humanAvgCpl;
+  const rawDelta = MATCHED_ENGINE_MAX_DELTA * Math.tanh(cplDiff / MATCHED_ENGINE_CPL_SCALE);
+  const eloDelta = Math.round(rawDelta);
+  const eloAfter = Math.max(MIN_MATCHED_ENGINE_ELO, eloBefore + eloDelta);
+
+  return {
+    eloBefore,
+    eloAfter,
+    eloDelta,
+    kFactor: MATCHED_ENGINE_MAX_DELTA,
+    opponentElo: eloBefore,
+    expectedScore: 0.5,
+    actualScore: clamp(0.5 + cplDiff / (MATCHED_ENGINE_CPL_SCALE * 2), 0, 1),
+    rawDelta,
+    clampedDelta: eloDelta,
+    ratingDeviationBefore,
+    ratingDeviationAfter,
+    humanAvgCpl: Math.round(humanAvgCpl),
+    engineAvgCpl: Math.round(engineAvgCpl),
+    cplDiff: Math.round(cplDiff),
+    ratingMethod: "matched_engine_cpl",
+  };
+}
+
+function average(values: number[]) {
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
 function clampInteger(value: number, min: number, max: number) {

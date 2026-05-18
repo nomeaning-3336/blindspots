@@ -5,7 +5,15 @@ import test from "node:test";
 const require = createRequire(import.meta.url);
 const trainingElo: typeof import("../lib/training/elo") = require("../lib/training/elo.ts");
 
-const { calculateEloUpdate, getKFactor, getOpponentElo, getStartingEloForSkillLevel, normalizeSkillLevel } = trainingElo;
+const {
+  calculateEloUpdate,
+  calculateMatchedEngineCplEloUpdate,
+  calculateMoveCplFromWhiteEval,
+  getKFactor,
+  getOpponentElo,
+  getStartingEloForSkillLevel,
+  normalizeSkillLevel,
+} = trainingElo;
 
 test("skill level brackets map to onboarding starting Elo", () => {
   assert.equal(getStartingEloForSkillLevel("new_to_chess"), 0);
@@ -19,11 +27,11 @@ test("expert is accepted as a normalized skill level", () => {
   assert.equal(normalizeSkillLevel("expert"), "expert");
 });
 
-test("opponent Elo is deterministic challenge Elo above a minimum floor", () => {
-  assert.equal(getOpponentElo(0), 800);
-  assert.equal(getOpponentElo(500), 800);
-  assert.equal(getOpponentElo(1500), 1600);
-  assert.equal(getOpponentElo(Number.NaN), 800);
+test("opponent Elo is matched to the user's current Elo", () => {
+  assert.equal(getOpponentElo(0), 100);
+  assert.equal(getOpponentElo(500), 500);
+  assert.equal(getOpponentElo(1500), 1500);
+  assert.equal(getOpponentElo(Number.NaN), 500);
 });
 
 test("calculateEloUpdate uses provided opponent Elo without resampling", () => {
@@ -140,3 +148,105 @@ test("legacy fallback: only evalPreservationScore set returns same result as bef
   assert.equal(update!.actualScore, 0.5);
   assert.ok(Math.abs(update!.eloDelta) <= 35, "should use non-outlier clamp");
 });
+
+test("matched-engine CPL update rewards outperforming the engine", () => {
+  const update = calculateMatchedEngineCplEloUpdate({
+    userEloAtGameStart: 1000,
+    ratingDeviation: 650,
+    totalSequences: 10,
+    humanMoves: repeatedCplMoves("w", 20, 4),
+    engineMoves: repeatedCplMoves("b", 140, 4),
+  });
+
+  assert.ok(update);
+  assert.equal(update.ratingMethod, "matched_engine_cpl");
+  assert.equal(update.opponentElo, 1000);
+  assert.equal(update.humanAvgCpl, 20);
+  assert.equal(update.engineAvgCpl, 140);
+  assert.equal(update.cplDiff, 120);
+  assert.equal(update.eloDelta, Math.round(64 * Math.tanh(120 / 120)));
+  assert.ok(update.eloDelta > 0);
+});
+
+test("matched-engine CPL update is near zero when CPL is similar", () => {
+  const update = calculateMatchedEngineCplEloUpdate({
+    userEloAtGameStart: 1500,
+    totalSequences: 10,
+    humanMoves: repeatedCplMoves("w", 52, 4),
+    engineMoves: repeatedCplMoves("b", 50, 4),
+  });
+
+  assert.ok(update);
+  assert.equal(update.cplDiff, -2);
+  assert.ok(Math.abs(update.eloDelta) <= 2);
+});
+
+test("matched-engine CPL update penalizes underperforming the engine", () => {
+  const update = calculateMatchedEngineCplEloUpdate({
+    userEloAtGameStart: 1500,
+    totalSequences: 10,
+    humanMoves: repeatedCplMoves("w", 160, 4),
+    engineMoves: repeatedCplMoves("b", 40, 4),
+  });
+
+  assert.ok(update);
+  assert.equal(update.cplDiff, -120);
+  assert.ok(update.eloDelta < 0);
+});
+
+test("matched-engine CPL update caps very large positive and negative differences", () => {
+  const positive = calculateMatchedEngineCplEloUpdate({
+    userEloAtGameStart: 1500,
+    totalSequences: 10,
+    humanMoves: repeatedCplMoves("w", 0, 4),
+    engineMoves: repeatedCplMoves("b", 1000, 4),
+  });
+  const negative = calculateMatchedEngineCplEloUpdate({
+    userEloAtGameStart: 1500,
+    totalSequences: 10,
+    humanMoves: repeatedCplMoves("w", 1000, 4),
+    engineMoves: repeatedCplMoves("b", 0, 4),
+  });
+
+  assert.ok(positive);
+  assert.ok(negative);
+  assert.ok(positive.eloDelta <= 64 && positive.eloDelta >= 63);
+  assert.ok(negative.eloDelta >= -64 && negative.eloDelta <= -63);
+});
+
+test("matched-engine CPL update skips when analysis is missing", () => {
+  const update = calculateMatchedEngineCplEloUpdate({
+    userEloAtGameStart: 1500,
+    totalSequences: 10,
+    humanMoves: repeatedCplMoves("w", 20, 4),
+    engineMoves: repeatedCplMoves("b", 40, 3),
+  });
+
+  assert.equal(update, null);
+});
+
+test("CPL is calculated from the moving side perspective and capped", () => {
+  assert.equal(calculateMoveCplFromWhiteEval({
+    sideToMove: "w",
+    bestEvalCp: 100,
+    playedEvalCp: 40,
+  }), 60);
+  assert.equal(calculateMoveCplFromWhiteEval({
+    sideToMove: "b",
+    bestEvalCp: -100,
+    playedEvalCp: 40,
+  }), 140);
+  assert.equal(calculateMoveCplFromWhiteEval({
+    sideToMove: "w",
+    bestEvalCp: 2000,
+    playedEvalCp: 0,
+  }), 1000);
+});
+
+function repeatedCplMoves(sideToMove: "w" | "b", cpl: number, count: number) {
+  return Array.from({ length: count }, () => (
+    sideToMove === "w"
+      ? { sideToMove, bestEvalCp: cpl, playedEvalCp: 0 }
+      : { sideToMove, bestEvalCp: -cpl, playedEvalCp: 0 }
+  ));
+}

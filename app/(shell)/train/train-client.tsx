@@ -300,6 +300,10 @@ type EloResult = {
   rawDelta: number;
   clampedDelta: number;
   skipped: boolean;
+  humanAvgCpl?: number | null;
+  engineAvgCpl?: number | null;
+  cplDiff?: number | null;
+  ratingMethod?: "legacy" | "matched_engine_cpl";
 };
 
 type OpponentMoveResponse = {
