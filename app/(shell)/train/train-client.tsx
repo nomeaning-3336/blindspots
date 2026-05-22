@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Chess, type Square } from "chess.js";
 import { AnalysisBoard, type BoardHighlight, type BoardMove, type EngineArrow } from "@/components/chess/analysis-board";
@@ -1217,7 +1218,7 @@ export default function TrainPage(props: TrainPageProps) {
     }
 
     try {
-      const res = await fetch("/api/dashboard/mistakes/add", {
+      const res = await fetch("/api/position/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1808,6 +1809,10 @@ export default function TrainPage(props: TrainPageProps) {
   useEffect(() => {
     let alive = true;
 
+    if (!shouldRunPreplayOnboarding && !initialMistakeId) {
+      prefetchNextPosition();
+    }
+
     async function loadOnboardingState() {
       try {
         const response = await fetch("/api/train/initialize", { cache: "no-store" });
@@ -1897,7 +1902,7 @@ export default function TrainPage(props: TrainPageProps) {
     return () => {
       alive = false;
     };
-  }, [shouldRunPreplayOnboarding, trainOnboardingIntroDone]);
+  }, [shouldRunPreplayOnboarding, trainOnboardingIntroDone, initialMistakeId]);
 
 
   const isOnboardingFirstPostmortem =
@@ -3104,19 +3109,20 @@ export default function TrainPage(props: TrainPageProps) {
       setFen(fenAfterUserMove);
       setLastMove({ from: move.from, to: move.to });
       setMoves(movesAfterUserMove);
-      warmEngineLinesForSequence(movesAfterUserMove);
 
       const isFinalUserMoveInSequence = userMoveCountAfterMove >= sequenceLength;
-
-      void evaluateUserMoveAsync({
-        userMoveIndex: userMoveCountAfterMove - 1,
-        decisionFen: boardFen!,
-        uci: userTrainingMove.uci,
-        san: userTrainingMove.san,
-        timeLimitMs: isFinalUserMoveInSequence ? 500 : 1000,
-      });
+      const evaluateCurrentUserMove = () =>
+        void evaluateUserMoveAsync({
+          userMoveIndex: userMoveCountAfterMove - 1,
+          decisionFen: boardFen!,
+          uci: userTrainingMove.uci,
+          san: userTrainingMove.san,
+          timeLimitMs: isFinalUserMoveInSequence ? 500 : 1000,
+        });
 
       if (chess.isGameOver()) {
+        evaluateCurrentUserMove();
+        warmEngineLinesForSequence(movesAfterUserMove);
         completingRef.current = true;
         setState("resolving");
         void completeSequence(movesAfterUserMove);
@@ -3124,13 +3130,18 @@ export default function TrainPage(props: TrainPageProps) {
       }
 
       if (userMoveCountAfterMove >= sequenceLength) {
+        evaluateCurrentUserMove();
+        warmEngineLinesForSequence(movesAfterUserMove);
         completingRef.current = true;
         setState("resolving");
         void completeSequence(movesAfterUserMove);
         return;
       }
 
-      void requestOpponentMove(fenAfterUserMove, movesAfterUserMove);
+      void requestOpponentMove(fenAfterUserMove, movesAfterUserMove).finally(() => {
+        evaluateCurrentUserMove();
+        warmEngineLinesForSequence(movesAfterUserMove);
+      });
     } catch {
       // The board only emits legal moves, but keep the page resilient to stale FEN.
     }
@@ -5999,6 +6010,7 @@ function TrainPostmortemTourOverlay({
   const cardContentRef = useRef<HTMLDivElement>(null);
   const [cardSize, setCardSize] = useState<{ width: number; height: number } | null>(null);
   const [animatedCardHeight, setAnimatedCardHeight] = useState<number | null>(null);
+  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const previousTourGeometryRef = useRef<{
     card: { top: number; left: number } | null;
     spotlight: { top: number; left: number; width: number; height: number } | null;
@@ -6008,11 +6020,19 @@ function TrainPostmortemTourOverlay({
   });
   const allSteps = steps as readonly PostmortemTourStep[];
   const currentStep = allSteps[step] ?? allSteps[0];
+  const isResolvingStepGeometry = resolvedStepIndex !== step;
+  const displayedStep = isResolvingStepGeometry
+    ? allSteps[resolvedStepIndex] ?? currentStep
+    : currentStep;
   const shouldCenterCard = centerCard || currentStep.centerCard === true;
   const isFirst = step <= 0;
 
   const VIEWPORT_PAD = 16;
   const GAP = 16;
+
+  useEffect(() => {
+    setPortalRoot(document.body);
+  }, []);
 
   function clamp(value: number, min: number, max: number) {
     return Math.max(min, Math.min(max, value));
@@ -6055,6 +6075,8 @@ function TrainPostmortemTourOverlay({
 
     async function resolveStep() {
       setIsPositioningSpotlight(true);
+      setTargetRect(null);
+      setMissingTarget(false);
 
       const currentStep = allSteps[step];
       if (!currentStep) {
@@ -6247,7 +6269,9 @@ function TrainPostmortemTourOverlay({
     !shouldCenterCard;
   const previousTourGeometry = previousTourGeometryRef.current;
   const displayedSpotlight = spotlight ?? (
-    waitsForTargetGeometry ? previousTourGeometry.spotlight : null
+    waitsForTargetGeometry && isResolvingStepGeometry
+      ? previousTourGeometry.spotlight
+      : null
   );
   const shouldDimSuppressedSpotlight =
     currentStep.suppressSpotlight &&
@@ -6260,7 +6284,6 @@ function TrainPostmortemTourOverlay({
   const isResolvingTargetWithoutReusableSpotlight =
     waitsForTargetGeometry &&
     !spotlight &&
-    Boolean(previousTourGeometry.card) &&
     !previousTourGeometry.spotlight;
   const shouldShowFullScreenTourDim =
     !isWaitingForActionCompletion &&
@@ -6423,14 +6446,14 @@ function TrainPostmortemTourOverlay({
   const primaryButtonLabel = completionInFlight
     ? "Saving..."
     : isActionStep && !actionCompleted
-      ? currentStep.cta ?? "Next"
-      : currentStep.cta ?? "Next";
+      ? displayedStep.cta ?? "Next"
+      : displayedStep.cta ?? "Next";
 
-  if (!hasInitialTourGeometry) {
+  if (!hasInitialTourGeometry || !portalRoot) {
     return null;
   }
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[80] overflow-hidden pointer-events-none"
       role="dialog"
@@ -6531,14 +6554,14 @@ function TrainPostmortemTourOverlay({
 
         <div className="relative min-h-0 flex-1 overflow-y-auto pr-1">
           <div
-            key={`current-${step}`}
+            key={`current-${resolvedStepIndex}`}
             className="train-tour-copy-enter relative"
           >
             <h2 className="mb-3 text-2xl font-bold leading-tight text-[var(--app-text)]">
-              {currentStep.headline}
+              {displayedStep.headline}
             </h2>
             <p className="mb-8 text-sm leading-7 text-[var(--app-muted)]">
-              {missingTarget ? "Finding the section..." : currentStep.body}
+              {missingTarget ? "Finding the section..." : displayedStep.body}
             </p>
           </div>
         </div>
@@ -6565,7 +6588,8 @@ function TrainPostmortemTourOverlay({
         </div>
         </div>
       </div>
-    </div>
+    </div>,
+    portalRoot,
   );
 }
 

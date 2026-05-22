@@ -1210,6 +1210,9 @@ async function enrichAttemptRegistry(
   if (!decisionFen) return response;
 
   const moveNotes = await loadMoveNotesForDecisionFen(decisionFen, userId, supabase);
+  const noteTextByMoveKey = new Map(
+    moveNotes.map((note) => [note.moveKey, note.noteText]),
+  );
 
   const { data: attempts } = await supabase
     .from("user_mistake_attempts" as any)
@@ -1223,27 +1226,20 @@ async function enrichAttemptRegistry(
     return moveNotes.length > 0 ? { ...response, moveNotes } : response;
   }
 
-  const registry = await Promise.all(
-    (attempts as any[]).map(async (a: any) => {
-      const moveKey = buildMoveKey(decisionFen, a.move_uci);
-      const { data: noteRow } = await supabase
-        .from("training_move_notes" as any)
-        .select("note_text")
-        .eq("user_id", userId)
-        .eq("move_key", moveKey)
-        .maybeSingle();
-      return {
-        id: a.id,
-        decisionFen,
-        moveUci: a.move_uci,
-        moveSan: a.move_san,
-        classification: a.classification,
-        cpLoss: a.cp_loss,
-        playedAt: a.played_at,
-        note: (noteRow as any)?.note_text || null,
-      };
-    }),
-  );
+  const registry = (attempts as any[]).map((attempt: any) => {
+    const moveKey = buildMoveKey(decisionFen, attempt.move_uci);
+
+    return {
+      id: attempt.id,
+      decisionFen,
+      moveUci: attempt.move_uci,
+      moveSan: attempt.move_san,
+      classification: attempt.classification,
+      cpLoss: attempt.cp_loss,
+      playedAt: attempt.played_at,
+      note: noteTextByMoveKey.get(moveKey) || null,
+    };
+  });
 
   return {
     ...response,
