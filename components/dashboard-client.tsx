@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Chess } from "chess.js";
 import type { DashboardClassifications, DashboardPosition, DashboardSummary, EloHistoryPoint } from "@/lib/dashboard";
@@ -51,30 +51,20 @@ export function DashboardClient({ summary }: { summary: DashboardSummary }) {
   const hasData = summary.totalSequences > 0 || summary.recentSessions.length > 0;
   const router = useRouter();
   const [exitingToTrain, setExitingToTrain] = useState(false);
-  const exitTimerRef = useRef<number | null>(null);
+  const handlePositionAdded = useCallback(() => {
+    router.refresh();
+  }, [router]);
 
   useEffect(() => {
-    return () => {
-      if (exitTimerRef.current) {
-        window.clearTimeout(exitTimerRef.current);
-        exitTimerRef.current = null;
-      }
-    };
-  }, []);
+    router.prefetch("/train");
+  }, [router]);
 
   const navigateToTrain = useCallback(
     (href: string) => {
       if (exitingToTrain) return;
-      if (prefersReducedMotion()) {
-        router.push(href);
-        return;
-      }
 
       setExitingToTrain(true);
-      exitTimerRef.current = window.setTimeout(() => {
-        exitTimerRef.current = null;
-        router.push(href);
-      }, DASHBOARD_TRAIN_EXIT_MS);
+      router.push(href);
     },
     [exitingToTrain, router],
   );
@@ -83,10 +73,7 @@ export function DashboardClient({ summary }: { summary: DashboardSummary }) {
     <main
       className={[
         "app-paper-shell min-h-[calc(100dvh-64px)] overflow-x-hidden px-4 py-5 md:px-8",
-        "transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
-        exitingToTrain
-          ? "pointer-events-none opacity-0 translate-y-2 scale-[0.992]"
-          : "opacity-100 translate-y-0 scale-100",
+        exitingToTrain ? "pointer-events-none" : "",
       ].join(" ")}
     >
       <div className="mx-auto grid w-full max-w-[1180px] gap-5">
@@ -100,6 +87,7 @@ export function DashboardClient({ summary }: { summary: DashboardSummary }) {
           hasData={hasData}
           onNavigateToTrain={navigateToTrain}
           trainNavigationDisabled={exitingToTrain}
+          onPositionAdded={handlePositionAdded}
         />
       </div>
     </main>
@@ -242,11 +230,13 @@ function SummaryTab({
   hasData,
   onNavigateToTrain,
   trainNavigationDisabled,
+  onPositionAdded,
 }: {
   summary: DashboardSummary;
   hasData: boolean;
   onNavigateToTrain: (href: string) => void;
   trainNavigationDisabled: boolean;
+  onPositionAdded: () => void;
 }) {
   return (
     <div className="grid gap-5">
@@ -256,6 +246,8 @@ function SummaryTab({
         onNavigateToTrain={onNavigateToTrain}
         trainNavigationDisabled={trainNavigationDisabled}
       />
+
+      <AddPositionSection onPositionAdded={onPositionAdded} />
 
       <QueueOverviewSection
         positions={summary.positions}
@@ -268,6 +260,296 @@ function SummaryTab({
         <MoveClassifications classifications={summary.classifications} />
       </div>
     </div>
+  );
+}
+
+type ParsedPreludeMove = {
+  uci: string;
+  san: string;
+  decisionFen: string;
+};
+
+type AddPositionPreview = {
+  previousFen: string | null;
+  finalFen: string;
+  playedMove: string | null;
+  preludeSan: string | null;
+  sideToMove: string;
+  validFen: boolean;
+  invalidPrelude: boolean;
+};
+
+function parsePreludeMove(chess: Chess, moveText: string): ParsedPreludeMove | null {
+  const uci = moveText.match(/^([a-h][1-8])([a-h][1-8])([qrbn])?$/i);
+  let played;
+  try {
+    played = uci
+      ? chess.move({
+          from: uci[1]!.toLowerCase(),
+          to: uci[2]!.toLowerCase(),
+          promotion: uci[3]?.toLowerCase(),
+        })
+      : chess.move(moveText, { strict: false });
+  } catch {
+    return null;
+  }
+
+  if (!played) return null;
+
+  return {
+    uci: `${played.from}${played.to}${played.promotion ?? ""}`,
+    san: played.san,
+    decisionFen: chess.fen(),
+  };
+}
+
+function AddPositionSection({
+  onPositionAdded,
+}: {
+  onPositionAdded: () => void;
+}) {
+  const [fenText, setFenText] = useState("");
+  const [preludeText, setPreludeText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const previewFrameRef = useRef<number | null>(null);
+  const previewSecondFrameRef = useRef<number | null>(null);
+  const preview = useMemo((): AddPositionPreview | null => {
+    const trimmedFen = fenText.trim();
+    if (!trimmedFen) return null;
+
+    let chess: Chess;
+    try {
+      chess = new Chess(trimmedFen);
+    } catch {
+      return null;
+    }
+
+    const sideToMove = chess.turn() === "w" ? "White" : "Black";
+    const trimmedPrelude = preludeText.trim();
+    if (!trimmedPrelude) {
+      return {
+        previousFen: null,
+        finalFen: chess.fen(),
+        playedMove: null,
+        preludeSan: null,
+        sideToMove,
+        validFen: true,
+        invalidPrelude: false,
+      };
+    }
+
+    const parsed = parsePreludeMove(chess, trimmedPrelude);
+    if (!parsed) {
+      return {
+        previousFen: null,
+        finalFen: trimmedFen,
+        playedMove: null,
+        preludeSan: null,
+        sideToMove,
+        validFen: true,
+        invalidPrelude: true,
+      };
+    }
+
+    return {
+      previousFen: trimmedFen,
+      finalFen: parsed.decisionFen,
+      playedMove: parsed.uci,
+      preludeSan: parsed.san,
+      sideToMove: chess.turn() === "w" ? "White" : "Black",
+      validFen: true,
+      invalidPrelude: false,
+    };
+  }, [fenText, preludeText]);
+  const previewKey = preview
+    ? `${preview.previousFen ?? "direct"}:${preview.finalFen}:${preview.playedMove ?? "none"}`
+    : "empty";
+
+  useLayoutEffect(() => {
+    setPreviewVisible(false);
+
+    if (previewFrameRef.current) {
+      window.cancelAnimationFrame(previewFrameRef.current);
+      previewFrameRef.current = null;
+    }
+    if (previewSecondFrameRef.current) {
+      window.cancelAnimationFrame(previewSecondFrameRef.current);
+      previewSecondFrameRef.current = null;
+    }
+
+    previewFrameRef.current = window.requestAnimationFrame(() => {
+      previewFrameRef.current = null;
+      previewSecondFrameRef.current = window.requestAnimationFrame(() => {
+        previewSecondFrameRef.current = null;
+        setPreviewVisible(true);
+      });
+    });
+
+    return () => {
+      if (previewFrameRef.current) {
+        window.cancelAnimationFrame(previewFrameRef.current);
+        previewFrameRef.current = null;
+      }
+      if (previewSecondFrameRef.current) {
+        window.cancelAnimationFrame(previewSecondFrameRef.current);
+        previewSecondFrameRef.current = null;
+      }
+    };
+  }, [previewKey]);
+
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (saving) return;
+
+    setError(null);
+    setStatus(null);
+
+    let chess: Chess;
+    try {
+      chess = new Chess(fenText.trim());
+    } catch {
+      setError("Invalid FEN.");
+      return;
+    }
+
+    const parsed = preludeText.trim() ? parsePreludeMove(chess, preludeText.trim()) : {
+      uci: null,
+      san: null,
+      decisionFen: chess.fen(),
+    };
+    if (!parsed) {
+      setError("Invalid prelude move.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/position/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          decisionFen: parsed.decisionFen,
+          setupPreviousFen: fenText.trim(),
+          setupPlayedMoveUci: parsed.uci,
+          setupPlayedMoveSan: parsed.san,
+        }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? `Add failed: ${res.status}`);
+      }
+
+      setFenText("");
+      setPreludeText("");
+      setStatus("Added to New.");
+      onPositionAdded();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add position.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="app-brutal-section p-5 md:p-6">
+      <SectionLabel>Add position</SectionLabel>
+      <form onSubmit={submit} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_368px] lg:items-start">
+        <div className="grid gap-4">
+          <label className="grid gap-1">
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">FEN</span>
+            <input
+              value={fenText}
+              onChange={(e) => {
+                setFenText(e.target.value);
+                setError(null);
+                setStatus(null);
+              }}
+              disabled={saving}
+              placeholder="Position before prelude move"
+              className="min-h-11 rounded-md border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-3 py-2 font-mono text-sm text-[var(--app-text)] outline-none transition focus:border-[var(--app-accent)] disabled:opacity-60"
+            />
+            {fenText.trim() && (
+              <span className={["text-xs", preview?.validFen ? "text-[var(--app-class-good)]" : "text-[var(--app-class-blunder)]"].join(" ")}>
+                {preview?.validFen ? `Valid position · ${preview.sideToMove} to move` : "Invalid FEN."}
+              </span>
+            )}
+          </label>
+          <label className="grid max-w-[260px] gap-1">
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
+              Prelude move <span className="ml-1 normal-case tracking-normal text-[var(--app-muted-soft)]">optional</span>
+            </span>
+            <input
+              value={preludeText}
+              onChange={(e) => {
+                setPreludeText(e.target.value);
+                setError(null);
+                setStatus(null);
+              }}
+              disabled={saving}
+              placeholder="e4 or e2e4"
+              className="min-h-11 rounded-md border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-3 py-2 font-mono text-sm text-[var(--app-text)] outline-none transition focus:border-[var(--app-accent)] disabled:opacity-60"
+            />
+            {preview?.invalidPrelude && (
+              <span className="text-xs text-[var(--app-class-blunder)]">Invalid prelude move.</span>
+            )}
+          </label>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="submit"
+              disabled={saving}
+              className="app-brutal-button inline-flex min-h-11 items-center justify-center px-5 py-2.5 text-sm disabled:opacity-60"
+            >
+              {saving ? "Adding..." : "Add to queue"}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-col items-center gap-2 lg:justify-self-end">
+          <div
+            key={previewKey}
+            className={[
+              "transition-[opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+              previewVisible ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-1 scale-[0.992]",
+            ].join(" ")}
+          >
+          {preview ? (
+            <>
+              <ReplayThumbnail
+                key={`${preview.previousFen ?? "direct"}:${preview.finalFen}:${preview.playedMove ?? "none"}`}
+                previousFen={preview.previousFen}
+                finalFen={preview.finalFen}
+                playedMove={preview.playedMove}
+                orientation={preview.sideToMove === "White" ? "white" : "black"}
+                size={360}
+              />
+              <span className="max-w-[360px] text-center text-xs leading-5 text-[var(--app-muted)]">
+                {preview.preludeSan ? `${preview.preludeSan} plays first — training starts from the reply` : `${preview.sideToMove} to move`}
+              </span>
+            </>
+          ) : (
+            <div className="grid h-[368px] w-[368px] max-w-full place-items-center rounded-lg border border-dashed border-[var(--app-border)] text-center text-xs text-[var(--app-muted-soft)]">
+              Preview
+            </div>
+          )}
+          </div>
+        </div>
+      </form>
+      {(error || status) && (
+        <div
+          className={[
+            "mt-3 text-xs font-bold",
+            error ? "text-[var(--app-class-blunder)]" : "text-[var(--app-class-good)]",
+          ].join(" ")}
+          role="status"
+        >
+          {error ?? status}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -518,6 +800,13 @@ function QueueOverviewSection({
     return positions.filter((p) => !deletedIds.has(p.id) && queueBucketForPosition(p, nowMs) === selectedBucket);
   }, [positions, selectedBucket, nowMs, deletedIds]);
 
+  useEffect(() => {
+    if (!selectedBucket) return;
+    if (bucketCounts[selectedBucket] === 0) {
+      setSelectedBucket(null);
+    }
+  }, [bucketCounts, selectedBucket]);
+
   const toggleBucket = (bucket: QueueBucket) => {
     setSelectedBucket((prev) => (prev === bucket ? null : bucket));
   };
@@ -603,6 +892,13 @@ function QueueOverviewSection({
                     setDeletedIds((prev) => {
                       const next = new Set(prev);
                       next.add(id);
+                      return next;
+                    })
+                  }
+                  onDeleteRollback={(id) =>
+                    setDeletedIds((prev) => {
+                      const next = new Set(prev);
+                      next.delete(id);
                       return next;
                     })
                   }
@@ -695,18 +991,22 @@ const noteBodyTextClassName =
 const noteMoveTextClassName =
   "font-sans text-sm font-bold normal-case tracking-normal leading-5 text-[var(--app-text)]";
 
+const QUEUE_DELETE_ANIMATION_MS = 520;
+
 function QueuePositionRow({
   position,
   nowMs,
   onNavigateToTrain,
   trainNavigationDisabled,
   onDelete,
+  onDeleteRollback,
 }: {
   position: DashboardPosition;
   nowMs: number;
   onNavigateToTrain: (href: string) => void;
   trainNavigationDisabled: boolean;
   onDelete: (id: string) => void;
+  onDeleteRollback: (id: string) => void;
 }) {
   const [notes, setNotes] = useState(position.moveNotes);
   const [editingMoveKey, setEditingMoveKey] = useState<string | null>(null);
@@ -714,8 +1014,13 @@ function QueuePositionRow({
   const [editError, setEditError] = useState<string | null>(null);
   const [pendingNoteKeys, setPendingNoteKeys] = useState<Set<string>>(() => new Set());
   const [savingNote, setSavingNote] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [newNoteText, setNewNoteText] = useState("");
+  const [addError, setAddError] = useState<string | null>(null);
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const editContainerRef = useRef<HTMLDivElement | null>(null);
+  const addTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const addContainerRef = useRef<HTMLDivElement | null>(null);
 
   function resizeTextareaToContent(el: HTMLTextAreaElement | null) {
     if (!el) return;
@@ -764,71 +1069,49 @@ function QueuePositionRow({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [editingMoveKey]);
 
-  const [adding, setAdding] = useState(false);
-  const [newNoteText, setNewNoteText] = useState("");
-  const [addError, setAddError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!adding) return;
+
+    function onPointerDown(e: PointerEvent) {
+      const container = addContainerRef.current;
+      if (!container) return;
+      if (container.contains(e.target as Node)) return;
+      void saveNewNote();
+    }
+
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [adding, newNoteText, savingNote]);
+
+  useEffect(() => {
+    if (!adding) return;
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeAddComposer();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [adding]);
+
   const [isDeleting, setIsDeleting] = useState(false);
-  const [deletionStage, setDeletionStage] = useState<"idle" | "success" | "collapsing">("idle");
-  const [isUndoingDelete, setIsUndoingDelete] = useState(false);
-  const [deleteUndo, setDeleteUndo] = useState<{
-    status: string;
-    nextReviewAt: string | null;
-    retiredAt: string | null;
-  } | null>(null);
-  const deleteCollapseTimerRef = useRef<number | null>(null);
-  const deleteRemoveTimerRef = useRef<number | null>(null);
+  const [deletionStage, setDeletionStage] = useState<"idle" | "collapsing">("idle");
   const [modalOpen, setModalOpen] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
-
-  function clearDeleteTimers() {
-    if (deleteCollapseTimerRef.current) {
-      window.clearTimeout(deleteCollapseTimerRef.current);
-      deleteCollapseTimerRef.current = null;
-    }
-    if (deleteRemoveTimerRef.current) {
-      window.clearTimeout(deleteRemoveTimerRef.current);
-      deleteRemoveTimerRef.current = null;
-    }
-  }
+  const deleteRemoveTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    return () => { clearDeleteTimers(); };
+    return () => {
+      if (deleteRemoveTimerRef.current) {
+        window.clearTimeout(deleteRemoveTimerRef.current);
+        deleteRemoveTimerRef.current = null;
+      }
+    };
   }, []);
-
-  if (deletionStage === "success" || deletionStage === "collapsing") {
-    const collapsing = deletionStage === "collapsing";
-    return (
-      <div
-        className={[
-          "overflow-hidden transition-[max-height,opacity] duration-300 ease-out",
-          collapsing ? "max-h-0 opacity-0" : "max-h-40 opacity-100",
-        ].join(" ")}
-        role="status"
-        aria-live="polite"
-      >
-        <div className="flex flex-col gap-4 rounded-lg border border-[color-mix(in_srgb,var(--app-class-good)_40%,transparent)] bg-[var(--app-panel-solid)] p-5 text-[var(--app-class-good)] sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center justify-center gap-3 sm:justify-start">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              <path d="M5 10 L9 14 L15 6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span className="text-sm font-black uppercase tracking-[0.14em]">
-              Position successfully deleted
-            </span>
-          </div>
-
-          <button
-            type="button"
-            onClick={undoDelete}
-            disabled={isUndoingDelete || collapsing}
-            className="inline-flex min-h-10 items-center justify-center border border-[var(--app-class-good)] bg-transparent px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--app-class-good)] transition hover:bg-[var(--app-class-good)] hover:text-[var(--app-bg)] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isUndoingDelete ? "Undoing..." : "Undo"}
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   const DELETE_SKIP_KEY = "blindspots:skipDeleteConfirmation";
 
@@ -870,69 +1153,30 @@ function QueuePositionRow({
   async function performDelete() {
     if (isDeleting) return;
     setIsDeleting(true);
+    setDeletionStage("collapsing");
+    const deleteRequest = fetch(`/api/dashboard/mistakes/${encodeURIComponent(position.id)}/delete`, {
+      method: "POST",
+    });
+    deleteRemoveTimerRef.current = window.setTimeout(() => {
+      deleteRemoveTimerRef.current = null;
+      onDelete(position.id);
+    }, QUEUE_DELETE_ANIMATION_MS);
     try {
-      const res = await fetch(`/api/dashboard/mistakes/${encodeURIComponent(position.id)}/delete`, {
-        method: "POST",
-      });
+      const res = await deleteRequest;
       if (!res.ok) {
         throw new Error(`Delete failed: ${res.status}`);
       }
-      const payload = await res.json().catch(() => null);
-      setDeleteUndo(payload?.undo ?? {
-        status: position.status,
-        nextReviewAt: position.nextReviewAt,
-        retiredAt: null,
-      });
-      setDeletionStage("success");
-
-      clearDeleteTimers();
-      deleteCollapseTimerRef.current = window.setTimeout(() => {
-        setDeletionStage("collapsing");
-      }, 8000);
-
-      deleteRemoveTimerRef.current = window.setTimeout(() => {
-        onDelete(position.id);
-      }, 8300);
     } catch (err) {
+      if (deleteRemoveTimerRef.current) {
+        window.clearTimeout(deleteRemoveTimerRef.current);
+        deleteRemoveTimerRef.current = null;
+      }
+      onDeleteRollback(position.id);
+      setDeletionStage("idle");
       console.error("[dashboard] failed to delete position", err);
       window.alert("Could not delete this position. Try again.");
     } finally {
       setIsDeleting(false);
-    }
-  }
-
-  async function undoDelete() {
-    if (isUndoingDelete || !deleteUndo) return;
-
-    clearDeleteTimers();
-    setIsUndoingDelete(true);
-
-    try {
-      const res = await fetch(`/api/dashboard/mistakes/${encodeURIComponent(position.id)}/undo-delete`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(deleteUndo),
-      });
-
-      if (!res.ok) {
-        throw new Error(`Undo failed: ${res.status}`);
-      }
-
-      setDeletionStage("idle");
-      setDeleteUndo(null);
-    } catch (err) {
-      console.error("[dashboard] failed to undo delete position", err);
-      window.alert("Could not undo delete. Try refreshing the dashboard.");
-      deleteCollapseTimerRef.current = window.setTimeout(() => {
-        setDeletionStage("collapsing");
-      }, 8000);
-      deleteRemoveTimerRef.current = window.setTimeout(() => {
-        onDelete(position.id);
-      }, 8300);
-    } finally {
-      setIsUndoingDelete(false);
     }
   }
 
@@ -1024,30 +1268,12 @@ function QueuePositionRow({
     })();
   }
 
-  function deleteNote(note: typeof notes[number]) {
-    const prevNotes = notes;
-    setNotes((prev) => prev.filter((n) => n.moveKey !== note.moveKey));
-
-    void (async () => {
-      try {
-        const res = await fetch("/api/train/move-notes", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ moveKey: note.moveKey }),
-        });
-        if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
-      } catch (err) {
-        console.error("[dashboard] failed to delete note", err);
-        setNotes(prevNotes);
-      }
-    })();
-  }
-
   function openAddComposer() {
     discardEdit();
     setAdding(true);
     setNewNoteText("");
     setAddError(null);
+    window.requestAnimationFrame(() => addTextareaRef.current?.focus());
   }
 
   function closeAddComposer() {
@@ -1062,7 +1288,7 @@ function QueuePositionRow({
 
     const noteText = newNoteText.trim();
     if (!noteText) {
-      setAddError("Note text is required.");
+      closeAddComposer();
       return;
     }
 
@@ -1128,9 +1354,20 @@ function QueuePositionRow({
   const lastResultText = lastAttemptLabel(position);
   const hasResult = position.attempts > 0 && lastResultText !== "—";
   const streak = Math.min(position.consecutiveCorrectCount ?? 0, 3);
+  const positionNote = notes[0] ?? null;
+  const isEditingPositionNote = Boolean(positionNote && editingMoveKey === positionNote.moveKey);
+  const isSavingPositionNote = positionNote ? pendingNoteKeys.has(positionNote.moveKey) : savingNote;
 
   return (
-    <div className="grid gap-2">
+    <div
+      className={[
+        "grid gap-2 overflow-hidden transition-[max-height,opacity,transform] duration-[520ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:duration-150",
+        deletionStage === "collapsing"
+          ? "pointer-events-none max-h-0 -translate-y-1 scale-[0.985] opacity-0"
+          : "max-h-[760px] translate-y-0 scale-100 opacity-100",
+      ].join(" ")}
+      aria-hidden={deletionStage === "collapsing" ? "true" : undefined}
+    >
       {showDelete && (
         <div className="flex justify-end px-1">
           <button
@@ -1254,35 +1491,33 @@ function QueuePositionRow({
       {/* Notes column */}
       <div className="min-w-0 py-2">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <h3 className="text-xl font-black tracking-[-0.03em] text-[var(--app-text)]">Notes</h3>
-            {notes.length > 0 && (
-              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--app-bg-2)] px-1.5 text-[10px] font-bold leading-none text-[var(--app-muted)]">
-                {notes.length}
-              </span>
-            )}
-          </div>
+          <h3 className="text-xl font-black tracking-[-0.03em] text-[var(--app-text)]">Notes</h3>
           <button
             type="button"
-            onClick={() => (adding ? closeAddComposer() : openAddComposer())}
-            aria-label={adding ? "Close add-note form" : "Add note"}
+            onClick={() => {
+              if (positionNote) {
+                startEditNote(positionNote);
+              } else {
+                openAddComposer();
+              }
+            }}
+            disabled={adding || isEditingPositionNote || isSavingPositionNote}
+            aria-label={positionNote ? "Edit note" : "Create note"}
             className="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-panel-solid)] text-[var(--app-muted)] transition-colors hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] focus-visible:border-[var(--app-accent)] focus-visible:text-[var(--app-accent)] focus-visible:outline-none"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-              {adding ? (
-                <path d="M2 2 L12 12 M12 2 L2 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              ) : (
-                <path d="M7 2 L7 12 M2 7 L12 7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              )}
+              <path d="M9 2 L12 5 L5 12 L2 12 L2 9 Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" fill="none" />
+              <path d="M8 3 L11 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </button>
         </div>
 
         {adding && (
-          <div className="mt-3 grid gap-2 rounded-md border border-[var(--app-border)] bg-[var(--app-panel-deep)] p-3">
+          <div ref={addContainerRef} className="mt-3 grid gap-2 rounded-md border border-[var(--app-border)] bg-[var(--app-panel-deep)] p-3">
             <label className="grid gap-1 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)]">
-              Note
+              Position note
               <textarea
+                ref={addTextareaRef}
                 value={newNoteText}
                 onChange={(e) => setNewNoteText(e.target.value)}
                 rows={3}
@@ -1292,77 +1527,27 @@ function QueuePositionRow({
             {addError && (
               <div className="text-xs text-[var(--app-class-blunder)]">{addError}</div>
             )}
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={closeAddComposer}
-                disabled={savingNote}
-                className="app-brutal-button-secondary inline-flex min-h-9 items-center justify-center px-3 py-1.5 text-xs disabled:opacity-60"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={saveNewNote}
-                disabled={savingNote}
-                className="inline-flex min-h-9 items-center justify-center rounded-lg border border-[var(--app-brutal-edge)] bg-[var(--app-class-good)] px-3 py-1.5 text-xs font-black uppercase tracking-[0.06em] text-[#050505] shadow-[2px_2px_0_var(--app-brutal-shadow)] transition-transform hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_var(--app-brutal-shadow)] disabled:opacity-60"
-              >
-                {savingNote ? "Saving..." : "Save"}
-              </button>
-            </div>
+            {savingNote ? <div className="text-xs text-[var(--app-muted)]">Saving...</div> : null}
           </div>
         )}
 
-        {notes.length === 0 ? (
+        {!positionNote && !adding ? (
           <div className="mt-2 rounded border border-dashed border-[var(--app-border)] px-3 py-2 text-xs text-[var(--app-muted-soft)]">
                 No notes for this position yet.
               </div>
-        ) : (
+        ) : null}
+
+        {positionNote ? (
           <div className="mt-3 grid gap-2">
-            {notes.map((note) => {
+            {(() => {
+              const note = positionNote;
               return (
                 <div
                   key={note.moveKey}
                   className={[
-                    "group relative border border-[var(--app-border-soft)] bg-[var(--app-panel-deep)] px-4 py-3 transition-colors hover:border-[var(--app-border-strong)] hover:bg-[var(--app-panel-solid)] focus-within:border-[var(--app-border-strong)] focus-within:bg-[var(--app-panel-solid)]",
-                    editingMoveKey !== note.moveKey && !adding ? "pr-20" : "",
+                    "relative border border-[var(--app-border-soft)] bg-[var(--app-panel-deep)] px-4 py-3 transition-colors focus-within:border-[var(--app-border-strong)] focus-within:bg-[var(--app-panel-solid)]",
                   ].filter(Boolean).join(" ")}
                 >
-                  {editingMoveKey !== note.moveKey && (
-                    <div className="absolute right-2 top-2 flex opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                      <button
-                        type="button"
-                        aria-label="Edit note"
-                        title="Edit note"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          startEditNote(note);
-                        }}
-                        className="grid h-8 w-8 place-items-center rounded-md text-[var(--app-muted)] transition hover:bg-[var(--app-surface-subtle)] hover:text-[var(--app-text)] focus-visible:bg-[var(--app-surface-subtle)] focus-visible:text-[var(--app-text)] focus-visible:outline-none"
-                      >
-                        <svg width="15" height="15" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                          <path d="M9 2 L12 5 L5 12 L2 12 L2 9 Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-                          <path d="M8 3 L11 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                        </svg>
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Delete note"
-                        title="Delete note"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          deleteNote(note);
-                        }}
-                        className="grid h-8 w-8 place-items-center rounded-md text-[var(--app-muted)] transition hover:bg-[var(--app-surface-subtle)] hover:text-[var(--app-class-blunder)] focus-visible:bg-[var(--app-surface-subtle)] focus-visible:text-[var(--app-class-blunder)] focus-visible:outline-none"
-                      >
-                        <svg width="15" height="15" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                          <path d="M3 4 L11 4 M5 4 L5 3 C5 2.5 5.5 2 6 2 L8 2 C8.5 2 9 2.5 9 3 L9 4 M6 6 L6 10 M8 6 L8 10 M3 4 L4 12 L10 12 L11 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </button>
-                    </div>
-                  )}
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--app-muted)]">
                       Position note
@@ -1396,31 +1581,9 @@ function QueuePositionRow({
                       {editError && (
                         <div className="text-xs text-[var(--app-class-blunder)]">{editError}</div>
                       )}
-                      <div className="mt-3 flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            submitEdit(note);
-                          }}
-                          disabled={pendingNoteKeys.has(note.moveKey)}
-                          aria-label="Save note"
-                          className="app-brutal-button inline-flex min-h-9 items-center justify-center px-3 py-1.5 text-xs disabled:opacity-60"
-                        >
-                          {pendingNoteKeys.has(note.moveKey) ? "Saving..." : "Save"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            discardEdit();
-                          }}
-                          aria-label="Discard changes"
-                          className="app-brutal-button-secondary inline-flex min-h-9 items-center justify-center px-3 py-1.5 text-xs disabled:opacity-60"
-                        >
-                          Cancel
-                        </button>
-                      </div>
+                      {pendingNoteKeys.has(note.moveKey) ? (
+                        <div className="text-xs text-[var(--app-muted)]">Saving...</div>
+                      ) : null}
                     </div>
                   ) : (
                     <p className={`mt-2 ${noteBodyTextClassName}`}>
@@ -1429,9 +1592,9 @@ function QueuePositionRow({
                   )}
                 </div>
               );
-            })}
+            })()}
           </div>
-        )}
+        ) : null}
       </div>
       {modalOpen && (
         <DeleteConfirmationModal
