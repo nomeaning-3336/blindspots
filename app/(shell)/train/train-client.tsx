@@ -2770,7 +2770,7 @@ export default function TrainPage(props: TrainPageProps) {
       await delayMs(POSTMORTEM_NEXT_POSITION_TRANSITION_MS);
     }
 
-    router.push("/");
+    router.push("/dashboard");
   }
 
   async function playInitialOpponentMoveFromPayload(payload: NextPositionResponse) {

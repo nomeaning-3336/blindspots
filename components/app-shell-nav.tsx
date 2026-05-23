@@ -31,9 +31,9 @@ const analyzePrefetchLinks = [
 ] as const;
 
 const authenticatedAppLinks = [
-  { href: "/", label: "Dashboard" },
-  { href: "/analysis", label: "Analysis" },
   { href: "/train", label: "Train" },
+  { href: "/analysis", label: "Analysis" },
+  { href: "/dashboard", label: "Dashboard" },
   { href: "/account", label: "Account" },
 ];
 
