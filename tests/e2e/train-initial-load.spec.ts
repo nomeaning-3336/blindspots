@@ -98,7 +98,7 @@ test(
     resolveNextPosition!(MOCK_PAYLOAD);
 
     // After resolution the overlay appears (engine-setup position)
-    const overlay = p.locator("[data-testid='audio-unlock-overlay']");
+    const overlay = p.locator("[data-testid='train-start-cta']");
     await expect(overlay).toBeVisible({ timeout: 5000 });
   },
 );
@@ -132,7 +132,7 @@ test(
     expect(boardFenBefore).toEqual(MOCK_PAYLOAD.previousFen);
 
     // Overlay is present
-    const overlay = p.locator("[data-testid='audio-unlock-overlay']");
+    const overlay = p.locator("[data-testid='train-start-cta']");
     await expect(overlay).toBeVisible();
 
     // Click overlay to unlock and play initial engine move
@@ -191,7 +191,7 @@ test(
     }
 
     // Unlock and wait for final state
-    const overlay = p.locator("[data-testid='audio-unlock-overlay']");
+    const overlay = p.locator("[data-testid='train-start-cta']");
     await overlay.click();
     await p.waitForTimeout(1500);
 
