@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Chess } from "chess.js";
 import type { DashboardClassifications, DashboardPosition, DashboardSummary, EloHistoryPoint } from "@/lib/dashboard";
@@ -263,142 +263,15 @@ function SummaryTab({
   );
 }
 
-type ParsedPreludeMove = {
-  uci: string;
-  san: string;
-  decisionFen: string;
-};
-
-type AddPositionPreview = {
-  previousFen: string | null;
-  finalFen: string;
-  playedMove: string | null;
-  preludeSan: string | null;
-  sideToMove: string;
-  validFen: boolean;
-  invalidPrelude: boolean;
-};
-
-function parsePreludeMove(chess: Chess, moveText: string): ParsedPreludeMove | null {
-  const uci = moveText.match(/^([a-h][1-8])([a-h][1-8])([qrbn])?$/i);
-  let played;
-  try {
-    played = uci
-      ? chess.move({
-          from: uci[1]!.toLowerCase(),
-          to: uci[2]!.toLowerCase(),
-          promotion: uci[3]?.toLowerCase(),
-        })
-      : chess.move(moveText, { strict: false });
-  } catch {
-    return null;
-  }
-
-  if (!played) return null;
-
-  return {
-    uci: `${played.from}${played.to}${played.promotion ?? ""}`,
-    san: played.san,
-    decisionFen: chess.fen(),
-  };
-}
-
 function AddPositionSection({
   onPositionAdded,
 }: {
   onPositionAdded: () => void;
 }) {
   const [fenText, setFenText] = useState("");
-  const [preludeText, setPreludeText] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const [previewVisible, setPreviewVisible] = useState(false);
-  const previewFrameRef = useRef<number | null>(null);
-  const previewSecondFrameRef = useRef<number | null>(null);
-  const preview = useMemo((): AddPositionPreview | null => {
-    const trimmedFen = fenText.trim();
-    if (!trimmedFen) return null;
-
-    let chess: Chess;
-    try {
-      chess = new Chess(trimmedFen);
-    } catch {
-      return null;
-    }
-
-    const sideToMove = chess.turn() === "w" ? "White" : "Black";
-    const trimmedPrelude = preludeText.trim();
-    if (!trimmedPrelude) {
-      return {
-        previousFen: null,
-        finalFen: chess.fen(),
-        playedMove: null,
-        preludeSan: null,
-        sideToMove,
-        validFen: true,
-        invalidPrelude: false,
-      };
-    }
-
-    const parsed = parsePreludeMove(chess, trimmedPrelude);
-    if (!parsed) {
-      return {
-        previousFen: null,
-        finalFen: trimmedFen,
-        playedMove: null,
-        preludeSan: null,
-        sideToMove,
-        validFen: true,
-        invalidPrelude: true,
-      };
-    }
-
-    return {
-      previousFen: trimmedFen,
-      finalFen: parsed.decisionFen,
-      playedMove: parsed.uci,
-      preludeSan: parsed.san,
-      sideToMove: chess.turn() === "w" ? "White" : "Black",
-      validFen: true,
-      invalidPrelude: false,
-    };
-  }, [fenText, preludeText]);
-  const previewKey = preview
-    ? `${preview.previousFen ?? "direct"}:${preview.finalFen}:${preview.playedMove ?? "none"}`
-    : "empty";
-
-  useLayoutEffect(() => {
-    setPreviewVisible(false);
-
-    if (previewFrameRef.current) {
-      window.cancelAnimationFrame(previewFrameRef.current);
-      previewFrameRef.current = null;
-    }
-    if (previewSecondFrameRef.current) {
-      window.cancelAnimationFrame(previewSecondFrameRef.current);
-      previewSecondFrameRef.current = null;
-    }
-
-    previewFrameRef.current = window.requestAnimationFrame(() => {
-      previewFrameRef.current = null;
-      previewSecondFrameRef.current = window.requestAnimationFrame(() => {
-        previewSecondFrameRef.current = null;
-        setPreviewVisible(true);
-      });
-    });
-
-    return () => {
-      if (previewFrameRef.current) {
-        window.cancelAnimationFrame(previewFrameRef.current);
-        previewFrameRef.current = null;
-      }
-      if (previewSecondFrameRef.current) {
-        window.cancelAnimationFrame(previewSecondFrameRef.current);
-        previewSecondFrameRef.current = null;
-      }
-    };
-  }, [previewKey]);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -407,21 +280,11 @@ function AddPositionSection({
     setError(null);
     setStatus(null);
 
-    let chess: Chess;
+    let canonicalFen: string;
     try {
-      chess = new Chess(fenText.trim());
+      canonicalFen = new Chess(fenText.trim()).fen();
     } catch {
       setError("Invalid FEN.");
-      return;
-    }
-
-    const parsed = preludeText.trim() ? parsePreludeMove(chess, preludeText.trim()) : {
-      uci: null,
-      san: null,
-      decisionFen: chess.fen(),
-    };
-    if (!parsed) {
-      setError("Invalid prelude move.");
       return;
     }
 
@@ -431,10 +294,7 @@ function AddPositionSection({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          decisionFen: parsed.decisionFen,
-          setupPreviousFen: fenText.trim(),
-          setupPlayedMoveUci: parsed.uci,
-          setupPlayedMoveSan: parsed.san,
+          decisionFen: canonicalFen,
         }),
       });
 
@@ -444,7 +304,6 @@ function AddPositionSection({
       }
 
       setFenText("");
-      setPreludeText("");
       setStatus("Added to New.");
       onPositionAdded();
     } catch (err) {
@@ -457,85 +316,29 @@ function AddPositionSection({
   return (
     <section className="app-brutal-section p-5 md:p-6">
       <SectionLabel>Add position</SectionLabel>
-      <form onSubmit={submit} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_368px] lg:items-start">
-        <div className="grid gap-4">
-          <label className="grid gap-1">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">FEN</span>
-            <input
-              value={fenText}
-              onChange={(e) => {
-                setFenText(e.target.value);
-                setError(null);
-                setStatus(null);
-              }}
-              disabled={saving}
-              placeholder="Position before prelude move"
-              className="min-h-11 rounded-md border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-3 py-2 font-mono text-sm text-[var(--app-text)] outline-none transition focus:border-[var(--app-accent)] disabled:opacity-60"
-            />
-            {fenText.trim() && (
-              <span className={["text-xs", preview?.validFen ? "text-[var(--app-class-good)]" : "text-[var(--app-class-blunder)]"].join(" ")}>
-                {preview?.validFen ? `Valid position · ${preview.sideToMove} to move` : "Invalid FEN."}
-              </span>
-            )}
-          </label>
-          <label className="grid max-w-[260px] gap-1">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
-              Prelude move <span className="ml-1 normal-case tracking-normal text-[var(--app-muted-soft)]">optional</span>
-            </span>
-            <input
-              value={preludeText}
-              onChange={(e) => {
-                setPreludeText(e.target.value);
-                setError(null);
-                setStatus(null);
-              }}
-              disabled={saving}
-              placeholder="e4 or e2e4"
-              className="min-h-11 rounded-md border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-3 py-2 font-mono text-sm text-[var(--app-text)] outline-none transition focus:border-[var(--app-accent)] disabled:opacity-60"
-            />
-            {preview?.invalidPrelude && (
-              <span className="text-xs text-[var(--app-class-blunder)]">Invalid prelude move.</span>
-            )}
-          </label>
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="submit"
-              disabled={saving}
-              className="app-brutal-button inline-flex min-h-11 items-center justify-center px-5 py-2.5 text-sm disabled:opacity-60"
-            >
-              {saving ? "Adding..." : "Add to queue"}
-            </button>
-          </div>
-        </div>
-
-        <div className="flex flex-col items-center gap-2 lg:justify-self-end">
-          <div
-            key={previewKey}
-            className={[
-              "transition-[opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
-              previewVisible ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-1 scale-[0.992]",
-            ].join(" ")}
+      <form onSubmit={submit} className="grid gap-4">
+        <label className="grid gap-1">
+          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">FEN</span>
+          <input
+            value={fenText}
+            onChange={(e) => {
+              setFenText(e.target.value);
+              setError(null);
+              setStatus(null);
+            }}
+            disabled={saving}
+            placeholder="Paste a FEN to add it to your queue"
+            className="min-h-11 rounded-md border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-3 py-2 font-mono text-sm text-[var(--app-text)] outline-none transition focus:border-[var(--app-accent)] disabled:opacity-60"
+          />
+        </label>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="submit"
+            disabled={saving}
+            className="app-brutal-button inline-flex min-h-11 items-center justify-center px-5 py-2.5 text-sm disabled:opacity-60"
           >
-          {preview ? (
-            <>
-              <ReplayThumbnail
-                key={`${preview.previousFen ?? "direct"}:${preview.finalFen}:${preview.playedMove ?? "none"}`}
-                previousFen={preview.previousFen}
-                finalFen={preview.finalFen}
-                playedMove={preview.playedMove}
-                orientation={preview.sideToMove === "White" ? "white" : "black"}
-                size={360}
-              />
-              <span className="max-w-[360px] text-center text-xs leading-5 text-[var(--app-muted)]">
-                {preview.preludeSan ? `${preview.preludeSan} plays first — training starts from the reply` : `${preview.sideToMove} to move`}
-              </span>
-            </>
-          ) : (
-            <div className="grid h-[368px] w-[368px] max-w-full place-items-center rounded-lg border border-dashed border-[var(--app-border)] text-center text-xs text-[var(--app-muted-soft)]">
-              Preview
-            </div>
-          )}
-          </div>
+            {saving ? "Adding..." : "Add to queue"}
+          </button>
         </div>
       </form>
       {(error || status) && (
