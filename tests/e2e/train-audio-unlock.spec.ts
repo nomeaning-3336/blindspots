@@ -94,7 +94,7 @@ test("A: no placeholder shown while loading a real position", async ({ page }) =
   resolveNextPosition!(ENGINE_SETUP_PAYLOAD);
 
   // Verify the overlay appears (since this is an engine-setup position)
-  const overlay = page.locator("[data-testid='audio-unlock-overlay']");
+  const overlay = page.locator("[data-testid='train-start-cta']");
   await expect(overlay).toBeVisible({ timeout: 5000 });
 });
 
@@ -118,9 +118,9 @@ test("B: overlay appears, Space unlocks, board reaches fen, move table has engin
   await expect(board).toBeVisible();
 
   // Overlay is visible
-  const overlay = page.locator("[data-testid='audio-unlock-overlay']");
+  const overlay = page.locator("[data-testid='train-start-cta']");
   await expect(overlay).toBeVisible();
-  await expect(overlay).toContainText(/press any key|click to start/i);
+  await expect(overlay).toContainText(/start/i);
 
   // Move table is empty (engine move not yet in table)
   const moveRows = page.locator("[data-testid='train-move-row']");
@@ -177,7 +177,7 @@ test("C: initial-engine sound event logged only after gesture, not before", asyn
   expect(beforeCount).toBe(0);
 
   // Press Space
-  await page.locator("[data-testid='audio-unlock-overlay']").click();
+  await page.locator("[data-testid='train-start-cta']").click();
   await page.waitForTimeout(1500);
 
   // Exactly one initial-engine sound after gesture
@@ -207,7 +207,7 @@ test("D: ArrowLeft after setup plays no sound; ArrowRight plays sound", async ({
   await page.goto("/train", { waitUntil: "networkidle" });
 
   // Unlock the setup
-  await page.locator("[data-testid='audio-unlock-overlay']").click();
+  await page.locator("[data-testid='train-start-cta']").click();
   await page.waitForTimeout(1500);
 
   const countAfterSetup = (await getSoundEvents(page)).length;
