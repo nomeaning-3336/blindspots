@@ -456,6 +456,11 @@ interface OnboardingStatePayload {
     blindspots_elo: number;
     total_sequences: number;
   } | null;
+  todayProgress?: {
+    completedToday: number;
+    dailyTargetPositions: number;
+    dueCount: number;
+  } | null;
 }
 
 const ANALYZE_PREFERENCES_STORAGE_KEY = "chessview-analyze-preferences";
@@ -890,6 +895,11 @@ export default function TrainPage(props: TrainPageProps) {
   const [sequenceLength, _setSequenceLength] = useState(4);
   const [skillLevel, setSkillLevel] = useState<SkillLevel>("beginner");
   const [blindspotsElo, setBlindspotsElo] = useState(initialCheckpointState?.elo.eloAfter ?? mockRep.rating);
+  const [todayProgress, setTodayProgress] = useState<{
+    completedToday: number;
+    dailyTargetPositions: number;
+    dueCount: number;
+  } | null>(null);
   const [eloResult, setEloResult] = useState<EloResult | null>(initialCheckpointState?.elo ?? null);
   const [resultMode, setResultMode] = useState<ResultMode>(initialCheckpointState ? "explore" : "results");
   const { alert: topAlert, showAlert, dismissAlert } = useTopAlert();
@@ -964,6 +974,7 @@ export default function TrainPage(props: TrainPageProps) {
   const selectedEcoRef = useRef<string | null>(null);
   const currentMistakeIdRef = useRef<string | null>(null);
   const currentQueueSourceRef = useRef<string | null>(null);
+  const [currentQueueSource, setCurrentQueueSource] = useState<string | null>(null);
   const [initialOpponentMove, setInitialOpponentMove] = useState<TrainingMove | null>(
     initialCheckpointState?.initialOpponentMove ?? null,
   );
@@ -1836,6 +1847,9 @@ export default function TrainPage(props: TrainPageProps) {
         if (typeof payload.profile?.blindspots_elo === "number") {
           setBlindspotsElo(payload.profile.blindspots_elo);
         }
+        if (payload.todayProgress) {
+          setTodayProgress(payload.todayProgress);
+        }
 
         setOnboardingScreen("done");
 
@@ -2217,7 +2231,9 @@ export default function TrainPage(props: TrainPageProps) {
   // Start gesture handler — intercepts the first user interaction to unlock audio
   // and play the pending initial engine move.
   useEffect(() => {
-    if (!isAwaitingStartGesture) return;
+    // Returning users start via the explicit panel CTA (which also unlocks
+    // audio). Only the guided onboarding keeps the click/key-anywhere gesture.
+    if (!isAwaitingStartGesture || !shouldRunPreplayOnboarding) return;
 
     function handleGesture(e: MouseEvent | KeyboardEvent) {
       // Ignore keyboard events from editable elements
@@ -2245,7 +2261,7 @@ export default function TrainPage(props: TrainPageProps) {
       window.removeEventListener("pointerdown", handleGesture);
       window.removeEventListener("keydown", handleGesture);
     };
-  }, [isAwaitingStartGesture, pendingInitialEngineMove]);
+  }, [isAwaitingStartGesture, pendingInitialEngineMove, shouldRunPreplayOnboarding]);
 
   useEffect(() => {
     if (onboardingScreen !== "analysis") return;
@@ -2405,6 +2421,7 @@ export default function TrainPage(props: TrainPageProps) {
       typeof payload.mistakeId === "string" ? payload.mistakeId : mistakeId;
     currentQueueSourceRef.current =
       typeof payload.queueSource === "string" ? payload.queueSource : null;
+    setCurrentQueueSource(currentQueueSourceRef.current);
     setStartingFen(payload.fen);
     setDisplayStartingFen(payload.previousFen ?? payload.fen);
     setFen(payload.previousFen ?? payload.fen);
@@ -2584,6 +2601,7 @@ export default function TrainPage(props: TrainPageProps) {
       typeof payload.mistakeId === "string" ? payload.mistakeId : null;
     currentQueueSourceRef.current =
       typeof payload.queueSource === "string" ? payload.queueSource : null;
+    setCurrentQueueSource(currentQueueSourceRef.current);
     syncTrainPositionUrl(currentMistakeIdRef.current);
 
     if (Array.isArray(payload.attemptRegistry)) {
@@ -2770,7 +2788,7 @@ export default function TrainPage(props: TrainPageProps) {
       await delayMs(POSTMORTEM_NEXT_POSITION_TRANSITION_MS);
     }
 
-    router.push("/");
+    router.push("/dashboard");
   }
 
   async function playInitialOpponentMoveFromPayload(payload: NextPositionResponse) {
@@ -3378,6 +3396,9 @@ export default function TrainPage(props: TrainPageProps) {
 
       setEloResult(payload.elo);
       setBlindspotsElo(payload.elo.eloAfter);
+      setTodayProgress((current) =>
+        current ? { ...current, completedToday: current.completedToday + 1 } : current,
+      );
       if (Array.isArray(payload.moveScores)) {
         setMoves((current) => applyMoveScores(current, payload.moveScores ?? [], startingFen));
       }
@@ -3501,6 +3522,9 @@ export default function TrainPage(props: TrainPageProps) {
       const initPayload = await initResponse.json().catch(() => null);
       if (typeof initPayload?.profile?.blindspots_elo === "number") {
         setBlindspotsElo(initPayload.profile.blindspots_elo);
+      }
+      if (initPayload?.todayProgress) {
+        setTodayProgress(initPayload.todayProgress);
       }
       if (initPayload?.preferences?.skill_level) {
         setSkillLevel(initPayload.preferences.skill_level);
@@ -4204,7 +4228,30 @@ export default function TrainPage(props: TrainPageProps) {
     !!initialPreludeRef.current &&
     moves.length === 0;
   const isViewingPreludeReplay = isActiveSetupReplay && activeSetupReplayIndex === 0;
-  const showStartGestureOverlay = state === "active" && isAwaitingStartGesture;
+  // Onboarding users keep the original on-board start overlay (the guided tour
+  // depends on it). Returning users get the Chessbook-style panel CTA instead.
+  const showOnboardingStartOverlay =
+    state === "active" && isAwaitingStartGesture && shouldRunPreplayOnboarding;
+  const showStartCta =
+    state === "active" &&
+    isAwaitingStartGesture &&
+    !shouldRunPreplayOnboarding &&
+    Boolean(pendingInitialEngineMove);
+
+  const isReviewQueueSource =
+    currentQueueSource === "review" ||
+    currentQueueSource === "active_mistake" ||
+    currentQueueSource === "retry" ||
+    currentQueueSource === "revisit" ||
+    currentPositionReviewCount > 0;
+  const queueContextLabel = isReviewQueueSource ? "Review" : "New from your games";
+  const sideToMoveLabel = userMoveSide === "white" ? "White to move" : "Black to move";
+
+  function handleStartPendingPosition() {
+    const pending = pendingInitialEngineMove;
+    if (!pending) return;
+    void startPendingInitialEngineMove(pending);
+  }
 
   const activeSetupBeforeFen = displayStartingFen;
   const activeSetupAfterFen = startingFen;
@@ -5116,7 +5163,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                       />
                     )}
                   </BoardWithPlayerStrips>
-                  {showStartGestureOverlay ? (
+                  {showOnboardingStartOverlay ? (
                     <div
                       className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-[10px] bg-black/70 backdrop-blur-sm"
                       data-testid="audio-unlock-overlay"
@@ -5165,6 +5212,36 @@ const introOverlay = trainOnboardingIntroVisible ? (
 
         {!isPostMortemVisible ? (
           <aside className="flex min-h-0 w-full flex-col gap-4 lg:w-[320px]">
+            {!shouldRunPreplayOnboarding ? (
+              <section className="app-brutal-section p-4" data-testid="train-today-panel">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--app-muted)]">
+                    Today
+                  </span>
+                  {todayProgress ? (
+                    <span className="text-xs font-bold text-[var(--app-text)]">
+                      {todayProgress.dueCount} due · {todayProgress.completedToday} / {todayProgress.dailyTargetPositions} complete
+                    </span>
+                  ) : null}
+                </div>
+                {hasLoadedPosition ? (
+                  <div className="mt-3">
+                    <div className="text-sm font-bold text-[var(--app-text)]">{queueContextLabel}</div>
+                    <div className="text-xs text-[var(--app-muted)]">{sideToMoveLabel}</div>
+                  </div>
+                ) : null}
+                {showStartCta ? (
+                  <button
+                    type="button"
+                    onClick={handleStartPendingPosition}
+                    className={[primaryActionClassName, "mt-4 min-h-12 w-full justify-center px-5"].join(" ")}
+                    data-testid="train-start-cta"
+                  >
+                    <span className={postmortemActionTextClassName}>Start position</span>
+                  </button>
+                ) : null}
+              </section>
+            ) : null}
             {(() => {
               async function copyCurrentFen() {
                 const fenToCopy = boardFen;

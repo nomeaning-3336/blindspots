@@ -17,27 +17,26 @@ test("dashboard renders add-position section between daily goal and queue overvi
   );
 });
 
-test("dashboard add-position form validates FEN and prelude move before posting", () => {
-  assert.match(dashboardSource, /new Chess\(fenText\.trim\(\)\)/);
-  assert.match(dashboardSource, /parsePreludeMove\(chess, preludeText\.trim\(\)\)/);
-  assert.match(dashboardSource, /try \{[\s\S]*chess\.move\(moveText, \{ strict: false \}\)[\s\S]*\} catch \{[\s\S]*return null;[\s\S]*\}/);
-  assert.match(dashboardSource, /setupPreviousFen: fenText\.trim\(\)/);
-  assert.match(dashboardSource, /setupPlayedMoveUci: parsed\.uci/);
-  assert.match(dashboardSource, /setupPlayedMoveSan: parsed\.san/);
+test("dashboard add-position form is FEN-only and posts only decisionFen", () => {
+  assert.match(addPositionSource, /new Chess\(fenText\.trim\(\)\)\.fen\(\)/);
+  assert.match(addPositionSource, /body: JSON\.stringify\(\{\s*decisionFen: canonicalFen,?\s*\}\)/);
+  assert.doesNotMatch(addPositionSource, /setupPreviousFen/);
+  assert.doesNotMatch(addPositionSource, /setupPlayedMoveUci/);
+  assert.doesNotMatch(addPositionSource, /setupPlayedMoveSan/);
 });
 
-test("dashboard add-position form renders a live board preview with prelude replay", () => {
-  assert.match(dashboardSource, /const preview = useMemo\(\(\): AddPositionPreview \| null => \{/);
-  assert.match(dashboardSource, /const previewKey = preview/);
-  assert.match(dashboardSource, /useLayoutEffect\(\(\) => \{/);
-  assert.match(addPositionSource, /transition-\[opacity,transform\] duration-\[420ms\] ease-\[cubic-bezier\(0\.22,1,0\.36,1\)\]/);
-  assert.match(addPositionSource, /previewVisible \? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-1 scale-\[0\.992\]"/);
-  assert.match(dashboardSource, /key=\{`\$\{preview\.previousFen \?\? "direct"\}:\$\{preview\.finalFen\}:\$\{preview\.playedMove \?\? "none"\}`\}/);
-  assert.match(dashboardSource, /<ReplayThumbnail[\s\S]*previousFen=\{preview\.previousFen\}[\s\S]*finalFen=\{preview\.finalFen\}[\s\S]*playedMove=\{preview\.playedMove\}/);
-  assert.match(addPositionSource, /<ReplayThumbnail[\s\S]*size=\{360\}/);
-  assert.match(dashboardSource, /preview\.preludeSan \? `\$\{preview\.preludeSan\} plays first/);
-  assert.match(dashboardSource, /Valid position · \$\{preview\.sideToMove\} to move/);
-  assert.doesNotMatch(dashboardSource, /Lands in New\./);
+test("dashboard add-position form drops the prelude input and board preview", () => {
+  assert.doesNotMatch(dashboardSource, /parsePreludeMove/);
+  assert.doesNotMatch(dashboardSource, /AddPositionPreview/);
+  assert.doesNotMatch(addPositionSource, /preludeText/);
+  assert.doesNotMatch(addPositionSource, /ReplayThumbnail/);
+  assert.doesNotMatch(addPositionSource, /useLayoutEffect/);
+});
+
+test("real training capture path still sends setup_* metadata", () => {
+  assert.match(trainSource, /setupPreviousFen: preludeMove\?\.fenBefore \?\? null/);
+  assert.match(trainSource, /setupPlayedMoveUci: preludeMove\?\.uci \?\? null/);
+  assert.match(trainSource, /setupPlayedMoveSan: preludeMove\?\.san \?\? null/);
 });
 
 test("new position additions use the position endpoint name", () => {

@@ -1,11 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { PublicHeaderClient } from "@/components/public-header";
 import { getOptionalAppUserId } from "@/lib/app-auth";
 import { AnalysisBoard } from "@/components/chess/analysis-board";
 import { getHomeCallToAction } from "@/lib/public-home";
-import { DashboardClient } from "@/components/dashboard-client";
-import { ProtectedAppShell } from "@/components/protected-app-shell";
-import { getDashboardSummary } from "@/lib/dashboard-server";
 
 function BrandMark({ size = 22 }: { size?: number }) {
   return (
@@ -102,15 +100,7 @@ export default async function DisclaimerPage() {
   const isSignedIn = Boolean(userId);
 
   if (userId) {
-    const summary = await getDashboardSummary(userId);
-
-    return (
-      <ProtectedAppShell isSignedIn={true}>
-        <section className="app-scroll w-full overflow-auto pb-8 pt-4 sm:pt-6">
-          <DashboardClient summary={summary} />
-        </section>
-      </ProtectedAppShell>
-    );
+    redirect("/train");
   }
 
   const callToAction = getHomeCallToAction(isSignedIn);

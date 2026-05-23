@@ -46,18 +46,49 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const [profile, preferences, linkedProfiles, trainingTourCheckpoint] = await Promise.all([
-    getOrCreateDefaultBlindspotProfile(userId),
-    getTrainingPreferences(userId),
-    getLinkedChessProfilesForUser(userId),
-    getTrainingTourCheckpoint(userId),
-  ]);
+  const supabase = getSupabaseAdminClient();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const tomorrowStart = new Date(todayStart);
+  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+  const nowIso = new Date().toISOString();
+
+  const [profile, preferences, linkedProfiles, trainingTourCheckpoint, completedTodayResult, dueResult] =
+    await Promise.all([
+      getOrCreateDefaultBlindspotProfile(userId),
+      getTrainingPreferences(userId),
+      getLinkedChessProfilesForUser(userId),
+      getTrainingTourCheckpoint(userId),
+      supabase
+        .from("training_sessions")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .not("completed_at", "is", null)
+        .gte("completed_at", todayStart.toISOString())
+        .lt("completed_at", tomorrowStart.toISOString()),
+      supabase
+        .from("user_mistakes" as any)
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .not("status", "in", "(deleted,mastered,retired)")
+        .lte("next_review_at", nowIso),
+    ]);
+
+  const dailyTargetPositions =
+    typeof (profile as { daily_target_positions?: unknown } | null)?.daily_target_positions === "number"
+      ? ((profile as { daily_target_positions: number }).daily_target_positions)
+      : 10;
 
   return NextResponse.json({
     profile,
     preferences,
     linkedProfiles,
     trainingTourCheckpoint,
+    todayProgress: {
+      completedToday: completedTodayResult.count ?? 0,
+      dailyTargetPositions,
+      dueCount: dueResult.count ?? 0,
+    },
   });
 }
 
@@ -236,7 +267,7 @@ async function getBlindspotProfile(userId: string) {
   const { data, error } = await supabase
     .from("user_blindspot_profile")
     .select(
-      "user_id, blindspots_elo, rating_deviation, initial_skill_level, weakness_vector, mastery_vector, exploit_queue, explore_queue, revisit_queue, mastered_queue, total_sequences, last_session_at, profile_initialized, initialization_status, initialization_completed_at, created_at, updated_at",
+      "user_id, blindspots_elo, rating_deviation, initial_skill_level, weakness_vector, mastery_vector, exploit_queue, explore_queue, revisit_queue, mastered_queue, total_sequences, last_session_at, profile_initialized, initialization_status, initialization_completed_at, daily_target_positions, created_at, updated_at",
     )
     .eq("user_id", userId)
     .maybeSingle();

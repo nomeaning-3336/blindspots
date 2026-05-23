@@ -165,7 +165,7 @@ async function getHighlightedSquares(page: Page): Promise<string[]> {
 }
 
 async function isOverlayVisible(page: Page): Promise<boolean> {
-  const count = await page.locator("[data-testid='audio-unlock-overlay']").count();
+  const count = await page.locator("[data-testid='train-start-cta']").count();
   return count > 0;
 }
 
@@ -424,7 +424,7 @@ test("train-fen-sampling: collect 30 /api/train/next-position samples with board
         if (overlayVisible) {
           // Click overlay to trigger setup
           const gestureStart = Date.now();
-          await page.locator("[data-testid='audio-unlock-overlay']").click();
+          await page.locator("[data-testid='train-start-cta']").click();
           gestureMs = Date.now() - gestureStart;
           // Poll for board update after gesture
           try {
@@ -835,7 +835,7 @@ test.describe("real /train page-owned next-position smoke", () => {
     // brief delay before the overlay renders.
     let overlayAppeared = false;
     try {
-      await page.waitForSelector("[data-testid='audio-unlock-overlay']", { timeout: 5000 });
+      await page.waitForSelector("[data-testid='train-start-cta']", { timeout: 5000 });
       overlayAppeared = true;
     } catch {
       // Overlay never appeared within 5s - record board state and exit without failure.
@@ -851,11 +851,11 @@ test.describe("real /train page-owned next-position smoke", () => {
     const screenshotBefore = saveScreenshot(page, "setup-before-gesture");
 
     // Trigger start gesture
-    await page.locator("[data-testid='audio-unlock-overlay']").click();
+    await page.locator("[data-testid='train-start-cta']").click();
 
     // Wait for overlay to hide
     try {
-      await page.waitForSelector("[data-testid='audio-unlock-overlay']", { state: "hidden", timeout: 4000 });
+      await page.waitForSelector("[data-testid='train-start-cta']", { state: "hidden", timeout: 4000 });
     } catch {
       // Did not hide within 4s
     }
