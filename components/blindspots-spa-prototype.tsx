@@ -13,7 +13,6 @@ type BoardHistoryEntry = {
   lastMove: { from: string; to: string } | null;
 };
 
-const USER = { initials: "KD" };
 const QUEUE = [
   {
     fen: "r1bq1rk1/pp1bpppp/2npn3/8/3PP3/2NB1N2/PPP2PPP/R1BQK2R w KQ - 0 1",
@@ -351,7 +350,13 @@ function TopBar({
         <button className="bs-kit-btn-quiet" onClick={onToggleTheme} title="Toggle theme">
           {theme === "paper" ? <MoonIcon /> : <SunIcon />}
         </button>
-        <div className="bs-kit-avatar">{USER.initials}</div>
+        <span
+          className="bs-kit-btn-quiet"
+          aria-hidden="true"
+          data-testid="spa-settings-placeholder"
+        >
+          <SettingsIcon />
+        </span>
         <AuthSignOutButton className="bs-kit-btn-quiet" />
       </div>
     </div>
@@ -567,6 +572,14 @@ function Icon({
 function PlusIcon() { return <Icon width={14} height={14} strokeWidth={2}><path d="M12 5v14M5 12h14" /></Icon>; }
 function MoonIcon() { return <Icon><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></Icon>; }
 function SunIcon() { return <Icon><circle cx="12" cy="12" r="4" /><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4" /></Icon>; }
+function SettingsIcon() {
+  return (
+    <Icon>
+      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.33 1V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8.6 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1-.33H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 8.6a1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 1 1 7.04 3.9l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-.6 1.65 1.65 0 0 0 .33-1V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15.4 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.18.38.52.68.93.82.2.07.42.1.63.1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1.08Z" />
+    </Icon>
+  );
+}
 function FlipIcon() { return <Icon><path d="M3 7h13M16 7l-3-3M16 7l-3 3M21 17H8M8 17l3-3M8 17l3 3" /></Icon>; }
 function SkipIcon() { return <Icon><polyline points="9 18 15 12 9 6" /></Icon>; }
 function StepBackIcon() { return <Icon><polyline points="15 18 9 12 15 6" /></Icon>; }

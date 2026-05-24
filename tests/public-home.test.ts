@@ -94,6 +94,16 @@ test("components/auth-sign-out-button.tsx calls window.location.assign with sign
   );
 });
 
+test("SPA top bar replaces KD avatar with a settings placeholder icon", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(source.includes("SettingsIcon"), "SPA should include a settings icon");
+  assert.ok(source.includes('data-testid="spa-settings-placeholder"'), "SPA should render the settings placeholder");
+  assert.ok(!source.includes('const USER = { initials: "KD" }'), "SPA should no longer define KD initials");
+  assert.ok(!source.includes("{USER.initials}"), "SPA should no longer render KD initials");
+  assert.ok(source.includes("AuthSignOutButton"), "SPA must preserve the repaired sign-out control");
+});
+
 test("app-auth-routing: authenticated default route is root SPA", () => {
   const routes: typeof import("../lib/app-routes") = require("../lib/app-routes.ts");
   assert.equal(routes.DEFAULT_APP_ROUTE, "/");
