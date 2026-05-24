@@ -12,7 +12,7 @@ test("next and skip position use in-memory transition instead of train href navi
   );
   const footerSource = trainClient.slice(
     trainClient.indexOf("data-tour=\"postmortem-actions\""),
-    trainClient.indexOf("<span className={postmortemActionTextClassName}>Return to Dashboard</span>"),
+    trainClient.indexOf("<span className={postmortemActionTextClassName}>Return to Home</span>"),
   );
 
   assert.doesNotMatch(trainClient, /href="\/train"/);
@@ -53,50 +53,53 @@ test("delayed prelude is cancellable across position transitions", () => {
   assert.match(applySource, /delayedPreludeTimerRef\.current = window\.setTimeout/);
 });
 
-test("return to dashboard uses programmatic transition instead of href navigation", () => {
+test("return to home collapses to the initial state in-page instead of navigating", () => {
   const trainClient = source();
 
-  // useRouter is imported from next/navigation
-  assert.match(trainClient, /import\s*\{\s*useRouter/);
-  assert.match(trainClient, /from\s+"next\/navigation"/);
+  // The training room is a single page — no router navigation away from it.
+  assert.doesNotMatch(trainClient, /import\s*\{\s*useRouter/);
+  assert.doesNotMatch(trainClient, /router\.push/);
 
-  // isTrainDashboardExitTransitioning state exists
-  assert.match(trainClient, /isTrainDashboardExitTransitioning/);
+  // isReturnToHomeTransitioning state exists
+  assert.match(trainClient, /isReturnToHomeTransitioning/);
 
   // isTrainLayoutExiting derived from both transition states
   assert.match(trainClient, /isTrainLayoutExiting/);
 
-  // handleReturnToDashboard function exists
-  assert.match(trainClient, /function handleReturnToDashboard/);
+  // handleReturnToHome function exists
+  assert.match(trainClient, /function handleReturnToHome/);
 
-  // handleReturnToDashboard sets the exit transitioning flag
   const handleReturnSource = trainClient.slice(
-    trainClient.indexOf("function handleReturnToDashboard"),
+    trainClient.indexOf("function handleReturnToHome"),
     trainClient.indexOf("async function playInitialOpponentMoveFromPayload"),
   );
-  assert.match(handleReturnSource, /setIsTrainDashboardExitTransitioning\(true\)/);
+  // handleReturnToHome sets the transitioning flag
+  assert.match(handleReturnSource, /setIsReturnToHomeTransitioning\(true\)/);
 
-  // handleReturnToDashboard uses the postmortem transition delay
+  // handleReturnToHome uses the postmortem transition delay
   assert.match(handleReturnSource, /delayMs\(POSTMORTEM_NEXT_POSITION_TRANSITION_MS\)/);
 
-  // handleReturnToDashboard calls router.push("/")
-  assert.match(handleReturnSource, /router\.push\("\/"\)/);
+  // handleReturnToHome collapses the postmortem and loads the next position
+  // idle (no auto-start) rather than navigating to another route.
+  assert.match(handleReturnSource, /setState\("active"\)/);
+  assert.match(handleReturnSource, /loadNextPosition\(\)/);
+  assert.doesNotMatch(handleReturnSource, /\/dashboard/);
 
   // TrainingNotesRail dashboardButton uses onClick instead of href
   const railSource = trainClient.slice(
     trainClient.indexOf("dashboardButton={"),
     trainClient.indexOf("dashboardButton={") + 800,
   );
-  assert.match(railSource, /onClick=\{\(\) => void handleReturnToDashboard\(\)\}/);
+  assert.match(railSource, /onClick=\{\(\) => void handleReturnToHome\(\)\}/);
   assert.match(railSource, /type="button"/);
   assert.match(railSource, /Returning\.\.\./);
 
-  // postmortem footer Return to Dashboard button uses onClick instead of href
+  // postmortem footer Return to Home button uses onClick instead of href
   const footerSource = trainClient.slice(
     trainClient.indexOf("data-tour=\"postmortem-actions\""),
-    trainClient.indexOf("<span className={postmortemActionTextClassName}>Return to Dashboard</span>"),
+    trainClient.indexOf("<span className={postmortemActionTextClassName}>Return to Home</span>"),
   );
-  assert.match(footerSource, /onClick=\{.*handleReturnToDashboard.*\}/);
+  assert.match(footerSource, /onClick=\{.*handleReturnToHome.*\}/);
   assert.doesNotMatch(footerSource, /href="\/"/);
 
   // button shows "Returning..." text when transitioning
