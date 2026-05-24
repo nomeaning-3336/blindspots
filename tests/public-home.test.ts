@@ -125,63 +125,103 @@ test("SPA piece selection does not call setInSession(true) — only handleBoardM
   );
 });
 
-test("next-position route is GET only and has no prelude/engine/helpers imports", () => {
+test("next-position is a read-only unified cold selector route", () => {
   const source = readSource("app/api/train/next-position/route.ts");
+
+  assert.ok(source.includes("export async function GET"), "next-position route must remain GET");
   assert.ok(
-    source.includes("export async function GET"),
-    "next-position route must be a GET handler"
+    source.includes("getNextColdPersonalTrainingCandidate"),
+    "next-position must use the unified personal candidate selector",
   );
   assert.ok(
-    !source.includes("getPreviousPosition") &&
-    !source.includes("normalizeSetupPrelude") &&
-    !source.includes("validateSetupPrelude"),
-    "route must not import prelude helpers"
+    source.includes("getDeterministicFillerCandidate"),
+    "next-position must use catalog-backed filler selection",
   );
   assert.ok(
-    !source.includes("getPositionMateStatus") &&
-    !source.includes("validateEngineServeability"),
-    "route must not import engine validation"
+    source.includes('queueSource: "filler"'),
+    "next-position must return filler candidates through the unified response",
   );
   assert.ok(
-    !source.includes("enrichAttemptRegistry") &&
-    !source.includes("enrichIfNonNull") &&
-    !source.includes("loadMoveNotesForDecisionFen") &&
-    !source.includes("normalizeDecisionFen") &&
-    !source.includes("buildMoveKey") &&
-    !source.includes("normalizeNotes"),
-    "route must not import history/enrichment helpers"
+    source.includes("fillerId: filler.id"),
+    "next-position must expose the stable filler UUID",
   );
+  assert.ok(
+    source.includes("fillerOrigin: filler.origin"),
+    "next-position must expose filler origin as provenance",
+  );
+
+  assert.ok(!source.includes("getNextActiveAppMistake"), "route must not have a separate app-training branch");
+  assert.ok(!source.includes("getNextActiveOrFillerMistakeForTraining"), "route must not query database filler rows");
+  assert.ok(!source.includes("getNextReviewMistakeForTraining"), "route must not assemble review responses separately");
+  assert.ok(!source.includes("user_blindspot_profile"), "route must not load legacy profile queues");
+  assert.ok(!source.includes("ensureTrainingQueuesHavePositions"), "route must not refill legacy queues");
+  assert.ok(!source.includes("chooseServeMode"), "route must not use serve-mode selection");
+  assert.ok(!source.includes("thompsonSample"), "route must not use bandit selection");
+  assert.ok(!source.includes("retryMistakeId"), "retry-by-ID must not remain inside next-position");
+  assert.ok(!source.includes("getPositionMateStatus"), "route must not run engine validation");
+  assert.ok(!source.includes("previousFen"), "route must not expose prelude position data");
+  assert.ok(!source.includes("playedMove"), "route must not expose prelude move data");
+  assert.ok(!source.includes("cpLoss"), "route must not expose historical grading data");
 });
 
-test("next-position response type has no answer/history fields", () => {
+test("next-position response type contains only cold candidate identifiers and display metadata", () => {
   const source = readSource("app/api/train/next-position/route.ts");
-  // Check NextPositionResponse type definition (variable declaration with fields)
   const responseTypeMatch = source.match(/type NextPositionResponse = \{[\s\S]*?\};/);
+
   assert.ok(responseTypeMatch, "NextPositionResponse type should be defined");
   const responseTypeBody = responseTypeMatch[0];
-  assert.ok(!responseTypeBody.includes("previousFen"), "response must not include previousFen");
-  assert.ok(!responseTypeBody.includes("playedMove"), "response must not include playedMove");
-  assert.ok(!responseTypeBody.includes("actualMoveUci"), "response must not include actualMoveUci");
-  assert.ok(!responseTypeBody.includes("actualMoveSan"), "response must not include actualMoveSan");
-  assert.ok(!responseTypeBody.includes("bestMoveUci"), "response must not include bestMoveUci");
-  assert.ok(!responseTypeBody.includes("bestMoveSan"), "response must not include bestMoveSan");
-  assert.ok(!responseTypeBody.includes("sequenceLength"), "response must not include sequenceLength");
-  assert.ok(!responseTypeBody.includes("cpLoss"), "response must not include cpLoss");
-  assert.ok(!responseTypeBody.includes("attemptRegistry"), "response must not include attemptRegistry");
-  assert.ok(!responseTypeBody.includes("moveNotes"), "response must not include moveNotes");
+
+  assert.ok(responseTypeBody.includes("fen?: string;"));
+  assert.ok(responseTypeBody.includes('queueSource?: "review" | "active" | "filler";'));
+  assert.ok(responseTypeBody.includes('candidateType?: "personal" | "filler";'));
+  assert.ok(responseTypeBody.includes("mistakeId?: string;"));
+  assert.ok(responseTypeBody.includes("fillerId?: string;"));
+  assert.ok(responseTypeBody.includes("fillerOrigin?: FillerOrigin;"));
+
+  assert.ok(!responseTypeBody.includes("previousFen"));
+  assert.ok(!responseTypeBody.includes("playedMove"));
+  assert.ok(!responseTypeBody.includes("actualMoveUci"));
+  assert.ok(!responseTypeBody.includes("actualMoveSan"));
+  assert.ok(!responseTypeBody.includes("bestMoveUci"));
+  assert.ok(!responseTypeBody.includes("bestMoveSan"));
+  assert.ok(!responseTypeBody.includes("sequenceLength"));
+  assert.ok(!responseTypeBody.includes("cpLoss"));
+  assert.ok(!responseTypeBody.includes("attemptRegistry"));
+  assert.ok(!responseTypeBody.includes("moveNotes"));
 });
 
-test("next-position cold serving validates displayed FEN and hides grading data", () => {
-  const source = readSource("app/api/train/next-position/route.ts");
+test("cold personal selector implements review then active-personal priority only", () => {
+  const source = readSource("lib/training/cold-candidate-store.ts");
 
-  assert.ok(source.includes("isValidFen(normalized.fen)"), "retry path must validate normalized displayed FEN");
-  assert.ok(!source.includes("isValidFen(retryRow.starting_fen"), "retry path must not validate starting_fen");
-  assert.ok(source.includes("isValidFen(row.servedFen)"), "app-training path must validate served FEN");
-  assert.ok(!source.includes("cpLoss"), "next-position route must not expose cpLoss, including debug");
-  assert.ok(source.includes("validatePlayableTrainingFen"), "route must import playable FEN validation");
-  assert.ok(!source.includes("validateTrainingQueueItem"), "route must not use legacy queue item validation");
-  assert.ok(!source.includes("sequenceLength"), "route must not use fixed sequence length");
-  assert.ok(!source.includes("DEFAULT_SEQUENCE_LENGTH"), "route must not define a default sequence length");
+  const reviewIndex = source.indexOf('.eq("status", "review")');
+  const activeIndex = source.indexOf('.eq("status", "active")');
+
+  assert.ok(reviewIndex >= 0, "personal selector must query review items");
+  assert.ok(activeIndex > reviewIndex, "active personal selection must occur after review selection");
+  assert.ok(
+    source.includes('.in("source_type", ["own_game", "imported_pgn", "app_training"])'),
+    "active selector must fold app-training into personal active items",
+  );
+  assert.ok(
+    !source.includes("lichess_puzzle_filler"),
+    "personal selector must not treat shared filler as per-user database rows",
+  );
+  assert.ok(
+    source.includes("validatePlayableTrainingFen(fen).ok"),
+    "personal selector must validate the cold displayed FEN",
+  );
+  assert.ok(!source.includes(".update("), "personal selector must be read-only");
+});
+
+test("filler catalog selection is cached and deterministic rather than legacy random serving", () => {
+  const source = readSource("lib/training/filler-catalog.ts");
+
+  assert.ok(source.includes("random-position-catalog.json"));
+  assert.ok(source.includes("catalogPromise"));
+  assert.ok(source.includes("getDeterministicFillerCandidate"));
+  assert.ok(source.includes("deriveTraversalStep"));
+  assert.ok(source.includes("greatestCommonDivisor"));
+  assert.ok(!source.includes("Math.random"));
 });
 
 test("mistake-store read functions pass reserve:false to avoid served_count updates", () => {
