@@ -923,7 +923,7 @@ export default function TrainPage(props: TrainPageProps) {
   const [currentPositionReviewCount, setCurrentPositionReviewCount] = useState(0);
   const [currentChallengeElo, setCurrentChallengeElo] = useState<number | null>(null);
   const [isPostmortemNextPositionTransitioning, setIsPostmortemNextPositionTransitioning] = useState(false);
-  const [isTrainDashboardExitTransitioning, setIsTrainDashboardExitTransitioning] = useState(false);
+  const [isReturnToHomeTransitioning, setIsReturnToHomeTransitioning] = useState(false);
   const [isTrainPageEntered, setIsTrainPageEntered] = useState(false);
   const [isOpponentThinking, setIsOpponentThinking] = useState(false);
   const [isCompletingSequence, setIsCompletingSequence] = useState(false);
@@ -939,6 +939,7 @@ export default function TrainPage(props: TrainPageProps) {
   const [connectionMessage, setConnectionMessage] = useState("");
   const [isConnectingProfile, setIsConnectingProfile] = useState(false);
   const [positionLoadError, setPositionLoadError] = useState<string | null>(null);
+  const [isClearForToday, setIsClearForToday] = useState(false);
   const [isAwaitingStartGesture, setIsAwaitingStartGesture] = useState(false);
   const [pendingInitialEngineMove, setPendingInitialEngineMove] = useState<NextPositionResponse | null>(null);
   const [analysisStep, setAnalysisStep] = useState(0);
@@ -1483,9 +1484,9 @@ export default function TrainPage(props: TrainPageProps) {
     (isPostmortemAddPositionActionStep && !postmortemAddPositionActionDone) ||
     isNotesToggleTourControlLockActive ||
     isPostmortemNextPositionTransitioning ||
-    isTrainDashboardExitTransitioning;
+    isReturnToHomeTransitioning;
   const isTrainLayoutExiting =
-    isPostmortemNextPositionTransitioning || isTrainDashboardExitTransitioning;
+    isPostmortemNextPositionTransitioning || isReturnToHomeTransitioning;
   const shouldHidePostmortemTour =
     shouldHideTourForAddPosition || shouldHideTourForNotesToggle;
   const [onboardingCompletionInFlight, setOnboardingCompletionInFlight] = useState(false);
@@ -2462,6 +2463,7 @@ export default function TrainPage(props: TrainPageProps) {
   }, [onboardingScreen, initialMistakeId, initialMode, trainOnboardingIntroActive]);
 
   async function loadNextPosition(options: { autoStart?: boolean; mistakeId?: string; preludeDelayMs?: number } = {}) {
+    setIsClearForToday(false);
     const cachedPosition = cachedNextPosition;
     if (cachedPosition?.fen) {
       const skipPreludeAnimation =
@@ -2498,8 +2500,14 @@ export default function TrainPage(props: TrainPageProps) {
       setCachedNextPosition(null);
 
       if (!payload?.fen) {
-        const errorMessage = payload?.error ?? "No training positions available. Please try again.";
-        setPositionLoadError(errorMessage);
+        // A non-null payload without a fen means the queue is exhausted — the
+        // calm "clear for today" state. A null payload is a real failure.
+        if (payload) {
+          setIsClearForToday(true);
+          setPositionLoadError(null);
+        } else {
+          setPositionLoadError("No training positions available. Please try again.");
+        }
         setStartingFen("");
         setDisplayStartingFen("");
         setFen("");
@@ -2511,6 +2519,7 @@ export default function TrainPage(props: TrainPageProps) {
         return;
       }
 
+      setIsClearForToday(false);
       applyNextPosition(payload, {
         autoStart: options.autoStart,
         skipPreludeAnimation,
@@ -2525,10 +2534,15 @@ export default function TrainPage(props: TrainPageProps) {
     const url = mistakeId
       ? `/api/train/next-position?positionId=${encodeURIComponent(mistakeId)}`
       : "/api/train/next-position";
-    const response = await fetch(url, { cache: "no-store" });
-    const payload = (await response.json().catch(() => null)) as NextPositionResponse | null;
-    if (!response.ok || !payload?.fen) return null;
-    return payload;
+    try {
+      const response = await fetch(url, { cache: "no-store" });
+      // Return the parsed payload even when it has no fen (e.g. an exhausted
+      // queue responds 404 with an `error`), so callers can tell an empty
+      // queue apart from a genuine network/parse failure (which yields null).
+      return (await response.json().catch(() => null)) as NextPositionResponse | null;
+    } catch {
+      return null;
+    }
   }
 
   function applyNextPosition(
@@ -2712,18 +2726,36 @@ export default function TrainPage(props: TrainPageProps) {
     }
   }
 
-  async function handleReturnToDashboard() {
-    if (postmortemFooterActionsDisabled || isTrainDashboardExitTransitioning) return;
+  async function handleReturnToHome() {
+    if (postmortemFooterActionsDisabled || isReturnToHomeTransitioning) return;
 
-    setIsTrainDashboardExitTransitioning(true);
+    setIsReturnToHomeTransitioning(true);
 
-    if (!prefersReducedMotion()) {
-      await delayMs(POSTMORTEM_NEXT_POSITION_TRANSITION_MS);
+    try {
+      if (!prefersReducedMotion()) {
+        await delayMs(POSTMORTEM_NEXT_POSITION_TRANSITION_MS);
+      }
+
+      setState("active");
+      setResultMode("results");
+      setPostmortemSidePanel("analysis");
+      setExploreIndex(0);
+      resetExploratoryLine();
+      setExploreSelectedSquare(null);
+      setSelectedMoveIndex(null);
+      setActiveReplayIndex(null);
+      setIsManualPostmortemExploration(false);
+      setEloResult(null);
+      setIsCompletingSequence(false);
+      setIsAwaitingStartGesture(false);
+      startTrainingGestureConsumedRef.current = false;
+      setSidebarsHidden(false);
+      setOpenWorkspaceDrawer("postmortem");
+
+      await loadNextPosition();
+    } finally {
+      setIsReturnToHomeTransitioning(false);
     }
-
-    setSidebarsHidden(false);
-    setOpenWorkspaceDrawer("postmortem");
-    setIsTrainDashboardExitTransitioning(false);
   }
 
   function prefetchNextPosition() {
@@ -5236,6 +5268,26 @@ const introOverlay = trainOnboardingIntroVisible ? (
                     </div>
                   </div>
                 </>
+              ) : isClearForToday ? (
+                <div
+                  className="grid aspect-square w-full place-items-center rounded-[10px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] px-6 text-center"
+                  aria-live="polite"
+                  data-testid="train-clear-for-today"
+                >
+                  <div className="flex flex-col items-center gap-2">
+                    <span className="text-lg font-bold text-[var(--app-text)]">
+                      You&apos;re clear for today
+                    </span>
+                    {todayProgress ? (
+                      <span className="text-sm text-[var(--app-muted)]">
+                        {todayProgress.completedToday} reviewed today
+                      </span>
+                    ) : null}
+                    <span className="mt-1 text-xs text-[var(--app-muted-soft)]">
+                      New mistakes show up here as you play more games.
+                    </span>
+                  </div>
+                </div>
               ) : (
                 <div
                   className="grid aspect-square w-full place-items-center rounded-[10px] border border-[var(--app-border-soft)] bg-[var(--app-surface-subtle)] text-sm font-bold text-[var(--app-muted)]"
@@ -5356,7 +5408,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                   dashboardButton={
                     <button
                       type="button"
-                      onClick={() => void handleReturnToDashboard()}
+                      onClick={() => void handleReturnToHome()}
                       disabled={postmortemFooterActionsDisabled}
                       className={[
                         secondaryActionClassName,
@@ -5365,7 +5417,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                       ].join(" ")}
                     >
                       <span className={postmortemActionTextClassName}>
-                        {isTrainDashboardExitTransitioning ? "Returning..." : "Return to Dashboard"}
+                        {isReturnToHomeTransitioning ? "Returning..." : "Return to Home"}
                       </span>
                     </button>
                   }
@@ -5618,7 +5670,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
               </button>
               <button
                 type="button"
-                onClick={() => void handleReturnToDashboard()}
+                onClick={() => void handleReturnToHome()}
                 disabled={postmortemFooterActionsDisabled}
                 className={[
                   secondaryActionClassName,
@@ -5627,7 +5679,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 ].join(" ")}
               >
                 <span className={postmortemActionTextClassName}>
-                  {isTrainDashboardExitTransitioning ? "Returning..." : "Return to Dashboard"}
+                  {isReturnToHomeTransitioning ? "Returning..." : "Return to Home"}
                 </span>
               </button>
             </div>

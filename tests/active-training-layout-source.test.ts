@@ -54,7 +54,7 @@ test("active train sidebar shows only notes and action buttons", () => {
   assert.match(activeRailSource, /<TrainingNotesRail/);
   assert.match(activeRailSource, /Copy FEN/);
   assert.match(activeRailSource, /Skip Position/);
-  assert.match(activeRailSource, /Return to Dashboard/);
+  assert.match(activeRailSource, /Return to Home/);
 });
 
 test("active board no longer has placeholder eval-bar gutter", () => {
