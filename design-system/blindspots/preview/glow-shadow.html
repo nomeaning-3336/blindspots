@@ -1,0 +1,21 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Elevation</title><link rel="stylesheet" href="_card.css"><style>
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; padding: 8px; }
+.cell { background: var(--bs-paper-bg); border-radius: 12px; padding: 24px 12px 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.chip { width: 96px; height: 48px; border-radius: 10px; background: #fff; }
+.cell .name { font-family: var(--bs-font-mono); font-size: 11px; color: var(--bs-fg-1); font-weight: 600; }
+.cell .desc { font-size: 11px; color: var(--bs-fg-3); text-align: center; line-height: 1.4; }
+.s-none {  /* nothing */ }
+.s-sm { box-shadow: 0 1px 2px rgba(26,23,20,0.06); }
+.s-md { box-shadow: 0 2px 8px rgba(26,23,20,0.06), 0 1px 2px rgba(26,23,20,0.04); }
+.s-lg { box-shadow: 0 12px 32px rgba(26,23,20,0.10), 0 2px 6px rgba(26,23,20,0.06); }
+.s-ring { box-shadow: 0 0 0 3px rgba(31, 111, 135,0.22); }
+.note { grid-column: 1 / -1; font-size: 12px; color: var(--bs-fg-2); line-height: 1.5; padding: 0 12px 4px; }
+.note b { color: var(--bs-fg-1); font-weight: 600; }
+</style></head><body><div class="bs-card flush"><div class="grid">
+  <div class="cell"><div class="chip s-none" style="border:1px solid var(--bs-divider)"></div><div class="name">flat</div><div class="desc">default · cards at rest</div></div>
+  <div class="cell"><div class="chip s-sm"></div><div class="name">shadow-sm</div><div class="desc">subtle hover</div></div>
+  <div class="cell"><div class="chip s-md"></div><div class="name">shadow-md</div><div class="desc">menus · popovers</div></div>
+  <div class="cell"><div class="chip s-lg"></div><div class="name">shadow-lg</div><div class="desc">modals</div></div>
+  <div class="cell" style="grid-column: 1 / -1;"><div class="chip s-ring"></div><div class="name">--bs-ring</div><div class="desc">focused board square · primary CTA · keyboard focus. The ONLY place purple appears as elevation.</div></div>
+  <div class="note">Glow is <b>not</b> the elevation system. Default is flat; borders and small shadows do the work. The accent ring is reserved for the actively-focused element — never ambient.</div>
+</div></div></body></html>

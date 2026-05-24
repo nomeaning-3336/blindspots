@@ -1,0 +1,5 @@
+<svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Blindspots.gg logo">
+  <rect x="2" y="2" width="20" height="20" rx="3" stroke="#1a1714" stroke-width="1.6"></rect>
+  <circle cx="12" cy="12" r="3.2" fill="#1F6F87"></circle>
+  <path d="M12 4.5v3M12 16.5v3M4.5 12h3M16.5 12h3" stroke="#1a1714" stroke-width="1.6" stroke-linecap="round"></path>
+</svg>

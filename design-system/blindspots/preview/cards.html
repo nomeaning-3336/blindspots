@@ -1,0 +1,40 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Cards & panels</title><link rel="stylesheet" href="_card.css"><style>
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.card { background: var(--bs-paper-surface-0); border: 1px solid var(--bs-divider); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.card.flat { background: var(--bs-paper-surface-1); border: 0; }
+.card.focused { border-color: var(--bs-accent); box-shadow: 0 0 0 3px rgba(31, 111, 135,0.18); }
+.head { display: flex; align-items: center; justify-content: space-between; }
+.head h4 { font-family: var(--bs-font-display); font-size: 14px; font-weight: 600; margin: 0; letter-spacing: -0.005em; }
+.eyebrow { font-family: var(--bs-font-display); font-size: 10px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--bs-fg-3); }
+.meta-line { font-family: var(--bs-font-mono); font-size: 11.5px; color: var(--bs-fg-3); }
+.body { font-size: 12.5px; color: var(--bs-fg-2); line-height: 1.5; }
+.meta { font-family: var(--bs-font-mono); font-size: 11px; color: var(--bs-fg-3); }
+.row { display: flex; align-items: baseline; gap: 8px; }
+.big { font-family: var(--bs-font-mono); font-size: 26px; font-weight: 700; color: var(--bs-fg-1); letter-spacing: -0.02em; line-height: 1; }
+.divider { height: 1px; background: var(--bs-divider); margin: 4px 0; }
+</style></head><body><div class="bs-card"><div class="grid">
+  <div class="card focused">
+    <span class="eyebrow">Position · before move</span>
+    <div class="meta-line">Review · White to move</div>
+    <div class="body" style="opacity:0.7">Theme, motif, and origin stay hidden until you submit.</div>
+  </div>
+  <div class="card">
+    <span class="eyebrow">Position · after move</span>
+    <div class="meta-line">Review · White to move</div>
+    <h4 style="margin-top:2px">Caro-Kann · Advance variation</h4>
+    <div class="body">From your game</div>
+    <div class="divider"></div>
+    <div class="body" style="font-size:11.5px;color:var(--bs-fg-3)">You reached this position in a recent game. Your move lost 1.8 pawns.</div>
+  </div>
+  <div class="card flat">
+    <span class="eyebrow">Session done</span>
+    <div class="row"><span class="big">17</span><span class="body">positions cleared in 12 min</span></div>
+    <div class="meta">3 still need review tomorrow</div>
+  </div>
+  <div class="card">
+    <span class="eyebrow">Insight</span>
+    <h4>You miss back-rank threats.</h4>
+    <div class="body">Across 8 positions where the back rank was weak, you found the right move 2 of 8 times.</div>
+    <div class="meta">drill · 8 positions</div>
+  </div>
+</div></div></body></html>

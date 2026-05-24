@@ -1,0 +1,30 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Buttons</title><link rel="stylesheet" href="_card.css"><style>
+.cols { display: flex; flex-direction: column; gap: 14px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.btn { font-family: var(--bs-font-display); font-weight: 600; font-size: 14px; padding: 9px 16px; border-radius: 10px; border: 1px solid transparent; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; letter-spacing: -0.005em; transition: all 180ms cubic-bezier(0.2,0,0,1); background: transparent; }
+.btn-primary { background: var(--bs-purple); color: #fff; }
+.btn-primary:hover { background: #1A607A; }
+.btn-secondary { background: var(--bs-paper-surface-0); color: var(--bs-fg-1); border-color: var(--bs-border); }
+.btn-secondary:hover { background: var(--bs-paper-hover); }
+.btn-ghost { background: transparent; color: var(--bs-fg-2); }
+.btn-ghost:hover { background: var(--bs-paper-surface-1); color: var(--bs-fg-1); }
+.btn-sm { font-size: 12px; padding: 6px 11px; border-radius: 8px; }
+.row-label { font-family: var(--bs-font-mono); font-size: 10px; color: var(--bs-fg-3); letter-spacing: 0.1em; text-transform: uppercase; width: 80px; }
+</style></head><body><div class="bs-card"><div class="cols">
+  <div class="row"><span class="row-label">primary</span>
+    <button class="btn btn-primary">Submit</button>
+    <button class="btn btn-primary btn-sm">Add FEN</button>
+    <button class="btn btn-primary">Next position →</button>
+  </div>
+  <div class="row"><span class="row-label">secondary</span>
+    <button class="btn btn-secondary">Skip</button>
+    <button class="btn btn-secondary btn-sm">Show line</button>
+    <button class="btn btn-ghost">Cancel</button>
+  </div>
+  <div class="row"><span class="row-label">states</span>
+    <button class="btn btn-primary" style="background:#144A5C">pressed</button>
+    <button class="btn btn-primary" style="background:#1A607A">hover</button>
+    <button class="btn btn-secondary" style="opacity:0.5;cursor:not-allowed">disabled</button>
+    <button class="btn btn-secondary" style="box-shadow:0 0 0 3px rgba(31, 111, 135,0.22)">focused</button>
+  </div>
+</div></div></body></html>

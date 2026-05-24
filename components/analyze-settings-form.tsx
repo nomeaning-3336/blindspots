@@ -14,6 +14,7 @@ const PIECE_THEMES: Array<{
   label: string;
   assetSet: string;
 }> = [
+  { id: "blindspots", label: "Blindspots", assetSet: "blindspots" },
   { id: "cburnett", label: "Cburnett", assetSet: "cburnett" },
   { id: "alpha-wood", label: "Alpha Wood", assetSet: "alpha" },
   { id: "maestro", label: "Maestro", assetSet: "maestro" },
@@ -112,7 +113,7 @@ export function AnalyzeSettingsForm({
       currentPreferences.depthLimitValue === 18 &&
       currentPreferences.linesShown === 3 &&
       currentPreferences.threads === 1 &&
-      currentPreferences.pieceTheme === "maestro";
+      currentPreferences.pieceTheme === "blindspots";
 
     if (!isLikelyDefaultPreferences) return;
     try {

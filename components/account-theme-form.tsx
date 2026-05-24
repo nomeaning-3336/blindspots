@@ -21,7 +21,7 @@ export function AccountThemeForm({
 
   // For unauthenticated users, use the server-provided theme (from cookie)
   // For authenticated users, use the server-provided theme (from database)
-  const selectedTheme = currentTheme ?? "midnight";
+  const selectedTheme = currentTheme ?? "paper";
   const initialThemeRef = { current: selectedTheme };
 
   // Apply theme on mount

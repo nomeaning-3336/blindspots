@@ -6,32 +6,8 @@ import { usePathname } from "next/navigation";
 function LogoMark() {
   return (
     <span className="inline-flex items-center gap-3 leading-none">
-      <svg
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        aria-hidden="true"
-        className="shrink-0"
-      >
-        <rect
-          x="2"
-          y="2"
-          width="20"
-          height="20"
-          rx="3"
-          stroke="var(--app-text)"
-          strokeWidth="1.6"
-        />
-        <circle cx="12" cy="12" r="3.2" fill="var(--app-accent)" />
-        <path
-          d="M12 4.5v3M12 16.5v3M4.5 12h3M16.5 12h3"
-          stroke="var(--app-text)"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-        />
-      </svg>
-      <span className="text-sm font-bold uppercase leading-none text-[var(--app-text)]">
+      <img src="/blindspots-logo.svg" width="24" height="24" alt="" className="shrink-0" />
+      <span className="text-sm font-semibold leading-none text-[var(--app-text)]">
         Blindspots<span className="text-[var(--app-accent)]">.gg</span>
       </span>
     </span>
@@ -51,7 +27,7 @@ function HeaderLink({
     <Link
       href={href}
       className={[
-        "inline-flex min-h-9 items-center justify-center px-4 py-2 text-xs !text-[#050505]",
+        "inline-flex min-h-9 items-center justify-center px-4 py-2 text-xs",
         primary
           ? "app-brutal-button"
           : "app-brutal-button",
@@ -92,7 +68,7 @@ export function PublicHeaderClient({ isSignedIn }: { isSignedIn: boolean }) {
             <>
               <Link
                 href="/blog"
-                className="app-brutal-button-secondary inline-flex min-h-9 items-center justify-center px-3 py-2 text-xs font-bold uppercase tracking-[0.04em] text-[var(--app-muted)] transition hover:text-[var(--app-text)] hover:!text-black"
+                className="app-brutal-button-secondary inline-flex min-h-9 items-center justify-center px-3 py-2 text-xs font-semibold text-[var(--app-muted)] transition hover:text-[var(--app-text)]"
               >
                 Blog
               </Link>

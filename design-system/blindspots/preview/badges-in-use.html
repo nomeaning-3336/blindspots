@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Move feedback in context</title><link rel="stylesheet" href="_card.css"><style>
+.list { display: flex; flex-direction: column; gap: 5px; }
+.mv { display: grid; grid-template-columns: 22px 22px 60px 60px 1fr 26px; align-items: center; gap: 10px; padding: 9px 12px; background: var(--bs-paper-surface-0); border: 1px solid var(--bs-divider); border-radius: 8px; }
+.mv .n { font-family: var(--bs-font-mono); font-size: 11px; color: var(--bs-fg-3); }
+.mv .san { font-family: var(--bs-font-mono); font-size: 13px; font-weight: 600; color: var(--bs-fg-1); }
+.mv .label { font-size: 12px; font-weight: 600; }
+.mv .ctx { font-size: 12px; color: var(--bs-fg-2); }
+.mv img { width: 20px; height: 20px; justify-self: end; }
+.l-bril { color: #149bbd; } .l-best { color: #57913a; } .l-ex { color: #57913a; } .l-ok { color: #6a7a55; }
+.l-inacc { color: #a18424; } .l-mist { color: #b96a20; } .l-blun { color: #a93128; }
+</style></head><body><div class="bs-card"><div class="list">
+  <div class="mv"><span class="n">14.</span><span></span><span class="san">Nf5</span><span class="label l-bril">Brilliant</span><span class="ctx">Engine needed depth 22 to find this.</span><img src="../assets/move-quality/brilliant.png"></div>
+  <div class="mv"><span class="n">15.</span><span></span><span class="san">Kxf7</span><span class="label l-best">Best</span><span class="ctx">Only legal recapture.</span><img src="../assets/move-quality/best.png"></div>
+  <div class="mv"><span class="n">17.</span><span></span><span class="san">Qh5+</span><span class="label l-inacc">Inaccuracy</span><span class="ctx">Qf5+ kept tempo.</span><img src="../assets/move-quality/inaccuracy.png"></div>
+  <div class="mv"><span class="n">22.</span><span></span><span class="san">Bxg6</span><span class="label l-mist">Mistake</span><span class="ctx">Missed Re8 defense.</span><img src="../assets/move-quality/mistake.png"></div>
+  <div class="mv"><span class="n">28.</span><span></span><span class="san">Na5</span><span class="label l-blun">Blunder</span><span class="ctx">Drops a knight to b4.</span><img src="../assets/move-quality/blunder.png"></div>
+</div></div></body></html>

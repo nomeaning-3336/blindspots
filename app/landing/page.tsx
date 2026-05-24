@@ -53,32 +53,8 @@ const faqItems = [
 function BrandMark({ size = 22 }: { size?: number }) {
   return (
     <span className="inline-flex items-center gap-3">
-      <svg
-        width={size}
-        height={size}
-        viewBox="0 0 24 24"
-        fill="none"
-        aria-hidden="true"
-        className="shrink-0"
-      >
-        <rect
-          x="2"
-          y="2"
-          width="20"
-          height="20"
-          rx="3"
-          stroke="var(--app-text)"
-          strokeWidth="1.6"
-        />
-        <circle cx="12" cy="12" r="3.2" fill="var(--app-accent)" />
-        <path
-          d="M12 4.5v3M12 16.5v3M4.5 12h3M16.5 12h3"
-          stroke="var(--app-text)"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-        />
-      </svg>
-      <span className="text-sm font-bold uppercase text-[var(--app-text)]">
+      <img src="/blindspots-logo.svg" width={size} height={size} alt="" className="shrink-0" />
+      <span className="text-sm font-semibold text-[var(--app-text)]">
         Blindspots<span className="text-[var(--app-accent)]">.gg</span>
       </span>
     </span>
@@ -89,7 +65,7 @@ function PrimaryLink({ href, children }: { href: string; children: React.ReactNo
   return (
     <Link
       href={href}
-      className="app-brutal-button inline-flex min-h-12 items-center justify-center px-5 py-3 text-sm !text-[#050505]"
+      className="app-brutal-button inline-flex min-h-12 items-center justify-center px-5 py-3 text-sm"
     >
       {children}
     </Link>
@@ -100,7 +76,7 @@ function SecondaryLink({ href, children }: { href: string; children: React.React
   return (
     <Link
       href={href}
-      className="inline-flex min-h-12 items-center justify-center rounded border border-[var(--app-border)] bg-transparent px-5 py-3 text-xs font-bold uppercase text-[var(--app-text)] transition hover:border-[var(--app-nav-hover-bg)] hover:bg-[var(--app-nav-hover-bg)] hover:text-[var(--app-nav-hover-text)]"
+      className="inline-flex min-h-12 items-center justify-center rounded border border-[var(--app-border)] bg-transparent px-5 py-3 text-xs font-semibold text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:bg-[var(--app-accent-soft)]"
     >
       {children}
     </Link>
@@ -227,7 +203,7 @@ export default async function LandingPage() {
             </h1>
 
             <p className="mt-6 max-w-xl text-base leading-8 text-[var(--app-muted)]">
-              <span className="font-bold uppercase leading-none text-[var(--app-text)]">Blindspots</span><span className="font-bold uppercase leading-none text-[var(--app-accent)]">.gg</span> finds the positions you blundered in your own games and serves them back to you until you stop failing them. We have plenty of time. Hopefully...
+              <span className="font-semibold leading-none text-[var(--app-text)]">Blindspots</span><span className="font-semibold leading-none text-[var(--app-accent)]">.gg</span> finds the positions you blundered in your own games and serves them back to you until you stop failing them. We have plenty of time. Hopefully...
             </p>
 
             <div className="mt-9 flex flex-wrap gap-3">

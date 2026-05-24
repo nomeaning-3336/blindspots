@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Chess board palette</title><link rel="stylesheet" href="_card.css"><style>
+.boards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+.bd { display: flex; flex-direction: column; gap: 10px; }
+.theme-name { font-size: 12px; font-weight: 600; color: var(--bs-fg-2); }
+.board { display: grid; grid-template-columns: repeat(4, 1fr); aspect-ratio: 1; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 14px rgba(26,23,20,0.1); }
+.sq { aspect-ratio: 1; position: relative; display: flex; align-items: center; justify-content: center; }
+.sq img { width: 78%; height: 78%; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.15)); }
+.hl { position: absolute; inset: 0; }
+.lbl { display: flex; gap: 4px; font-family: var(--bs-font-mono); font-size: 10px; color: var(--bs-fg-3); justify-content: space-between; }
+</style></head><body><div class="bs-card"><div class="boards">
+  <div class="bd">
+    <div class="theme-name">Wood (default)</div>
+    <div class="board">
+      <div class="sq" style="background:#ebe5d3"><img src="../assets/pieces/bR.svg"></div><div class="sq" style="background:#a08560"><img src="../assets/pieces/bN.svg"></div><div class="sq" style="background:#ebe5d3"><span class="hl" style="background:rgba(255,220,110,0.45)"></span></div><div class="sq" style="background:#a08560"></div>
+      <div class="sq" style="background:#a08560"></div><div class="sq" style="background:#ebe5d3"><span class="hl" style="background:rgba(31, 111, 135,0.42)"></span></div><div class="sq" style="background:#a08560"><img src="../assets/pieces/bP.svg"></div><div class="sq" style="background:#ebe5d3"></div>
+      <div class="sq" style="background:#ebe5d3"></div><div class="sq" style="background:#a08560"></div><div class="sq" style="background:#ebe5d3"><img src="../assets/pieces/wK.svg"></div><div class="sq" style="background:#a08560"><span class="hl" style="background:rgba(196,59,48,0.55)"></span></div>
+      <div class="sq" style="background:#a08560"></div><div class="sq" style="background:#ebe5d3"></div><div class="sq" style="background:#a08560"></div><div class="sq" style="background:#ebe5d3"></div>
+    </div>
+    <div class="lbl"><span>light #EBE5D3</span><span>dark #A08560</span></div>
+  </div>
+  <div class="bd">
+    <div class="theme-name">Forest (alt)</div>
+    <div class="board">
+      <div class="sq" style="background:#ebecd0"><img src="../assets/pieces/bR.svg"></div><div class="sq" style="background:#739552"><img src="../assets/pieces/bN.svg"></div><div class="sq" style="background:#ebecd0"><span class="hl" style="background:rgba(255,220,110,0.45)"></span></div><div class="sq" style="background:#739552"></div>
+      <div class="sq" style="background:#739552"></div><div class="sq" style="background:#ebecd0"><span class="hl" style="background:rgba(31, 111, 135,0.42)"></span></div><div class="sq" style="background:#739552"><img src="../assets/pieces/bP.svg"></div><div class="sq" style="background:#ebecd0"></div>
+      <div class="sq" style="background:#ebecd0"></div><div class="sq" style="background:#739552"></div><div class="sq" style="background:#ebecd0"><img src="../assets/pieces/wK.svg"></div><div class="sq" style="background:#739552"><span class="hl" style="background:rgba(196,59,48,0.55)"></span></div>
+      <div class="sq" style="background:#739552"></div><div class="sq" style="background:#ebecd0"></div><div class="sq" style="background:#739552"></div><div class="sq" style="background:#ebecd0"></div>
+    </div>
+    <div class="lbl"><span>light #EBECD0</span><span>dark #739552</span></div>
+  </div>
+</div></div></body></html>

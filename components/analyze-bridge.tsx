@@ -81,8 +81,8 @@ type AnalyzeRuntimeSnapshot = {
 const DEFAULT_ANALYZE_SNAPSHOT: AnalyzeRuntimeSnapshot = {
   fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
   orientation: "white",
-  boardTheme: "midnight",
-  pieceTheme: "maestro",
+  boardTheme: "paper",
+  pieceTheme: "blindspots",
   lines: [],
   isLoading: true,
 };

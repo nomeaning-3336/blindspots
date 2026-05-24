@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Feedback states</title><link rel="stylesheet" href="_card.css"><style>
+.stack { display: flex; flex-direction: column; gap: 10px; }
+.card { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 12px; background: var(--bs-paper-surface-0); border: 1px solid var(--bs-divider); }
+.card img { width: 40px; height: 40px; flex-shrink: 0; }
+.card .word { font-family: var(--bs-font-display); font-size: 18px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.1; }
+.card .reason { font-size: 13px; color: var(--bs-fg-2); margin-top: 3px; line-height: 1.45; }
+.card .move { font-family: var(--bs-font-mono); font-size: 13px; font-weight: 600; padding: 4px 9px; border-radius: 6px; margin-left: auto; flex-shrink: 0; }
+.w-best { color: #57913a; } .w-inacc { color: #a18424; } .w-blun { color: #a93128; } .w-bril { color: #149bbd; }
+.move.you { background: var(--bs-paper-surface-1); color: var(--bs-fg-1); }
+</style></head><body><div class="bs-card"><div class="stack">
+  <div class="card">
+    <img src="../assets/move-quality/best.png">
+    <div><div class="word w-best">Best.</div><div class="reason">Engine agrees at depth 22. Next position in 2s.</div></div>
+    <span class="move you">Nf5</span>
+  </div>
+  <div class="card">
+    <img src="../assets/move-quality/inaccuracy.png">
+    <div><div class="word w-inacc">Inaccuracy.</div><div class="reason">Nh4 holds. Nf5 was sharper — same idea, with tempo.</div></div>
+    <span class="move you">Nh4</span>
+  </div>
+  <div class="card">
+    <img src="../assets/move-quality/blunder.png">
+    <div><div class="word w-blun">Blunder.</div><div class="reason">After Nxh7 Kxh7, the attack runs out. Try Nf5 instead.</div></div>
+    <span class="move you">Nxh7</span>
+  </div>
+  <div class="card">
+    <img src="../assets/move-quality/brilliant.png">
+    <div><div class="word w-bril">Brilliant.</div><div class="reason">Engine needed depth 22 to find this. Saved to your "good moves" album.</div></div>
+    <span class="move you">Rxf7</span>
+  </div>
+</div></div></body></html>

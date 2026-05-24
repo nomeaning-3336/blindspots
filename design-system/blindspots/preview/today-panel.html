@@ -1,0 +1,48 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Today panel</title><link rel="stylesheet" href="_card.css"><style>
+.today { background: var(--bs-paper-surface-1); border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 14px; max-width: 320px; }
+.heading { font-family: var(--bs-font-display); font-size: 14px; font-weight: 600; color: var(--bs-fg-2); letter-spacing: -0.005em; }
+.due-row { display: flex; align-items: baseline; gap: 12px; margin-top: 10px; }
+.due-num { font-family: var(--bs-font-mono); font-size: 38px; font-weight: 700; letter-spacing: -0.02em; color: var(--bs-fg-1); line-height: 1; }
+.due-label { font-size: 13px; color: var(--bs-fg-2); }
+.progress { font-size: 13px; color: var(--bs-fg-3); margin-top: 8px; }
+.progress b { color: var(--bs-fg-1); font-weight: 700; }
+.queue, .rating-block { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid var(--bs-divider); }
+.queue { gap: 6px; }
+.row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+.row .name { color: var(--bs-fg-1); }
+.row .count { font-family: var(--bs-font-mono); color: var(--bs-fg-1); font-weight: 700; font-size: 13px; }
+.rating-row { display: flex; align-items: baseline; }
+.rating-num { font-family: var(--bs-font-mono); font-size: 26px; font-weight: 700; letter-spacing: -0.015em; color: var(--bs-fg-1); line-height: 1; }
+.host { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.notes { font-size: 12px; color: var(--bs-fg-2); line-height: 1.55; }
+.notes b { color: var(--bs-fg-1); font-weight: 600; }
+.notes p { margin: 0 0 10px; }
+.notes p:last-child { margin: 0; }
+</style></head><body><div class="bs-card flush" style="padding:18px"><div class="host">
+  <div class="today">
+    <div>
+      <div class="heading">Today</div>
+      <div class="due-row"><span class="due-num">3</span><span class="due-label">positions due</span></div>
+      <div class="progress"><b>2</b> / 10 complete</div>
+    </div>
+    <div class="queue">
+      <div class="row"><span class="name">Review due</span><span class="count">2</span></div>
+      <div class="row"><span class="name">New from your games</span><span class="count">1</span></div>
+    </div>
+    <div class="rating-block">
+      <div class="heading" style="font-size:13px">Rating</div>
+      <div class="rating-row">
+        <span class="rating-num">1842</span>
+      </div>
+      <svg viewBox="0 0 240 36" width="100%" height="36" preserveAspectRatio="none" style="display:block">
+        <path d="M0,30 L30,32 L60,22 L90,16 L120,18 L150,14 L180,9 L210,7 L240,2 L240,36 L0,36 Z" fill="#1F6F87" opacity="0.12"/>
+        <path d="M0,30 L30,32 L60,22 L90,16 L120,18 L150,14 L180,9 L210,7 L240,2" fill="none" stroke="#1F6F87" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  </div>
+  <div class="notes">
+    <p><b>Today</b> communicates work, not curriculum. Sentence-case heading, no heavy tracking — same font family, calmer voice.</p>
+    <p><b>Rating</b> lives here too: current Glicko and a small trend. Inside the same panel so session progress and progression live together.</p>
+    <p>No streak counter. Completion is the reward.</p>
+  </div>
+</div></div></body></html>

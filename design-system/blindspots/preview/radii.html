@@ -1,0 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Radii</title><link rel="stylesheet" href="_card.css"><style>
+.row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+.box { background: var(--bs-paper-surface-1); aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding: 12px; border: 1px solid var(--bs-divider); }
+.box span { font-family: var(--bs-font-mono); font-size: 10px; color: var(--bs-fg-2); }
+.box small { font-family: var(--bs-font-mono); font-size: 9px; color: var(--bs-fg-3); margin-top: 2px; }
+</style></head><body><div class="bs-card"><div class="row">
+  <div class="box" style="border-radius:4px"><span>xs</span><small>4</small></div>
+  <div class="box" style="border-radius:6px"><span>sm</span><small>6</small></div>
+  <div class="box" style="border-radius:10px"><span>md</span><small>10</small></div>
+  <div class="box" style="border-radius:14px"><span>lg</span><small>14</small></div>
+  <div class="box" style="border-radius:20px"><span>xl</span><small>20</small></div>
+  <div class="box" style="border-radius:999px"><span>pill</span><small>999</small></div>
+</div></div></body></html>

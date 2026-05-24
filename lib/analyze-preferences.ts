@@ -1,15 +1,9 @@
 import { normalizeAppTheme, type AppTheme } from "@/lib/app-theme";
 
 export type AnalyzeLimitKind = "time" | "depth";
-export type AnalyzeBoardTheme =
-  | "grey"
-  | "light"
-  | "solarized"
-  | "forest"
-  | "ocean"
-  | "crimson"
-  | "midnight";
+export type AnalyzeBoardTheme = "paper" | "dark";
 export type AnalyzePieceTheme =
+  | "blindspots"
   | "cburnett"
   | "alpha-wood"
   | "maestro"
@@ -66,25 +60,32 @@ export function clampAnalyzeThreads(value: unknown) {
 
 export function normalizeAnalyzeBoardTheme(value: unknown): AnalyzeBoardTheme {
   switch (value) {
-    case "grey":
+    case "paper":
+    case "dark":
+      return value;
     case "light":
     case "solarized":
+    case "grey":
+      return "paper";
     case "forest":
     case "ocean":
     case "crimson":
     case "midnight":
-      return value;
+      return "dark";
     default:
-      return "midnight";
+      return "paper";
   }
 }
 
-export function analyzeBoardThemeForAppTheme(value: AppTheme | string | null | undefined) {
-  return normalizeAnalyzeBoardTheme(normalizeAppTheme(value));
+export function analyzeBoardThemeForAppTheme(
+  value: AppTheme | string | null | undefined,
+): AnalyzeBoardTheme {
+  return normalizeAppTheme(value) === "dark" ? "dark" : "paper";
 }
 
 export function normalizeAnalyzePieceTheme(value: unknown): AnalyzePieceTheme {
   switch (value) {
+    case "blindspots":
     case "cburnett":
     case "alpha-wood":
     case "maestro":
@@ -94,7 +95,7 @@ export function normalizeAnalyzePieceTheme(value: unknown): AnalyzePieceTheme {
     case "companion":
       return value;
     default:
-      return "maestro";
+      return "blindspots";
   }
 }
 

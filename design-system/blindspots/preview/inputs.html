@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Inputs</title><link rel="stylesheet" href="_card.css"><style>
+.fields { display: flex; flex-direction: column; gap: 14px; }
+.f { display: flex; flex-direction: column; gap: 6px; }
+.f label { font-size: 12px; color: var(--bs-fg-2); font-weight: 500; }
+.input { background: var(--bs-paper-surface-0); border: 1px solid var(--bs-border); color: var(--bs-fg-1); border-radius: 10px; padding: 10px 14px; font-family: var(--bs-font-body); font-size: 14px; outline: none; }
+.input:focus, .input.focused { border-color: var(--bs-purple); box-shadow: 0 0 0 3px rgba(31, 111, 135,0.18); }
+.input.mono { font-family: var(--bs-font-mono); font-size: 12px; }
+.input.error { border-color: var(--bs-incorrect); box-shadow: 0 0 0 3px rgba(196,59,48,0.15); }
+.err-msg { font-size: 11px; color: var(--bs-incorrect); }
+.hint { font-size: 11px; color: var(--bs-fg-3); }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.row2.fen { grid-template-columns: 1fr auto; align-items: end; }
+.btn-primary { font-family: var(--bs-font-display); font-weight: 600; font-size: 14px; padding: 10px 16px; border-radius: 10px; border: 0; background: var(--bs-purple); color: #fff; cursor: pointer; }
+</style></head><body><div class="bs-card"><div class="fields">
+  <div class="f"><label>Themes to focus on</label><input class="input" value="endgame · rook & pawn, opening · Caro-Kann"></div>
+  <div class="row2 fen">
+    <div class="f"><label>Add FEN</label><input class="input mono focused" value="r1bqk2r/pp2bppp/2n1pn2/3p4/3PP3/2NB1N2/PPP2PPP/R1BQK2R w KQkq - 0 7"></div>
+    <button class="btn-primary">Add</button>
+  </div>
+  <div class="row2">
+    <div class="f"><label>Daily target</label><input class="input" value="20 positions"></div>
+    <div class="f"><label>Engine depth</label><input class="input error" value="42"><span class="err-msg">Max depth on free plan is 30.</span></div>
+  </div>
+</div></div></body></html>

@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Brand accent</title><link rel="stylesheet" href="_card.css"><style>
+.layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.hero { padding: 20px; border-radius: 12px; background: var(--bs-paper-surface-1); display: flex; align-items: center; gap: 14px; }
+.dot { width: 28px; height: 28px; border-radius: 50%; background: #1F6F87; flex-shrink: 0; }
+.hero .label { font-family: var(--bs-font-display); font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+.hero .label small { display: block; color: var(--bs-fg-3); font-weight: 400; margin-top: 2px; font-family: var(--bs-font-mono); font-size: 11px; }
+.ramp { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.s { padding: 12px 10px; border-radius: 8px; min-height: 64px; display: flex; flex-direction: column; justify-content: space-between; }
+.s b { font-size: 11px; font-weight: 600; }
+.s code { font-family: var(--bs-font-mono); font-size: 10px; opacity: 0.85; }
+.note { grid-column: 1 / -1; font-size: 12px; color: var(--bs-fg-2); line-height: 1.5; padding: 14px 16px; background: var(--bs-paper-surface-1); border-radius: 10px; }
+.note b { color: var(--bs-fg-1); font-weight: 600; }
+</style></head><body><div class="bs-card"><div class="layout">
+  <div class="hero"><span class="dot"></span><span class="label">Petrol Teal<small>#1F6F87 · the only accent</small></span></div>
+  <div class="ramp">
+    <div class="s" style="background:#DDEEF2;color:#0E2229"><b>Soft</b><code>#DDEEF2</code></div>
+    <div class="s" style="background:#144A5C;color:#fff"><b>Deep</b><code>#144A5C</code></div>
+    <div class="s" style="background:#1F6F87;color:#fff"><b>Petrol</b><code>#1F6F87</code></div>
+    <div class="s" style="background:#3A95AE;color:#0E2229"><b>Bright</b><code>#3A95AE</code></div>
+  </div>
+  <div class="note">Used <b>sparingly</b> — focused board square, the primary CTA, the logo dot. Never as ambient atmosphere. On dark surfaces the <code>bright</code> tone reads better; <code>deep</code> for pressed states.</div>
+</div></div></body></html>

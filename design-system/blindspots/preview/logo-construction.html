@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Logo construction</title><link rel="stylesheet" href="_card.css"><style>
+.grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 22px; align-items: center; }
+.diagram { background: var(--bs-paper-surface-1); border-radius: 12px; padding: 22px; display: flex; justify-content: center; align-items: center; }
+.diagram svg { width: 200px; height: 200px; }
+.gridline { stroke: #c4bda7; stroke-width: 0.3; stroke-dasharray: 1 1; }
+.notes { display: flex; flex-direction: column; gap: 14px; }
+.note { display: flex; gap: 12px; align-items: flex-start; }
+.swatch { width: 14px; height: 14px; border-radius: 4px; margin-top: 3px; flex-shrink: 0; border: 1px solid var(--bs-divider); }
+.note small { color: var(--bs-fg-3); display: block; font-size: 11px; margin-top: 1px; }
+.note strong { font-size: 13px; color: var(--bs-fg-1); font-weight: 600; }
+</style></head><body><div class="bs-card"><div class="grid">
+  <div class="diagram">
+    <svg viewBox="0 0 24 24" fill="none">
+      <line class="gridline" x1="12" y1="0" x2="12" y2="24"/>
+      <line class="gridline" x1="0" y1="12" x2="24" y2="12"/>
+      <line class="gridline" x1="4.5" y1="12" x2="7.5" y2="12" stroke-dasharray="0"/>
+      <line class="gridline" x1="16.5" y1="12" x2="19.5" y2="12" stroke-dasharray="0"/>
+      <rect x="2" y="2" width="20" height="20" rx="3" stroke="#1a1714" stroke-width="1.6"/>
+      <circle cx="12" cy="12" r="3.2" fill="#1F6F87"/>
+      <path d="M12 4.5v3M12 16.5v3M4.5 12h3M16.5 12h3" stroke="#1a1714" stroke-width="1.6" stroke-linecap="round"/>
+      <text x="12.6" y="11.6" fill="#1F6F87" font-size="0.9" font-family="JetBrains Mono">r=3.2</text>
+      <text x="2.4" y="1.5" fill="#1F6F87" font-size="0.9" font-family="JetBrains Mono">rx=3</text>
+    </svg>
+  </div>
+  <div class="notes">
+    <div class="note"><div class="swatch" style="background:#1a1714"></div><div><strong>Crosshair</strong><small>1.6 stroke · matches body weight</small></div></div>
+    <div class="note"><div class="swatch" style="background:#1F6F87"></div><div><strong>Petrol core</strong><small>#1F6F87 · the only brand accent</small></div></div>
+    <div class="note"><div class="swatch" style="background:transparent"></div><div><strong>Squircle frame</strong><small>20×20 box, rx 3 · scope-shaped</small></div></div>
+    <div class="note"><div class="swatch" style="background:#f4f1ea;border-color:#c4bda7"></div><div><strong>Mark first, glow never</strong><small>No neon halo — let the form carry it</small></div></div>
+  </div>
+</div></div></body></html>

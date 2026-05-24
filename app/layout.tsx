@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Source_Serif_4 } from "next/font/google";
+import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import type { ReactNode } from "react";
 import { PageTransition } from "@/components/navigation/page-transition";
 import { getCookieAppThemeOnly } from "@/lib/app-theme-store";
@@ -7,17 +7,17 @@ import { PostHogProvider } from "./providers";
 import SmoothScrollWrapper from "@/components/smooth-scroll-wrapper";
 import "./globals.css";
 
-const serif = Source_Serif_4({
+const sans = Space_Grotesk({
   subsets: ["latin"],
-  weight: ["500", "600", "700"],
-  variable: "--font-display",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-space-grotesk",
   display: "swap",
 });
 
-const mono = IBM_Plex_Mono({
+const mono = JetBrains_Mono({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-mono",
+  weight: ["400", "500", "700"],
+  variable: "--font-jetbrains-mono",
   display: "swap",
 });
 
@@ -59,7 +59,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${serif.variable} ${mono.variable}`}
+      className={`${sans.variable} ${mono.variable}`}
       data-theme={theme ?? undefined}
     >
       <body>

@@ -1,0 +1,271 @@
+/* ==========================================================================
+   Blindspots.gg — Foundations
+   Board-first daily deliberate-practice app for chess.
+   Quiet · precise · premium · restrained · chess-native.
+   ========================================================================== */
+
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap");
+
+:root {
+  /* ---------- Brand accent — Petrol Teal ----------
+     Deep, contemplative, chess-classical. Sits like fountain pen ink on
+     paper and glows quietly on dark. Used SPARINGLY — focused board square,
+     the primary CTA, the logo dot. Not ambient. */
+  --bs-accent:        #1F6F87;   /* the dot in the crosshair — primary */
+  --bs-accent-bright: #3A95AE;   /* hover / dark-mode-friendly */
+  --bs-accent-deep:   #144A5C;   /* pressed */
+  --bs-accent-soft:   #DDEEF2;   /* tinted surface on paper */
+  --bs-accent-soft-dark: #13313A;/* tinted surface on dark */
+
+  /* Backward-compat aliases (legacy --bs-purple-* names) */
+  --bs-purple:        var(--bs-accent);
+  --bs-purple-bright: var(--bs-accent-bright);
+  --bs-purple-deep:   var(--bs-accent-deep);
+  --bs-purple-soft:   var(--bs-accent-soft-dark);
+
+  /* ---------- Surfaces — Paper (default, board-native) ----------
+     Paper is the calm, chess-native default. Think score-sheet,
+     analog clock face, museum-lit wood board. */
+  --bs-paper-bg:        #f4f1ea;   /* page — warm off-white */
+  --bs-paper-surface-0: #ffffff;   /* card / panel */
+  --bs-paper-surface-1: #eeeae0;   /* recessed (Today panel ground) */
+  --bs-paper-surface-2: #e6e1d3;   /* deeper recess */
+  --bs-paper-hover:     #ece8dc;
+  --bs-paper-divider:   #d9d3c2;
+  --bs-paper-border:    #c4bda7;
+
+  --bs-paper-fg-1: #1a1714;        /* primary ink */
+  --bs-paper-fg-2: #54504a;        /* secondary */
+  --bs-paper-fg-3: #87827a;        /* tertiary, metadata */
+  --bs-paper-fg-4: #b0aa9d;        /* hint / disabled */
+
+  /* ---------- Surfaces — Dark (alternate, late-night practice) ---------- */
+  --bs-dark-bg:        #0e0d10;
+  --bs-dark-surface-0: #16151a;
+  --bs-dark-surface-1: #1d1c22;
+  --bs-dark-surface-2: #25232c;
+  --bs-dark-hover:     #201f26;
+  --bs-dark-divider:   #2a2832;
+  --bs-dark-border:    #3a3744;
+
+  --bs-dark-fg-1: #ece9e0;         /* warm white — softer than pure */
+  --bs-dark-fg-2: #aca89c;
+  --bs-dark-fg-3: #76726a;
+  --bs-dark-fg-4: #4c4a45;
+
+  /* ---------- Default theme tokens (paper) ----------
+     Apps consume these; switching to dark mode reassigns them
+     (see `.theme-dark` rule below). */
+  --bs-bg:        var(--bs-paper-bg);
+  --bs-surface-0: var(--bs-paper-surface-0);
+  --bs-surface-1: var(--bs-paper-surface-1);
+  --bs-surface-2: var(--bs-paper-surface-2);
+  --bs-surface-hover: var(--bs-paper-hover);
+  --bs-divider: var(--bs-paper-divider);
+  --bs-border:  var(--bs-paper-border);
+  --bs-fg-1: var(--bs-paper-fg-1);
+  --bs-fg-2: var(--bs-paper-fg-2);
+  --bs-fg-3: var(--bs-paper-fg-3);
+  --bs-fg-4: var(--bs-paper-fg-4);
+  --bs-fg-on-accent: #ffffff;
+  --bs-fg-on-purple: var(--bs-fg-on-accent); /* legacy alias */
+
+  /* ---------- Move-quality / feedback colors ----------
+     Lifted from the badge palette. These are user-facing meaning;
+     never remap. */
+  --bs-mq-brilliant:  #1bb6e0;
+  --bs-mq-best:       #6fb24a;
+  --bs-mq-excellent:  #6fb24a;
+  --bs-mq-okay:       #8a9b6f;
+  --bs-mq-critical:   #5d83a3;
+  --bs-mq-inaccuracy: #c9a73a;
+  --bs-mq-mistake:    #d97e2d;
+  --bs-mq-blunder:    #c43b30;
+
+  /* Training feedback (correct / incorrect / try-again) */
+  --bs-correct:   #6fb24a;
+  --bs-incorrect: #c43b30;
+  --bs-tryagain:  #c9a73a;
+  --bs-info:      #5d83a3;
+
+  /* ---------- Chess board ----------
+     Defaults are calm wood, used regardless of theme. */
+  --bs-board-light: #ebe5d3;
+  --bs-board-dark:  #a08560;
+  --bs-board-light-alt: #ebecd0;   /* forest alt */
+  --bs-board-dark-alt:  #739552;
+  --bs-board-highlight: rgba(31, 111, 135, 0.42);  /* selection */
+  --bs-board-lastmove:  rgba(255, 220, 110, 0.45); /* last move */
+  --bs-board-check:     rgba(196, 59, 48, 0.55);
+  --bs-board-arrow:     rgba(31, 111, 135, 0.85);
+  --bs-board-correct:   rgba(111, 178, 74, 0.45);
+  --bs-board-incorrect: rgba(196, 59, 48, 0.42);
+
+  /* ---------- Shadows — soft, restrained ----------
+     Glow is reserved. Default elevation is paper-soft. */
+  --bs-shadow-sm: 0 1px 2px rgba(26, 23, 20, 0.06);
+  --bs-shadow-md: 0 2px 8px rgba(26, 23, 20, 0.06), 0 1px 2px rgba(26, 23, 20, 0.04);
+  --bs-shadow-lg: 0 12px 32px rgba(26, 23, 20, 0.10), 0 2px 6px rgba(26, 23, 20, 0.06);
+  --bs-shadow-board: 0 6px 24px rgba(26, 23, 20, 0.12), 0 2px 6px rgba(26, 23, 20, 0.08);
+
+  /* Accent ring — used ONLY for active position / focused board square /
+     active CTA. Not ambient. */
+  --bs-ring: 0 0 0 3px rgba(31, 111, 135, 0.22);
+  --bs-ring-strong: 0 0 0 4px rgba(31, 111, 135, 0.30);
+
+  /* ---------- Type ---------- */
+  --bs-font-display: "Space Grotesk", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+  --bs-font-body:    "Space Grotesk", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+  --bs-font-mono:    "JetBrains Mono", ui-monospace, "SF Mono", "Menlo", monospace;
+
+  /* Type scale — calm, no display sizes */
+  --bs-text-xs:   12px;
+  --bs-text-sm:   13px;
+  --bs-text-base: 15px;
+  --bs-text-md:   17px;
+  --bs-text-lg:   20px;
+  --bs-text-xl:   26px;
+  --bs-text-2xl:  34px;
+  --bs-text-3xl:  44px;
+
+  --bs-leading-tight: 1.15;
+  --bs-leading-snug:  1.3;
+  --bs-leading-normal:1.55;
+
+  --bs-tracking-tight: -0.015em;
+  --bs-tracking-flat:  0em;
+  --bs-tracking-wide:  0.04em;
+  --bs-tracking-mega:  0.16em;   /* eyebrows — used sparingly */
+
+  /* ---------- Spacing (4px base) ---------- */
+  --bs-space-0: 0;
+  --bs-space-1: 4px;
+  --bs-space-2: 8px;
+  --bs-space-3: 12px;
+  --bs-space-4: 16px;
+  --bs-space-5: 20px;
+  --bs-space-6: 24px;
+  --bs-space-8: 32px;
+  --bs-space-10: 40px;
+  --bs-space-12: 48px;
+  --bs-space-16: 64px;
+
+  /* ---------- Radii ---------- */
+  --bs-radius-xs: 4px;
+  --bs-radius-sm: 6px;
+  --bs-radius-md: 10px;
+  --bs-radius-lg: 14px;
+  --bs-radius-xl: 20px;
+  --bs-radius-pill: 999px;
+
+  /* ---------- Motion — quiet ---------- */
+  --bs-ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --bs-dur-fast: 120ms;
+  --bs-dur-base: 200ms;
+  --bs-dur-slow: 320ms;
+}
+
+/* Dark theme — reassigns the abstract tokens */
+.theme-dark, [data-theme="dark"] {
+  --bs-bg:        var(--bs-dark-bg);
+  --bs-surface-0: var(--bs-dark-surface-0);
+  --bs-surface-1: var(--bs-dark-surface-1);
+  --bs-surface-2: var(--bs-dark-surface-2);
+  --bs-surface-hover: var(--bs-dark-hover);
+  --bs-divider: var(--bs-dark-divider);
+  --bs-border:  var(--bs-dark-border);
+  --bs-fg-1: var(--bs-dark-fg-1);
+  --bs-fg-2: var(--bs-dark-fg-2);
+  --bs-fg-3: var(--bs-dark-fg-3);
+  --bs-fg-4: var(--bs-dark-fg-4);
+
+  --bs-shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+  --bs-shadow-md: 0 2px 8px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+  --bs-shadow-lg: 0 12px 40px rgba(0,0,0,0.6), 0 2px 6px rgba(0,0,0,0.4);
+  --bs-shadow-board: 0 8px 28px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.4);
+
+  --bs-ring: 0 0 0 3px rgba(31, 111, 135, 0.30);
+  --bs-ring-strong: 0 0 0 4px rgba(31, 111, 135, 0.40);
+}
+
+/* ============== Semantic element styles ============== */
+
+html, body {
+  background: var(--bs-bg);
+  color: var(--bs-fg-1);
+  font-family: var(--bs-font-body);
+  font-size: var(--bs-text-base);
+  line-height: var(--bs-leading-normal);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, .bs-h1 {
+  font-family: var(--bs-font-display);
+  font-size: var(--bs-text-2xl);
+  font-weight: 600;
+  line-height: var(--bs-leading-tight);
+  letter-spacing: var(--bs-tracking-tight);
+  color: var(--bs-fg-1);
+  margin: 0;
+}
+h2, .bs-h2 {
+  font-family: var(--bs-font-display);
+  font-size: var(--bs-text-xl);
+  font-weight: 600;
+  line-height: var(--bs-leading-tight);
+  letter-spacing: var(--bs-tracking-tight);
+  margin: 0;
+}
+h3, .bs-h3 {
+  font-family: var(--bs-font-display);
+  font-size: var(--bs-text-lg);
+  font-weight: 600;
+  line-height: var(--bs-leading-snug);
+  letter-spacing: var(--bs-tracking-tight);
+  margin: 0;
+}
+h4, .bs-h4 {
+  font-family: var(--bs-font-display);
+  font-size: var(--bs-text-md);
+  font-weight: 600;
+  line-height: var(--bs-leading-snug);
+  margin: 0;
+}
+p, .bs-p {
+  font-size: var(--bs-text-base);
+  line-height: var(--bs-leading-normal);
+  color: var(--bs-fg-2);
+  text-wrap: pretty;
+  margin: 0;
+}
+.bs-eyebrow {
+  font-family: var(--bs-font-display);
+  font-size: var(--bs-text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--bs-tracking-mega);
+  color: var(--bs-fg-3);
+}
+.bs-caption {
+  font-size: var(--bs-text-xs);
+  color: var(--bs-fg-3);
+}
+code, kbd, .bs-mono {
+  font-family: var(--bs-font-mono);
+  font-size: 0.92em;
+  font-feature-settings: "zero", "ss01";
+}
+.bs-notation {
+  font-family: var(--bs-font-mono);
+  font-feature-settings: "zero";
+  letter-spacing: 0.01em;
+}
+
+/* Focus — quiet ring, not glow */
+*:focus-visible {
+  outline: 2px solid var(--bs-accent);
+  outline-offset: 2px;
+  border-radius: var(--bs-radius-xs);
+}
+
+::selection { background: var(--bs-accent); color: var(--bs-fg-on-accent); }

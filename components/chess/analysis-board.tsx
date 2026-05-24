@@ -88,16 +88,12 @@ export type AnalysisBoardProps = {
 };
 
 const BOARD_THEMES: Record<AnalyzeBoardTheme, { light: string; dark: string; coord: string }> = {
-  grey: { light: "#e8e8e8", dark: "#a1a1ae", coord: "#666686" },
-  light: { light: "#f7f0e0", dark: "#d9ccb5", coord: "#847560" },
-  solarized: { light: "#f3ebcf", dark: "#c8ba98", coord: "#6e7c78" },
-  forest: { light: "#dce7d8", dark: "#7d9770", coord: "#4d6a53" },
-  ocean: { light: "#dce6f2", dark: "#5c769a", coord: "#3b5678" },
-  crimson: { light: "#f0dde2", dark: "#73515f", coord: "#a96c82" },
-  midnight: { light: "#efe6fb", dark: "#6d5a8f", coord: "#b39ae0" },
+  paper: { light: "#ebe5d3", dark: "#a08560", coord: "#6f5c3f" },
+  dark: { light: "#ebe5d3", dark: "#a08560", coord: "#6f5c3f" },
 };
 
 const PIECE_ASSET_SETS: Record<AnalyzePieceTheme, string> = {
+  blindspots: "blindspots",
   cburnett: "cburnett",
   "alpha-wood": "alpha",
   maestro: "maestro",
@@ -125,8 +121,8 @@ export function AnalysisBoard({
   coordinates = true,
   showLegalTargets = true,
   mode = "analysis",
-  boardTheme = "midnight",
-  pieceTheme = "maestro",
+  boardTheme = "paper",
+  pieceTheme = "blindspots",
   engineArrows,
   onMove,
   onSquareClick,
@@ -217,8 +213,8 @@ export function AnalysisBoard({
   const activeSelected = selectedSquare !== undefined ? selectedSquare : internalSelected;
   const highlightMap = useMemo(() => normalizeHighlights(highlightedSquares), [highlightedSquares]);
   const boardSquares = useMemo(() => squaresForOrientation(orientation), [orientation]);
-  const colors = BOARD_THEMES[boardTheme] ?? BOARD_THEMES.midnight;
-  const pieceAssetSet = PIECE_ASSET_SETS[pieceTheme] ?? PIECE_ASSET_SETS.maestro;
+  const colors = BOARD_THEMES[boardTheme] ?? BOARD_THEMES.paper;
+  const pieceAssetSet = PIECE_ASSET_SETS[pieceTheme] ?? PIECE_ASSET_SETS.blindspots;
   const checkedKingSquare = useMemo(() => findCheckedKingSquare(chess), [chess]);
   const computedTargets = useMemo(() => {
     const sourceSquare = activeSelected ?? dragFrom;

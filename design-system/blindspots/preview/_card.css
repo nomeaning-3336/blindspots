@@ -1,0 +1,35 @@
+/* Shared shell for design-system preview cards. Paper-default. */
+@import url("../colors_and_type.css");
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bs-bg);
+  color: var(--bs-fg-1);
+  font-family: var(--bs-font-body);
+  -webkit-font-smoothing: antialiased;
+}
+.bs-card {
+  box-sizing: border-box;
+  width: 700px;
+  padding: 24px;
+  background: var(--bs-surface-0);
+  border: 1px solid var(--bs-divider);
+  border-radius: 14px;
+  position: relative;
+  overflow: hidden;
+}
+.bs-card.dark {
+  background: var(--bs-dark-surface-0);
+  border-color: var(--bs-dark-divider);
+  color: var(--bs-dark-fg-1);
+}
+.bs-card.flush { padding: 0; }
+.bs-label {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--bs-fg-3);
+  font-weight: 600;
+}
+.bs-mono { font-family: var(--bs-font-mono); }

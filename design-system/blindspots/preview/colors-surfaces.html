@@ -1,0 +1,27 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Surfaces</title><link rel="stylesheet" href="_card.css"><style>
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.col { display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: 12px; }
+.col.paper { background: var(--bs-paper-bg); }
+.col.dark  { background: var(--bs-dark-bg); }
+.head { font-family: var(--bs-font-display); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; }
+.col.paper .head { color: var(--bs-paper-fg-3); }
+.col.dark  .head { color: var(--bs-dark-fg-3); }
+.surf { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; font-size: 12px; }
+.surf .name { font-weight: 600; }
+.surf .meta { font-family: var(--bs-font-mono); font-size: 10px; opacity: 0.75; }
+</style></head><body><div class="bs-card"><div class="cols">
+  <div class="col paper">
+    <div class="head">Paper · default</div>
+    <div class="surf" style="background:#f4f1ea;color:#1a1714"><span class="name">bg</span><span class="meta">#F4F1EA</span></div>
+    <div class="surf" style="background:#ffffff;color:#1a1714"><span class="name">surface-0</span><span class="meta">#FFFFFF</span></div>
+    <div class="surf" style="background:#eeeae0;color:#1a1714"><span class="name">surface-1</span><span class="meta">#EEEAE0</span></div>
+    <div class="surf" style="background:#e6e1d3;color:#1a1714"><span class="name">surface-2</span><span class="meta">#E6E1D3</span></div>
+  </div>
+  <div class="col dark">
+    <div class="head">Dark · alternate</div>
+    <div class="surf" style="background:#0e0d10;color:#ece9e0"><span class="name">bg</span><span class="meta">#0E0D10</span></div>
+    <div class="surf" style="background:#16151a;color:#ece9e0"><span class="name">surface-0</span><span class="meta">#16151A</span></div>
+    <div class="surf" style="background:#1d1c22;color:#ece9e0"><span class="name">surface-1</span><span class="meta">#1D1C22</span></div>
+    <div class="surf" style="background:#25232c;color:#ece9e0"><span class="name">surface-2</span><span class="meta">#25232C</span></div>
+  </div>
+</div></div></body></html>

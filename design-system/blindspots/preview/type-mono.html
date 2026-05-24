@@ -1,0 +1,30 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Type — Mono / notation</title><link rel="stylesheet" href="_card.css"><style>
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.block { background: var(--bs-paper-surface-1); border-radius: 10px; padding: 16px; }
+.block h5 { font-family: var(--bs-font-display); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--bs-fg-3); margin: 0 0 10px; }
+.pgn { font-family: var(--bs-font-mono); font-feature-settings: "zero"; font-size: 13px; line-height: 1.65; color: var(--bs-fg-1); }
+.pgn .mv  { color: var(--bs-fg-3); }
+.pgn .bl  { color: #c43b30; font-weight: 700; }
+.pgn .ac  { color: var(--bs-purple); font-weight: 600; }
+.fen { font-family: var(--bs-font-mono); font-size: 12px; color: var(--bs-fg-2); line-height: 1.6; word-break: break-all; }
+.eval { font-family: var(--bs-font-mono); font-size: 26px; font-weight: 700; letter-spacing: -0.02em; color: var(--bs-fg-1); }
+.label { font-family: var(--bs-font-mono); font-size: 11px; color: var(--bs-fg-3); margin-top: 4px; }
+</style></head><body><div class="bs-card"><div class="cols">
+  <div class="block">
+    <h5>Solution line</h5>
+    <div class="pgn">
+      <span class="mv">23.</span> <span class="ac">Nf5</span> exf5 <span class="mv">24.</span> Rxe7 Qxe7 <span class="mv">25.</span> Qxf5 g6 <span class="mv">26.</span> Qf6 Qxf6 <span class="mv">27.</span> exf6
+    </div>
+  </div>
+  <div class="block">
+    <h5>Eval</h5>
+    <div class="eval">+2.1</div>
+    <div class="label">white advantage after Nf5</div>
+    <div class="eval" style="margin-top:14px">+0.4</div>
+    <div class="label">your move (Nh4)</div>
+  </div>
+  <div class="block" style="grid-column: 1 / -1">
+    <h5>FEN</h5>
+    <div class="fen">r1bqk2r/pp2bppp/2n1pn2/3p4/3PP3/2NB1N2/PPP2PPP/R1BQK2R w KQkq - 0 7</div>
+  </div>
+</div></div></body></html>

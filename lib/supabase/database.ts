@@ -12,37 +12,19 @@ export type Database = {
       user_app_preferences: {
         Row: {
           user_id: string;
-          theme:
-            | "midnight"
-            | "light"
-            | "solarized"
-            | "forest"
-            | "ocean"
-            | "crimson";
+          theme: "paper" | "dark";
           created_at: string;
           updated_at: string;
         };
         Insert: {
           user_id: string;
-          theme?:
-            | "midnight"
-            | "light"
-            | "solarized"
-            | "forest"
-            | "ocean"
-            | "crimson";
+          theme?: "paper" | "dark";
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           user_id?: string;
-          theme?:
-            | "midnight"
-            | "light"
-            | "solarized"
-            | "forest"
-            | "ocean"
-            | "crimson";
+          theme?: "paper" | "dark";
           created_at?: string;
           updated_at?: string;
         };
@@ -56,15 +38,9 @@ export type Database = {
           depth_limit_value: number;
           lines_shown: number;
           threads: number;
-          board_theme:
-            | "grey"
-            | "light"
-            | "solarized"
-            | "forest"
-            | "ocean"
-            | "crimson"
-            | "midnight";
+          board_theme: "paper" | "dark";
           piece_theme:
+            | "blindspots"
             | "cburnett"
             | "alpha-wood"
             | "maestro"
@@ -82,15 +58,9 @@ export type Database = {
           depth_limit_value?: number;
           lines_shown?: number;
           threads?: number;
-          board_theme?:
-            | "grey"
-            | "light"
-            | "solarized"
-            | "forest"
-            | "ocean"
-            | "crimson"
-            | "midnight";
+          board_theme?: "paper" | "dark";
           piece_theme?:
+            | "blindspots"
             | "cburnett"
             | "alpha-wood"
             | "maestro"
@@ -108,15 +78,9 @@ export type Database = {
           depth_limit_value?: number;
           lines_shown?: number;
           threads?: number;
-          board_theme?:
-            | "grey"
-            | "light"
-            | "solarized"
-            | "forest"
-            | "ocean"
-            | "crimson"
-            | "midnight";
+          board_theme?: "paper" | "dark";
           piece_theme?:
+            | "blindspots"
             | "cburnett"
             | "alpha-wood"
             | "maestro"

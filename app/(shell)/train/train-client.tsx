@@ -523,7 +523,10 @@ const primaryActionClassName =
 const secondaryActionClassName =
   `app-brutal-button-secondary inline-flex min-h-10 min-w-0 items-center justify-center px-3 py-2 text-sm`;
 
-function readVisualPreferences() {
+function readVisualPreferences(): {
+  boardTheme: AnalyzeBoardTheme;
+  pieceTheme: AnalyzePieceTheme;
+} {
   let storedPreferences: Partial<AnalyzePreferences> | null = null;
   try {
     const raw =
@@ -678,7 +681,10 @@ async function waitForCompletedMoveEvaluations({
   return collectCompletedMoveEvaluations(getEvaluations());
 }
 
-async function readServerVisualPreferences() {
+async function readServerVisualPreferences(): Promise<{
+  boardTheme: AnalyzeBoardTheme;
+  pieceTheme: AnalyzePieceTheme;
+} | null> {
   const response = await fetch("/api/analyze/preferences", { cache: "no-store" });
   if (!response.ok) return null;
   const payload = (await response.json().catch(() => null)) as
@@ -955,8 +961,8 @@ export default function TrainPage(props: TrainPageProps) {
     boardTheme: AnalyzeBoardTheme;
     pieceTheme: AnalyzePieceTheme;
   }>({
-    boardTheme: "midnight",
-    pieceTheme: "maestro",
+    boardTheme: "paper",
+    pieceTheme: "blindspots",
   });
   const [pieceLineCache, setPieceLineCache] = useState<Record<string, EngineLineResult[]>>({});
   const [pieceLinesLoadingKey, setPieceLinesLoadingKey] = useState<string | null>(null);
@@ -4518,10 +4524,10 @@ export default function TrainPage(props: TrainPageProps) {
     hoveredEngineLineIndex == null ? null : classifiedDisplayLines[hoveredEngineLineIndex]?.bestMove ?? null;
   const currentEngineMateCp = whitePositiveMateCp(boardFen, currentEngineMate, currentEngineEval);
   const boardFrameClassName = [
-    "app-brutal-board-frame relative max-w-full overflow-visible transition-[width] duration-300 ease-[var(--train-motion-soft)]",
-    isExploringResults
-      ? "w-[min(88vw,calc(100dvh-10.25rem),836px)]"
-      : "w-[min(82vw,calc(100dvh-12.5rem),800px)]",
+    "app-brutal-board-frame bs-board-frame relative max-w-full overflow-visible transition-[width] duration-300 ease-[var(--train-motion-soft)]",
+      isExploringResults
+      ? "w-[min(88vw,calc(100dvh-9rem),836px)]"
+      : "w-[min(82vw,calc(100dvh-10.5rem),800px)]",
   ].join(" ");
   const trainViewportClassName =
     [
@@ -4530,9 +4536,9 @@ export default function TrainPage(props: TrainPageProps) {
       isTrainPageEntered ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2",
     ].join(" ");
   const playingGridClassName =
-    "mx-auto grid h-full min-h-0 w-fit max-w-[calc(100vw-32px)] min-w-0 grid-cols-1 grid-rows-[auto_auto_auto] content-center gap-4 transition-opacity duration-200 lg:grid-cols-[auto_320px] lg:grid-rows-[auto_auto] lg:items-center lg:justify-center";
+    "bs-training-workspace mx-auto grid h-full min-h-0 w-full min-w-0 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] content-stretch gap-0 transition-opacity duration-200 lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-1";
   const playingBoardSectionClassName =
-    "app-brutal-section relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden p-3 sm:p-4 lg:w-fit lg:p-4";
+    "bs-board-pane relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden p-4 lg:p-8";
   const preplayBoardHandoffClassName = "";
   const isEngineLinesLoading = Boolean(
     isExploringResults && engineLineLoadingFen === boardFen,
@@ -5036,7 +5042,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
         <>
           <div
             className={[
-              "pointer-events-auto absolute left-3 top-[4.75rem] z-30 hidden w-[min(15rem,calc(100vw-1.5rem))] flex-col gap-2 transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] md:left-9 md:top-[5.25rem] md:flex md:w-[15rem]",
+              "pointer-events-none absolute left-3 top-[4.75rem] z-30 hidden w-[min(15rem,calc(100vw-1.5rem))] flex-col gap-2 opacity-0 transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
               sidebarsHidden ? "pointer-events-none -translate-x-3 opacity-0" : "translate-x-0 opacity-100",
             ].join(" ")}
             aria-hidden={sidebarsHidden ? "true" : undefined}
@@ -5077,7 +5083,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
 
           <div
             className={[
-              "pointer-events-auto absolute bottom-3 right-3 z-30 hidden w-[min(15rem,calc(100vw-1.5rem))] flex-col gap-2 transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] md:bottom-auto md:right-9 md:top-5 md:flex md:w-[15rem]",
+              "pointer-events-none absolute bottom-3 right-3 z-30 hidden w-[min(15rem,calc(100vw-1.5rem))] flex-col gap-2 opacity-0 transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
               sidebarsHidden ? "pointer-events-none translate-x-3 opacity-0" : "translate-x-0 opacity-100",
             ].join(" ")}
             aria-hidden={sidebarsHidden ? "true" : undefined}
@@ -5117,7 +5123,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 setSidebarsHidden(false);
                 setOpenWorkspaceDrawer("today");
               }}
-              className="absolute left-3 top-[4.75rem] z-40 min-h-11 rounded-md border border-[var(--app-border)] bg-[var(--app-panel-solid)] px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)] md:left-5 md:top-[5.25rem]"
+              className="hidden"
             >
               Workspace
             </button>
@@ -5128,7 +5134,7 @@ const introOverlay = trainOnboardingIntroVisible ? (
               setSidebarsHidden(false);
               setOpenWorkspaceDrawer("import");
             }}
-            className="absolute right-3 top-3 z-40 min-h-11 rounded-md border border-[var(--app-border)] bg-[var(--app-panel-solid)] px-3 py-2 text-xs font-bold text-[var(--app-muted)] shadow-[var(--app-elevation-1)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)] md:hidden"
+            className="hidden"
           >
             Workspace
           </button>
@@ -5301,7 +5307,76 @@ const introOverlay = trainOnboardingIntroVisible ? (
         </section>
 
         {!isPostMortemVisible ? (
-          <aside className="flex min-h-0 w-full flex-col gap-4 lg:w-[320px]">
+          <aside className="bs-sidebar flex min-h-0 w-full flex-col gap-5 lg:w-[340px]">
+            {dashboardSummary ? (
+              <div
+                className={[
+                  "grid gap-2 transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                  sidebarsHidden ? "pointer-events-none translate-x-3 opacity-0" : "translate-x-0 opacity-100",
+                ].join(" ")}
+                aria-hidden={sidebarsHidden ? "true" : undefined}
+              >
+                <WorkspaceDrawer
+                  id="today"
+                  title="Today"
+                  metric={`${dashboardSummary.dailyCompletedToday}/${dashboardSummary.dailyTargetPositions}`}
+                  open={openWorkspaceDrawer === "today"}
+                  onToggle={() => setOpenWorkspaceDrawer((current) => current === "today" ? null : "today")}
+                >
+                  <div className="grid gap-2 text-xs text-[var(--app-muted)]">
+                    <div>{dashboardSummary.positions.filter((position) => position.nextReviewAt && new Date(position.nextReviewAt).getTime() <= Date.now()).length} due</div>
+                    <div>{Math.max(0, dashboardSummary.dailyTargetPositions - dashboardSummary.dailyCompletedToday)} remaining</div>
+                  </div>
+                </WorkspaceDrawer>
+
+                <WorkspaceDrawer
+                  id="import"
+                  title="Import position"
+                  metric="FEN"
+                  open={openWorkspaceDrawer === "import"}
+                  onToggle={() => setOpenWorkspaceDrawer((current) => current === "import" ? null : "import")}
+                >
+                  <WorkspaceImportPosition onImport={handleImportPosition} />
+                </WorkspaceDrawer>
+
+                <WorkspaceDrawer
+                  id="queue"
+                  title="Queue"
+                  metric={String(dashboardSummary.positions.length)}
+                  open={openWorkspaceDrawer === "queue"}
+                  onToggle={() => setOpenWorkspaceDrawer((current) => current === "queue" ? null : "queue")}
+                >
+                  <WorkspaceQueueOverview summary={dashboardSummary} />
+                </WorkspaceDrawer>
+
+                <WorkspaceDrawer
+                  id="progress"
+                  title="Progress"
+                  metric={dashboardSummary.blindspotsElo == null ? "-" : workspaceFormatNumber(dashboardSummary.blindspotsElo)}
+                  open={openWorkspaceDrawer === "progress"}
+                  onToggle={() => setOpenWorkspaceDrawer((current) => current === "progress" ? null : "progress")}
+                >
+                  <WorkspaceProgress summary={dashboardSummary} />
+                </WorkspaceDrawer>
+
+                <WorkspaceDrawer
+                  id="postmortem"
+                  title="Postmortem"
+                  metric={isPostMortemVisible ? "Open" : "Idle"}
+                  open={openWorkspaceDrawer === "postmortem"}
+                  onToggle={() => setOpenWorkspaceDrawer((current) => current === "postmortem" ? null : "postmortem")}
+                >
+                  <WorkspacePostmortemDrawer
+                    visible={isPostMortemVisible}
+                    moves={moves.length}
+                    onOpen={() => {
+                      setSidebarsHidden(false);
+                      setOpenWorkspaceDrawer("postmortem");
+                    }}
+                  />
+                </WorkspaceDrawer>
+              </div>
+            ) : null}
             {!shouldRunPreplayOnboarding ? (
               <section className="app-brutal-section p-4" data-testid="train-today-panel">
                 <div className="flex items-baseline justify-between gap-3">

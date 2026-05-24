@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Add FEN</title><link rel="stylesheet" href="_card.css"><style>
+.box { background: var(--bs-paper-surface-1); border-radius: 12px; padding: 22px; display: flex; flex-direction: column; gap: 12px; }
+.eyebrow { font-family: var(--bs-font-display); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--bs-fg-3); }
+.row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: stretch; }
+.field { background: var(--bs-paper-surface-0); border: 1px solid var(--bs-border); border-radius: 10px; padding: 10px 14px; font-family: var(--bs-font-mono); font-size: 12px; color: var(--bs-fg-1); outline: none; }
+.field:focus, .field.focused { border-color: var(--bs-purple); box-shadow: 0 0 0 3px rgba(31, 111, 135,0.18); }
+.add { font-family: var(--bs-font-display); font-weight: 600; font-size: 14px; padding: 0 18px; border-radius: 10px; border: 0; background: var(--bs-purple); color: #fff; cursor: pointer; }
+.hint { font-size: 11px; color: var(--bs-fg-3); }
+.hint b { color: var(--bs-fg-1); font-weight: 600; }
+</style></head><body><div class="bs-card flush"><div class="box">
+  <div class="eyebrow">Add FEN</div>
+  <div class="row">
+    <input class="field focused" value="r1bqk2r/pp2bppp/2n1pn2/3p4/3PP3/2NB1N2/PPP2PPP/R1BQK2R w KQkq - 0 7">
+    <button class="add">Add</button>
+  </div>
+  <div class="hint">One field, one button. Paste any FEN — it goes into your queue with default scheduling. <b>No</b> tagging, side, naming, themes, comments. That all happens later, in-board.</div>
+</div></div></body></html>

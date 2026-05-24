@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Voice & tone</title><link rel="stylesheet" href="_card.css"><style>
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cell { padding: 14px 16px; border-radius: 10px; background: var(--bs-paper-surface-1); display: flex; flex-direction: column; gap: 8px; border: 1px solid transparent; }
+.cell.good { border-color: rgba(111,178,74,0.4); }
+.cell.bad  { border-color: rgba(196,59,48,0.35); }
+.tag { font-family: var(--bs-font-mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 700; }
+.good .tag { color: #517a2f; }
+.bad  .tag { color: #a93128; }
+.line { font-family: var(--bs-font-display); font-size: 15px; font-weight: 500; color: var(--bs-fg-1); line-height: 1.4; letter-spacing: -0.01em; }
+.cap { font-size: 11px; color: var(--bs-fg-3); }
+</style></head><body><div class="bs-card"><div class="cols">
+  <div class="cell good"><span class="tag">✓ do</span><span class="line">3 positions due.</span><span class="cap">Quiet · numeric · gets out of the way</span></div>
+  <div class="cell bad"><span class="tag">✗ don't</span><span class="line">Welcome back, champ! Ready to crush some chess?</span><span class="cap">Hype · cheerleading · in the way</span></div>
+  <div class="cell good"><span class="tag">✓ do</span><span class="line">Best move. Engine agrees at depth 22.</span><span class="cap">Earned · backed by evidence · one period</span></div>
+  <div class="cell bad"><span class="tag">✗ don't</span><span class="line">BRILLIANT MOVE!! You're on FIRE today!</span><span class="cap">Loud · all-caps · stacked exclamations</span></div>
+  <div class="cell good"><span class="tag">✓ do</span><span class="line">Inaccuracy. Knight is stronger on f5.</span><span class="cap">Name the verdict · show the better move</span></div>
+  <div class="cell bad"><span class="tag">✗ don't</span><span class="line">Oops, not quite! Try thinking about your knights!</span><span class="cap">Cushiony · vague · two exclamations</span></div>
+</div></div></body></html>

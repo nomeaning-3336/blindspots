@@ -3,40 +3,13 @@ import { PublicHeaderClient } from "@/components/public-header";
 import { getOptionalAppUserId } from "@/lib/app-auth";
 import { AnalysisBoard } from "@/components/chess/analysis-board";
 import { getHomeCallToAction } from "@/lib/public-home";
-import { ProtectedAppShell } from "@/components/protected-app-shell";
-import { getDashboardSummary } from "@/lib/dashboard-server";
-import { getOnboardingStateForUser } from "@/lib/onboarding-state";
-import TrainPage from "./(shell)/train/train-client";
+import { BlindspotsSpaPrototype } from "@/components/blindspots-spa-prototype";
 
 function BrandMark({ size = 22 }: { size?: number }) {
   return (
     <span className="inline-flex items-center gap-3">
-      <svg
-        width={size}
-        height={size}
-        viewBox="0 0 24 24"
-        fill="none"
-        aria-hidden="true"
-        className="shrink-0"
-      >
-        <rect
-          x="2"
-          y="2"
-          width="20"
-          height="20"
-          rx="3"
-          stroke="var(--app-text)"
-          strokeWidth="1.6"
-        />
-        <circle cx="12" cy="12" r="3.2" fill="var(--app-accent)" />
-        <path
-          d="M12 4.5v3M12 16.5v3M4.5 12h3M16.5 12h3"
-          stroke="var(--app-text)"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-        />
-      </svg>
-      <span className="text-sm font-bold uppercase text-[var(--app-text)]">
+      <img src="/blindspots-logo.svg" width={size} height={size} alt="" className="shrink-0" />
+      <span className="text-sm font-semibold text-[var(--app-text)]">
         Blindspots<span className="text-[var(--app-accent)]">.gg</span>
       </span>
     </span>
@@ -117,25 +90,10 @@ export default async function HomePage({
         : undefined;
 
   if (userId || (isDebugRequest && process.env.NODE_ENV !== "production")) {
-    const appUserId = userId ?? "debug-user";
-    const state =
-      appUserId === "debug-user"
-        ? { trainingTourCompleted: true, trainingTourCheckpoint: null }
-        : await getOnboardingStateForUser(appUserId);
-    const summary = appUserId === "debug-user" ? undefined : await getDashboardSummary(appUserId);
-
-    return (
-      <ProtectedAppShell isSignedIn={Boolean(userId)}>
-        <TrainPage
-          initialOnboarding={appUserId !== "debug-user" && !state.trainingTourCompleted}
-          forceOnboarding={forceOnboarding}
-          initialTrainingTourCheckpoint={state.trainingTourCheckpoint}
-          initialMistakeId={initialMistakeId}
-          initialMode={initialMode}
-          dashboardSummary={summary}
-        />
-      </ProtectedAppShell>
-    );
+    void forceOnboarding;
+    void initialMistakeId;
+    void initialMode;
+    return <BlindspotsSpaPrototype />;
   }
 
   const callToAction = getHomeCallToAction(isSignedIn);

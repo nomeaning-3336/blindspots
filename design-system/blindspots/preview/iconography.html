@@ -1,0 +1,48 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Iconography</title><link rel="stylesheet" href="_card.css"><style>
+.wrap { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 18px; }
+.section { display: flex; flex-direction: column; gap: 10px; }
+.section h5 { font-family: var(--bs-font-display); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--bs-fg-3); margin: 0; }
+.icons { display: flex; gap: 10px; flex-wrap: wrap; }
+.icon { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; color: var(--bs-fg-1); border-radius: 8px; background: var(--bs-paper-surface-1); }
+.icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.pieces { display: flex; gap: 8px; flex-wrap: wrap; }
+.piece { font-family: serif; font-size: 32px; color: var(--bs-fg-1); }
+.piece.w { color: var(--bs-fg-3); }
+.note { font-size: 11px; color: var(--bs-fg-3); line-height: 1.5; }
+.note b { color: var(--bs-fg-1); font-weight: 600; }
+</style></head><body><div class="bs-card"><div class="wrap">
+  <div class="section">
+    <h5>Lucide line · 1.6 stroke · 20px</h5>
+    <div class="icons">
+      <div class="icon"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
+      <div class="icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+      <div class="icon"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
+      <div class="icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></div>
+      <div class="icon"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></div>
+      <div class="icon"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+      <div class="icon"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg></div>
+      <div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/></svg></div>
+    </div>
+    <div class="note">For UI affordances only — never as decorative motif.</div>
+  </div>
+  <div class="section">
+    <h5>Chess pieces · SVG sprites</h5>
+    <div class="pieces">
+      <img src="../assets/pieces/wK.svg" style="width:34px;height:34px">
+      <img src="../assets/pieces/wQ.svg" style="width:34px;height:34px">
+      <img src="../assets/pieces/wR.svg" style="width:34px;height:34px">
+      <img src="../assets/pieces/wB.svg" style="width:34px;height:34px">
+      <img src="../assets/pieces/wN.svg" style="width:34px;height:34px">
+      <img src="../assets/pieces/wP.svg" style="width:34px;height:34px">
+    </div>
+    <div class="pieces">
+      <img src="../assets/pieces/bK.svg" style="width:34px;height:34px">
+      <img src="../assets/pieces/bQ.svg" style="width:34px;height:34px">
+      <img src="../assets/pieces/bR.svg" style="width:34px;height:34px">
+      <img src="../assets/pieces/bB.svg" style="width:34px;height:34px">
+      <img src="../assets/pieces/bN.svg" style="width:34px;height:34px">
+      <img src="../assets/pieces/bP.svg" style="width:34px;height:34px">
+    </div>
+    <div class="note">SVG sprites at <code>assets/pieces/</code>. Unicode glyphs only for <b>inline prose</b>.</div>
+  </div>
+</div></div></body></html>
