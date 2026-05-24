@@ -166,6 +166,7 @@ test("next-position response type has no answer/history fields", () => {
   assert.ok(!responseTypeBody.includes("bestMoveUci"), "response must not include bestMoveUci");
   assert.ok(!responseTypeBody.includes("bestMoveSan"), "response must not include bestMoveSan");
   assert.ok(!responseTypeBody.includes("sequenceLength"), "response must not include sequenceLength");
+  assert.ok(!responseTypeBody.includes("cpLoss"), "response must not include cpLoss");
   assert.ok(!responseTypeBody.includes("attemptRegistry"), "response must not include attemptRegistry");
   assert.ok(!responseTypeBody.includes("moveNotes"), "response must not include moveNotes");
 });
@@ -188,6 +189,24 @@ test("mistake-store read functions pass reserve:false to avoid served_count upda
   assert.ok(
     getNextMistakeBody.includes("reserve: false"),
     "getNextMistakeForTraining must pass reserve:false to read-only helpers"
+  );
+});
+
+test("getNextActiveAppMistake accepts FEN-only rows without prelude fields", () => {
+  const source = readSource("lib/training/mistake-store.ts");
+  // Must NOT require setup_prelude fields for serveability
+  assert.ok(
+    !/if \(!decisionFen \|\| !setupPreviousFen \|\| !setupPlayedMoveUci\)/.test(source),
+    "getNextActiveAppMistake must not reject rows missing prelude fields"
+  );
+  assert.ok(
+    !/normalizeSetupPrelude\(\{[\s\S]*?\}\)/.test(source.slice(source.indexOf("getNextActiveAppMistake"))),
+    "getNextActiveAppMistake must not call normalizeSetupPrelude for serveability"
+  );
+  // Must define servedFen using decision_fen ?? starting_fen
+  assert.ok(
+    source.includes("servedFen"),
+    "ActiveAppMistake must include servedFen field"
   );
 });
 

@@ -55,11 +55,13 @@ export interface NextMistakeResult {
 }
 
 /**
- * App-training active mistake with pre-validated setup prelude fields.
+ * App-training active mistake. A valid FEN (decision_fen or starting_fen fallback)
+ * is the only serveability requirement. Prelude/setup fields are optional provenance.
  */
 export interface ActiveAppMistake {
   id: string;
   decisionFen: string;
+  servedFen: string;
   actualMoveUci: string;
   actualMoveSan: string | null;
   cpLoss: number | null;
@@ -73,11 +75,11 @@ export interface ActiveAppMistake {
 }
 
 /**
- * Fetch the next due active app-training mistake that has a valid setup prelude.
+ * Fetch the next due active app-training mistake.
  *
- * Queries user_mistakes for source_type = 'app_training', status = 'active',
- * next_review_at <= now. Validates setup prelude fields before returning.
- * Invalid rows (missing or broken preludes) are skipped and counted.
+ * A valid FEN (decision_fen with starting_fen as legacy fallback) is sufficient.
+ * Prelude/setup fields are optional provenance only — their absence does not
+ * determine serveability.
  */
 export async function getNextActiveAppMistake(
   userId: string,
@@ -110,23 +112,13 @@ export async function getNextActiveAppMistake(
   let rejectedNoPreludeCount = 0;
 
   for (const row of rows as any[]) {
-    const decisionFen = typeof row.decision_fen === "string" ? row.decision_fen : "";
-    const setupPreviousFen = typeof row.setup_previous_fen === "string" ? row.setup_previous_fen : "";
-    const setupPlayedMoveUci = typeof row.setup_played_move_uci === "string" ? row.setup_played_move_uci : "";
+    const decisionFen = typeof row.decision_fen === "string" && row.decision_fen
+      ? row.decision_fen
+      : typeof row.starting_fen === "string" && row.starting_fen
+        ? row.starting_fen
+        : "";
 
-    if (!decisionFen || !setupPreviousFen || !setupPlayedMoveUci) {
-      rejectedNoPreludeCount++;
-      continue;
-    }
-
-    // Validate the stored prelude. We do NOT infer — only use stored fields.
-    const prelude = normalizeSetupPrelude({
-      fen: decisionFen,
-      previousFen: setupPreviousFen,
-      playedMove: setupPlayedMoveUci,
-    });
-
-    if (!prelude) {
+    if (!decisionFen) {
       rejectedNoPreludeCount++;
       continue;
     }
@@ -143,17 +135,20 @@ export async function getNextActiveAppMistake(
         .eq("user_id", userId);
     }
 
+    const servedFen = decisionFen;
+
     return {
       mistake: {
         id: row.id,
         decisionFen,
+        servedFen,
         actualMoveUci: typeof row.actual_move_uci === "string" ? row.actual_move_uci : "",
         actualMoveSan: typeof row.actual_move_san === "string" ? row.actual_move_san : null,
         cpLoss: typeof row.cp_loss === "number" ? row.cp_loss : null,
         classification: typeof row.classification === "string" ? row.classification : null,
         severity: typeof row.severity === "string" ? row.severity : null,
-        setupPreviousFen,
-        setupPlayedMoveUci,
+        setupPreviousFen: typeof row.setup_previous_fen === "string" ? row.setup_previous_fen : "",
+        setupPlayedMoveUci: typeof row.setup_played_move_uci === "string" ? row.setup_played_move_uci : "",
         setupPlayedMoveSan: typeof row.setup_played_move_san === "string" ? row.setup_played_move_san : null,
         sourceType: "app_training",
         sourceProvider: "blindspots",

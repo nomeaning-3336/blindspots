@@ -52,7 +52,6 @@ type NextPositionResponse = {
   randomExplorationProbability?: number;
   randomExplorationRoll?: number;
   selectedByRandomExploration?: boolean;
-  cpLoss?: number;
   error?: string;
   debug?: Record<string, unknown>;
 };
@@ -97,7 +96,6 @@ export async function GET(request: Request) {
           tags,
           openingName: (retryRow.opening_name as string) ?? undefined,
           eco: (retryRow.eco as string) ?? undefined,
-          cpLoss: (retryRow.cp_loss as number) ?? undefined,
           challengeElo,
         };
         return NextResponse.json(retryResponse);
@@ -154,7 +152,7 @@ export async function GET(request: Request) {
     const normalized = normalizeUserMistakeForTraining(mistakeResult.mistake);
     const mistake = mistakeResult.mistake;
 
-    const fenValid = isValidFen(mistake.starting_fen);
+    const fenValid = isValidFen(normalized.fen);
     if (fenValid) {
       const tags = normalizeThemeTags(mistake.theme_tags);
       const response: NextPositionResponse = {
@@ -171,7 +169,6 @@ export async function GET(request: Request) {
         tags,
         openingName: mistake.opening_name ?? undefined,
         eco: mistake.eco ?? undefined,
-        cpLoss: mistake.cp_loss ?? undefined,
         challengeElo,
       };
 
@@ -390,7 +387,7 @@ function buildAppMistakeResponse({
 
   const response: NextPositionResponse = {
     mistakeId: row.id,
-    fen: row.decisionFen,
+    fen: row.servedFen,
     decisionFen: row.decisionFen,
     source: "app_training",
     queueSource: "active_mistake",
@@ -398,7 +395,6 @@ function buildAppMistakeResponse({
     randomExplorationProbability: randomProbability,
     randomExplorationRoll,
     selectedByRandomExploration,
-    cpLoss: row.cpLoss ?? undefined,
     challengeElo,
   };
 
@@ -438,9 +434,9 @@ function buildRowMistakeResponse({
   const normalized = normalizeUserMistakeForTraining(mistakeResult.mistake);
   const mistake = mistakeResult.mistake;
 
-  if (!isValidFen(mistake.starting_fen)) {
+  if (!isValidFen(normalized.fen)) {
     console.error(
-      `[next-position] Invalid FEN in row-based mistake ${mistake.id}: ${mistake.starting_fen.slice(0, 60)}`,
+      `[next-position] Invalid FEN in row-based mistake ${mistake.id}: ${normalized.fen.slice(0, 60)}`,
     );
     return null;
   }
@@ -459,7 +455,6 @@ function buildRowMistakeResponse({
     tags: normalizeThemeTags(mistake.theme_tags),
     openingName: mistake.opening_name ?? undefined,
     eco: mistake.eco ?? undefined,
-    cpLoss: mistake.cp_loss ?? undefined,
     challengeElo,
   };
 
