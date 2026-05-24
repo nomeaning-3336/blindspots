@@ -30,7 +30,7 @@ export const metadata: Metadata = {
 export default function BlogPage() {
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-transparent">
-      <PublicHeaderClient isSignedIn={false} />
+      <PublicHeaderClient />
 
       <main className="app-scroll min-h-0 flex-1 overflow-y-auto overflow-x-clip">
         <section className="mx-auto w-full max-w-5xl px-6 py-12 md:px-10 md:py-16">

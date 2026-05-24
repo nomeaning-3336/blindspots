@@ -92,7 +92,7 @@ export default async function BlogPostPage({ params }: PageProps) {
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-transparent">
-      <PublicHeaderClient isSignedIn={false} />
+      <PublicHeaderClient />
 
       <main className="app-scroll min-h-0 flex-1 overflow-y-auto overflow-x-clip">
         <article className="mx-auto w-full max-w-3xl px-6 py-12 md:px-10 md:py-16">

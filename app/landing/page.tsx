@@ -193,7 +193,7 @@ export default async function LandingPage() {
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-transparent">
-      <PublicHeaderClient isSignedIn={isSignedIn} />
+      <PublicHeaderClient />
       <main className="min-h-0 flex-1 overflow-hidden">
         <section className="mx-auto grid w-full min-w-0 max-w-full overflow-x-clip gap-12 px-5 py-14 md:max-w-[96rem] md:grid-cols-[1fr_1.3fr] md:items-center md:px-10 md:py-20">
           <div>

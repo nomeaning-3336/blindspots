@@ -40,11 +40,27 @@ test("components/public-header.tsx does not contain Blog, Find your blindspots, 
   assert.ok(!source.includes("Open app"), "public-header should not contain Open app");
 });
 
-test("components/blindspots-spa-prototype.tsx contains a link to /auth/sign-out", () => {
+test("components/blindspots-spa-prototype.tsx uses AuthSignOutButton and not Link for sign-out", () => {
   const source = readSource("components/blindspots-spa-prototype.tsx");
   assert.ok(
-    source.includes('/auth/sign-out'),
-    "blindspots-spa-prototype.tsx should contain a link to /auth/sign-out"
+    source.includes("AuthSignOutButton"),
+    "blindspots-spa-prototype.tsx should use AuthSignOutButton for sign-out"
+  );
+  assert.ok(
+    !source.includes('<Link href="/auth/sign-out"'),
+    "blindspots-spa-prototype.tsx should not use <Link> for sign-out"
+  );
+  assert.ok(
+    !/import Link from ["']next\/link["']/.test(source) || !source.includes('href="/auth/sign-out"'),
+    "blindspots-spa-prototype.tsx should not import Link from next/link for sign-out purposes"
+  );
+});
+
+test("components/auth-sign-out-button.tsx calls window.location.assign with sign-out path", () => {
+  const source = readSource("components/auth-sign-out-button.tsx");
+  assert.ok(
+    source.includes('window.location.assign("/auth/sign-out")'),
+    "auth-sign-out-button.tsx should call window.location.assign('/auth/sign-out')"
   );
 });
 
