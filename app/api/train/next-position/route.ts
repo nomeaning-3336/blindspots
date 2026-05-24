@@ -18,7 +18,7 @@ import {
   randomExplorationProbability,
   type ServeMode,
 } from "@/lib/training/serving-policy";
-import { validateTrainingQueueItem } from "@/lib/training/position-validity";
+import { validatePlayableTrainingFen } from "@/lib/training/position-validity";
 import { getModeSeedCandidates } from "@/lib/training/serve-mode-sampler";
 import { enrichTrainingQueueItem } from "@/lib/training/position-metadata";
 import { selectAndReserveNextTrainingPositionCore, type TrainingBucket } from "@/lib/training/queue-core";
@@ -55,7 +55,6 @@ type NextPositionResponse = {
   error?: string;
   debug?: Record<string, unknown>;
 };
-const DEFAULT_SEQUENCE_LENGTH = 4;
 const MAX_VALID_SELECTION_ATTEMPTS = 25;
 
 const BASE_COLUMNS = "user_id,total_sequences,blindspots_elo,exploit_queue,explore_queue,revisit_queue,mastered_queue,recent_served_fens";
@@ -82,7 +81,7 @@ export async function GET(request: Request) {
 
     if (retryRow) {
       const normalized = normalizeUserMistakeForTraining(retryRow as any);
-      const fenValid = isValidFen(retryRow.starting_fen as string);
+      const fenValid = isValidFen(normalized.fen);
       if (fenValid) {
         const tags = normalizeThemeTags(retryRow.theme_tags);
         const challengeElo = getOpponentElo(DEFAULT_BLINDSPOTS_ELO);
@@ -137,7 +136,6 @@ export async function GET(request: Request) {
     masteredQueue: normalizeQueue(profile?.mastered_queue ?? null),
   };
   const queueCountsBefore = getQueueCounts(queuesBeforeRefill);
-  const sequenceLength = 4;
   const userElo = typeof profile?.blindspots_elo === "number"
     ? profile.blindspots_elo
     : Number(profile?.blindspots_elo ?? DEFAULT_BLINDSPOTS_ELO);
@@ -177,7 +175,6 @@ export async function GET(request: Request) {
           queueSource: mistakeResult.queueSource,
           mistakeId: normalized.id,
           sourceType: mistake.source_type,
-          cpLoss: mistake.cp_loss,
           reviewCount: mistake.review_count,
           intervalDays: mistake.interval_days,
           nextReviewAt: mistake.next_review_at ?? undefined,
@@ -260,7 +257,6 @@ export async function GET(request: Request) {
     queues,
     completedSequenceCount,
     recentServedFens,
-    sequenceLength,
     requestedServeMode,
     bucketStats,
   });
@@ -385,6 +381,13 @@ function buildAppMistakeResponse({
   const row = activeAppResult.mistake;
   if (!row) return null;
 
+  if (!isValidFen(row.servedFen)) {
+    console.error(
+      `[next-position] Invalid FEN in app-training mistake ${row.id}: ${row.servedFen.slice(0, 60)}`,
+    );
+    return null;
+  }
+
   const response: NextPositionResponse = {
     mistakeId: row.id,
     fen: row.servedFen,
@@ -403,7 +406,6 @@ function buildAppMistakeResponse({
       queueSource: "active_mistake",
       mistakeId: row.id,
       sourceType: row.sourceType,
-      cpLoss: row.cpLoss,
       selectedQueueKind: "active_mistake",
       randomExplorationProbability: randomProbability,
       randomExplorationRoll,
@@ -463,7 +465,6 @@ function buildRowMistakeResponse({
       queueSource: mistakeResult.queueSource,
       mistakeId: normalized.id,
       sourceType: mistake.source_type,
-      cpLoss: mistake.cp_loss,
       reviewCount: mistake.review_count,
       intervalDays: mistake.interval_days,
       nextReviewAt: mistake.next_review_at ?? undefined,
@@ -507,14 +508,12 @@ async function selectValidTrainingPositionReadOnly({
   queues,
   completedSequenceCount,
   recentServedFens,
-  sequenceLength,
   requestedServeMode,
   bucketStats,
 }: {
   queues: Awaited<ReturnType<typeof ensureTrainingQueuesHavePositions>>;
   completedSequenceCount: number;
   recentServedFens: RecentEntry[];
-  sequenceLength: number;
   requestedServeMode: ServeMode;
   bucketStats: BucketStats;
 }) {
@@ -526,7 +525,7 @@ async function selectValidTrainingPositionReadOnly({
   let nearDuplicateReason: string | null = null;
   let selectedQueue = "fallback";
   let wasDueRevisit = false;
-  let selectedFenValidity: ReturnType<typeof validateTrainingQueueItem> | null = null;
+  let selectedFenValidity: ReturnType<typeof validatePlayableTrainingFen> | null = null;
   let selectedPhase: string | undefined = undefined;
   let selectedBucket: string | undefined = undefined;
   let phaseFallbackUsed = false;
@@ -544,7 +543,7 @@ async function selectValidTrainingPositionReadOnly({
   const dueRevisit = currentQueues.revisitQueue.find((item) => Date.parse(item.scheduledAt) <= now.getTime());
   if (dueRevisit) {
     const enriched = enrichTrainingQueueItem(dueRevisit);
-    selectedFenValidity = validateTrainingQueueItem(dueRevisit, { sequenceLength });
+    selectedFenValidity = validatePlayableTrainingFen(dueRevisit.fen);
 
     if (selectedFenValidity.ok) {
       // No engine validation in cold read-only path
@@ -617,7 +616,7 @@ async function selectValidTrainingPositionReadOnly({
 
       if (seedSelection.item) {
         const enriched = enrichTrainingQueueItem(seedSelection.item);
-        selectedFenValidity = validateTrainingQueueItem(seedSelection.item, { sequenceLength });
+        selectedFenValidity = validatePlayableTrainingFen(seedSelection.item.fen);
         if (selectedFenValidity.ok) {
           // No engine validation in cold read-only path
           selectedPhase = enriched.phase ?? classifyPhaseFromFen(seedSelection.item.fen);
@@ -683,7 +682,7 @@ async function selectValidTrainingPositionReadOnly({
       continue;
     }
 
-    const validity = validateTrainingQueueItem(reservation.item, { sequenceLength });
+    const validity = validatePlayableTrainingFen(reservation.item.fen);
     if (validity.ok) {
       // No engine validation in cold read-only path
       const enriched = enrichTrainingQueueItem(reservation.item);

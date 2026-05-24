@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { extractFenConsequenceFingerprint } from "../fen-consequence-similarity";
 import { validatePlayableTrainingFen } from "./position-validity";
-import { normalizeSetupPrelude } from "./setup-prelude";
 import type { Json } from "../supabase/database";
 
 const ENABLE_GENERATED_TRAINING_CORPUS = true;
@@ -197,10 +196,6 @@ export function normalizeQueue(value: Json | null | undefined): TrainingQueueIte
       : typeof candidate.played_move === "string"
         ? candidate.played_move
         : undefined;
-    // When generated corpus is enabled, reject elite/filler items without valid setup prelude.
-    if (ENABLE_GENERATED_TRAINING_CORPUS && source === "elite" && !normalizeSetupPrelude({ fen, previousFen, playedMove })) {
-      return [];
-    }
     const mateDistancePlies = normalizeMateDistancePlies(
       candidate.mateDistancePlies ?? candidate.mate_distance_plies,
     );

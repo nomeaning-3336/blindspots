@@ -2,7 +2,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database";
 import { nextIntervalDays, shouldMasterMistake, addDays, type TrainingOutcome } from "./mistake-srs";
 import { inferLegalMoveBetweenFens } from "./fen-transition";
-import { normalizeSetupPrelude } from "./setup-prelude";
+import { validatePlayableTrainingFen } from "./position-validity";
 import { getNextReviewAtForActiveMistake, nextConsecutiveCorrectCount } from "./active-mistake-schedule";
 import { selectRandomPhase, getPhaseFallbackOrder, hasLikelySyzygyTablebaseEntry, inferPhaseFromFen } from "./random-filler-selection";
 
@@ -67,8 +67,8 @@ export interface ActiveAppMistake {
   cpLoss: number | null;
   classification: string | null;
   severity: string | null;
-  setupPreviousFen: string;
-  setupPlayedMoveUci: string;
+  setupPreviousFen: string | null;
+  setupPlayedMoveUci: string | null;
   setupPlayedMoveSan: string | null;
   sourceType: string;
   sourceProvider: string | null;
@@ -85,7 +85,7 @@ export async function getNextActiveAppMistake(
   userId: string,
   now: Date = new Date(),
   { reserve = true }: { reserve?: boolean } = {},
-): Promise<{ mistake: ActiveAppMistake | null; rejectedNoPreludeCount: number; candidateCount: number }> {
+): Promise<{ mistake: ActiveAppMistake | null; rejectedInvalidFenCount: number; candidateCount: number }> {
   const supabase = getSupabaseAdminClient();
   const nowISO = now.toISOString();
 
@@ -105,21 +105,21 @@ export async function getNextActiveAppMistake(
 
   if (error) {
     console.error("[mistake-store] active app mistake query failed", error);
-    return { mistake: null, rejectedNoPreludeCount: 0, candidateCount: 0 };
+    return { mistake: null, rejectedInvalidFenCount: 0, candidateCount: 0 };
   }
 
   const rows = Array.isArray(candidates) ? candidates : [];
-  let rejectedNoPreludeCount = 0;
+  let rejectedInvalidFenCount = 0;
 
   for (const row of rows as any[]) {
-    const decisionFen = typeof row.decision_fen === "string" && row.decision_fen
+    const servedFen = typeof row.decision_fen === "string" && row.decision_fen.length > 0
       ? row.decision_fen
-      : typeof row.starting_fen === "string" && row.starting_fen
+      : typeof row.starting_fen === "string" && row.starting_fen.length > 0
         ? row.starting_fen
         : "";
 
-    if (!decisionFen) {
-      rejectedNoPreludeCount++;
+    if (!servedFen || !validatePlayableTrainingFen(servedFen).ok) {
+      rejectedInvalidFenCount++;
       continue;
     }
 
@@ -135,30 +135,34 @@ export async function getNextActiveAppMistake(
         .eq("user_id", userId);
     }
 
-    const servedFen = decisionFen;
-
     return {
       mistake: {
         id: row.id,
-        decisionFen,
+        decisionFen: servedFen,
         servedFen,
         actualMoveUci: typeof row.actual_move_uci === "string" ? row.actual_move_uci : "",
         actualMoveSan: typeof row.actual_move_san === "string" ? row.actual_move_san : null,
         cpLoss: typeof row.cp_loss === "number" ? row.cp_loss : null,
         classification: typeof row.classification === "string" ? row.classification : null,
         severity: typeof row.severity === "string" ? row.severity : null,
-        setupPreviousFen: typeof row.setup_previous_fen === "string" ? row.setup_previous_fen : "",
-        setupPlayedMoveUci: typeof row.setup_played_move_uci === "string" ? row.setup_played_move_uci : "",
+        setupPreviousFen:
+          typeof row.setup_previous_fen === "string" && row.setup_previous_fen.length > 0
+            ? row.setup_previous_fen
+            : null,
+        setupPlayedMoveUci:
+          typeof row.setup_played_move_uci === "string" && row.setup_played_move_uci.length > 0
+            ? row.setup_played_move_uci
+            : null,
         setupPlayedMoveSan: typeof row.setup_played_move_san === "string" ? row.setup_played_move_san : null,
         sourceType: "app_training",
         sourceProvider: "blindspots",
       },
-      rejectedNoPreludeCount,
+      rejectedInvalidFenCount,
       candidateCount: rows.length,
     };
   }
 
-  return { mistake: null, rejectedNoPreludeCount, candidateCount: rows.length };
+  return { mistake: null, rejectedInvalidFenCount, candidateCount: rows.length };
 }
 
 export async function getNextMistakeForTraining(

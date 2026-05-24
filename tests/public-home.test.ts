@@ -171,6 +171,19 @@ test("next-position response type has no answer/history fields", () => {
   assert.ok(!responseTypeBody.includes("moveNotes"), "response must not include moveNotes");
 });
 
+test("next-position cold serving validates displayed FEN and hides grading data", () => {
+  const source = readSource("app/api/train/next-position/route.ts");
+
+  assert.ok(source.includes("isValidFen(normalized.fen)"), "retry path must validate normalized displayed FEN");
+  assert.ok(!source.includes("isValidFen(retryRow.starting_fen"), "retry path must not validate starting_fen");
+  assert.ok(source.includes("isValidFen(row.servedFen)"), "app-training path must validate served FEN");
+  assert.ok(!source.includes("cpLoss"), "next-position route must not expose cpLoss, including debug");
+  assert.ok(source.includes("validatePlayableTrainingFen"), "route must import playable FEN validation");
+  assert.ok(!source.includes("validateTrainingQueueItem"), "route must not use legacy queue item validation");
+  assert.ok(!source.includes("sequenceLength"), "route must not use fixed sequence length");
+  assert.ok(!source.includes("DEFAULT_SEQUENCE_LENGTH"), "route must not define a default sequence length");
+});
+
 test("mistake-store read functions pass reserve:false to avoid served_count updates", () => {
   const source = readSource("lib/training/mistake-store.ts");
   assert.ok(
@@ -190,6 +203,27 @@ test("mistake-store read functions pass reserve:false to avoid served_count upda
     getNextMistakeBody.includes("reserve: false"),
     "getNextMistakeForTraining must pass reserve:false to read-only helpers"
   );
+});
+
+test("app-training mistake selection validates FEN and treats setup as nullable provenance", () => {
+  const source = readSource("lib/training/mistake-store.ts");
+
+  assert.ok(source.includes('import { validatePlayableTrainingFen } from "./position-validity";'));
+  assert.ok(!source.includes("normalizeSetupPrelude"), "mistake-store must not reference setup prelude validation");
+  assert.ok(source.includes("rejectedInvalidFenCount"), "invalid FEN rejection counter should be explicit");
+  assert.ok(!source.includes("rejectedNoPreludeCount"), "prelude rejection counter name should be gone");
+  assert.ok(source.includes("setupPreviousFen: string | null;"));
+  assert.ok(source.includes("setupPlayedMoveUci: string | null;"));
+});
+
+test("training queue normalization keeps provenance without prelude gating", () => {
+  const source = readSource("lib/training/queues.ts");
+
+  assert.ok(!source.includes("normalizeSetupPrelude"), "queues must not import or call setup prelude validation");
+  assert.ok(source.includes("const previousFen = typeof candidate.previousFen"));
+  assert.ok(source.includes("const playedMove = typeof candidate.playedMove"));
+  assert.ok(source.includes("previousFen,"));
+  assert.ok(source.includes("playedMove,"));
 });
 
 test("getNextActiveAppMistake accepts FEN-only rows without prelude fields", () => {
