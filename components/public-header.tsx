@@ -13,7 +13,11 @@ function LogoMark() {
   );
 }
 
-export function PublicHeaderClient() {
+export function PublicHeaderClient({
+  hideAuthAction = false,
+}: {
+  hideAuthAction?: boolean;
+}) {
   return (
     <header
       className="relative z-40 shrink-0 border-b border-[var(--app-border)] px-4 py-3 backdrop-blur md:px-7"
@@ -29,12 +33,14 @@ export function PublicHeaderClient() {
           </Link>
         </h1>
         <div className="app-shell-nav flex min-h-9 flex-wrap items-center justify-end gap-2">
-          <Link
-            href="/sign-in?next=%2F"
-            className="app-brutal-button inline-flex min-h-9 items-center justify-center px-4 py-2 text-xs"
-          >
-            Log in
-          </Link>
+          {hideAuthAction ? null : (
+            <Link
+              href="/sign-in?next=%2F"
+              className="app-brutal-button inline-flex min-h-9 items-center justify-center px-4 py-2 text-xs"
+            >
+              Log in
+            </Link>
+          )}
         </div>
       </div>
     </header>

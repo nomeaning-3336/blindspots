@@ -27,6 +27,20 @@ test("app/page.tsx does not reference debugFEN, debugFen, or getHomeCallToAction
   assert.ok(!source.includes("getHomeCallToAction"), "app/page.tsx should not reference getHomeCallToAction");
 });
 
+test("app/page.tsx contains HeroVisual and AnalysisBoard", () => {
+  const source = readSource("app/page.tsx");
+  assert.ok(source.includes("<HeroVisual />"), "app/page.tsx should contain <HeroVisual />");
+  assert.ok(source.includes("AnalysisBoard"), "app/page.tsx should contain AnalysisBoard");
+});
+
+test("app/page.tsx footer contains nested wordmark pattern", () => {
+  const source = readSource("app/page.tsx");
+  assert.ok(
+    source.includes('Blindspots<span className="text-[var(--app-accent)]">.gg</span>'),
+    "app/page.tsx footer should contain the nested wordmark pattern"
+  );
+});
+
 test("components/public-header.tsx contains Log in and no Sign up", () => {
   const source = readSource("components/public-header.tsx");
   assert.ok(source.includes("Log in"), "public-header should contain Log in");
@@ -38,6 +52,22 @@ test("components/public-header.tsx does not contain Blog, Find your blindspots, 
   assert.ok(!source.includes("Blog"), "public-header should not contain Blog");
   assert.ok(!source.includes("Find your blindspots"), "public-header should not contain Find your blindspots");
   assert.ok(!source.includes("Open app"), "public-header should not contain Open app");
+});
+
+test("components/public-header.tsx supports hideAuthAction prop", () => {
+  const source = readSource("components/public-header.tsx");
+  assert.ok(
+    source.includes("hideAuthAction"),
+    "public-header.tsx should support hideAuthAction prop"
+  );
+});
+
+test("app/auth/email/page.tsx uses PublicHeaderClient with hideAuthAction", () => {
+  const source = readSource("app/auth/email/page.tsx");
+  assert.ok(
+    source.includes("<PublicHeaderClient hideAuthAction />"),
+    "auth/email page should use <PublicHeaderClient hideAuthAction />"
+  );
 });
 
 test("components/blindspots-spa-prototype.tsx uses AuthSignOutButton and not Link for sign-out", () => {
