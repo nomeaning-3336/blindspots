@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Chess } from "chess.js";
@@ -351,6 +352,9 @@ function TopBar({
           {theme === "paper" ? <MoonIcon /> : <SunIcon />}
         </button>
         <div className="bs-kit-avatar">{USER.initials}</div>
+        <Link href="/auth/sign-out" className="bs-kit-btn-quiet" style={{ fontSize: '11px', padding: '4px 8px' }}>
+          Sign out
+        </Link>
       </div>
     </div>
   );

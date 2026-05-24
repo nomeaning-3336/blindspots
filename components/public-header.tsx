@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 
 function LogoMark() {
   return (
@@ -14,35 +13,7 @@ function LogoMark() {
   );
 }
 
-function HeaderLink({
-  href,
-  children,
-  primary = false,
-}: {
-  href: string;
-  children: React.ReactNode;
-  primary?: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className={[
-        "inline-flex min-h-9 items-center justify-center px-4 py-2 text-xs",
-        primary
-          ? "app-brutal-button"
-          : "app-brutal-button",
-      ].join(" ")}
-    >
-      {children}
-    </Link>
-  );
-}
-
-export function PublicHeaderClient({ isSignedIn }: { isSignedIn: boolean }) {
-  const pathname = usePathname();
-  const signUpHref = `/sign-up?next=${encodeURIComponent("/")}`;
-  const isAuthPage = pathname === "/sign-in" || pathname === "/auth/email";
-
+export function PublicHeaderClient() {
   return (
     <header
       className="relative z-40 shrink-0 border-b border-[var(--app-border)] px-4 py-3 backdrop-blur md:px-7"
@@ -58,25 +29,12 @@ export function PublicHeaderClient({ isSignedIn }: { isSignedIn: boolean }) {
           </Link>
         </h1>
         <div className="app-shell-nav flex min-h-9 flex-wrap items-center justify-end gap-2">
-          {isSignedIn ? (
-            <HeaderLink href="/" primary>
-              Open app
-            </HeaderLink>
-          ) : isAuthPage ? (
-            <div className="min-h-9 w-28" />
-          ) : (
-            <>
-              <Link
-                href="/blog"
-                className="app-brutal-button-secondary inline-flex min-h-9 items-center justify-center px-3 py-2 text-xs font-semibold text-[var(--app-muted)] transition hover:text-[var(--app-text)]"
-              >
-                Blog
-              </Link>
-              <HeaderLink href={signUpHref} primary>
-                Find your blindspots
-              </HeaderLink>
-            </>
-          )}
+          <Link
+            href="/sign-in?next=%2F"
+            className="app-brutal-button inline-flex min-h-9 items-center justify-center px-4 py-2 text-xs"
+          >
+            Log in
+          </Link>
         </div>
       </div>
     </header>

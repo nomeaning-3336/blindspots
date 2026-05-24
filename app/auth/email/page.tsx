@@ -58,7 +58,7 @@ export default async function EmailAuthPage({
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-transparent">
       <EmailAuthHashHandler />
-      <PublicHeaderClient isSignedIn={false} />
+      <PublicHeaderClient />
       <main className="flex min-h-0 w-full flex-1 overflow-auto px-4 pb-4 pt-3 md:px-6">
         <div className="mx-auto flex w-full max-w-5xl items-center justify-center">
           <section className="grid w-full max-w-[720px] gap-8">
