@@ -104,6 +104,93 @@ test("SPA top bar replaces KD avatar with a settings placeholder icon", () => {
   assert.ok(source.includes("AuthSignOutButton"), "SPA must preserve the repaired sign-out control");
 });
 
+test("SPA piece selection does not call setInSession(true) — only handleBoardMove starts session", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+  // onSquareClick must not contain setInSession
+  const squareClickHandler = source.match(/onSquareClick=\{[\s\S]*?\}\s*\}/);
+  assert.ok(squareClickHandler, "onSquareClick handler should exist");
+  assert.ok(
+    !squareClickHandler[0].includes("setInSession"),
+    "onSquareClick handler should not call setInSession"
+  );
+  // Stage must not include `selected` in the playing condition
+  assert.ok(
+    !/stage\s*=\s*verdict\s*\?\s*"review"\s*:\s*inSession\s*\|\|\s*committed\s*\|\|\s*selected/.test(source),
+    "stage expression should not include `selected` for the playing state"
+  );
+  // handleBoardMove still calls setInSession (legal move starts prototype session)
+  assert.ok(
+    source.includes("setInSession"),
+    "handleBoardMove should still call setInSession for local prototype session"
+  );
+});
+
+test("next-position route is GET only and has no prelude/engine/helpers imports", () => {
+  const source = readSource("app/api/train/next-position/route.ts");
+  assert.ok(
+    source.includes("export async function GET"),
+    "next-position route must be a GET handler"
+  );
+  assert.ok(
+    !source.includes("getPreviousPosition") &&
+    !source.includes("normalizeSetupPrelude") &&
+    !source.includes("validateSetupPrelude"),
+    "route must not import prelude helpers"
+  );
+  assert.ok(
+    !source.includes("getPositionMateStatus") &&
+    !source.includes("validateEngineServeability"),
+    "route must not import engine validation"
+  );
+  assert.ok(
+    !source.includes("enrichAttemptRegistry") &&
+    !source.includes("enrichIfNonNull") &&
+    !source.includes("loadMoveNotesForDecisionFen") &&
+    !source.includes("normalizeDecisionFen") &&
+    !source.includes("buildMoveKey") &&
+    !source.includes("normalizeNotes"),
+    "route must not import history/enrichment helpers"
+  );
+});
+
+test("next-position response type has no answer/history fields", () => {
+  const source = readSource("app/api/train/next-position/route.ts");
+  // Check NextPositionResponse type definition (variable declaration with fields)
+  const responseTypeMatch = source.match(/type NextPositionResponse = \{[\s\S]*?\};/);
+  assert.ok(responseTypeMatch, "NextPositionResponse type should be defined");
+  const responseTypeBody = responseTypeMatch[0];
+  assert.ok(!responseTypeBody.includes("previousFen"), "response must not include previousFen");
+  assert.ok(!responseTypeBody.includes("playedMove"), "response must not include playedMove");
+  assert.ok(!responseTypeBody.includes("actualMoveUci"), "response must not include actualMoveUci");
+  assert.ok(!responseTypeBody.includes("actualMoveSan"), "response must not include actualMoveSan");
+  assert.ok(!responseTypeBody.includes("bestMoveUci"), "response must not include bestMoveUci");
+  assert.ok(!responseTypeBody.includes("bestMoveSan"), "response must not include bestMoveSan");
+  assert.ok(!responseTypeBody.includes("sequenceLength"), "response must not include sequenceLength");
+  assert.ok(!responseTypeBody.includes("attemptRegistry"), "response must not include attemptRegistry");
+  assert.ok(!responseTypeBody.includes("moveNotes"), "response must not include moveNotes");
+});
+
+test("mistake-store read functions pass reserve:false to avoid served_count updates", () => {
+  const source = readSource("lib/training/mistake-store.ts");
+  assert.ok(
+    source.includes("reserve?: boolean"),
+    "getNextActiveAppMistake must accept reserve option"
+  );
+  assert.ok(
+    source.includes("reserve?: boolean"),
+    "getNextReviewMistakeForTraining must accept reserve option"
+  );
+  assert.ok(
+    source.includes("reserve?: boolean"),
+    "getNextActiveOrFillerMistakeForTraining must accept reserve option"
+  );
+  const getNextMistakeBody = source.match(/getNextMistakeForTraining[\s\S]*?(?=\nexport|$)/)?.[0] ?? "";
+  assert.ok(
+    getNextMistakeBody.includes("reserve: false"),
+    "getNextMistakeForTraining must pass reserve:false to read-only helpers"
+  );
+});
+
 test("app-auth-routing: authenticated default route is root SPA", () => {
   const routes: typeof import("../lib/app-routes") = require("../lib/app-routes.ts");
   assert.equal(routes.DEFAULT_APP_ROUTE, "/");

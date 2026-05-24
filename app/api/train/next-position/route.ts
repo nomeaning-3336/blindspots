@@ -20,16 +20,11 @@ import {
 } from "@/lib/training/serving-policy";
 import { validateTrainingQueueItem } from "@/lib/training/position-validity";
 import { getModeSeedCandidates } from "@/lib/training/serve-mode-sampler";
-import { classifyTrainingPhase, enrichTrainingQueueItem } from "@/lib/training/position-metadata";
+import { enrichTrainingQueueItem } from "@/lib/training/position-metadata";
 import { selectAndReserveNextTrainingPositionCore, type TrainingBucket } from "@/lib/training/queue-core";
 import { normalizeBucketStats, thompsonSample, type BucketStats } from "@/lib/training/bandit-stats";
-import { getPositionMateStatus } from "@/lib/engines/dispatcher";
 import { getOpponentElo } from "@/lib/training/elo";
 import { getNextActiveOrFillerMistakeForTraining, getNextReviewMistakeForTraining, getNextActiveAppMistake, normalizeUserMistakeForTraining, type NextMistakeResult } from "@/lib/training/mistake-store";
-import { getPreviousPosition } from "@/lib/training/position-index";
-import { normalizeSetupPrelude, validateSetupPrelude } from "@/lib/training/setup-prelude";
-import { normalizeDecisionFen, buildMoveKey } from "@/lib/training/mistake-memory";
-import { normalizeNotes } from "@/lib/notes";
 import {
   DEFAULT_BLINDSPOTS_ELO,
   buildDefaultBlindspotProfile,
@@ -40,14 +35,7 @@ export const dynamic = "force-dynamic";
 
 type NextPositionResponse = {
   fen?: string;
-  previousFen?: string;
-  playedMove?: string;
   decisionFen?: string;
-  actualMoveUci?: string;
-  actualMoveSan?: string;
-  bestMoveUci?: string;
-  bestMoveSan?: string;
-  sequenceLength?: number;
   source?: string;
   selectedServeMode?: string;
   selectedPhase?: string;
@@ -67,32 +55,11 @@ type NextPositionResponse = {
   cpLoss?: number;
   error?: string;
   debug?: Record<string, unknown>;
-  attemptRegistry?: Array<{
-    id: string;
-    decisionFen: string;
-    moveUci: string;
-    moveSan: string;
-    classification: "inaccuracy" | "mistake" | "blunder";
-    cpLoss: number;
-    playedAt: string;
-    note: string | null;
-  }>;
-  moveNotes?: Array<{
-    moveKey: string;
-    moveSan: string | null;
-    moveUci: string | null;
-    classification: string | null;
-    noteText: string;
-  }>;
 };
 const DEFAULT_SEQUENCE_LENGTH = 4;
-const MIN_SEQUENCE_LENGTH = 1;
-const MAX_SEQUENCE_LENGTH = 9;
 const MAX_VALID_SELECTION_ATTEMPTS = 25;
 
-// Columns that must exist for the route to function
 const BASE_COLUMNS = "user_id,total_sequences,blindspots_elo,exploit_queue,explore_queue,revisit_queue,mastered_queue,recent_served_fens";
-// Columns that may not exist before migration is applied
 const OPTIONAL_COLUMNS = "recent_served_modes,bucket_stats";
 
 export async function GET(request: Request) {
@@ -103,7 +70,7 @@ export async function GET(request: Request) {
 
   const supabase = getSupabaseAdminClient();
 
-  // Retry: serve a specific mistake by id
+  // Retry path — return the position without prelude/history fields
   const requestUrl = new URL(request.url);
   const retryMistakeId = requestUrl.searchParams.get("positionId") ?? requestUrl.searchParams.get("mistakeId");
   if (retryMistakeId) {
@@ -115,47 +82,30 @@ export async function GET(request: Request) {
       .maybeSingle();
 
     if (retryRow) {
-      const normalized = normalizeUserMistakeForTraining(retryRow);
+      const normalized = normalizeUserMistakeForTraining(retryRow as any);
       const fenValid = isValidFen(retryRow.starting_fen as string);
       if (fenValid) {
-        const setupPrelude = normalizeSetupPrelude({
+        const tags = normalizeThemeTags(retryRow.theme_tags);
+        const challengeElo = getOpponentElo(DEFAULT_BLINDSPOTS_ELO);
+        const retryResponse: NextPositionResponse = {
+          mistakeId: normalized.id,
           fen: normalized.fen,
-          previousFen: normalized.previousFen,
-          playedMove: normalized.playedMove,
-        });
-
-        if (setupPrelude) {
-          const tags = normalizeThemeTags(retryRow.theme_tags);
-          const challengeElo = getOpponentElo(DEFAULT_BLINDSPOTS_ELO);
-          const retryResponse: NextPositionResponse = {
-            mistakeId: normalized.id,
-            fen: normalized.fen,
-            decisionFen: normalized.decisionFen ?? undefined,
-            previousFen: setupPrelude.previousFen,
-            playedMove: setupPrelude.playedMove,
-            actualMoveUci: normalized.actualMoveUci ?? undefined,
-            actualMoveSan: normalized.actualMoveSan ?? undefined,
-            bestMoveUci: normalized.bestMoveUci ?? undefined,
-            bestMoveSan: normalized.bestMoveSan ?? undefined,
-            source: normalized.source,
-            queueSource: "retry",
-            selectedServeMode: "retry",
-            tags,
-            openingName: (retryRow.opening_name as string) ?? undefined,
-            eco: (retryRow.eco as string) ?? undefined,
-            cpLoss: (retryRow.cp_loss as number) ?? undefined,
-            sequenceLength: 4,
-            challengeElo,
-          };
-          const enrichedRetry = await enrichAttemptRegistry(retryResponse, userId, supabase);
-          return NextResponse.json(enrichedRetry);
-        }
+          decisionFen: normalized.decisionFen ?? undefined,
+          source: normalized.source,
+          queueSource: "retry",
+          selectedServeMode: "retry",
+          tags,
+          openingName: (retryRow.opening_name as string) ?? undefined,
+          eco: (retryRow.eco as string) ?? undefined,
+          cpLoss: (retryRow.cp_loss as number) ?? undefined,
+          challengeElo,
+        };
+        return NextResponse.json(retryResponse);
       }
     }
-    // Fall through to normal queue selection silently
   }
 
-  // Fetch base columns (always exist post-20260425121000 migration)
+  // Load profile
   const { data: profile, error: baseError } = await supabase
     .from("user_blindspot_profile")
     .select(BASE_COLUMNS)
@@ -166,7 +116,6 @@ export async function GET(request: Request) {
     throw new Error(`Failed to load training profile: ${baseError.message}`);
   }
 
-  // Fetch optional columns only if the table has them
   let recentServedModes: ReturnType<typeof normalizeRecentServedModes> = [];
   let bucketStats: BucketStats = normalizeBucketStats(null);
 
@@ -176,20 +125,10 @@ export async function GET(request: Request) {
     .eq("user_id", userId)
     .maybeSingle();
 
-if (!optionalError && optionalData) {
+  if (!optionalError && optionalData) {
     recentServedModes = normalizeRecentServedModes(optionalData?.recent_served_modes);
     bucketStats = normalizeBucketStats((optionalData as Record<string, unknown>)?.bucket_stats);
   }
-
-  const optionalRecentServedModesRawCount = Array.isArray((optionalData as Record<string, unknown>)?.recent_served_modes)
-    ? ((optionalData as Record<string, unknown>).recent_served_modes as unknown[]).length
-    : null;
-
-  const { data: preferences } = await supabase
-    .from("user_training_preferences")
-    .select("sequence_length")
-    .eq("user_id", userId)
-    .maybeSingle();
 
   const recentServedFens = normalizeRecentServedEntries(profile?.recent_served_fens ?? null);
   const completedSequenceCount = profile?.total_sequences ?? 0;
@@ -209,149 +148,106 @@ if (!optionalError && optionalData) {
   const randomProbability = randomExplorationProbability(completedSequenceCount);
   const selectedByRandomExploration = randomExplorationRoll < randomProbability;
 
-  // ── Row-based review-due mistakes — true SRS priority ─────────────
-  // Only genuine SRS review-due mistakes override random exploration.
-  // App-training active mistakes (including newly "due" ones) do NOT hard-block P(random).
-  const mistakeResult = await getNextReviewMistakeForTraining(userId);
+  // Row-based review mistakes — read-only, no reserve
+  const mistakeResult = await getNextReviewMistakeForTraining(userId, new Date(), { reserve: false });
   if (mistakeResult.mistake) {
     const normalized = normalizeUserMistakeForTraining(mistakeResult.mistake);
     const mistake = mistakeResult.mistake;
 
-    // Validate FEN before serving
     const fenValid = isValidFen(mistake.starting_fen);
-    if (!fenValid) {
-      console.error(
-        `[next-position] Invalid FEN in row-based mistake ${mistake.id}: ${mistake.starting_fen.slice(0, 60)}`,
-      );
-      // Fall through to legacy path — do not return invalid data
-    } else {
+    if (fenValid) {
       const tags = normalizeThemeTags(mistake.theme_tags);
-      const setupPrelude = normalizeSetupPrelude({
+      const response: NextPositionResponse = {
+        mistakeId: normalized.id,
         fen: normalized.fen,
-        previousFen: normalized.previousFen,
-        playedMove: normalized.playedMove,
-      });
+        decisionFen: normalized.decisionFen ?? undefined,
+        source: normalized.source,
+        queueSource: mistakeResult.queueSource ?? undefined,
+        reviewCount: mistake.review_count ?? 0,
+        selectedServeMode: mistakeResult.queueSource ?? undefined,
+        randomExplorationProbability: randomProbability,
+        randomExplorationRoll,
+        selectedByRandomExploration: false,
+        tags,
+        openingName: mistake.opening_name ?? undefined,
+        eco: mistake.eco ?? undefined,
+        cpLoss: mistake.cp_loss ?? undefined,
+        challengeElo,
+      };
 
-      // Reject row-based mistakes without valid setup prelude
-      if (!setupPrelude) {
-        if (process.env.NODE_ENV !== "production") {
-          console.warn("[next-position] row-based mistake rejected — no valid prelude", {
-            mistakeId: normalized.id,
-            sourceType: mistake.source_type,
-            fen: normalized.fen,
-            previousFen: normalized.previousFen,
-            playedMove: normalized.playedMove,
-          });
-        }
-        // fall through to seeded/legacy queue path
-      } else {
-        const response: NextPositionResponse = {
+      if (process.env.NODE_ENV !== "production") {
+        response.debug = {
+          queueSource: mistakeResult.queueSource,
           mistakeId: normalized.id,
-          fen: normalized.fen,
-          decisionFen: normalized.decisionFen ?? undefined,
-          previousFen: setupPrelude.previousFen,
-          playedMove: setupPrelude.playedMove,
-          actualMoveUci: normalized.actualMoveUci ?? undefined,
-          actualMoveSan: normalized.actualMoveSan ?? undefined,
-          bestMoveUci: normalized.bestMoveUci ?? undefined,
-          bestMoveSan: normalized.bestMoveSan ?? undefined,
-          source: normalized.source,
-          queueSource: mistakeResult.queueSource ?? undefined,
-          reviewCount: mistake.review_count ?? 0,
-          selectedServeMode: mistakeResult.queueSource ?? undefined,
+          sourceType: mistake.source_type,
+          cpLoss: mistake.cp_loss,
+          reviewCount: mistake.review_count,
+          intervalDays: mistake.interval_days,
+          nextReviewAt: mistake.next_review_at ?? undefined,
+          servedCount: mistake.served_count,
+          rowBased: true,
           randomExplorationProbability: randomProbability,
           randomExplorationRoll,
           selectedByRandomExploration: false,
-          tags,
-          openingName: mistake.opening_name ?? undefined,
-          eco: mistake.eco ?? undefined,
-          cpLoss: mistake.cp_loss ?? undefined,
-          sequenceLength,
-          challengeElo,
+          coldStartReviewOverride: true,
         };
-
-        if (process.env.NODE_ENV !== "production") {
-          response.debug = {
-            queueSource: mistakeResult.queueSource,
-            mistakeId: normalized.id,
-            sourceType: mistake.source_type,
-            cpLoss: mistake.cp_loss,
-            reviewCount: mistake.review_count,
-            intervalDays: mistake.interval_days,
-            nextReviewAt: mistake.next_review_at ?? undefined,
-            servedCount: mistake.served_count,
-            rowBased: true,
-            randomExplorationProbability: randomProbability,
-            randomExplorationRoll,
-            selectedByRandomExploration: false,
-            coldStartReviewOverride: true,
-          };
-        }
-
-        const enrichedReview = await enrichAttemptRegistry(response, userId, supabase);
-        return NextResponse.json(enrichedReview);
       }
+
+      return NextResponse.json(response);
     }
   }
 
-  // Do not run Lichess sync inside /api/train/next-position.
-  // This endpoint must stay fast and only serve an already-available position.
-  // Profile/game syncing belongs in onboarding, explicit account sync, or a background job.
-  // If no row-based mistake is ready, fall through to seeded/legacy queue selection.
-  // P(random) gating: filler-first when exploration fires, active-first otherwise
+  // P(random) path — read-only, no reserve
   if (selectedByRandomExploration) {
-    const personalMistakeResult = await getNextActiveOrFillerMistakeForTraining(userId);
-    const personalResponse = await enrichIfNonNull(buildRowMistakeResponse({
+    const personalMistakeResult = await getNextActiveOrFillerMistakeForTraining(userId, new Date(), { reserve: false });
+    const personalResponse = buildRowMistakeResponse({
       mistakeResult: personalMistakeResult,
-      sequenceLength,
       challengeElo,
       randomProbability,
       randomExplorationRoll,
       selectedByRandomExploration,
       attemptedQueueOrder: ["filler", "active"],
-    }), userId, supabase);
+    });
 
     if (personalResponse) {
       return NextResponse.json(personalResponse);
     }
 
-    // Random succeeded but filler pool empty — fall through to app_training
-    const appFallback = await getNextActiveAppMistake(userId);
-    const appFallbackResponse = await enrichIfNonNull(buildAppMistakeResponse({
+    // Random succeeded but filler pool empty — app_training fallback
+    const appFallback = await getNextActiveAppMistake(userId, new Date(), { reserve: false });
+    const appFallbackResponse = buildAppMistakeResponse({
       activeAppResult: appFallback,
-      sequenceLength,
       challengeElo,
       randomProbability,
       randomExplorationRoll,
       selectedByRandomExploration,
-    }), userId, supabase);
+    });
     if (appFallbackResponse) return NextResponse.json(appFallbackResponse);
   } else {
-    // No random exploration — try app_training first
-    const appResult = await getNextActiveAppMistake(userId);
-    const appFirstResponse = await enrichIfNonNull(buildAppMistakeResponse({
+    // No random — app_training first, then personal
+    const appResult = await getNextActiveAppMistake(userId, new Date(), { reserve: false });
+    const appFirstResponse = buildAppMistakeResponse({
       activeAppResult: appResult,
-      sequenceLength,
       challengeElo,
       randomProbability,
       randomExplorationRoll,
       selectedByRandomExploration,
-    }), userId, supabase);
+    });
     if (appFirstResponse) return NextResponse.json(appFirstResponse);
 
-    const personalMistakeResult = await getNextActiveOrFillerMistakeForTraining(userId);
-    const personalFallbackResponse = await enrichIfNonNull(buildRowMistakeResponse({
+    const personalMistakeResult = await getNextActiveOrFillerMistakeForTraining(userId, new Date(), { reserve: false });
+    const personalFallbackResponse = buildRowMistakeResponse({
       mistakeResult: personalMistakeResult,
-      sequenceLength,
       challengeElo,
       randomProbability,
       randomExplorationRoll,
       selectedByRandomExploration,
       attemptedQueueOrder: ["active", "filler"],
-    }), userId, supabase);
+    });
     if (personalFallbackResponse) return NextResponse.json(personalFallbackResponse);
   }
 
+  // Queue-based fallback selection — read-only (no persistQueues call)
   const queues = await ensureTrainingQueuesHavePositions({
     ...queuesBeforeRefill,
     recentServedFens,
@@ -363,7 +259,7 @@ if (!optionalError && optionalData) {
     recentModes: recentServedModes,
   });
 
-  const selection = await selectValidTrainingPosition({
+  const selection = await selectValidTrainingPositionReadOnly({
     queues,
     completedSequenceCount,
     recentServedFens,
@@ -375,16 +271,15 @@ if (!optionalError && optionalData) {
 
   if (!nextPosition) {
     if (selectedByRandomExploration) {
-      const personalMistakeResult = await getNextActiveOrFillerMistakeForTraining(userId);
-      const personalBucketResponse = await enrichIfNonNull(buildRowMistakeResponse({
+      const personalMistakeResult = await getNextActiveOrFillerMistakeForTraining(userId, new Date(), { reserve: false });
+      const personalBucketResponse = buildRowMistakeResponse({
         mistakeResult: personalMistakeResult,
-        sequenceLength,
         challengeElo,
         randomProbability,
         randomExplorationRoll,
         selectedByRandomExploration,
         attemptedQueueOrder: ["random", "personal"],
-      }), userId, supabase);
+      });
 
       if (personalBucketResponse) {
         personalBucketResponse.debug = {
@@ -394,14 +289,6 @@ if (!optionalError && optionalData) {
         return NextResponse.json(personalBucketResponse);
       }
     }
-
-    await persistQueues(
-      userId,
-      selection.queues,
-      Boolean(profile),
-      recentServedFens,
-      undefined, // no position served — skip prepending to recentServedModes
-    );
 
     const response: NextPositionResponse = {
       error: "No playable training positions available.",
@@ -423,33 +310,12 @@ if (!optionalError && optionalData) {
     return NextResponse.json(response, { status: 404 });
   }
 
-  const nextRecentServedFens = prependRecentServedEntry(recentServedFens, {
-    fen: nextPosition.fen,
-    gameId: nextPosition.gameId,
-    ply: nextPosition.ply,
-  });
-  const nextRecentServedModes = prependRecentServeMode(recentServedModes, selection.selectedServeMode);
-  const queueCountsAfter = getQueueCounts(selection.queues);
-
-  await persistQueues(userId, selection.queues, Boolean(profile), nextRecentServedFens, nextRecentServedModes, bucketStats);
-
+  // No persistQueues call — read-only; same candidate may be returned after refresh
   const enriched = enrichTrainingQueueItem(nextPosition);
-
-  const enrichedPreviousPosition = nextPosition.previousFen
-    ? null
-    : await getPreviousPosition(nextPosition.fen).catch(() => null);
-  const setupPrelude = normalizeSetupPrelude({
-    fen: nextPosition.fen,
-    previousFen: nextPosition.previousFen ?? enrichedPreviousPosition?.previousFen,
-    playedMove: nextPosition.previousFen ? nextPosition.playedMove : enrichedPreviousPosition?.playedMove,
-  });
 
   const response: NextPositionResponse = {
     fen: nextPosition.fen,
-    previousFen: setupPrelude?.previousFen,
-    playedMove: setupPrelude?.playedMove,
     source: nextPosition.source,
-    sequenceLength,
     selectedServeMode: selection.selectedServeMode,
     selectedPhase: enriched.phase ?? selection.selectedPhase,
     selectedBucket: enriched.bucket ?? selection.selectedBucket,
@@ -468,7 +334,7 @@ if (!optionalError && optionalData) {
     response.debug = {
       selectedQueue: selection.selectedQueue,
       queueCountsBefore,
-      queueCountsAfter,
+      queueCountsAfter: getQueueCounts(selection.queues),
       selectedFen: nextPosition.fen,
       wasDueRevisit: selection.wasDueRevisit,
       completedSequenceCount,
@@ -492,39 +358,28 @@ if (!optionalError && optionalData) {
       banditUsed: selection.banditUsed,
       banditFallbackUsed: selection.banditFallbackUsed,
       challengeElo,
-      // Safe recommender diagnostics for QA
       recentServedModesCount: recentServedModes.length,
       recentServedModesPreview: recentServedModes.slice(0, 10).map((e) => e.mode),
       dueRevisitCount: queues.revisitQueue.filter(
         (item) => Date.parse(item.scheduledAt) <= new Date().getTime(),
       ).length,
-      // QA debug: prove recentServedModes grew per call
       profileUserId: userId,
-      recentServedModesSource: optionalError ? "optional-query-error" : "optional-query",
-      optionalRecentServedModesRawCount: optionalRecentServedModesRawCount,
-      recentServedModesBeforeCount: recentServedModes.length,
-      recentServedModesBeforePreview: recentServedModes.slice(0, 5).map((e) => e.mode),
-      nextRecentServedModesCount: nextRecentServedModes.length,
-      nextRecentServedModesPreview: nextRecentServedModes.slice(0, 5).map((e) => e.mode),
     };
   }
 
-  const enrichedResponse = await enrichAttemptRegistry(response, userId, supabase);
-  return NextResponse.json(enrichedResponse);
+  return NextResponse.json(response);
 }
 
 type RecentEntry = { fen: string; gameId?: string; ply?: number };
 
 function buildAppMistakeResponse({
   activeAppResult,
-  sequenceLength,
   challengeElo,
   randomProbability,
   randomExplorationRoll,
   selectedByRandomExploration,
 }: {
   activeAppResult: Awaited<ReturnType<typeof getNextActiveAppMistake>>;
-  sequenceLength: number;
   challengeElo: number;
   randomProbability: number;
   randomExplorationRoll: number;
@@ -533,21 +388,10 @@ function buildAppMistakeResponse({
   const row = activeAppResult.mistake;
   if (!row) return null;
 
-  const preludeValidation = validateSetupPrelude({
-    fen: row.decisionFen,
-    previousFen: row.setupPreviousFen,
-    playedMove: row.setupPlayedMoveUci,
-  });
-  if (!preludeValidation.ok) return null;
-
   const response: NextPositionResponse = {
     mistakeId: row.id,
     fen: row.decisionFen,
     decisionFen: row.decisionFen,
-    previousFen: preludeValidation.previousFen,
-    playedMove: preludeValidation.playedMove,
-    actualMoveUci: row.actualMoveUci || undefined,
-    actualMoveSan: row.actualMoveSan ?? undefined,
     source: "app_training",
     queueSource: "active_mistake",
     selectedServeMode: "active_mistake",
@@ -555,7 +399,6 @@ function buildAppMistakeResponse({
     randomExplorationRoll,
     selectedByRandomExploration,
     cpLoss: row.cpLoss ?? undefined,
-    sequenceLength,
     challengeElo,
   };
 
@@ -577,7 +420,6 @@ function buildAppMistakeResponse({
 
 function buildRowMistakeResponse({
   mistakeResult,
-  sequenceLength,
   challengeElo,
   randomProbability,
   randomExplorationRoll,
@@ -585,7 +427,6 @@ function buildRowMistakeResponse({
   attemptedQueueOrder,
 }: {
   mistakeResult: NextMistakeResult;
-  sequenceLength: number;
   challengeElo: number;
   randomProbability: number;
   randomExplorationRoll: number;
@@ -604,35 +445,10 @@ function buildRowMistakeResponse({
     return null;
   }
 
-  const setupPrelude = normalizeSetupPrelude({
-    fen: normalized.fen,
-    previousFen: normalized.previousFen,
-    playedMove: normalized.playedMove,
-  });
-
-  if (!setupPrelude) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn("[next-position] row-based mistake rejected — no valid prelude", {
-        mistakeId: normalized.id,
-        sourceType: mistake.source_type,
-        fen: normalized.fen,
-        previousFen: normalized.previousFen,
-        playedMove: normalized.playedMove,
-      });
-    }
-    return null;
-  }
-
   const response: NextPositionResponse = {
     mistakeId: normalized.id,
     fen: normalized.fen,
     decisionFen: normalized.decisionFen ?? undefined,
-    previousFen: setupPrelude.previousFen,
-    playedMove: setupPrelude.playedMove,
-    actualMoveUci: normalized.actualMoveUci ?? undefined,
-    actualMoveSan: normalized.actualMoveSan ?? undefined,
-    bestMoveUci: normalized.bestMoveUci ?? undefined,
-    bestMoveSan: normalized.bestMoveSan ?? undefined,
     source: normalized.source,
     queueSource: mistakeResult.queueSource ?? undefined,
     reviewCount: mistake.review_count ?? 0,
@@ -644,7 +460,6 @@ function buildRowMistakeResponse({
     openingName: mistake.opening_name ?? undefined,
     eco: mistake.eco ?? undefined,
     cpLoss: mistake.cp_loss ?? undefined,
-    sequenceLength,
     challengeElo,
   };
 
@@ -670,35 +485,6 @@ function buildRowMistakeResponse({
   return response;
 }
 
-async function validateEngineServeability(
-  fen: string,
-): Promise<
-  | { ok: true; mate?: number | null }
-  | { ok: false; reason: string; mate?: number | null }
-> {
-  try {
-    const status = await getPositionMateStatus(fen, {
-      depthLimit: 14,
-      timeLimitMs: 700,
-    });
-
-    if (typeof status.mate === "number" && status.mate < 0) {
-      return {
-        ok: false,
-        reason: "forced_losing_mate",
-        mate: status.mate,
-      };
-    }
-
-    return {
-      ok: true,
-      mate: status.mate,
-    };
-  } catch {
-    return { ok: true };
-  }
-}
-
 function deriveServeModeFromCandidate(input: {
   requestedServeMode: ServeMode;
   phase?: string;
@@ -722,7 +508,7 @@ function deriveServeModeFromCandidate(input: {
   return input.requestedServeMode;
 }
 
-async function selectValidTrainingPosition({
+async function selectValidTrainingPositionReadOnly({
   queues,
   completedSequenceCount,
   recentServedFens,
@@ -759,58 +545,45 @@ async function selectValidTrainingPosition({
   const now = new Date();
   const recentFenSet = new Set([...recentServedFens, ...invalidRecentEntries].map((e) => e.fen));
 
-  // Step 1: If revisit is due, always prefer it
+  // Step 1: Revisit due — select without persisting
   const dueRevisit = currentQueues.revisitQueue.find((item) => Date.parse(item.scheduledAt) <= now.getTime());
   if (dueRevisit) {
     const enriched = enrichTrainingQueueItem(dueRevisit);
     selectedFenValidity = validateTrainingQueueItem(dueRevisit, { sequenceLength });
 
     if (selectedFenValidity.ok) {
-      const engineValidity = await validateEngineServeability(dueRevisit.fen);
-      if (engineValidity.ok) {
-        // Reject revisit items without valid setup prelude (stale legacy queue entries).
-        if (normalizeSetupPrelude({
-          fen: dueRevisit.fen,
-          previousFen: dueRevisit.previousFen,
-          playedMove: dueRevisit.playedMove,
-        })) {
-          selectedPhase = enriched.phase;
-          selectedBucket = enriched.bucket;
-          selectedServeMode = deriveServeModeFromCandidate({
-            requestedServeMode,
-            phase: selectedPhase,
-            bucket: selectedBucket,
-            isTactic: dueRevisit.isTactic,
-            selectedQueue: "revisit",
-          });
-          return {
-            item: dueRevisit,
-            selectedQueue: "revisit" as const,
-            wasDueRevisit: true,
-            queues: removeFenFromAllQueues(currentQueues, dueRevisit.fen),
-            rejectedRecentExactCount: 0,
-            rejectedNearDuplicateCount: 0,
-            nearDuplicateReason: null,
-            rejectedInvalidCount: rejectedInvalidReasons.length,
-            rejectedInvalidReasons,
-            selectedFenValidity,
-            selectedServeMode,
-            selectedPhase,
-            selectedBucket,
-            banditPreferredBucket,
-            banditCandidateBuckets,
-            banditUsed: false,
-            banditFallbackUsed: false,
-            phaseFallbackUsed: requestedServeMode !== "revisit",
-          };
-        }
-        rejectedInvalidReasons.push("missing_setup_prelude");
-      } else {
-        rejectedInvalidReasons.push(engineValidity.reason);
-      }
-    } else {
-      rejectedInvalidReasons.push(selectedFenValidity.reason ?? "invalid_position");
+      // No engine validation in cold read-only path
+      selectedPhase = enriched.phase;
+      selectedBucket = enriched.bucket;
+      selectedServeMode = deriveServeModeFromCandidate({
+        requestedServeMode,
+        phase: selectedPhase,
+        bucket: selectedBucket,
+        isTactic: dueRevisit.isTactic,
+        selectedQueue: "revisit",
+      });
+      return {
+        item: dueRevisit,
+        selectedQueue: "revisit" as const,
+        wasDueRevisit: true,
+        queues: currentQueues,
+        rejectedRecentExactCount: 0,
+        rejectedNearDuplicateCount: 0,
+        nearDuplicateReason: null,
+        rejectedInvalidCount: rejectedInvalidReasons.length,
+        rejectedInvalidReasons,
+        selectedFenValidity,
+        selectedServeMode,
+        selectedPhase,
+        selectedBucket,
+        banditPreferredBucket,
+        banditCandidateBuckets,
+        banditUsed: false,
+        banditFallbackUsed: false,
+        phaseFallbackUsed: requestedServeMode !== "revisit",
+      };
     }
+    rejectedInvalidReasons.push(selectedFenValidity.reason ?? "invalid_position");
 
     invalidRecentEntries.push({
       fen: dueRevisit.fen,
@@ -821,7 +594,7 @@ async function selectValidTrainingPosition({
     currentQueues = removeFenFromAllQueues(currentQueues, dueRevisit.fen);
   }
 
-  // Step 2: For opening/tactic/endgame/middlegame/wildcard modes, try seed candidates first
+  // Step 2: Seed candidates for opening/tactic/endgame/middlegame/wildcard modes
   if (requestedServeMode === "opening" || requestedServeMode === "tactic" || requestedServeMode === "endgame" || requestedServeMode === "middlegame" || requestedServeMode === "wildcard") {
     const seedModes = buildSeedModePreferenceList(requestedServeMode, banditPreferredBucket);
 
@@ -851,35 +624,7 @@ async function selectValidTrainingPosition({
         const enriched = enrichTrainingQueueItem(seedSelection.item);
         selectedFenValidity = validateTrainingQueueItem(seedSelection.item, { sequenceLength });
         if (selectedFenValidity.ok) {
-          const engineValidity = await validateEngineServeability(seedSelection.item.fen);
-
-          if (!engineValidity.ok) {
-            rejectedInvalidReasons.push(engineValidity.reason);
-            invalidRecentEntries.push({
-              fen: seedSelection.item.fen,
-              gameId: seedSelection.item.gameId,
-              ply: seedSelection.item.ply,
-            });
-            recentFenSet.add(seedSelection.item.fen);
-            continue;
-          }
-
-          // Reject generated/filler candidates without valid setup prelude.
-          if (!normalizeSetupPrelude({
-            fen: seedSelection.item.fen,
-            previousFen: seedSelection.item.previousFen,
-            playedMove: seedSelection.item.playedMove,
-          })) {
-            rejectedInvalidReasons.push("missing_setup_prelude");
-            invalidRecentEntries.push({
-              fen: seedSelection.item.fen,
-              gameId: seedSelection.item.gameId,
-              ply: seedSelection.item.ply,
-            });
-            recentFenSet.add(seedSelection.item.fen);
-            continue;
-          }
-
+          // No engine validation in cold read-only path
           selectedPhase = enriched.phase ?? classifyPhaseFromFen(seedSelection.item.fen);
           selectedBucket = enriched.bucket;
           selectedServeMode = deriveServeModeFromCandidate({
@@ -911,13 +656,14 @@ async function selectValidTrainingPosition({
             phaseFallbackUsed: selectedServeMode !== requestedServeMode,
           };
         }
+        rejectedInvalidReasons.push(selectedFenValidity.reason ?? "invalid_position");
       }
     }
 
     phaseFallbackUsed = true;
   }
 
-  // Step 3: Fallback to queue-based selection
+  // Step 3: Queue-based selection — read-only
   for (let attempt = 0; attempt < MAX_VALID_SELECTION_ATTEMPTS; attempt += 1) {
     const reservation = await selectAndReserveNextTrainingPosition(currentQueues, {
       completedSequenceCount,
@@ -934,7 +680,6 @@ async function selectValidTrainingPosition({
     currentQueues = reservation.queues;
 
     if (!reservation.item) {
-      // Refill and retry once
       currentQueues = await ensureTrainingQueuesHavePositions({
         ...currentQueues,
         excludeFens: invalidRecentEntries.map((entry) => entry.fen),
@@ -945,35 +690,7 @@ async function selectValidTrainingPosition({
 
     const validity = validateTrainingQueueItem(reservation.item, { sequenceLength });
     if (validity.ok) {
-      const engineValidity = await validateEngineServeability(reservation.item.fen);
-
-      if (!engineValidity.ok) {
-        rejectedInvalidReasons.push(engineValidity.reason);
-        invalidRecentEntries.push({
-          fen: reservation.item.fen,
-          gameId: reservation.item.gameId,
-          ply: reservation.item.ply,
-        });
-        recentFenSet.add(reservation.item.fen);
-        continue;
-      }
-
-      // Reject queue items without valid setup prelude.
-      if (!normalizeSetupPrelude({
-        fen: reservation.item.fen,
-        previousFen: reservation.item.previousFen,
-        playedMove: reservation.item.playedMove,
-      })) {
-        rejectedInvalidReasons.push("missing_setup_prelude");
-        invalidRecentEntries.push({
-          fen: reservation.item.fen,
-          gameId: reservation.item.gameId,
-          ply: reservation.item.ply,
-        });
-        recentFenSet.add(reservation.item.fen);
-        continue;
-      }
-
+      // No engine validation in cold read-only path
       const enriched = enrichTrainingQueueItem(reservation.item);
       selectedFenValidity = validity;
       selectedPhase = enriched.phase;
@@ -1091,67 +808,6 @@ function buildSeedModePreferenceList(
   return modes.filter((mode, index) => modes.indexOf(mode) === index);
 }
 
-async function persistQueues(
-  userId: string,
-  queues: Awaited<ReturnType<typeof ensureTrainingQueuesHavePositions>>,
-  hasProfile: boolean,
-  recentServedFens: RecentEntry[],
-  recentServedModes: ReturnType<typeof prependRecentServeMode> | undefined,
-  _bucketStats?: Record<string, unknown> | null,
-) {
-  const supabase = getSupabaseAdminClient();
-  const baseValues = {
-    exploit_queue: queues.exploitQueue as unknown as Json,
-    explore_queue: queues.exploreQueue as unknown as Json,
-    revisit_queue: queues.revisitQueue as unknown as Json,
-    mastered_queue: queues.masteredQueue as unknown as Json,
-    recent_served_fens: recentServedFens as unknown as Json,
-  };
-
-  const values = recentServedModes
-    ? { ...baseValues, recent_served_modes: recentServedModes as unknown as Json }
-    : baseValues;
-
-  if (hasProfile) {
-    const { error } = await supabase
-      .from("user_blindspot_profile")
-      .update(values)
-      .eq("user_id", userId);
-
-    if (error && !isIgnoredPersistError(error.message)) {
-      throw new Error(`Failed to persist training queue: ${error.message}`);
-    }
-    return;
-  }
-
-  const { error } = await supabase.from("user_blindspot_profile").upsert(
-    {
-      ...buildDefaultBlindspotProfile(userId),
-      ...values,
-    },
-    { onConflict: "user_id" },
-  );
-
-  if (error && !isIgnoredPersistError(error.message)) {
-    throw new Error(`Failed to persist training queue: ${error.message}`);
-  }
-}
-
-function normalizeSequenceLength(value: unknown) {
-  const parsed = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(parsed)) return DEFAULT_SEQUENCE_LENGTH;
-  return Math.max(MIN_SEQUENCE_LENGTH, Math.min(MAX_SEQUENCE_LENGTH, Math.round(parsed)));
-}
-
-function isIgnoredPersistError(message: string) {
-  // Ignore column-not-found errors for optional columns when persisting
-  // (means migration hasn't been applied yet, so just skip those fields)
-  return (
-    message.includes("recent_served_modes") ||
-    message.includes("bucket_stats")
-  );
-}
-
 function removeFenFromAllQueues(
   queues: Awaited<ReturnType<typeof ensureTrainingQueuesHavePositions>>,
   fen: string,
@@ -1190,86 +846,4 @@ function isValidFen(fen: string) {
   } catch {
     return false;
   }
-}
-
-async function enrichIfNonNull(
-  response: NextPositionResponse | null,
-  userId: string,
-  supabase: ReturnType<typeof getSupabaseAdminClient>,
-): Promise<NextPositionResponse | null> {
-  if (!response) return null;
-  return enrichAttemptRegistry(response, userId, supabase);
-}
-
-async function enrichAttemptRegistry(
-  response: NextPositionResponse,
-  userId: string,
-  supabase: ReturnType<typeof getSupabaseAdminClient>,
-): Promise<NextPositionResponse> {
-  const decisionFen = normalizeDecisionFen(response.decisionFen ?? response.fen ?? "");
-  if (!decisionFen) return response;
-
-  const moveNotes = await loadMoveNotesForDecisionFen(decisionFen, userId, supabase);
-  const noteTextByMoveKey = new Map(
-    moveNotes.map((note) => [note.moveKey, note.noteText]),
-  );
-
-  const { data: attempts } = await supabase
-    .from("user_mistake_attempts" as any)
-    .select("id, move_uci, move_san, classification, cp_loss, played_at")
-    .eq("user_id", userId)
-    .eq("decision_fen", decisionFen)
-    .is("resolved_at", null)
-    .order("played_at", { ascending: false });
-
-  if (!attempts || (attempts as any[]).length === 0) {
-    return moveNotes.length > 0 ? { ...response, moveNotes } : response;
-  }
-
-  const registry = (attempts as any[]).map((attempt: any) => {
-    const moveKey = buildMoveKey(decisionFen, attempt.move_uci);
-
-    return {
-      id: attempt.id,
-      decisionFen,
-      moveUci: attempt.move_uci,
-      moveSan: attempt.move_san,
-      classification: attempt.classification,
-      cpLoss: attempt.cp_loss,
-      playedAt: attempt.played_at,
-      note: noteTextByMoveKey.get(moveKey) || null,
-    };
-  });
-
-  return {
-    ...response,
-    attemptRegistry: registry,
-    ...(moveNotes.length > 0 ? { moveNotes } : {}),
-  };
-}
-
-async function loadMoveNotesForDecisionFen(
-  decisionFen: string,
-  userId: string,
-  supabase: ReturnType<typeof getSupabaseAdminClient>,
-) {
-  const moveKeyPrefix = `${decisionFen}::`;
-  const { data } = await supabase
-    .from("training_move_notes" as any)
-    .select("move_key, decision_fen, move_san, move_uci, classification, note_text, eval_before_cp, eval_after_cp")
-    .eq("user_id", userId)
-    .eq("decision_fen", decisionFen)
-    .order("last_attempted_at", { ascending: false });
-
-  const directMatches = (data as any[] | null) ?? [];
-  if (directMatches.length > 0) return normalizeNotes(directMatches);
-
-  const { data: keyMatches } = await supabase
-    .from("training_move_notes" as any)
-    .select("move_key, decision_fen, move_san, move_uci, classification, note_text, eval_before_cp, eval_after_cp")
-    .eq("user_id", userId)
-    .like("move_key", `${moveKeyPrefix}%`)
-    .order("last_attempted_at", { ascending: false });
-
-  return normalizeNotes((keyMatches as any[] | null) ?? []);
 }

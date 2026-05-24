@@ -105,7 +105,7 @@ export function BlindspotsSpaPrototype() {
   }, [theme]);
 
   const current = QUEUE[queueIdx]!;
-  const stage = verdict ? "review" : inSession || committed || selected ? "playing" : "loaded";
+  const stage = verdict ? "review" : inSession || committed ? "playing" : "loaded";
   const lastMove = committed ? [committed.from, committed.to] : [];
   const correct = committed && (verdict === "best" || verdict === "brilliant") ? [committed.to] : [];
   const incorrect = committed && verdict === "blunder" ? [committed.to] : [];
@@ -254,7 +254,6 @@ export function BlindspotsSpaPrototype() {
                       return;
                     }
                     setSelected(square);
-                    setInSession(true);
                   } catch {
                     setSelected(null);
                   }

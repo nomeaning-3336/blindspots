@@ -82,6 +82,7 @@ export interface ActiveAppMistake {
 export async function getNextActiveAppMistake(
   userId: string,
   now: Date = new Date(),
+  { reserve = true }: { reserve?: boolean } = {},
 ): Promise<{ mistake: ActiveAppMistake | null; rejectedNoPreludeCount: number; candidateCount: number }> {
   const supabase = getSupabaseAdminClient();
   const nowISO = now.toISOString();
@@ -130,15 +131,17 @@ export async function getNextActiveAppMistake(
       continue;
     }
 
-    // Update served_count / last_served_at
-    await supabase
-      .from("user_mistakes" as any)
-      .update({
-        served_count: ((row.served_count ?? 0) + 1),
-        last_served_at: nowISO,
-      })
-      .eq("id", row.id)
-      .eq("user_id", userId);
+    // Update served_count / last_served_at only when reserving
+    if (reserve) {
+      await supabase
+        .from("user_mistakes" as any)
+        .update({
+          served_count: ((row.served_count ?? 0) + 1),
+          last_served_at: nowISO,
+        })
+        .eq("id", row.id)
+        .eq("user_id", userId);
+    }
 
     return {
       mistake: {
@@ -167,14 +170,15 @@ export async function getNextMistakeForTraining(
   userId: string,
   now: Date = new Date(),
 ): Promise<NextMistakeResult> {
-  const review = await getNextReviewMistakeForTraining(userId, now);
+  const review = await getNextReviewMistakeForTraining(userId, now, { reserve: false });
   if (review.mistake) return review;
-  return getNextActiveOrFillerMistakeForTraining(userId, now);
+  return getNextActiveOrFillerMistakeForTraining(userId, now, { reserve: false });
 }
 
 export async function getNextReviewMistakeForTraining(
   userId: string,
   now: Date = new Date(),
+  { reserve = true }: { reserve?: boolean } = {},
 ): Promise<NextMistakeResult> {
   const supabase = getSupabaseAdminClient();
   const nowISO = now.toISOString();
@@ -198,14 +202,16 @@ export async function getNextReviewMistakeForTraining(
   }
 
   if (review) {
-    await supabase
-      .from("user_mistakes")
-      .update({
-        served_count: (review.served_count ?? 0) + 1,
-        last_served_at: nowISO,
-      })
-      .eq("id", review.id)
-      .eq("user_id", userId);
+    if (reserve) {
+      await supabase
+        .from("user_mistakes")
+        .update({
+          served_count: (review.served_count ?? 0) + 1,
+          last_served_at: nowISO,
+        })
+        .eq("id", review.id)
+        .eq("user_id", userId);
+    }
 
     return { mistake: review as unknown as UserMistakeRow, queueSource: "review" };
   }
@@ -216,6 +222,7 @@ export async function getNextReviewMistakeForTraining(
 export async function getNextActiveOrFillerMistakeForTraining(
   userId: string,
   now: Date = new Date(),
+  { reserve = true }: { reserve?: boolean } = {},
 ): Promise<NextMistakeResult> {
   const supabase = getSupabaseAdminClient();
   const nowISO = now.toISOString();
@@ -240,14 +247,16 @@ export async function getNextActiveOrFillerMistakeForTraining(
   }
 
   if (active) {
-    await supabase
-      .from("user_mistakes")
-      .update({
-        served_count: (active.served_count ?? 0) + 1,
-        last_served_at: nowISO,
-      })
-      .eq("id", active.id)
-      .eq("user_id", userId);
+    if (reserve) {
+      await supabase
+        .from("user_mistakes")
+        .update({
+          served_count: (active.served_count ?? 0) + 1,
+          last_served_at: nowISO,
+        })
+        .eq("id", active.id)
+        .eq("user_id", userId);
+    }
 
     return { mistake: active as unknown as UserMistakeRow, queueSource: "active" };
   }
@@ -295,14 +304,16 @@ export async function getNextActiveOrFillerMistakeForTraining(
   }
 
   if (filler) {
-    await supabase
-      .from("user_mistakes")
-      .update({
-        served_count: (filler.served_count ?? 0) + 1,
-        last_served_at: nowISO,
-      })
-      .eq("id", filler.id)
-      .eq("user_id", userId);
+    if (reserve) {
+      await supabase
+        .from("user_mistakes")
+        .update({
+          served_count: (filler.served_count ?? 0) + 1,
+          last_served_at: nowISO,
+        })
+        .eq("id", filler.id)
+        .eq("user_id", userId);
+    }
 
     return { mistake: filler, queueSource: "filler", selectedPhase: preferredPhase };
   }
