@@ -12,7 +12,7 @@ export function ProtectedAppShell({
     <div className="relative flex h-[100dvh] flex-col overflow-hidden bg-transparent">
       <div aria-hidden="true" className="app-ambient" />
       <Link
-        href="/landing"
+        href="/"
         prefetch={false}
         aria-label="Blindspots home"
         className="fixed left-3 top-3 z-50 inline-flex min-h-12 items-center gap-2.5 rounded-md border border-[var(--app-border)] bg-[var(--app-panel-solid)] px-3.5 text-sm font-semibold text-[var(--app-text)] shadow-[var(--app-elevation-1)] transition hover:border-[var(--app-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)] md:left-5 md:top-5"

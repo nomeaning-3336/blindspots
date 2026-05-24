@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const pageSource = readFileSync("app/(shell)/train/page.tsx", "utf8");
+const pageSource = readFileSync("app/page.tsx", "utf8");
 const clientSource = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
 
 test("train page passes the persisted tour checkpoint into the initial client render", () => {

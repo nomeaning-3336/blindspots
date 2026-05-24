@@ -56,7 +56,7 @@ export function DashboardClient({ summary }: { summary: DashboardSummary }) {
   }, [router]);
 
   useEffect(() => {
-    router.prefetch("/train");
+    router.prefetch("/");
   }, [router]);
 
   const navigateToTrain = useCallback(
@@ -64,7 +64,14 @@ export function DashboardClient({ summary }: { summary: DashboardSummary }) {
       if (exitingToTrain) return;
 
       setExitingToTrain(true);
-      router.push(href);
+      if (prefersReducedMotion()) {
+        router.push(href);
+        return;
+      }
+
+      window.setTimeout(() => {
+        router.push(href);
+      }, DASHBOARD_TRAIN_EXIT_MS);
     },
     [exitingToTrain, router],
   );
@@ -72,8 +79,8 @@ export function DashboardClient({ summary }: { summary: DashboardSummary }) {
   return (
     <main
       className={[
-        "app-paper-shell min-h-[calc(100dvh-64px)] overflow-x-hidden px-4 py-5 md:px-8",
-        exitingToTrain ? "pointer-events-none" : "",
+        "app-paper-shell min-h-[calc(100dvh-64px)] overflow-x-hidden px-4 py-5 transition-[opacity,transform] duration-300 ease-out md:px-8",
+        exitingToTrain ? "pointer-events-none opacity-0 translate-y-2 scale-[0.992]" : "opacity-100 translate-y-0 scale-100",
       ].join(" ")}
     >
       <div className="mx-auto grid w-full max-w-[1180px] gap-5">
@@ -154,7 +161,7 @@ function DailyGoalSection({
         {hasData && (
           <button
             type="button"
-            onClick={() => onNavigateToTrain("/train")}
+            onClick={() => onNavigateToTrain("/")}
             disabled={trainNavigationDisabled}
             className="app-brutal-button inline-flex min-h-11 items-center justify-center px-5 py-2.5 text-sm"
           >
@@ -1269,7 +1276,7 @@ function QueuePositionRow({
         <div className="mt-5 flex flex-wrap gap-3">
           <button
             type="button"
-            onClick={() => onNavigateToTrain(`/train?positionId=${encodeURIComponent(position.id)}`)}
+            onClick={() => onNavigateToTrain(`/?positionId=${encodeURIComponent(position.id)}`)}
             disabled={trainNavigationDisabled}
             className="app-brutal-button inline-flex min-h-12 min-w-0 items-center justify-center px-4 py-2.5 text-sm"
           >
@@ -1277,7 +1284,7 @@ function QueuePositionRow({
           </button>
           <button
             type="button"
-            onClick={() => onNavigateToTrain(`/train?positionId=${encodeURIComponent(position.id)}&mode=postmortem`)}
+            onClick={() => onNavigateToTrain(`/?positionId=${encodeURIComponent(position.id)}&mode=postmortem`)}
             disabled={trainNavigationDisabled}
             className="app-brutal-button-secondary inline-flex min-h-12 min-w-0 items-center justify-center px-6 py-3 text-sm"
           >

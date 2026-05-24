@@ -6,7 +6,7 @@ export type HomeCallToAction = {
 export function getHomeCallToAction(isSignedIn: boolean): HomeCallToAction {
   if (isSignedIn) {
     return {
-      href: "/train",
+      href: "/",
       label: "Go find the bad parts",
     };
   }

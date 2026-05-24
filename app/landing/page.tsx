@@ -213,7 +213,7 @@ function DifferenceCard({
 export default async function LandingPage() {
   const isSignedIn = await getShellAuthHint();
 
-  const startHref = isSignedIn ? "/train" : "/sign-up?next=%2Ftrain";
+  const startHref = isSignedIn ? "/" : "/sign-up?next=%2F";
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-transparent">
@@ -232,7 +232,6 @@ export default async function LandingPage() {
 
             <div className="mt-9 flex flex-wrap gap-3">
               <PrimaryLink href={startHref}>Start training</PrimaryLink>
-              <SecondaryLink href="/analysis">Open analysis board</SecondaryLink>
             </div>
           </div>
 

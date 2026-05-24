@@ -5,7 +5,7 @@ import type { Database } from "@/lib/supabase/database";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
 import { isSupabaseSessionCookie } from "@/lib/supabase/auth-cookies";
 
-const PROTECTED_ROUTES = ["/train", "/performance", "/account"];
+const PROTECTED_ROUTES = ["/performance"];
 const PUBLIC_ROUTES_WITHOUT_SESSION_REFRESH = [
   "/landing",
   "/blog",
@@ -27,18 +27,22 @@ export default async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
   if (
+    pathname === "/train" ||
+    pathname.startsWith("/train/") ||
+    pathname === "/account" ||
+    pathname.startsWith("/account/") ||
+    pathname === "/analysis" ||
+    pathname.startsWith("/analysis/") ||
     pathname === "/analyze" ||
     pathname === "/analyze/" ||
     pathname === "/app/analyze" ||
     pathname === "/app/analyze/"
   ) {
-    const targetUrl = new URL(`/analysis${search}`, request.url);
+    const targetUrl = new URL(`/${search}`, request.url);
     return NextResponse.redirect(targetUrl, 302);
   }
   if (pathname === "/app" || pathname.startsWith("/app/")) {
-    const targetPath =
-      pathname === "/app" ? "/analysis" : pathname.slice(4) || "/analysis";
-    const targetUrl = new URL(`${targetPath}${search}`, request.url);
+    const targetUrl = new URL(`/${search}`, request.url);
     return NextResponse.redirect(targetUrl, 308);
   }
 

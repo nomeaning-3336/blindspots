@@ -34,7 +34,7 @@ test("next position mirrors concrete position id to URL with replaceState", () =
     trainClient.indexOf("async function startPendingInitialEngineMove"),
   );
 
-  assert.match(syncSource, /\/train\?positionId=/);
+  assert.match(syncSource, /\/\?positionId=/);
   assert.match(syncSource, /window\.history\.replaceState\(null, "", nextUrl\)/);
   assert.doesNotMatch(syncSource, /pushState/);
   assert.match(applySource, /currentMistakeIdRef\.current\s*=\s*typeof payload\.mistakeId === "string" \? payload\.mistakeId : null/);

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const shellSource = readFileSync("components/protected-app-shell.tsx", "utf8");
+const homePageSource = readFileSync("app/page.tsx", "utf8");
 const trainPageSource = readFileSync("app/(shell)/train/page.tsx", "utf8");
 const trainClientSource = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
 
@@ -14,9 +15,15 @@ test("protected shell removes the signed-in navbar", () => {
   assert.match(shellSource, /<main className=/);
 });
 
-test("train route hydrates dashboard summary into the single-page workspace", () => {
-  assert.match(trainPageSource, /getDashboardSummary/);
-  assert.match(trainPageSource, /dashboardSummary=\{summary\}/);
+test("root route hydrates dashboard summary into the single-page workspace", () => {
+  assert.match(homePageSource, /getDashboardSummary/);
+  assert.match(homePageSource, /<ProtectedAppShell/);
+  assert.match(homePageSource, /dashboardSummary=\{summary\}/);
+});
+
+test("train route is only a compatibility alias back to root", () => {
+  assert.match(trainPageSource, /redirect\(query \? `\/\?\$\{query\}` : "\/"\)/);
+  assert.doesNotMatch(trainPageSource, /getDashboardSummary/);
 });
 
 test("training workspace renders minified dashboard drawers around the board", () => {

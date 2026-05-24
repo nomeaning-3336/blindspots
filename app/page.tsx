@@ -1,9 +1,12 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { PublicHeaderClient } from "@/components/public-header";
 import { getOptionalAppUserId } from "@/lib/app-auth";
 import { AnalysisBoard } from "@/components/chess/analysis-board";
 import { getHomeCallToAction } from "@/lib/public-home";
+import { ProtectedAppShell } from "@/components/protected-app-shell";
+import { getDashboardSummary } from "@/lib/dashboard-server";
+import { getOnboardingStateForUser } from "@/lib/onboarding-state";
+import TrainPage from "./(shell)/train/train-client";
 
 function BrandMark({ size = 22 }: { size?: number }) {
   return (
@@ -95,12 +98,44 @@ function HeroVisual() {
   );
 }
 
-export default async function DisclaimerPage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ onboarding?: string; debugFEN?: string; debugFen?: string; positionId?: string; mistakeId?: string; mode?: string }>;
+}) {
+  const params = await searchParams;
   const userId = await getOptionalAppUserId();
   const isSignedIn = Boolean(userId);
+  const forceOnboarding = params?.onboarding === "1";
+  const isDebugRequest = Boolean(params?.debugFEN ?? params?.debugFen);
+  const initialMode = params?.mode === "postmortem" ? "postmortem" : "play";
+  const initialMistakeId =
+    typeof params?.positionId === "string"
+      ? params.positionId
+      : typeof params?.mistakeId === "string"
+        ? params.mistakeId
+        : undefined;
 
-  if (userId) {
-    redirect("/train");
+  if (userId || (isDebugRequest && process.env.NODE_ENV !== "production")) {
+    const appUserId = userId ?? "debug-user";
+    const state =
+      appUserId === "debug-user"
+        ? { trainingTourCompleted: true, trainingTourCheckpoint: null }
+        : await getOnboardingStateForUser(appUserId);
+    const summary = appUserId === "debug-user" ? undefined : await getDashboardSummary(appUserId);
+
+    return (
+      <ProtectedAppShell isSignedIn={Boolean(userId)}>
+        <TrainPage
+          initialOnboarding={appUserId !== "debug-user" && !state.trainingTourCompleted}
+          forceOnboarding={forceOnboarding}
+          initialTrainingTourCheckpoint={state.trainingTourCheckpoint}
+          initialMistakeId={initialMistakeId}
+          initialMode={initialMode}
+          dashboardSummary={summary}
+        />
+      </ProtectedAppShell>
+    );
   }
 
   const callToAction = getHomeCallToAction(isSignedIn);

@@ -14,8 +14,8 @@ test("agent magic link script uses Supabase admin generateLink without sending e
   assert.doesNotMatch(source, /signInWithOtp|send-magic-link/);
 });
 
-test("agent magic link script defaults to the train page callback", () => {
-  assert.match(source, /nextPath: "\/train"/);
+test("agent magic link script defaults to the root SPA callback", () => {
+  assert.match(source, /nextPath: "\/"/);
   assert.match(source, /new URL\("\/auth\/agent-link", origin\)/);
   assert.match(source, /url\.searchParams\.set\("token_hash", tokenHash\)/);
   assert.match(source, /url\.searchParams\.set\("next", nextPath\)/);

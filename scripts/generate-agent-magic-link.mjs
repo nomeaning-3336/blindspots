@@ -35,7 +35,7 @@ function loadEnvFile(path) {
 function usage() {
   return [
     "Usage:",
-    "  node scripts/generate-agent-magic-link.mjs <email> [--next /train] [--origin http://localhost:3000] [--json]",
+    "  node scripts/generate-agent-magic-link.mjs <email> [--next /] [--origin http://localhost:3000] [--json]",
     "",
     "Generates a Supabase magic link with the service role key without sending email.",
     "Open the printed link in Playwright to create an authenticated app session.",
@@ -45,7 +45,7 @@ function usage() {
 function parseArgs(argv) {
   const options = {
     email: "",
-    nextPath: "/train",
+    nextPath: "/",
     origin: process.env.PLAYWRIGHT_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
     json: false,
   };

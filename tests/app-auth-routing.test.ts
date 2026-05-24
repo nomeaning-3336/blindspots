@@ -10,4 +10,8 @@ test("authenticated app default route is the root dashboard", () => {
   assert.equal(routes.normalizeNextPath(), "/");
   assert.equal(routes.normalizeNextPath("/dashboard"), "/");
   assert.equal(routes.normalizeNextPath("/dashboard/anything"), "/");
+  assert.equal(routes.normalizeNextPath("/train"), "/");
+  assert.equal(routes.normalizeNextPath("/analysis"), "/");
+  assert.equal(routes.normalizeNextPath("/account"), "/");
+  assert.equal(routes.normalizeNextPath("/analyze"), "/");
 });

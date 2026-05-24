@@ -1,1 +1,5 @@
-export { default } from "../analyze/page";
+import { redirect } from "next/navigation";
+
+export default function AnalysisRouteAlias() {
+  redirect("/");
+}

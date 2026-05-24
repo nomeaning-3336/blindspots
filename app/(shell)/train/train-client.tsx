@@ -190,7 +190,7 @@ function prefersReducedMotion() {
 
 function syncTrainPositionUrl(positionId: string | null | undefined) {
   if (!positionId || typeof window === "undefined") return;
-  const nextUrl = `/train?positionId=${encodeURIComponent(positionId)}`;
+  const nextUrl = `/?positionId=${encodeURIComponent(positionId)}`;
   const currentUrl = `${window.location.pathname}${window.location.search}`;
   if (currentUrl === nextUrl) return;
   window.history.replaceState(null, "", nextUrl);
@@ -3341,7 +3341,7 @@ export default function TrainPage(props: TrainPageProps) {
 
     try {
       const formData = new FormData();
-      formData.set("next", "/train");
+      formData.set("next", "/");
       formData.set("provider", provider);
       formData.set("username", username);
 
@@ -6130,11 +6130,6 @@ function OnboardingPreferencesModal({
           <h2 className="mb-2 text-2xl font-bold leading-tight text-[var(--app-text)]">
             Set your daily goal
           </h2>
-          <p className="mb-6 text-sm leading-7 text-[var(--app-muted)]">
-            Choose how many training positions you want to complete per day. You can change this later in{" "}
-            <a href="/account" className="font-bold text-[var(--app-accent)] underline-offset-2 hover:underline">Account</a>.
-          </p>
-
           {/* Positions per day — custom stepper */}
           <div className="mb-6">
             <h3 className="mb-1 text-sm font-bold text-[var(--app-text)]">Total positions per day</h3>

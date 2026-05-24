@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AppShellNav } from "@/components/app-shell-nav";
 
 function LogoMark() {
   return (
@@ -65,9 +64,7 @@ function HeaderLink({
 
 export function PublicHeaderClient({ isSignedIn }: { isSignedIn: boolean }) {
   const pathname = usePathname();
-  const nextPath =
-    pathname && pathname !== "/" ? pathname : "/train";
-  const signUpHref = `/sign-up?next=${encodeURIComponent("/train")}`;
+  const signUpHref = `/sign-up?next=${encodeURIComponent("/")}`;
   const isAuthPage = pathname === "/sign-in" || pathname === "/auth/email";
 
   return (
@@ -86,7 +83,9 @@ export function PublicHeaderClient({ isSignedIn }: { isSignedIn: boolean }) {
         </h1>
         <div className="app-shell-nav flex min-h-9 flex-wrap items-center justify-end gap-2">
           {isSignedIn ? (
-            <AppShellNav isSignedIn />
+            <HeaderLink href="/" primary>
+              Open app
+            </HeaderLink>
           ) : isAuthPage ? (
             <div className="min-h-9 w-28" />
           ) : (

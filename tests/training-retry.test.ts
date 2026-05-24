@@ -8,19 +8,19 @@ test("dashboard Start action navigates with positionId through dashboard fade tr
   const fs = require("node:fs");
   const source = fs.readFileSync("components/dashboard-client.tsx", "utf8");
 
-  const startMatches = source.match(/onNavigateToTrain\(`\/train\?positionId=\$\{encodeURIComponent\(position\.id\)\}`\)/g);
-  assert.ok(startMatches, "Start action must navigate to /train?positionId=<id>");
+  const startMatches = source.match(/onNavigateToTrain\(`\/\?positionId=\$\{encodeURIComponent\(position\.id\)\}`\)/g);
+  assert.ok(startMatches, "Start action must navigate to /?positionId=<id>");
   assert.equal(startMatches.length, 1, "exactly one Start navigation expected");
   assert.match(source, /setExitingToTrain\(true\)/);
   assert.match(source, /router\.push\(href\)/);
 
-  const analyzeMatch = source.match(/onNavigateToTrain\(`\/train\?positionId=\$\{encodeURIComponent\(position\.id\)\}&mode=postmortem`\)/);
+  const analyzeMatch = source.match(/onNavigateToTrain\(`\/\?positionId=\$\{encodeURIComponent\(position\.id\)\}&mode=postmortem`\)/);
   assert.ok(analyzeMatch, "Analyze action must still include mode=postmortem");
 });
 
-test("page.tsx forwards positionId to TrainPage", () => {
+test("root page forwards positionId to TrainPage", () => {
   const fs = require("node:fs");
-  const source = fs.readFileSync("app/(shell)/train/page.tsx", "utf8");
+  const source = fs.readFileSync("app/page.tsx", "utf8");
 
   // searchParams type must include positionId and legacy mistakeId fallback
   assert.match(source, /positionId\?/);

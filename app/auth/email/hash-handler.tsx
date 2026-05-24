@@ -13,7 +13,7 @@ export function EmailAuthHashHandler() {
     const params = new URLSearchParams(hash.slice(1));
     const error = params.get("error") ?? "";
     const errorCode = params.get("error_code") ?? "";
-    const next = params.get("next") ?? "/train";
+    const next = params.get("next") ?? "/";
 
     // Map Supabase OTP errors to user-friendly query params
     if (errorCode === "otp_expired" || error === "access_denied") {

@@ -21,9 +21,9 @@ test("dashboard train actions use the shared transition handler instead of train
 
   assert.doesNotMatch(dashboard, /href="\/train"/);
   assert.doesNotMatch(dashboard, /href=\{`\/train/);
-  assert.match(dashboard, /onClick=\{\(\) => onNavigateToTrain\("\/train"\)\}/);
-  assert.match(dashboard, /onClick=\{\(\) => onNavigateToTrain\(`\/train\?positionId=\$\{encodeURIComponent\(position\.id\)\}`\)\}/);
-  assert.match(dashboard, /onClick=\{\(\) => onNavigateToTrain\(`\/train\?positionId=\$\{encodeURIComponent\(position\.id\)\}&mode=postmortem`\)\}/);
+  assert.match(dashboard, /onClick=\{\(\) => onNavigateToTrain\("\/"\)\}/);
+  assert.match(dashboard, /onClick=\{\(\) => onNavigateToTrain\(`\/\?positionId=\$\{encodeURIComponent\(position\.id\)\}`\)\}/);
+  assert.match(dashboard, /onClick=\{\(\) => onNavigateToTrain\(`\/\?positionId=\$\{encodeURIComponent\(position\.id\)\}&mode=postmortem`\)\}/);
 });
 
 test("train page fades in after dashboard navigation", () => {
