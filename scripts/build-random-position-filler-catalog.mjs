@@ -38,25 +38,34 @@ async function readJsonFile(path) {
   return JSON.parse(raw);
 }
 
-async function readExistingIds() {
+async function readExistingItems() {
   try {
     const existing = await readJsonFile(OUTPUT_PATH);
     if (!Array.isArray(existing)) return new Map();
 
-    const idsBySourceRecordId = new Map();
+    const itemsBySourceRecordId = new Map();
     for (const item of existing) {
       if (!isRecord(item)) continue;
       if (typeof item.id !== "string") continue;
       if (typeof item.sourceRecordId !== "string") continue;
-      idsBySourceRecordId.set(item.sourceRecordId, item.id);
+      if (typeof item.origin !== "string") continue;
+      if (typeof item.fen !== "string") continue;
+      if (typeof item.phase !== "string") continue;
+
+      itemsBySourceRecordId.set(item.sourceRecordId, {
+        id: item.id,
+        origin: item.origin,
+        fen: item.fen,
+        phase: item.phase,
+      });
     }
-    return idsBySourceRecordId;
+    return itemsBySourceRecordId;
   } catch {
     return new Map();
   }
 }
 
-const existingIds = await readExistingIds();
+const existingItems = await readExistingItems();
 const catalog = [];
 const seenSourceRecordIds = new Set();
 let rejectedInvalidRecordCount = 0;
@@ -88,8 +97,23 @@ for (const source of SOURCES) {
       continue;
     }
 
+    const existingItem = existingItems.get(sourceRecordId);
+
+    if (
+      existingItem &&
+      (
+        existingItem.origin !== "random_position" ||
+        existingItem.phase !== source.phase ||
+        existingItem.fen !== row.fen
+      )
+    ) {
+      throw new Error(
+        `Refusing to rebind existing filler UUID for ${sourceRecordId}: catalog identity metadata changed`,
+      );
+    }
+
     catalog.push({
-      id: existingIds.get(sourceRecordId) ?? randomUUID(),
+      id: existingItem?.id ?? randomUUID(),
       origin: "random_position",
       fen: row.fen,
       phase: source.phase,
@@ -107,5 +131,7 @@ console.log(JSON.stringify({
   rejectedInvalidRecordCount,
   rejectedInvalidFenCount,
   rejectedDuplicateSourceRecordIdCount,
-  preservedExistingIdCount: catalog.filter((item) => existingIds.get(item.sourceRecordId) === item.id).length,
+  preservedExistingIdCount: catalog.filter(
+    (item) => existingItems.get(item.sourceRecordId)?.id === item.id,
+  ).length,
 }, null, 2));
