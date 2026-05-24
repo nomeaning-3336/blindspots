@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Chess, type Square } from "chess.js";
 import { AnalysisBoard, type BoardHighlight, type BoardMove, type EngineArrow } from "@/components/chess/analysis-board";
 import {
@@ -78,6 +78,7 @@ import {
 import { playBoardSnapshotToButton } from "@/components/train/board-snapshot";
 import { TopAlertViewport, useTopAlert } from "@/components/ui/top-alert";
 import { normalizeNotes, formatEvalCp, type NormalizedNote, type RawNoteRow } from "@/lib/notes";
+import type { DashboardSummary } from "@/lib/dashboard";
 
 type TrainingState = "active" | "complete" | "drift" | "resolving";
 type OnboardingScreen = "loading" | "connect" | "analysis" | "summary" | "done";
@@ -717,6 +718,7 @@ type TrainPageProps = {
   initialTrainingTourCheckpoint?: TrainingTourCheckpointPayload | null;
   initialMistakeId?: string;
   initialMode?: "play" | "postmortem";
+  dashboardSummary?: DashboardSummary;
 };
 
 function normalizeInitialCheckpointMoves(input: unknown): TrainingMove[] {
@@ -875,6 +877,7 @@ export default function TrainPage(props: TrainPageProps) {
     initialTrainingTourCheckpoint = null,
     initialMistakeId,
     initialMode = "play",
+    dashboardSummary,
   } = props;
   const shouldRunPreplayOnboarding = initialOnboarding || forceOnboarding;
   const initialCheckpointState = shouldRunPreplayOnboarding
@@ -883,7 +886,6 @@ export default function TrainPage(props: TrainPageProps) {
   const initialMistakeIdConsumedRef = useRef(false);
   const [state, setState] = useState<TrainingState>(initialCheckpointState ? "complete" : "active");
   const [startingFen, setStartingFen] = useState<string>(initialCheckpointState?.startingFen ?? "");
-  const router = useRouter();
   const searchParams = useSearchParams();
   const initialPreludeRef = useRef<{ previousFen: string; playedMove: string } | null>(
     initialCheckpointState?.initialPrelude ?? null,
@@ -997,6 +999,8 @@ export default function TrainPage(props: TrainPageProps) {
 
   const [fenCopied, setFenCopied] = useState(false);
   const [addingPositionToQueue, setAddingPositionToQueue] = useState(false);
+  const [sidebarsHidden, setSidebarsHidden] = useState(false);
+  const [openWorkspaceDrawer, setOpenWorkspaceDrawer] = useState<"today" | "import" | "queue" | "progress" | "postmortem" | null>(null);
   const fenCopyTimerRef = useRef<number | null>(null);
 
   async function evaluateMoveForAnnotationClient(move: TrainingMove): Promise<MoveScore | null> {
@@ -2423,8 +2427,8 @@ export default function TrainPage(props: TrainPageProps) {
       typeof payload.queueSource === "string" ? payload.queueSource : null;
     setCurrentQueueSource(currentQueueSourceRef.current);
     setStartingFen(payload.fen);
-    setDisplayStartingFen(payload.previousFen ?? payload.fen);
-    setFen(payload.previousFen ?? payload.fen);
+    setDisplayStartingFen(payload.fen);
+    setFen(payload.fen);
     setMoves([]);
     setCurrentPositionReviewCount(reviewCount);
     setCurrentPositionNotes(
@@ -2444,17 +2448,7 @@ export default function TrainPage(props: TrainPageProps) {
     setHasLoadedPosition(true);
     setIsOpponentThinking(false);
 
-    if (payload.previousFen && payload.playedMove) {
-      initialPreludeRef.current = {
-        previousFen: payload.previousFen,
-        playedMove: payload.playedMove,
-      };
-      if (mode === "play") {
-        void startPendingInitialEngineMove(payload);
-      }
-    } else {
-      initialPreludeRef.current = null;
-    }
+    initialPreludeRef.current = null;
   }
 
   useEffect(() => {
@@ -2616,17 +2610,10 @@ export default function TrainPage(props: TrainPageProps) {
     moveSoundPlyRef.current = 0;
     setPositionLoadError(null);
 
-    const visibleInitialFen = payload.previousFen ?? payload.fen;
-    const setupPreviousFen = payload.previousFen;
-    const setupPlayedMove = payload.playedMove;
-    const hasSetupPrelude =
-      typeof setupPreviousFen === "string" &&
-      typeof setupPlayedMove === "string";
+    const visibleInitialFen = payload.fen;
     setStartingFen(payload.fen);
-    initialPreludeRef.current = hasSetupPrelude
-      ? { previousFen: setupPreviousFen, playedMove: setupPlayedMove }
-      : null;
-    setActiveSetupReplayIndex(hasSetupPrelude ? 0 : 1);
+    initialPreludeRef.current = null;
+    setActiveSetupReplayIndex(1);
     setDisplayStartingFen(visibleInitialFen);
     setFen(visibleInitialFen);
     setHasLoadedPosition(true);
@@ -2653,52 +2640,10 @@ export default function TrainPage(props: TrainPageProps) {
     setPieceLinesLoadingKey(null);
     setCurrentChallengeElo(typeof payload.challengeElo === "number" ? payload.challengeElo : null);
 
-    if (hasSetupPrelude) {
-      setPendingInitialEngineMove(payload);
-
-      if (options.skipPreludeAnimation) {
-        completeInitialOpponentMove(payload);
-      } else if (shouldAutoStart) {
-        setIsAwaitingStartGesture(false);
-        if (process.env.NODE_ENV !== "production") {
-          console.log("[train-start-gesture] apply-next-position-auto-start-prelude", {
-            fen: payload.fen,
-            previousFen: payload.previousFen,
-            playedMove: payload.playedMove,
-          });
-        }
-        const startPrelude = () => void startPendingInitialEngineMove(payload);
-        if (typeof options.preludeDelayMs === "number" && options.preludeDelayMs > 0) {
-          if (delayedPreludeTimerRef.current) {
-            window.clearTimeout(delayedPreludeTimerRef.current);
-          }
-          delayedPreludeTimerRef.current = window.setTimeout(() => {
-            delayedPreludeTimerRef.current = null;
-            startPrelude();
-          }, options.preludeDelayMs);
-        } else {
-          startPrelude();
-        }
-      } else {
-        if (process.env.NODE_ENV !== "production") {
-          console.log("[train-start-gesture] cold-load-awaiting-gesture", {
-            fen: payload.fen,
-            previousFen: payload.previousFen,
-            playedMove: payload.playedMove,
-          });
-          console.log("[train-start-gesture] hard-refresh-awaiting-gesture", {
-            fen: payload.fen,
-            previousFen: payload.previousFen,
-            playedMove: payload.playedMove,
-          });
-        }
-        setIsAwaitingStartGesture(true);
-      }
-    } else {
-      startTrainingGestureConsumedRef.current = false;
-      setPendingInitialEngineMove(null);
-      setIsAwaitingStartGesture(false);
-    }
+    startTrainingGestureConsumedRef.current = Boolean(shouldAutoStart);
+    setPendingInitialEngineMove(null);
+    setIsAwaitingStartGesture(false);
+    setState("active");
   }
 
   async function startPendingInitialEngineMove(pending: NextPositionResponse) {
@@ -2708,16 +2653,7 @@ export default function TrainPage(props: TrainPageProps) {
 
     void unlockTrainAudio();
     void primeTrainAudio();
-    const fallback = window.setTimeout(() => {
-      completeInitialOpponentMove(pending);
-    }, PRELUDE_SETUP_MOVE_DELAY_MS + 900);
-
-    try {
-      await playInitialOpponentMoveFromPayload(pending);
-    } finally {
-      window.clearTimeout(fallback);
-      completeInitialOpponentMove(pending);
-    }
+    completeInitialOpponentMove(pending);
   }
 
   function completeInitialOpponentMove(payload: NextPositionResponse) {
@@ -2770,10 +2706,7 @@ export default function TrainPage(props: TrainPageProps) {
       setIsAwaitingStartGesture(false);
       startTrainingGestureConsumedRef.current = true;
 
-      await loadNextPosition({
-        autoStart: true,
-        preludeDelayMs: prefersReducedMotion() ? 0 : POSTMORTEM_NEXT_POSITION_PRELUDE_DELAY_MS,
-      });
+      await loadNextPosition({ autoStart: true });
     } finally {
       setIsPostmortemNextPositionTransitioning(false);
     }
@@ -2788,63 +2721,9 @@ export default function TrainPage(props: TrainPageProps) {
       await delayMs(POSTMORTEM_NEXT_POSITION_TRANSITION_MS);
     }
 
-    router.push("/dashboard");
-  }
-
-  async function playInitialOpponentMoveFromPayload(payload: NextPositionResponse) {
-    const requestId = initialOpponentRequestRef.current + 1;
-    initialOpponentRequestRef.current = requestId;
-
-    initialOpponentMoveRef.current = null;
-    setInitialOpponentMove(null);
-
-    const previousFen = payload.previousFen!;
-    const playedMove = payload.playedMove!;
-
-    const applied = applyIndexedMove(previousFen, playedMove);
-    if (!applied) {
-      if (initialOpponentRequestRef.current === requestId) {
-        setIsOpponentThinking(false);
-        setIsAwaitingStartGesture(false);
-        setPendingInitialEngineMove(null);
-      }
-      return;
-    }
-
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[train-setup-move]", { previousFen, playedMove, fen: payload.fen, san: applied.move.san, uci: applied.move.uci, from: applied.lastMove.from, to: applied.lastMove.to });
-    }
-
-    initialOpponentMoveRef.current = applied.move;
-
-    try {
-      setIsOpponentThinking(true);
-
-      // Show the "before" position briefly.
-      setActiveSetupReplayIndex(0);
-      setFen(previousFen);
-      await nextAnimationFrame();
-      await delayMs(PRELUDE_SETUP_MOVE_DELAY_MS);
-
-      if (initialOpponentRequestRef.current !== requestId) return;
-
-      // Apply the move, sound, and visual transition together — synchronized.
-      setState("active");
-      setHasLoadedPosition(true);
-      setIsPositionLoading(false);
-      setActiveSetupReplayIndex(1);
-      setInitialOpponentMove(applied.move);
-      setExploreSelectedSquare(null);
-      setLastMove(applied.lastMove);
-      setFen(payload.fen!);
-      playTrainMoveSound({ move: applied.move, plyRef: moveSoundPlyRef, source: "initial-engine", advanceLivePitch: false });
-    } finally {
-      if (initialOpponentRequestRef.current === requestId) {
-        setIsOpponentThinking(false);
-        setIsAwaitingStartGesture(false);
-        setPendingInitialEngineMove(null);
-      }
-    }
+    setSidebarsHidden(false);
+    setOpenWorkspaceDrawer("postmortem");
+    setIsTrainDashboardExitTransitioning(false);
   }
 
   function prefetchNextPosition() {
@@ -3099,7 +2978,14 @@ export default function TrainPage(props: TrainPageProps) {
     setIsManualPostmortemExploration(false);
   }
 
+  function hideWorkspaceSidebars() {
+    if (isPostMortemVisible) return;
+    setSidebarsHidden(true);
+    setOpenWorkspaceDrawer(null);
+  }
+
   function handleMove(move: BoardMove) {
+    hideWorkspaceSidebars();
     if (state !== "active" || isOpponentThinking || completingRef.current) return;
     if (isViewingPreludeReplay) return;
     if (isViewingActiveReplay) return;
@@ -4253,6 +4139,48 @@ export default function TrainPage(props: TrainPageProps) {
     void startPendingInitialEngineMove(pending);
   }
 
+  async function handleImportPosition(fenText: string) {
+    const canonicalFen = new Chess(fenText.trim()).fen();
+    const response = await fetch("/api/position/add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decisionFen: canonicalFen }),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null) as { error?: string } | null;
+      throw new Error(body?.error ?? `Import failed: ${response.status}`);
+    }
+
+    completingRef.current = false;
+    initialPreludeRef.current = null;
+    initialOpponentMoveRef.current = null;
+    setInitialOpponentMove(null);
+    setPendingInitialEngineMove(null);
+    setIsAwaitingStartGesture(false);
+    setIsOpponentThinking(false);
+    setIsCompletingSequence(false);
+    setState("active");
+    setStartingFen(canonicalFen);
+    setDisplayStartingFen(canonicalFen);
+    setFen(canonicalFen);
+    setMoves([]);
+    setLastMove(null);
+    setActiveSetupReplayIndex(1);
+    setHasLoadedPosition(true);
+    setIsPositionLoading(false);
+    setPositionLoadError(null);
+    setCurrentPositionNotes([]);
+    setCurrentPositionReviewCount(0);
+    setCurrentQueueSource("import");
+    setSidebarsHidden(true);
+    setOpenWorkspaceDrawer(null);
+    showAlert({
+      kind: "success",
+      title: "Position imported",
+      message: "Ready to play.",
+    });
+  }
+
   const activeSetupBeforeFen = displayStartingFen;
   const activeSetupAfterFen = startingFen;
   const activeSetupCurrentFen =
@@ -4565,7 +4493,7 @@ export default function TrainPage(props: TrainPageProps) {
   ].join(" ");
   const trainViewportClassName =
     [
-      "-mx-4 -mb-4 flex h-full min-h-0 w-[calc(100%+2rem)] flex-1 overflow-hidden px-3 py-3 md:-mx-6 md:w-[calc(100%+3rem)]",
+      "relative -mx-4 -mb-4 flex h-full min-h-0 w-[calc(100%+2rem)] flex-1 overflow-hidden px-3 py-3 md:-mx-6 md:w-[calc(100%+3rem)]",
       "transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
       isTrainPageEntered ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2",
     ].join(" ");
@@ -5072,6 +5000,108 @@ const introOverlay = trainOnboardingIntroVisible ? (
 
   return (
     <div className={trainViewportClassName}>
+      {dashboardSummary ? (
+        <>
+          <div
+            className={[
+              "pointer-events-auto absolute left-3 top-[4.75rem] z-30 hidden w-[min(15rem,calc(100vw-1.5rem))] flex-col gap-2 transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] md:left-9 md:top-[5.25rem] md:flex md:w-[15rem]",
+              sidebarsHidden ? "pointer-events-none -translate-x-3 opacity-0" : "translate-x-0 opacity-100",
+            ].join(" ")}
+            aria-hidden={sidebarsHidden ? "true" : undefined}
+          >
+            <WorkspaceDrawer
+              id="today"
+              title="Today"
+              metric={`${dashboardSummary.dailyCompletedToday}/${dashboardSummary.dailyTargetPositions}`}
+              open={openWorkspaceDrawer === "today"}
+              onToggle={() => setOpenWorkspaceDrawer((current) => current === "today" ? null : "today")}
+            >
+              <div className="grid gap-2 text-xs text-[var(--app-muted)]">
+                <div>{dashboardSummary.positions.filter((position) => position.nextReviewAt && new Date(position.nextReviewAt).getTime() <= Date.now()).length} due</div>
+                <div>{Math.max(0, dashboardSummary.dailyTargetPositions - dashboardSummary.dailyCompletedToday)} remaining</div>
+              </div>
+            </WorkspaceDrawer>
+
+            <WorkspaceDrawer
+              id="import"
+              title="Import position"
+              metric="FEN"
+              open={openWorkspaceDrawer === "import"}
+              onToggle={() => setOpenWorkspaceDrawer((current) => current === "import" ? null : "import")}
+            >
+              <WorkspaceImportPosition onImport={handleImportPosition} />
+            </WorkspaceDrawer>
+
+            <WorkspaceDrawer
+              id="progress"
+              title="Progress"
+              metric={dashboardSummary.blindspotsElo == null ? "-" : workspaceFormatNumber(dashboardSummary.blindspotsElo)}
+              open={openWorkspaceDrawer === "progress"}
+              onToggle={() => setOpenWorkspaceDrawer((current) => current === "progress" ? null : "progress")}
+            >
+              <WorkspaceProgress summary={dashboardSummary} />
+            </WorkspaceDrawer>
+          </div>
+
+          <div
+            className={[
+              "pointer-events-auto absolute bottom-3 right-3 z-30 hidden w-[min(15rem,calc(100vw-1.5rem))] flex-col gap-2 transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] md:bottom-auto md:right-9 md:top-5 md:flex md:w-[15rem]",
+              sidebarsHidden ? "pointer-events-none translate-x-3 opacity-0" : "translate-x-0 opacity-100",
+            ].join(" ")}
+            aria-hidden={sidebarsHidden ? "true" : undefined}
+          >
+            <WorkspaceDrawer
+              id="queue"
+              title="Queue"
+              metric={String(dashboardSummary.positions.length)}
+              open={openWorkspaceDrawer === "queue"}
+              onToggle={() => setOpenWorkspaceDrawer((current) => current === "queue" ? null : "queue")}
+            >
+              <WorkspaceQueueOverview summary={dashboardSummary} />
+            </WorkspaceDrawer>
+
+            <WorkspaceDrawer
+              id="postmortem"
+              title="Postmortem"
+              metric={isPostMortemVisible ? "Open" : "Idle"}
+              open={openWorkspaceDrawer === "postmortem"}
+              onToggle={() => setOpenWorkspaceDrawer((current) => current === "postmortem" ? null : "postmortem")}
+            >
+              <WorkspacePostmortemDrawer
+                visible={isPostMortemVisible}
+                moves={moves.length}
+                onOpen={() => {
+                  setSidebarsHidden(false);
+                  setOpenWorkspaceDrawer("postmortem");
+                }}
+              />
+            </WorkspaceDrawer>
+          </div>
+
+          {sidebarsHidden ? (
+            <button
+              type="button"
+              onClick={() => {
+                setSidebarsHidden(false);
+                setOpenWorkspaceDrawer("today");
+              }}
+              className="absolute left-3 top-[4.75rem] z-40 min-h-11 rounded-md border border-[var(--app-border)] bg-[var(--app-panel-solid)] px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[var(--app-muted)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)] md:left-5 md:top-[5.25rem]"
+            >
+              Workspace
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              setSidebarsHidden(false);
+              setOpenWorkspaceDrawer("import");
+            }}
+            className="absolute right-3 top-3 z-40 min-h-11 rounded-md border border-[var(--app-border)] bg-[var(--app-panel-solid)] px-3 py-2 text-xs font-bold text-[var(--app-muted)] shadow-[var(--app-elevation-1)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)] md:hidden"
+          >
+            Workspace
+          </button>
+        </>
+      ) : null}
       <div
         ref={trainLayoutGridRef}
         data-train-layout-state={isPostMortemVisible ? "results" : "playing"}
@@ -5159,6 +5189,14 @@ const introOverlay = trainOnboardingIntroVisible ? (
                         annotationsDisabled={false}
                         highlightedSquares={getTrainingBoardHighlights(state)}
                         onMove={handleMove}
+                        onSquareClick={(square) => {
+                          try {
+                            const chess = new Chess(displayedBoardFen);
+                            if (chess.get(square as Square)) hideWorkspaceSidebars();
+                          } catch {
+                            // Ignore stale board state.
+                          }
+                        }}
                         dataTestId="train-board"
                       />
                     )}
@@ -5233,11 +5271,14 @@ const introOverlay = trainOnboardingIntroVisible ? (
                 {showStartCta ? (
                   <button
                     type="button"
-                    onClick={handleStartPendingPosition}
+                    onClick={() => {
+                      setSidebarsHidden(false);
+                      setOpenWorkspaceDrawer("import");
+                    }}
                     className={[primaryActionClassName, "mt-4 min-h-12 w-full justify-center px-5"].join(" ")}
                     data-testid="train-start-cta"
                   >
-                    <span className={postmortemActionTextClassName}>Start position</span>
+                    <span className={postmortemActionTextClassName}>Import position</span>
                   </button>
                 ) : null}
               </section>
@@ -5740,6 +5781,209 @@ const introOverlay = trainOnboardingIntroVisible ? (
       <TopAlertViewport alert={topAlert} onDismiss={dismissAlert} />
     </div>
   );
+}
+
+function WorkspaceDrawer({
+  id,
+  title,
+  metric,
+  open,
+  onToggle,
+  children,
+}: {
+  id: string;
+  title: string;
+  metric: string;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      data-workspace-drawer={id}
+      className={[
+        "overflow-hidden rounded-md border border-[var(--app-border-soft)] bg-[color-mix(in_srgb,var(--app-panel-solid)_88%,transparent)] shadow-[var(--app-elevation-1)] backdrop-blur-sm transition-[border-color,background-color,opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+        open ? "border-[var(--app-border)]" : "opacity-90 hover:border-[var(--app-border)]",
+      ].join(" ")}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--app-accent)]"
+        aria-expanded={open}
+      >
+        <span className="text-xs font-semibold text-[var(--app-muted)]">
+          {title}
+        </span>
+        <span className="text-xs font-bold tabular-nums text-[var(--app-text)]">
+          {metric}
+        </span>
+      </button>
+      <div
+        className={[
+          "grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+          open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+        ].join(" ")}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className="border-t border-[var(--app-border-soft)] px-3 py-3">
+            {children}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function WorkspaceImportPosition({
+  onImport,
+}: {
+  onImport: (fen: string) => Promise<void>;
+}) {
+  const [fenText, setFenText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const isValidFen = useMemo(() => {
+    if (!fenText.trim()) return false;
+    try {
+      new Chess(fenText.trim());
+      return true;
+    } catch {
+      return false;
+    }
+  }, [fenText]);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving) return;
+    setError(null);
+    setSaving(true);
+    try {
+      await onImport(fenText);
+      setFenText("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not import position.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="grid gap-3">
+      <input
+        value={fenText}
+        onChange={(event) => {
+          setFenText(event.target.value);
+          setError(null);
+        }}
+        placeholder="FEN"
+        aria-label="FEN"
+        className="min-h-11 rounded-md border border-[var(--app-border)] bg-[var(--app-panel-deep)] px-3 py-2 font-mono text-sm text-[var(--app-text)] outline-none transition focus:border-[var(--app-accent)]"
+      />
+      <button
+        type="submit"
+        disabled={!isValidFen || saving}
+        className="app-brutal-button min-h-11 justify-center px-3 py-2 text-xs disabled:opacity-50"
+      >
+        {saving ? "Importing" : "Import position"}
+      </button>
+      {error ? (
+        <div className="text-xs font-bold text-[var(--app-class-blunder)]" role="status">
+          {error}
+        </div>
+      ) : null}
+    </form>
+  );
+}
+
+function WorkspaceQueueOverview({ summary }: { summary: DashboardSummary }) {
+  const now = Date.now();
+  const counts = summary.positions.reduce(
+    (acc, position) => {
+      if (position.status === "mastered") acc.mastered += 1;
+      else if (position.nextReviewAt && new Date(position.nextReviewAt).getTime() <= now) acc.due += 1;
+      else if (position.attempts > 0) acc.learning += 1;
+      else acc.new += 1;
+      return acc;
+    },
+    { due: 0, new: 0, learning: 0, mastered: 0 },
+  );
+
+  return (
+    <div className="grid gap-2">
+      {[
+        ["Due", counts.due],
+        ["New", counts.new],
+        ["Learning", counts.learning],
+        ["Mastered", counts.mastered],
+      ].map(([label, value]) => (
+        <div key={label} className="flex min-h-7 items-center justify-between text-xs">
+          <span className="text-[var(--app-muted)]">{label}</span>
+          <span className="font-bold tabular-nums text-[var(--app-text)]">{value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function WorkspaceProgress({ summary }: { summary: DashboardSummary }) {
+  const delta = summary.eloDeltaSession;
+  return (
+    <div className="grid gap-2 text-xs">
+      <div className="flex min-h-7 items-center justify-between">
+        <span className="text-[var(--app-muted)]">Elo</span>
+        <span className="font-bold tabular-nums text-[var(--app-text)]">
+          {summary.blindspotsElo == null ? "-" : workspaceFormatNumber(summary.blindspotsElo)}
+        </span>
+      </div>
+      {delta != null ? (
+        <div className="flex min-h-7 items-center justify-between">
+          <span className="text-[var(--app-muted)]">Session</span>
+          <span className={["font-bold tabular-nums", delta >= 0 ? "text-[var(--app-class-good)]" : "text-[var(--app-class-blunder)]"].join(" ")}>
+            {delta > 0 ? "+" : ""}{delta}
+          </span>
+        </div>
+      ) : null}
+      <div className="flex min-h-7 items-center justify-between">
+        <span className="text-[var(--app-muted)]">Sessions</span>
+        <span className="font-bold tabular-nums text-[var(--app-text)]">{summary.totalSequences}</span>
+      </div>
+    </div>
+  );
+}
+
+function WorkspacePostmortemDrawer({
+  visible,
+  moves,
+  onOpen,
+}: {
+  visible: boolean;
+  moves: number;
+  onOpen: () => void;
+}) {
+  return (
+    <div className="grid gap-2 text-xs">
+      <div className="flex min-h-7 items-center justify-between">
+        <span className="text-[var(--app-muted)]">State</span>
+        <span className="font-bold text-[var(--app-text)]">{visible ? "Reviewing" : "Playing"}</span>
+      </div>
+      <div className="flex min-h-7 items-center justify-between">
+        <span className="text-[var(--app-muted)]">Moves</span>
+        <span className="font-bold tabular-nums text-[var(--app-text)]">{moves}</span>
+      </div>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="mt-1 min-h-11 rounded-md border border-[var(--app-border)] px-3 py-2 text-xs font-bold text-[var(--app-muted)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)]"
+      >
+        Postmortem
+      </button>
+    </div>
+  );
+}
+
+function workspaceFormatNumber(value: number) {
+  return new Intl.NumberFormat("en-US").format(value);
 }
 
 function OnboardingPreferencesModal({

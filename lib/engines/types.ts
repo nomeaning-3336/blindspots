@@ -13,6 +13,7 @@ export interface EngineMoveOptions {
   userBlindspotElo?: number;
   previousEvalCp?: number;
   responseDelayMs?: number;
+  skipRefinement?: boolean;
 }
 
 export interface EngineEvalOptions {

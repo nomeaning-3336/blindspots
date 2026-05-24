@@ -40,6 +40,7 @@ export async function POST(request: Request) {
         responseDelayMs: 0,
         timeLimitMs: TRAIN_ENGINE_TIME_LIMIT_MS,
         targetElo: normalizeOptionalNumber(payload?.challengeElo),
+        skipRefinement: true,
       },
     );
 

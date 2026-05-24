@@ -1,4 +1,5 @@
 import { getOptionalAppUserId, requireAppAuth } from "@/lib/app-auth";
+import { getDashboardSummary } from "@/lib/dashboard-server";
 import { getOnboardingStateForUser } from "@/lib/onboarding-state";
 import TrainPage from "./train-client";
 
@@ -21,6 +22,7 @@ export default async function TrainPageWrapper({
   // Allow unauthenticated debug access in dev
   if (isDebugRequest && process.env.NODE_ENV !== "production") {
     const userId = (await getOptionalAppUserId()) ?? "debug-user";
+    const summary = userId === "debug-user" ? undefined : await getDashboardSummary(userId);
     return (
       <TrainPage
         initialOnboarding={false}
@@ -28,12 +30,14 @@ export default async function TrainPageWrapper({
         initialTrainingTourCheckpoint={null}
         initialMistakeId={initialMistakeId}
         initialMode={initialMode}
+        dashboardSummary={summary}
       />
     );
   }
 
   const userId = await requireAppAuth("/train");
   const state = await getOnboardingStateForUser(userId);
+  const summary = await getDashboardSummary(userId);
   const shouldRunTrainingTour = !state.trainingTourCompleted;
   return (
     <TrainPage
@@ -42,6 +46,7 @@ export default async function TrainPageWrapper({
       initialTrainingTourCheckpoint={state.trainingTourCheckpoint}
       initialMistakeId={initialMistakeId}
       initialMode={initialMode}
+      dashboardSummary={summary}
     />
   );
 }

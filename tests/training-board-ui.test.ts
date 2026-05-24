@@ -42,7 +42,10 @@ test("postmortem tour overlay cannot create viewport scrollbars during transitio
   const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
   const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
 
-  assert.match(overlaySource, /className="fixed inset-0 z-\[80\] overflow-hidden"/);
+  assert.match(source, /import \{ createPortal \} from "react-dom"/);
+  assert.match(overlaySource, /const \[portalRoot, setPortalRoot\] = useState<HTMLElement \| null>\(null\)/);
+  assert.match(overlaySource, /return createPortal\(/);
+  assert.match(overlaySource, /fixed inset-0 z-\[80\] overflow-hidden/);
   assert.doesNotMatch(overlaySource, /left-\[-9999px\]/);
   assert.doesNotMatch(overlaySource, /measureCardRef/);
 });
@@ -70,12 +73,16 @@ test("postmortem tour placement ignores stale target geometry from another step"
   assert.match(overlaySource, /setTargetRect\(\{ step, \.\.\.snapshot \}\)/);
 });
 
-test("postmortem tour keeps the dim spotlight mounted while next target resolves", () => {
+test("postmortem tour keeps old visual geometry only while next target resolves", () => {
   const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
   const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
 
+  assert.match(overlaySource, /setTargetRect\(null\)/);
+  assert.match(overlaySource, /const isResolvingStepGeometry = resolvedStepIndex !== step/);
   assert.match(overlaySource, /const displayedSpotlight = spotlight \?\? \(/);
-  assert.match(overlaySource, /!currentStep\.suppressSpotlight && displayedSpotlight \? \(/);
+  assert.match(overlaySource, /waitsForTargetGeometry && isResolvingStepGeometry/);
+  assert.match(overlaySource, /const currentTargetRect = targetRect\?\.step === step \? targetRect : null/);
+  assert.match(overlaySource, /!effectiveSuppressSpotlight && displayedSpotlight \? \(/);
 });
 
 test("postmortem tour geometry uses a gentle timing curve", () => {
@@ -130,22 +137,23 @@ test("add-position action transition does not show a Waiting fallback CTA", () =
   const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
 
   assert.match(overlaySource, /const primaryButtonLabel =/);
-  assert.match(overlaySource, /isActionStep && !actionCompleted\s*\?\s*currentStep\.cta \?\? "Next"/);
+  assert.match(overlaySource, /isActionStep && !actionCompleted\s*\?\s*displayedStep\.cta \?\? "Next"/);
   assert.doesNotMatch(overlaySource, /displayedTourStep\.cta \?\? "Waiting\.\.\."/);
 });
 
-test("postmortem tour renders current step content without delayed displayed step state", () => {
+test("postmortem tour switches copy only after target geometry resolves", () => {
   const source = readFileSync("app/(shell)/train/train-client.tsx", "utf8");
   const overlaySource = source.slice(source.indexOf("function TrainPostmortemTourOverlay"));
 
-  assert.doesNotMatch(overlaySource, /displayedStep/);
+  assert.match(overlaySource, /const displayedStep = isResolvingStepGeometry/);
   assert.doesNotMatch(overlaySource, /previousDisplayedStep/);
   assert.doesNotMatch(overlaySource, /isCardSwitching/);
   assert.doesNotMatch(overlaySource, /previousTourStep/);
   assert.doesNotMatch(overlaySource, /displayedTourStep/);
-  assert.match(overlaySource, /\{currentStep\.headline\}/);
-  assert.match(overlaySource, /missingTarget \? "Finding the section\.\.\." : currentStep\.body/);
-  assert.match(overlaySource, /: currentStep\.cta \?\? "Next"/);
+  assert.match(overlaySource, /key=\{`current-\$\{resolvedStepIndex\}`\}/);
+  assert.match(overlaySource, /\{displayedStep\.headline\}/);
+  assert.match(overlaySource, /missingTarget \? "Finding the section\.\.\." : displayedStep\.body/);
+  assert.match(overlaySource, /: displayedStep\.cta \?\? "Next"/);
 });
 
 test("postmortem tour primary button keeps a stable hit target on hover and active", () => {

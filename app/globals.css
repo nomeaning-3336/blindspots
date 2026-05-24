@@ -1,14 +1,15 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: var(--font-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: var(--font-mono), ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --font-sans: "Inter", "Aptos", "Segoe UI", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: var(--font-display), Georgia, "Times New Roman", serif;
+  --font-mono: var(--font-mono), "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
 :root {
   color-scheme: dark;
   --app-brutal-edge: color-mix(in srgb, var(--app-border-strong) 18%, var(--app-bg-2) 82%);
-  --app-brutal-shadow: #000;
+  --app-brutal-shadow: color-mix(in srgb, #000 54%, transparent);
   --app-bg: #0a0a0a;
   --app-bg-2: #141414;
   --app-panel: rgba(13, 13, 13, 0.92);
@@ -26,6 +27,8 @@
   --app-accent-soft: rgba(192, 132, 252, 0.16);
   --app-accent-contrast: #000;
   --app-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
+  --app-elevation-1: 0 1px 0 color-mix(in srgb, var(--app-border-strong) 5%, transparent), 0 10px 28px color-mix(in srgb, #000 22%, transparent);
+  --app-elevation-2: 0 1px 0 color-mix(in srgb, var(--app-border-strong) 6%, transparent), 0 18px 48px color-mix(in srgb, #000 30%, transparent);
   --app-header-bg: rgba(0, 0, 0, 0.5);
   --app-surface-subtle: rgba(0, 0, 0, 0.22);
   --app-surface-input: rgba(0, 0, 0, 0.28);
@@ -245,12 +248,7 @@ html[data-theme="crimson"] {
 html {
   height: 100%;
   min-height: 100%;
-  background:
-    radial-gradient(circle at top, var(--app-page-glow), transparent 24%),
-    linear-gradient(180deg, var(--app-bg-2) 0%, var(--app-bg) 100%);
-  background-size: auto, auto;
-  background-repeat: no-repeat, no-repeat;
-  background-position: top center, 0 0;
+  background: var(--app-bg);
   overflow: hidden;
 }
 
@@ -260,36 +258,42 @@ body {
   margin: 0;
   overflow: hidden;
   color: var(--app-text);
-  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   font-variant-numeric: tabular-nums;
 }
 
-/* Ambient page backdrop — mirrors landing's radial wash + graphite grid.
-   Layer sits behind shell chrome; pointer-events none. */
 .app-ambient {
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background:
-    radial-gradient(1100px 520px at 82% -8%, color-mix(in srgb, var(--app-accent) 10%, transparent), transparent 62%),
-    radial-gradient(820px 460px at 6% 108%, color-mix(in srgb, var(--app-accent) 6%, transparent), transparent 66%);
+  overflow: hidden;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--app-bg-2) 28%, var(--app-bg) 72%), var(--app-bg));
 }
 
 .app-ambient::before {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: -1px;
   background-image:
     linear-gradient(color-mix(in srgb, var(--app-border-strong) 4%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--app-border-strong) 4%, transparent) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: radial-gradient(ellipse at 50% 35%, #000 0%, #000 40%, transparent 85%);
-  -webkit-mask-image: radial-gradient(ellipse at 50% 35%, #000 0%, #000 40%, transparent 85%);
-  opacity: 0.8;
+    linear-gradient(90deg, color-mix(in srgb, var(--app-border-strong) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--app-accent) 28%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--app-accent) 22%, transparent) 1px, transparent 1px);
+  background-position: 0 0, 0 0, 0 0, 0 0;
+  background-size:
+    32px 32px,
+    32px 32px,
+    128px 96px,
+    112px 144px;
+  opacity: 0.3;
+}
+
+.app-ambient::after {
+  content: none;
 }
 
 /* Custom scrollbar for surfaces inside the app shell. */
@@ -326,7 +330,7 @@ body {
 
 /* Eyebrow label — mono, wide-tracked, accent tint. */
 .app-eyebrow {
-  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.26em;
@@ -353,6 +357,24 @@ button,
 input,
 textarea {
   font: inherit;
+}
+
+button,
+input,
+textarea,
+select,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
 }
 
 button:not(:disabled),
@@ -393,80 +415,79 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
 
 @layer utilities {
   .app-brutal-card {
-    border: 1px solid color-mix(in srgb, var(--app-text) 72%, transparent);
+    border: 1px solid var(--app-border);
     background: var(--app-panel-solid);
-    box-shadow: 5px 5px 0 var(--app-brutal-shadow);
-    border-radius: 10px;
+    box-shadow: var(--app-elevation-1);
+    border-radius: 8px;
   }
 
   .app-brutal-card-strong {
-    border: 1px solid color-mix(in srgb, var(--app-text) 72%, transparent);
+    border: 1px solid var(--app-border);
     background: var(--app-panel-solid);
-    box-shadow: 5px 5px 0 var(--app-brutal-shadow);
-    border-radius: 10px;
+    box-shadow: var(--app-elevation-2);
+    border-radius: 8px;
   }
 
   .app-brutal-inset {
-    border: 2px solid color-mix(in srgb, var(--app-border-strong) 28%, transparent);
+    border: 1px solid var(--app-border);
     background: var(--app-surface-subtle);
-    box-shadow: 4px 4px 0 var(--app-brutal-shadow);
     border-radius: 8px;
   }
 
   .app-brutal-input {
-    border: 2px solid color-mix(in srgb, var(--app-text) 72%, transparent);
+    border: 1px solid var(--app-border);
     background: var(--app-surface-input);
-    box-shadow: 4px 4px 0 var(--app-brutal-shadow);
     color: var(--app-text);
-    border-radius: 8px;
+    border-radius: 6px;
   }
 
   .app-brutal-button {
-    border: 1px solid var(--app-brutal-edge);
+    border: 1px solid color-mix(in srgb, var(--app-accent) 72%, var(--app-border) 28%);
     background: var(--app-accent);
     color: var(--app-accent-contrast) !important;
-    box-shadow: 5px 5px 0 var(--app-brutal-shadow);
-    border-radius: 8px;
-    font-weight: 800;
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--app-accent) 18%, transparent);
+    border-radius: 6px;
+    font-weight: 750;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.02em;
     transition:
-      transform 120ms ease,
-      box-shadow 120ms ease,
-      background 120ms ease,
-      color 120ms ease;
+      transform 180ms var(--train-motion-soft),
+      box-shadow 180ms var(--train-motion-soft),
+      background 180ms var(--train-motion-soft),
+      color 180ms var(--train-motion-soft);
   }
 
   .app-brutal-button:hover,
   .app-brutal-button:focus-visible {
-    transform: translate(2px, 2px);
-    box-shadow: 3px 3px 0 var(--app-brutal-shadow);
-    background: #ffffff;
-    color: #050505 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 14px 32px color-mix(in srgb, var(--app-accent) 24%, transparent);
+    background: color-mix(in srgb, var(--app-accent) 88%, white 12%);
   }
 
   .app-brutal-button:active {
-    transform: translate(4px, 4px);
-    box-shadow: 0 0 0 var(--app-brutal-shadow);
+    transform: translateY(0);
+    box-shadow: 0 6px 16px color-mix(in srgb, var(--app-accent) 16%, transparent);
   }
 
   .app-brutal-button-secondary {
-    border: 1px solid var(--app-brutal-edge);
-    background: var(--app-panel-solid);
+    border: 1px solid var(--app-border);
+    background: color-mix(in srgb, var(--app-panel-solid) 92%, var(--app-bg) 8%);
     color: var(--app-text);
-    box-shadow: 3px 3px 0 var(--app-brutal-shadow);
-    border-radius: 8px;
-    font-weight: 800;
+    box-shadow: none;
+    border-radius: 6px;
+    font-weight: 750;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.02em;
     transition:
-      transform 120ms ease,
-      box-shadow 120ms ease;
+      border-color 180ms var(--train-motion-soft),
+      background 180ms var(--train-motion-soft),
+      color 180ms var(--train-motion-soft);
   }
 
-  .app-brutal-button-secondary:hover {
-    transform: translate(1px, 1px);
-    box-shadow: 2px 2px 0 var(--app-brutal-shadow);
+  .app-brutal-button-secondary:hover,
+  .app-brutal-button-secondary:focus-visible {
+    border-color: var(--app-accent);
+    background: color-mix(in srgb, var(--app-accent) 10%, var(--app-panel-solid) 90%);
   }
 
   .app-paper-shell {
@@ -475,38 +496,38 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   }
 
   .app-brutal-section {
-    border: 1px solid color-mix(in srgb, var(--app-text) 72%, transparent);
-    background: var(--app-panel-solid);
-    box-shadow: 4px 4px 0 var(--app-brutal-shadow);
-    border-radius: 12px;
+    border: 1px solid var(--app-border);
+    background: color-mix(in srgb, var(--app-panel-solid) 94%, var(--app-bg) 6%);
+    box-shadow: var(--app-elevation-1);
+    border-radius: 8px;
   }
 
   .app-brutal-section-soft {
-    border: 1px solid color-mix(in srgb, var(--app-text) 32%, transparent);
+    border: 1px solid var(--app-border-soft);
     background: color-mix(in srgb, var(--app-panel-solid) 88%, var(--app-bg) 12%);
-    box-shadow: 2px 2px 0 var(--app-brutal-shadow);
-    border-radius: 10px;
+    box-shadow: var(--app-elevation-1);
+    border-radius: 8px;
   }
 
   .app-brutal-board-frame {
-    border: 1px solid var(--app-brutal-edge);
+    border: 1px solid color-mix(in srgb, var(--app-border-strong) 34%, transparent);
     background: var(--app-panel-solid);
-    box-shadow: 3px 3px 0 var(--app-brutal-shadow);
-    border-radius: 10px;
+    box-shadow: var(--app-elevation-2);
+    border-radius: 8px;
     overflow: hidden;
   }
 
   .app-brutal-heading {
-    font-weight: 800;
-    letter-spacing: 0.22em;
+    font-weight: 750;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--app-text);
   }
 
   .app-brutal-label {
     font-size: 0.72rem;
-    font-weight: 800;
-    letter-spacing: 0.2em;
+    font-weight: 750;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: color-mix(in srgb, var(--app-text) 72%, transparent);
   }

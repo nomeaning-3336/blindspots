@@ -24,6 +24,7 @@ export function PositionThumbnail({
   lastMove,
   lastMoveBadge = null,
   pieceAnimation = false,
+  pieceAnimationDurationMs = 240,
   persistentHighlightedMoves = [],
 }: {
   fen: string;
@@ -32,6 +33,7 @@ export function PositionThumbnail({
   lastMove?: { from: string; to: string } | null;
   lastMoveBadge?: LastMoveBadge | null;
   pieceAnimation?: boolean;
+  pieceAnimationDurationMs?: number;
   persistentHighlightedMoves?: PersistentHighlightedMove[];
 }) {
   const persistentHighlightedSquares =
@@ -69,6 +71,7 @@ export function PositionThumbnail({
         lastMove={lastMove ?? null}
         lastMoveBadge={lastMoveBadge}
         pieceAnimation={pieceAnimation}
+        pieceAnimationDurationMs={pieceAnimationDurationMs}
         highlightedSquares={persistentHighlightedSquares}
         className="!rounded-none"
       />
@@ -464,7 +467,7 @@ export function ReplayThumbnail({
       onPointerLeave={previewBackward}
       onFocus={previewForward}
       onBlur={previewBackward}
-      className="relative inline-flex cursor-pointer overflow-hidden rounded-lg border border-[var(--app-border-soft)] bg-[var(--app-panel-deep)] p-1 transition-transform duration-200 ease-out hover:scale-[1.015]"
+      className="relative inline-flex cursor-pointer overflow-hidden rounded-lg border border-[var(--app-border-soft)] bg-[var(--app-panel-deep)] p-1 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.002]"
       style={{ width: size + 8, height: size + 8 }}
       aria-label={canReplay || movePreview ? "Replay setup move preview" : "Position preview"}
     >
@@ -475,6 +478,7 @@ export function ReplayThumbnail({
         lastMove={previewLastMove}
         lastMoveBadge={previewBadge}
         pieceAnimation={animating}
+        pieceAnimationDurationMs={PIECE_GLIDE_MS}
         persistentHighlightedMoves={persistentHighlightedMoves}
       />
     </div>

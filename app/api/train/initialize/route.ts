@@ -74,10 +74,10 @@ export async function GET() {
         .lte("next_review_at", nowIso),
     ]);
 
+  const profileDailyTarget =
+    (profile as unknown as { daily_target_positions?: unknown } | null)?.daily_target_positions;
   const dailyTargetPositions =
-    typeof (profile as { daily_target_positions?: unknown } | null)?.daily_target_positions === "number"
-      ? ((profile as { daily_target_positions: number }).daily_target_positions)
-      : 10;
+    typeof profileDailyTarget === "number" ? profileDailyTarget : 10;
 
   return NextResponse.json({
     profile,

@@ -84,7 +84,9 @@ export const stockfishHarness: EngineHarness = {
       }
       let selected = sampleCandidate(candidates, targetElo);
 
-      if (targetElo < 2000) {
+      const shouldRefineHumanMove = targetElo < 2000 && options.skipRefinement !== true;
+
+      if (shouldRefineHumanMove) {
         await engine.setMultiPv(1);
         assertValidEngineMove(fen, selected.uci);
         const selectedFen = fenAfterMove(fen, selected.uci);

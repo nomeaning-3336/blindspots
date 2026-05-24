@@ -21,6 +21,7 @@ export async function getOpponentMove(
     responseDelayMs?: number;
     targetElo?: number;
     timeLimitMs?: number;
+    skipRefinement?: boolean;
   } = {},
 ): Promise<EngineMove> {
   const targetElo =
@@ -33,6 +34,7 @@ export async function getOpponentMove(
     previousEvalCp,
     responseDelayMs: options.responseDelayMs,
     timeLimitMs: options.timeLimitMs,
+    skipRefinement: options.skipRefinement,
   });
 }
 
@@ -55,6 +57,21 @@ export async function getPositionLines(
     multiPv: options.multiPv ?? 5,
     timeLimitMs: options.timeLimitMs,
   }) ?? [];
+}
+
+export async function getForcedMoveLine(
+  fen: string,
+  uci: string,
+  options: { depthLimit?: number; timeLimitMs?: number } = {},
+) {
+  const lines = await (stockfishHarness.getLines?.(fen, {
+    depthLimit: options.depthLimit ?? 18,
+    multiPv: 1,
+    searchMoves: [uci],
+    timeLimitMs: options.timeLimitMs,
+  }) ?? []);
+
+  return lines[0] ?? null;
 }
 
 export async function getPositionMateStatus(

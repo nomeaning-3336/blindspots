@@ -2,27 +2,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-test("protected shell brand opens landing without route prefetching the dashboard", () => {
+test("protected shell is a navbar-free single-page frame", () => {
   const source = readFileSync("components/protected-app-shell.tsx", "utf8");
-  const brandSource = source.slice(
-    source.indexOf("<Link"),
-    source.indexOf("<AppShellNav"),
-  );
 
-  assert.match(brandSource, /href="\/landing"/);
-  assert.match(brandSource, /prefetch=\{false\}/);
-  assert.doesNotMatch(brandSource, /href="\/"/);
-});
-
-test("app shell navigation does not prefetch authenticated routes", () => {
-  const source = readFileSync("components/app-shell-nav.tsx", "utf8");
-  const linkSource = source.slice(
-    source.indexOf("function AppShellLink"),
-    source.indexOf("function AppShellSignOutButton"),
-  );
-
-  assert.match(linkSource, /prefetch=\{false\}/);
-  assert.doesNotMatch(linkSource, /\sprefetch\s*\n/);
+  assert.doesNotMatch(source, /AppShellNav/);
+  assert.doesNotMatch(source, /<header/);
+  assert.match(source, /Blindspots home/);
+  assert.match(source, /fixed left-3 top-3/);
+  assert.match(source, /<main className=/);
 });
 
 test("landing page uses cookie auth hint instead of verified Supabase user fetch", () => {

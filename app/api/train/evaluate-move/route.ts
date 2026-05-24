@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { Chess } from "chess.js";
 import { getOptionalAppUserId } from "@/lib/app-auth";
-import { getPositionEval, getLegalMoveLines } from "@/lib/engines/dispatcher";
+import { getForcedMoveLine, getPositionEval, getPositionLines } from "@/lib/engines/dispatcher";
 import {
   classifyMoveAgainstBest,
   classifyRankedMove,
@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
 
 const MATE_VISUAL_CP = 10000;
 const EVAL_TIME_LIMIT_MS = 1000;
+const LEGAL_LINE_DEPTH_LIMIT = 18;
 
 type EvaluateMovePayload = {
   decisionFen?: unknown;
@@ -169,82 +170,74 @@ export async function POST(request: Request) {
     });
   }
 
-  // Evaluate all legal moves from the decision position.
-  let legalLines: Awaited<ReturnType<typeof getLegalMoveLines>> = [];
+  // Compare the played move against the best root line from the same decision FEN.
+  let bestLine: Awaited<ReturnType<typeof getPositionLines>>[number] | null = null;
+  let candidateLine: Awaited<ReturnType<typeof getForcedMoveLine>> | null = null;
   try {
-    legalLines = await getLegalMoveLines(decisionFen, {
-      timeLimitMs: evaluationTimeLimitMs,
+    const bestLines = await getPositionLines(decisionFen, {
+      depthLimit: LEGAL_LINE_DEPTH_LIMIT,
+      multiPv: 1,
+    });
+    bestLine = bestLines[0] ?? null;
+    candidateLine = await getForcedMoveLine(decisionFen, uci, {
+      depthLimit: LEGAL_LINE_DEPTH_LIMIT,
     });
   } catch {
-    legalLines = [];
+    bestLine = null;
+    candidateLine = null;
   }
 
   const phase = selectedPhase ?? classifyTrainingPhase(fenAfterUserMove);
 
   // If legal-lines scan succeeded, score against the best line from the same FEN.
-  if (legalLines.length > 0) {
-    const sortedLines = [...legalLines].sort(
-      (left, right) => comparableEval(right, decisionFen) - comparableEval(left, decisionFen),
-    );
-    const bestLine = sortedLines[0]!;
-    const candidateLine = sortedLines.find((line) => line.bestMove === uci) ?? null;
+  if (bestLine && candidateLine) {
+    const comparableEvalBefore = comparableEval(bestLine, decisionFen);
+    const comparableEvalAfter = comparableEval(candidateLine, decisionFen);
+    const displayEvalBefore = Math.round(Number(bestLine.cp) || 0);
+    const displayEvalAfter = Math.round(Number(candidateLine.cp) || 0);
+    const cpLoss = Math.max(0, Math.round(comparableEvalBefore - comparableEvalAfter));
 
-    if (bestLine && candidateLine) {
-      const comparableEvalBefore = comparableEval(bestLine, decisionFen);
-      const directEvalAfter = await getPositionEval(fenAfterUserMove, {
-        timeLimitMs: evaluationTimeLimitMs,
-      }).catch(() => null);
-      const displayEvalAfter = Math.round(
-        typeof directEvalAfter?.cp === "number"
-          ? directEvalAfter.cp
-          : Number(candidateLine.cp) || 0,
-      );
-      const comparableEvalAfter = userColor === "w" ? displayEvalAfter : -displayEvalAfter;
-      const displayEvalBefore = Math.round(Number(bestLine.cp) || 0);
-      const cpLoss = Math.max(0, Math.round(comparableEvalBefore - comparableEvalAfter));
+    const winChanceClassification =
+      candidateLine.bestMove === bestLine.bestMove
+        ? (classifyRankedMove(0, [bestLine], decisionFen) ?? "best")
+        : (classifyMoveAgainstBest(bestLine, candidateLine, decisionFen) ?? "good");
 
-      const winChanceClassification =
-        candidateLine.bestMove === bestLine.bestMove
-          ? (classifyRankedMove(0, legalLines, decisionFen) ?? "best")
-          : (classifyMoveAgainstBest(bestLine, candidateLine, decisionFen) ?? "good");
+    const cpLossClassification = classifyByCpLoss(cpLoss);
 
-      const cpLossClassification = classifyByCpLoss(cpLoss);
+    const classification =
+      candidateLine.bestMove === bestLine.bestMove
+        ? winChanceClassification
+        : worseClassification(winChanceClassification, cpLossClassification);
 
-      const classification =
-        candidateLine.bestMove === bestLine.bestMove
-          ? winChanceClassification
-          : worseClassification(winChanceClassification, cpLossClassification);
-
-      return NextResponse.json({
-        ok: true,
-        moveScore: {
-          userMoveIndex: 0,
-          cpLoss,
-          evalBefore: displayEvalBefore,
-          evalAfter: displayEvalAfter,
-          mateBefore: bestLine.mate ?? null,
-          mateAfter: directEvalAfter?.mate ?? candidateLine.mate ?? null,
-          classification,
-        },
-        positionEvaluation: {
-          decisionFen,
-          userMove: { san, uci },
-          evalBefore: displayEvalBefore,
-          evalAfter: displayEvalAfter,
-          mateBefore: bestLine.mate ?? null,
-          mateAfter: directEvalAfter?.mate ?? candidateLine.mate ?? null,
-          cpLoss,
-          classification,
-          banditResult: getBanditResult(classification),
-          fenAfterUserMove,
-          fenAfterEngineMove: null,
-          phase,
-          bucket: selectedBucket,
-          clusterId: deriveCoarseClusterId(phase, selectedBucket),
-          tags: selectedTags ?? [],
-        },
-      });
-    }
+    return NextResponse.json({
+      ok: true,
+      moveScore: {
+        userMoveIndex: 0,
+        cpLoss,
+        evalBefore: displayEvalBefore,
+        evalAfter: displayEvalAfter,
+        mateBefore: bestLine.mate ?? null,
+        mateAfter: candidateLine.mate ?? null,
+        classification,
+      },
+      positionEvaluation: {
+        decisionFen,
+        userMove: { san, uci },
+        evalBefore: displayEvalBefore,
+        evalAfter: displayEvalAfter,
+        mateBefore: bestLine.mate ?? null,
+        mateAfter: candidateLine.mate ?? null,
+        cpLoss,
+        classification,
+        banditResult: getBanditResult(classification),
+        fenAfterUserMove,
+        fenAfterEngineMove: null,
+        phase,
+        bucket: selectedBucket,
+        clusterId: deriveCoarseClusterId(phase, selectedBucket),
+        tags: selectedTags ?? [],
+      },
+    });
   }
 
   // Fallback: independent before/after eval (only when legal-lines scan is unavailable).
