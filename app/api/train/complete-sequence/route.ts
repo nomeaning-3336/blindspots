@@ -4,7 +4,6 @@ import { getOptionalAppUserId } from "@/lib/app-auth";
 import { getPositionEval } from "@/lib/engines/dispatcher";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/database";
-import { normalizeQueue, normalizeRecentServedFens, updateQueuesAfterSequence } from "@/lib/training/queues";
 import {
   calculateEloUpdate,
   calculateMatchedEngineCplEloUpdate,
@@ -14,9 +13,7 @@ import {
   normalizeRatingDeviation,
   type CplAnalyzedMove,
 } from "@/lib/training/elo";
-import { normalizeBucketStats, recordBucketResult } from "@/lib/training/bandit-stats";
 import { classifyTrainingBucket, classifyTrainingPhase } from "@/lib/training/position-metadata";
-import type { TrainingBucket, TrainingPhase } from "@/lib/training/queue-core";
 import {
   classifyReviewedMoveOutcome,
   classifyTrainingOutcome,
@@ -160,7 +157,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid sequence." }, { status: 400 });
   }
 
-  const sequenceLength = 4;
+  const sequenceLength = countUserMovesInSequence(startingFen, moves);
   const reflectionNote = typeof payload?.reflectionNote === "string" ? payload.reflectionNote : null;
   const precomputedInputCount = Array.isArray(payload?.precomputedEvaluations)
     ? payload.precomputedEvaluations.length
@@ -476,40 +473,7 @@ export async function POST(request: Request) {
     }
   }
 
-  // Legacy JSON-queue path
-  const legacyQueueStartedAt = Date.now();
-  const queues = await updateQueuesAfterSequence({
-    currentQueues: {
-      exploitQueue: normalizeQueue(profile.exploit_queue),
-      exploreQueue: normalizeQueue(profile.explore_queue),
-      revisitQueue: normalizeQueue(profile.revisit_queue),
-      masteredQueue: normalizeQueue(profile.mastered_queue),
-    },
-    startingFen,
-    evalPreservationScore,
-    sessionId: session.id,
-    recentServedFens: normalizeRecentServedFens(profile.recent_served_fens),
-    selectedMetadata: {
-      phase: (selectedPhase as TrainingPhase) ?? undefined,
-      bucket: selectedBucket as TrainingBucket | undefined,
-      tags: selectedTags ?? undefined,
-      isTactic: selectedIsTactic ?? undefined,
-      tacticRating: selectedTacticRating ?? undefined,
-      openingName: selectedOpeningName ?? undefined,
-      eco: selectedEco ?? undefined,
-    },
-  });
-
-  const currentStats = normalizeBucketStats(profile.bucket_stats);
-  let updatedStats = currentStats;
-  for (const posEval of sequenceEvaluation.positionEvaluations) {
-    updatedStats = recordBucketResult(updatedStats, posEval.bucket, posEval.banditResult === "success");
-  }
-
-  const currentClusterStats = normalizeClusterStats(profile.cluster_stats);
-  const updatedClusterStats = recordClusterResults(currentClusterStats, sequenceEvaluation.positionEvaluations, completedAt);
-  const updatedRecentClusters = updateRecentClusters(profile.recent_clusters, sequenceEvaluation.positionEvaluations);
-
+  // Catalog filler path: record completion and Elo without mutating obsolete legacy queues.
   const profileUpdateStartedAt = Date.now();
   const { error: profileError } = await supabase
     .from("user_blindspot_profile")
@@ -518,13 +482,6 @@ export async function POST(request: Request) {
       rating_deviation: eloUpdate?.ratingDeviationAfter ?? profileRatingDeviation,
       total_sequences: profile.total_sequences + 1,
       last_session_at: completedAt,
-      exploit_queue: queues.exploitQueue as unknown as Json,
-      explore_queue: queues.exploreQueue as unknown as Json,
-      revisit_queue: queues.revisitQueue as unknown as Json,
-      mastered_queue: queues.masteredQueue as unknown as Json,
-      bucket_stats: updatedStats as unknown as Json,
-      cluster_stats: updatedClusterStats as unknown as Json,
-      recent_clusters: updatedRecentClusters as unknown as Json,
     })
     .eq("user_id", userId);
 
@@ -534,14 +491,13 @@ export async function POST(request: Request) {
 
   if (process.env.NODE_ENV !== "production") {
     console.log("[complete-sequence:done]", {
-      path: "legacy-json-queue",
+      path: "catalog-filler",
       usedPrecomputedEvaluations,
       usedPartialPrecomputedEvaluations,
       precomputedInputCount,
       profileMs,
       evaluationMs,
       sessionInsertMs,
-      legacyQueueMs: Date.now() - legacyQueueStartedAt,
       profileUpdateMs: Date.now() - profileUpdateStartedAt,
       totalMs: Date.now() - requestStartedAt,
     });
@@ -553,12 +509,6 @@ export async function POST(request: Request) {
     evalPreservationScore,
     moveScores: sequenceEvaluation.moveScores,
     positionEvaluations: sequenceEvaluation.positionEvaluations,
-    queues: {
-      exploitCount: queues.exploitQueue.length,
-      exploreCount: queues.exploreQueue.length,
-      revisitCount: queues.revisitQueue.length,
-      masteredCount: queues.masteredQueue.length,
-    },
     elo: {
       eloBefore,
       eloAfter,
@@ -580,7 +530,6 @@ export async function POST(request: Request) {
     trainingOutcome,
     averageCpLoss,
     maxSingleCpLoss,
-    selectedMistakeId: selectedMistakeId ?? undefined,
   });
 }
 

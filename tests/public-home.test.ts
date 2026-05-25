@@ -226,6 +226,34 @@ test("filler catalog selection is cached, deterministic, and includes both origi
   assert.ok(!source.includes("Math.random"));
 });
 
+test("complete-sequence uses variable-length completion without legacy queue mutation", () => {
+  const source = readSource("app/api/train/complete-sequence/route.ts");
+
+  assert.ok(
+    source.includes("const sequenceLength = countUserMovesInSequence(startingFen, moves);"),
+    "completed sessions must store the actual number of user moves",
+  );
+  assert.ok(
+    !source.includes("const sequenceLength = 4;"),
+    "complete-sequence must not hard-code four user moves",
+  );
+  assert.ok(
+    source.includes("Catalog filler path: record completion and Elo without mutating obsolete legacy queues."),
+    "catalog filler completion must use the unified completion path",
+  );
+  assert.ok(!source.includes("updateQueuesAfterSequence"));
+  assert.ok(!source.includes("normalizeRecentServedFens"));
+  assert.ok(!source.includes("normalizeQueue("));
+  assert.ok(!source.includes("recordBucketResult"));
+  assert.ok(!source.includes("normalizeBucketStats"));
+  assert.ok(!source.includes("legacy-json-queue"));
+  assert.ok(!source.includes("legacyQueueStartedAt"));
+  assert.ok(!source.includes("exploit_queue:"));
+  assert.ok(!source.includes("explore_queue:"));
+  assert.ok(!source.includes("revisit_queue:"));
+  assert.ok(!source.includes("mastered_queue:"));
+});
+
 test("mistake-store read functions pass reserve:false to avoid served_count updates", () => {
   const source = readSource("lib/training/mistake-store.ts");
   assert.ok(
