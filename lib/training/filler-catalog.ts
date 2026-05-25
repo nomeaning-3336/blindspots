@@ -18,6 +18,10 @@ const CATALOG_FILES: Array<{ path: string; origin: FillerOrigin }> = [
     path: resolve(process.cwd(), "public", "filler", "random-position-catalog.json"),
     origin: "random_position",
   },
+  {
+    path: resolve(process.cwd(), "public", "filler", "lichess-puzzle-catalog.json"),
+    origin: "lichess_puzzle",
+  },
 ];
 
 let catalogPromise: Promise<FillerCatalogItem[]> | null = null;
@@ -65,6 +69,22 @@ function parseCatalogItems(value: unknown, expectedOrigin: FillerOrigin): Filler
   });
 }
 
+function interleaveCatalogs(catalogs: FillerCatalogItem[][]): FillerCatalogItem[] {
+  const combined: FillerCatalogItem[] = [];
+  const maxLength = Math.max(0, ...catalogs.map((catalog) => catalog.length));
+
+  for (let index = 0; index < maxLength; index += 1) {
+    for (const catalog of catalogs) {
+      const item = catalog[index];
+      if (item) {
+        combined.push(item);
+      }
+    }
+  }
+
+  return combined;
+}
+
 export function resetFillerCatalogCacheForTests(): void {
   catalogPromise = null;
 }
@@ -76,7 +96,7 @@ export async function loadFillerCatalog(): Promise<FillerCatalogItem[]> {
         const raw = await readFile(path, "utf8");
         return parseCatalogItems(JSON.parse(raw) as unknown, origin);
       }),
-    ).then((catalogs) => catalogs.flat());
+    ).then((catalogs) => interleaveCatalogs(catalogs));
   }
 
   return catalogPromise;

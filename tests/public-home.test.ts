@@ -213,10 +213,12 @@ test("cold personal selector implements review then active-personal priority onl
   assert.ok(!source.includes(".update("), "personal selector must be read-only");
 });
 
-test("filler catalog selection is cached and deterministic rather than legacy random serving", () => {
+test("filler catalog selection is cached, deterministic, and includes both origins", () => {
   const source = readSource("lib/training/filler-catalog.ts");
 
   assert.ok(source.includes("random-position-catalog.json"));
+  assert.ok(source.includes("lichess-puzzle-catalog.json"));
+  assert.ok(source.includes("interleaveCatalogs"));
   assert.ok(source.includes("catalogPromise"));
   assert.ok(source.includes("getDeterministicFillerCandidate"));
   assert.ok(source.includes("deriveTraversalStep"));
