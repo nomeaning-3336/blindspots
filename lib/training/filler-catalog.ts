@@ -151,3 +151,16 @@ export async function getDeterministicFillerCandidate(input: {
   const index = (offset + boundedCursor * step) % catalog.length;
   return catalog[index] ?? null;
 }
+
+export async function getFillerCatalogItemById(input: {
+  id: string;
+  origin: FillerOrigin;
+}): Promise<FillerCatalogItem | null> {
+  const catalog = await loadFillerCatalog();
+
+  return (
+    catalog.find(
+      (item) => item.id === input.id && item.origin === input.origin,
+    ) ?? null
+  );
+}

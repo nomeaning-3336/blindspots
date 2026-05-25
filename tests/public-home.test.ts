@@ -254,6 +254,33 @@ test("complete-sequence uses variable-length completion without legacy queue mut
   assert.ok(!source.includes("mastered_queue:"));
 });
 
+test("active-session route exposes read start and update operations only", () => {
+  const source = readSource("app/api/train/active-session/route.ts");
+
+  assert.ok(source.includes("export async function GET()"));
+  assert.ok(source.includes("export async function POST(request: Request)"));
+  assert.ok(source.includes("export async function PATCH(request: Request)"));
+  assert.ok(source.includes("createActiveTrainingSession"));
+  assert.ok(source.includes("updateActiveTrainingSessionMoves"));
+  assert.ok(source.includes("getActiveTrainingSession"));
+  assert.ok(!source.includes("export async function DELETE"));
+});
+
+test("active-session store resolves trusted candidates and persists server-derived moves", () => {
+  const source = readSource("lib/training/active-session-store.ts");
+
+  assert.ok(source.includes("resolvePersonalCandidate"));
+  assert.ok(source.includes("resolveFillerCandidate"));
+  assert.ok(source.includes("getFillerCatalogItemById"));
+  assert.ok(source.includes("buildLegalStoredSequence"));
+  assert.ok(source.includes("storedSequenceIsPrefix"));
+  assert.ok(source.includes('completed_at: null'));
+  assert.ok(source.includes('filler_id: candidate.fillerId'));
+  assert.ok(source.includes('filler_origin: candidate.fillerOrigin'));
+  assert.ok(source.includes('candidate_metadata: candidate.candidateMetadata'));
+  assert.ok(!source.includes("startingFen: input."));
+});
+
 test("mistake-store read functions pass reserve:false to avoid served_count updates", () => {
   const source = readSource("lib/training/mistake-store.ts");
   assert.ok(
