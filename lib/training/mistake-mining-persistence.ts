@@ -17,7 +17,7 @@ import type { MineableMove, MineableMoveInput, MiningSummary } from "./mistake-m
 // ── Persistence ────────────────────────────────────────────────────
 
 /**
- * Upsert mined active mistakes into the user_mistakes table.
+ * Upsert mined active mistakes into the user_training_items table.
  * Uses (user_id, move_key) for deduplication.
  * On conflict: preserves existing review_count/pass_count,
  * updates latest fail data, resets to active status.
@@ -59,7 +59,7 @@ export async function upsertMinedActiveMistakes(
 
     // Check if a row already exists for this user + move_key
     const { data: existing } = await supabase
-      .from("user_mistakes" as any)
+      .from("user_training_items" as any)
       .select("id, fail_count, pass_count, review_count, cp_loss")
       .eq("user_id", userId)
       .eq("move_key", m.moveKey)
@@ -70,7 +70,7 @@ export async function upsertMinedActiveMistakes(
       const existingCpLoss = typeof existingRow.cp_loss === "number" ? existingRow.cp_loss : 0;
 
       const { error } = await supabase
-        .from("user_mistakes" as any)
+        .from("user_training_items" as any)
         .update({
           source_type: "app_training",
           source_provider: "blindspots",
@@ -107,7 +107,7 @@ export async function upsertMinedActiveMistakes(
       }
     } else {
       const { error } = await supabase
-        .from("user_mistakes" as any)
+        .from("user_training_items" as any)
         .insert({
           user_id: userId,
           source_type: "app_training",
@@ -212,3 +212,5 @@ export async function mineMistakesFromSequence({
     };
   }
 }
+
+

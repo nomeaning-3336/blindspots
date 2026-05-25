@@ -1,11 +1,11 @@
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import { validatePlayableTrainingFen } from "./position-validity";
-import type { UserMistakeRow } from "./mistake-store";
+import type { UserTrainingItemRow } from "./training-item-store";
 
 export type PersonalQueueSource = "review" | "active";
 
 export type ColdPersonalTrainingCandidate = {
-  mistakeId: string;
+  trainingItemId: string;
   fen: string;
   queueSource: PersonalQueueSource;
   sourceType: string;
@@ -25,7 +25,7 @@ function normalizeThemeTags(value: unknown): string[] | undefined {
 }
 
 function buildColdCandidate(
-  row: UserMistakeRow,
+  row: UserTrainingItemRow,
   queueSource: PersonalQueueSource,
 ): ColdPersonalTrainingCandidate | null {
   const fen =
@@ -38,7 +38,7 @@ function buildColdCandidate(
   }
 
   return {
-    mistakeId: row.id,
+    trainingItemId: row.id,
     fen,
     queueSource,
     sourceType: row.source_type,
@@ -57,7 +57,7 @@ export async function getNextColdPersonalTrainingCandidate(
   const nowIso = now.toISOString();
 
   const { data: reviewRows, error: reviewError } = await supabase
-    .from("user_mistakes" as any)
+    .from("user_training_items" as any)
     .select("*")
     .eq("user_id", userId)
     .eq("status", "review")
@@ -73,13 +73,13 @@ export async function getNextColdPersonalTrainingCandidate(
     throw new Error(`Failed to select due review position: ${reviewError.message}`);
   }
 
-  for (const row of (reviewRows ?? []) as unknown as UserMistakeRow[]) {
+  for (const row of (reviewRows ?? []) as unknown as UserTrainingItemRow[]) {
     const candidate = buildColdCandidate(row, "review");
     if (candidate) return candidate;
   }
 
   const { data: activeRows, error: activeError } = await supabase
-    .from("user_mistakes" as any)
+    .from("user_training_items" as any)
     .select("*")
     .eq("user_id", userId)
     .eq("status", "active")
@@ -96,10 +96,12 @@ export async function getNextColdPersonalTrainingCandidate(
     throw new Error(`Failed to select active personal position: ${activeError.message}`);
   }
 
-  for (const row of (activeRows ?? []) as unknown as UserMistakeRow[]) {
+  for (const row of (activeRows ?? []) as unknown as UserTrainingItemRow[]) {
     const candidate = buildColdCandidate(row, "active");
     if (candidate) return candidate;
   }
 
   return null;
 }
+
+

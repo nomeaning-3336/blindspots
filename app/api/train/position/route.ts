@@ -8,17 +8,17 @@ import { normalizeDecisionFen } from "@/lib/training/mistake-memory";
 export async function GET(request: NextRequest) {
   const userId = await requireAppAuth("/train");
 
-  const mistakeId = request.nextUrl.searchParams.get("positionId") ?? request.nextUrl.searchParams.get("mistakeId");
-  if (!mistakeId) {
+  const trainingItemId = request.nextUrl.searchParams.get("positionId") ?? request.nextUrl.searchParams.get("trainingItemId");
+  if (!trainingItemId) {
     return NextResponse.json({ error: "Missing positionId parameter" }, { status: 400 });
   }
 
   const supabase = await getSupabaseServerClient();
 
   const { data: mistake, error } = await supabase
-    .from("user_mistakes")
+    .from("user_training_items")
     .select("*")
-    .eq("id", mistakeId)
+    .eq("id", trainingItemId)
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     .order("last_attempted_at", { ascending: false });
 
   return NextResponse.json({
-    mistakeId: m.id,
+    trainingItemId: m.id,
     fen: m.starting_fen,
     decisionFen,
     previousFen: (m.setup_previous_fen as string) ?? undefined,
@@ -58,3 +58,5 @@ export async function GET(request: NextRequest) {
     moveNotes: normalizeNotes((noteRows as any[] | null) ?? []),
   });
 }
+
+

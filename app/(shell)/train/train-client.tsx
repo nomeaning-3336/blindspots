@@ -407,7 +407,7 @@ type NextPositionResponse = {
   openingName?: string;
   eco?: string;
   challengeElo?: number;
-  mistakeId?: string;
+  trainingItemId?: string;
   queueSource?: string;
   reviewCount?: number;
   cpLoss?: number;
@@ -722,7 +722,7 @@ type TrainPageProps = {
   initialOnboarding?: boolean;
   forceOnboarding?: boolean;
   initialTrainingTourCheckpoint?: TrainingTourCheckpointPayload | null;
-  initialMistakeId?: string;
+  initialTrainingItemId?: string;
   initialMode?: "play" | "postmortem";
   dashboardSummary?: DashboardSummary;
 };
@@ -881,7 +881,7 @@ export default function TrainPage(props: TrainPageProps) {
     initialOnboarding = false,
     forceOnboarding = false,
     initialTrainingTourCheckpoint = null,
-    initialMistakeId,
+    initialTrainingItemId,
     initialMode = "play",
     dashboardSummary,
   } = props;
@@ -889,7 +889,7 @@ export default function TrainPage(props: TrainPageProps) {
   const initialCheckpointState = shouldRunPreplayOnboarding
     ? buildInitialTrainingTourCheckpointState(initialTrainingTourCheckpoint)
     : null;
-  const initialMistakeIdConsumedRef = useRef(false);
+  const initialTrainingItemIdConsumedRef = useRef(false);
   const [state, setState] = useState<TrainingState>(initialCheckpointState ? "complete" : "active");
   const [startingFen, setStartingFen] = useState<string>(initialCheckpointState?.startingFen ?? "");
   const searchParams = useSearchParams();
@@ -981,7 +981,7 @@ export default function TrainPage(props: TrainPageProps) {
   const selectedTacticRatingRef = useRef<number | null>(null);
   const selectedOpeningNameRef = useRef<string | null>(null);
   const selectedEcoRef = useRef<string | null>(null);
-  const currentMistakeIdRef = useRef<string | null>(null);
+  const currentTrainingItemIdRef = useRef<string | null>(null);
   const currentQueueSourceRef = useRef<string | null>(null);
   const [currentQueueSource, setCurrentQueueSource] = useState<string | null>(null);
   const [initialOpponentMove, setInitialOpponentMove] = useState<TrainingMove | null>(
@@ -1831,7 +1831,7 @@ export default function TrainPage(props: TrainPageProps) {
   useEffect(() => {
     let alive = true;
 
-    if (!shouldRunPreplayOnboarding && !initialMistakeId) {
+    if (!shouldRunPreplayOnboarding && !initialTrainingItemId) {
       prefetchNextPosition();
     }
 
@@ -1892,7 +1892,7 @@ export default function TrainPage(props: TrainPageProps) {
           setHasLoadedPosition(false);
           setActiveSetupReplayIndex(0);
           setTrainOnboardingIntroVisible(true);
-        } else if (!shouldRunPreplayOnboarding && !initialMistakeId) {
+        } else if (!shouldRunPreplayOnboarding && !initialTrainingItemId) {
           void loadNextPosition();
         }
       } catch {
@@ -1916,7 +1916,7 @@ export default function TrainPage(props: TrainPageProps) {
           setHasLoadedPosition(false);
           setActiveSetupReplayIndex(0);
           setTrainOnboardingIntroVisible(true);
-        } else if (!shouldRunPreplayOnboarding && !initialMistakeId) {
+        } else if (!shouldRunPreplayOnboarding && !initialTrainingItemId) {
           void loadNextPosition();
         }
       }
@@ -1927,7 +1927,7 @@ export default function TrainPage(props: TrainPageProps) {
     return () => {
       alive = false;
     };
-  }, [shouldRunPreplayOnboarding, trainOnboardingIntroDone, initialMistakeId]);
+  }, [shouldRunPreplayOnboarding, trainOnboardingIntroDone, initialTrainingItemId]);
 
 
   const isOnboardingFirstPostmortem =
@@ -2346,7 +2346,7 @@ export default function TrainPage(props: TrainPageProps) {
     return () => window.clearTimeout(timer);
   }, [state]);
 
-  const mistakeIdParam = searchParams?.get("positionId") ?? searchParams?.get("mistakeId");
+  const trainingItemIdParam = searchParams?.get("positionId") ?? searchParams?.get("trainingItemId");
   const modeParam = searchParams?.get("mode"); // "play" | "postmortem"
 
   // ── Dev-only debug FEN injection ──────────────────────────────────
@@ -2414,10 +2414,10 @@ export default function TrainPage(props: TrainPageProps) {
 
   // ── Exact-position loading ───────────────────────────────────────
 
-  async function loadSpecificPosition(mistakeId: string, mode: "play" | "postmortem") {
+  async function loadSpecificPosition(trainingItemId: string, mode: "play" | "postmortem") {
     setIsPositionLoading(true);
     setPositionLoadError(null);
-    const res = await fetch(`/api/train/position?positionId=${encodeURIComponent(mistakeId)}`);
+    const res = await fetch(`/api/train/position?positionId=${encodeURIComponent(trainingItemId)}`);
     if (!res.ok) {
       setPositionLoadError("That queue position could not be loaded.");
       setIsPositionLoading(false);
@@ -2428,8 +2428,8 @@ export default function TrainPage(props: TrainPageProps) {
       typeof payload.reviewCount === "number" && Number.isFinite(payload.reviewCount)
         ? Math.max(0, Math.round(payload.reviewCount))
         : 0;
-    currentMistakeIdRef.current =
-      typeof payload.mistakeId === "string" ? payload.mistakeId : mistakeId;
+    currentTrainingItemIdRef.current =
+      typeof payload.trainingItemId === "string" ? payload.trainingItemId : trainingItemId;
     currentQueueSourceRef.current =
       typeof payload.queueSource === "string" ? payload.queueSource : null;
     setCurrentQueueSource(currentQueueSourceRef.current);
@@ -2462,13 +2462,13 @@ export default function TrainPage(props: TrainPageProps) {
     if (!onboardingScreen) return;
     if (onboardingScreen !== "done" && !debugFen) return;
     if (loadDebugFenPosition()) return;
-    if (initialMistakeId && !initialMistakeIdConsumedRef.current && !trainOnboardingIntroActive) {
-      initialMistakeIdConsumedRef.current = true;
-      void loadSpecificPosition(initialMistakeId, initialMode);
+    if (initialTrainingItemId && !initialTrainingItemIdConsumedRef.current && !trainOnboardingIntroActive) {
+      initialTrainingItemIdConsumedRef.current = true;
+      void loadSpecificPosition(initialTrainingItemId, initialMode);
     }
-  }, [onboardingScreen, initialMistakeId, initialMode, trainOnboardingIntroActive]);
+  }, [onboardingScreen, initialTrainingItemId, initialMode, trainOnboardingIntroActive]);
 
-  async function loadNextPosition(options: { autoStart?: boolean; mistakeId?: string; preludeDelayMs?: number } = {}) {
+  async function loadNextPosition(options: { autoStart?: boolean; trainingItemId?: string; preludeDelayMs?: number } = {}) {
     setIsClearForToday(false);
     const cachedPosition = cachedNextPosition;
     if (cachedPosition?.fen) {
@@ -2495,8 +2495,8 @@ export default function TrainPage(props: TrainPageProps) {
     }
 
     try {
-      const payload = options.mistakeId
-        ? await fetchNextPosition(options.mistakeId)
+      const payload = options.trainingItemId
+        ? await fetchNextPosition(options.trainingItemId)
         : pendingPrefetch
           ? await pendingPrefetch
           : await fetchNextPosition();
@@ -2536,9 +2536,9 @@ export default function TrainPage(props: TrainPageProps) {
     }
   }
 
-  async function fetchNextPosition(mistakeId?: string) {
-    const url = mistakeId
-      ? `/api/train/next-position?positionId=${encodeURIComponent(mistakeId)}`
+  async function fetchNextPosition(trainingItemId?: string) {
+    const url = trainingItemId
+      ? `/api/train/next-position?positionId=${encodeURIComponent(trainingItemId)}`
       : "/api/train/next-position";
     try {
       const response = await fetch(url, { cache: "no-store" });
@@ -2611,12 +2611,12 @@ export default function TrainPage(props: TrainPageProps) {
           ? (debug.eco as string)
           : null;
 
-    currentMistakeIdRef.current =
-      typeof payload.mistakeId === "string" ? payload.mistakeId : null;
+    currentTrainingItemIdRef.current =
+      typeof payload.trainingItemId === "string" ? payload.trainingItemId : null;
     currentQueueSourceRef.current =
       typeof payload.queueSource === "string" ? payload.queueSource : null;
     setCurrentQueueSource(currentQueueSourceRef.current);
-    syncTrainPositionUrl(currentMistakeIdRef.current);
+    syncTrainPositionUrl(currentTrainingItemIdRef.current);
 
     if (Array.isArray(payload.attemptRegistry)) {
       setAttemptRegistry(payload.attemptRegistry as AttemptRegistryEntry[]);
@@ -3299,7 +3299,7 @@ export default function TrainPage(props: TrainPageProps) {
           selectedTacticRating: selectedTacticRatingRef.current,
           selectedOpeningName: selectedOpeningNameRef.current,
           selectedEco: selectedEcoRef.current,
-          selectedMistakeId: currentMistakeIdRef.current,
+          selectedTrainingItemId: currentTrainingItemIdRef.current,
           queueSource: currentQueueSourceRef.current,
           challengeElo: currentChallengeElo,
           previousFen: initialPreludeRef.current?.previousFen ?? null,
@@ -9049,3 +9049,4 @@ function TargetIcon() {
 function KingIcon() {
   return <svg width="38" height="38" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="shrink-0 text-[var(--app-text)]"><path d="M12 3v5M9.5 5.5h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /><path d="M7 21h10M8 18h8M8.8 15.5c-1.4-1-2.3-2.6-2.3-4.4A5.5 5.5 0 0 1 12 5.6a5.5 5.5 0 0 1 5.5 5.5c0 1.8-.9 3.4-2.3 4.4H8.8Z" fill="currentColor" /></svg>;
 }
+

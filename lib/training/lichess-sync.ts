@@ -193,7 +193,7 @@ export async function syncLichessMistakesForUser(input: {
 
             if (deduplicated.length > 0) {
               const { error: insertError } = await supabase
-                .from("user_mistakes")
+                .from("user_training_items")
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 .insert(deduplicated as any);
 
@@ -504,7 +504,7 @@ async function filterExistingMistakes(
   if (gameIds.length === 0) return candidates;
 
   const { data: existing } = await supabase
-    .from("user_mistakes")
+    .from("user_training_items")
     .select("source_game_id, ply")
     .eq("user_id", userId)
     .eq("source_type", "own_game")
@@ -521,3 +521,5 @@ async function filterExistingMistakes(
     return !existingSet.has(key);
   });
 }
+
+

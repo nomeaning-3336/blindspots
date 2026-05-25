@@ -26,7 +26,7 @@ export async function POST(
   // Before deleting, capture the existing status and scheduling fields so the
   // client can undo by restoring them.
   const { data: existing, error: existingError } = await supabase
-    .from("user_mistakes")
+    .from("user_training_items")
     .select("id,status,next_review_at,retired_at")
     .eq("id", id)
     .eq("user_id", userId)
@@ -50,7 +50,7 @@ export async function POST(
 
   // Soft delete — status='deleted' hides the row while preserving FK targets in training_sessions.
   const { error } = await supabase
-    .from("user_mistakes")
+    .from("user_training_items")
     .update({
       status: "deleted",
       retired_at: now,
@@ -82,3 +82,4 @@ export async function POST(
     },
   });
 }
+

@@ -273,14 +273,14 @@ test("next-position is a read-only unified cold selector route", () => {
     "next-position must expose filler origin as provenance",
   );
 
-  assert.ok(!source.includes("getNextActiveAppMistake"), "route must not have a separate app-training branch");
-  assert.ok(!source.includes("getNextActiveOrFillerMistakeForTraining"), "route must not query database filler rows");
-  assert.ok(!source.includes("getNextReviewMistakeForTraining"), "route must not assemble review responses separately");
+  assert.ok(!source.includes("getNextActiveAppTrainingItem"), "route must not have a separate app-training branch");
+  assert.ok(!source.includes("getNextActiveOrFillerTrainingItemForTraining"), "route must not query database filler rows");
+  assert.ok(!source.includes("getNextReviewTrainingItemForTraining"), "route must not assemble review responses separately");
   assert.ok(!source.includes("user_blindspot_profile"), "route must not load legacy profile queues");
   assert.ok(!source.includes("ensureTrainingQueuesHavePositions"), "route must not refill legacy queues");
   assert.ok(!source.includes("chooseServeMode"), "route must not use serve-mode selection");
   assert.ok(!source.includes("thompsonSample"), "route must not use bandit selection");
-  assert.ok(!source.includes("retryMistakeId"), "retry-by-ID must not remain inside next-position");
+  assert.ok(!source.includes("retryTrainingItemId"), "retry-by-ID must not remain inside next-position");
   assert.ok(!source.includes("getPositionMateStatus"), "route must not run engine validation");
   assert.ok(!source.includes("previousFen"), "route must not expose prelude position data");
   assert.ok(!source.includes("playedMove"), "route must not expose prelude move data");
@@ -297,7 +297,7 @@ test("next-position response type contains only cold candidate identifiers and d
   assert.ok(responseTypeBody.includes("fen?: string;"));
   assert.ok(responseTypeBody.includes('queueSource?: "review" | "active" | "filler";'));
   assert.ok(responseTypeBody.includes('candidateType?: "personal" | "filler";'));
-  assert.ok(responseTypeBody.includes("mistakeId?: string;"));
+  assert.ok(responseTypeBody.includes("trainingItemId?: string;"));
   assert.ok(responseTypeBody.includes("fillerId?: string;"));
   assert.ok(responseTypeBody.includes("fillerOrigin?: FillerOrigin;"));
 
@@ -404,32 +404,58 @@ test("active-session store resolves trusted candidates and persists server-deriv
   assert.ok(!source.includes("startingFen: input."));
 });
 
-test("mistake-store read functions pass reserve:false to avoid served_count updates", () => {
-  const source = readSource("lib/training/mistake-store.ts");
+test("personal scheduled queue is named as training items rather than mistakes", () => {
+  const nextPositionSource = readSource("app/api/train/next-position/route.ts");
+  const activeSessionSource = readSource("lib/training/active-session-store.ts");
+  const databaseSource = readSource("lib/supabase/database.ts");
+  const legacyPositionIdToken = ["mis", "takeId"].join("");
+  const legacySelectedIdToken = ["selected", "Mist", "ake", "Id"].join("");
+  const legacyUserTrainingTable = ["user", "_mistakes"].join("");
+  const legacySelectedColumn = ["selected", "_mistake", "_id"].join("");
+
+  assert.ok(nextPositionSource.includes("trainingItemId?: string;"));
+  assert.ok(nextPositionSource.includes("trainingItemId: personalCandidate.trainingItemId"));
+  assert.ok(!nextPositionSource.includes(legacyPositionIdToken));
+
+  assert.ok(activeSessionSource.includes("selectedTrainingItemId: string | null;"));
+  assert.ok(activeSessionSource.includes("trainingItemId: unknown;"));
+  assert.ok(activeSessionSource.includes('selected_training_item_id: candidate.selectedTrainingItemId'));
+  assert.ok(activeSessionSource.includes('.from("user_training_items" as any)'));
+  assert.ok(!activeSessionSource.includes(legacySelectedIdToken));
+  assert.ok(!activeSessionSource.includes(legacyPositionIdToken));
+
+  assert.ok(databaseSource.includes("user_training_items:"));
+  assert.ok(databaseSource.includes("selected_training_item_id: string | null;"));
+  assert.ok(!databaseSource.includes(legacyUserTrainingTable + ":"));
+  assert.ok(!databaseSource.includes(legacySelectedColumn + ": string | null;"));
+});
+
+test("training-item-store read functions pass reserve:false to avoid served_count updates", () => {
+  const source = readSource("lib/training/training-item-store.ts");
   assert.ok(
     source.includes("reserve?: boolean"),
-    "getNextActiveAppMistake must accept reserve option"
+    "getNextActiveAppTrainingItem must accept reserve option"
   );
   assert.ok(
     source.includes("reserve?: boolean"),
-    "getNextReviewMistakeForTraining must accept reserve option"
+    "getNextReviewTrainingItemForTraining must accept reserve option"
   );
   assert.ok(
     source.includes("reserve?: boolean"),
-    "getNextActiveOrFillerMistakeForTraining must accept reserve option"
+    "getNextActiveOrFillerTrainingItemForTraining must accept reserve option"
   );
-  const getNextMistakeBody = source.match(/getNextMistakeForTraining[\s\S]*?(?=\nexport|$)/)?.[0] ?? "";
+  const getNextMistakeBody = source.match(/getNextTrainingItemForTraining[\s\S]*?(?=\nexport|$)/)?.[0] ?? "";
   assert.ok(
     getNextMistakeBody.includes("reserve: false"),
-    "getNextMistakeForTraining must pass reserve:false to read-only helpers"
+    "getNextTrainingItemForTraining must pass reserve:false to read-only helpers"
   );
 });
 
 test("app-training mistake selection validates FEN and treats setup as nullable provenance", () => {
-  const source = readSource("lib/training/mistake-store.ts");
+  const source = readSource("lib/training/training-item-store.ts");
 
   assert.ok(source.includes('import { validatePlayableTrainingFen } from "./position-validity";'));
-  assert.ok(!source.includes("normalizeSetupPrelude"), "mistake-store must not reference setup prelude validation");
+  assert.ok(!source.includes("normalizeSetupPrelude"), "training-item-store must not reference setup prelude validation");
   assert.ok(source.includes("rejectedInvalidFenCount"), "invalid FEN rejection counter should be explicit");
   assert.ok(!source.includes("rejectedNoPreludeCount"), "prelude rejection counter name should be gone");
   assert.ok(source.includes("setupPreviousFen: string | null;"));
@@ -446,16 +472,16 @@ test("training queue normalization keeps provenance without prelude gating", () 
   assert.ok(source.includes("playedMove,"));
 });
 
-test("getNextActiveAppMistake accepts FEN-only rows without prelude fields", () => {
-  const source = readSource("lib/training/mistake-store.ts");
+test("getNextActiveAppTrainingItem accepts FEN-only rows without prelude fields", () => {
+  const source = readSource("lib/training/training-item-store.ts");
   // Must NOT require setup_prelude fields for serveability
   assert.ok(
     !/if \(!decisionFen \|\| !setupPreviousFen \|\| !setupPlayedMoveUci\)/.test(source),
-    "getNextActiveAppMistake must not reject rows missing prelude fields"
+    "getNextActiveAppTrainingItem must not reject rows missing prelude fields"
   );
   assert.ok(
-    !/normalizeSetupPrelude\(\{[\s\S]*?\}\)/.test(source.slice(source.indexOf("getNextActiveAppMistake"))),
-    "getNextActiveAppMistake must not call normalizeSetupPrelude for serveability"
+    !/normalizeSetupPrelude\(\{[\s\S]*?\}\)/.test(source.slice(source.indexOf("getNextActiveAppTrainingItem"))),
+    "getNextActiveAppTrainingItem must not call normalizeSetupPrelude for serveability"
   );
   // Must define servedFen using decision_fen ?? starting_fen
   assert.ok(
@@ -475,3 +501,4 @@ test("app-auth-routing: authenticated default route is root SPA", () => {
   assert.equal(routes.normalizeNextPath("/account"), "/");
   assert.equal(routes.normalizeNextPath("/analyze"), "/");
 });
+

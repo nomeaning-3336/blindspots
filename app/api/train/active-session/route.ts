@@ -47,7 +47,7 @@ export async function POST(request: Request) {
       userId,
       candidateType: payload?.candidateType,
       queueSource: payload?.queueSource,
-      mistakeId: payload?.mistakeId,
+      trainingItemId: payload?.trainingItemId,
       fillerId: payload?.fillerId,
       fillerOrigin: payload?.fillerOrigin,
       firstMoveUci: payload?.firstMoveUci,
@@ -80,3 +80,5 @@ export async function PATCH(request: Request) {
     return handleRouteError(error);
   }
 }
+
+

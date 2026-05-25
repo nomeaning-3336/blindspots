@@ -6,9 +6,9 @@ import { validatePlayableTrainingFen } from "./position-validity";
 import { getNextReviewAtForActiveMistake, nextConsecutiveCorrectCount } from "./active-mistake-schedule";
 import { selectRandomPhase, getPhaseFallbackOrder, hasLikelySyzygyTablebaseEntry, inferPhaseFromFen } from "./random-filler-selection";
 
-type UserMistakeUpdate = Database["public"]["Tables"]["user_mistakes"]["Update"];
+type UserTrainingItemUpdate = Database["public"]["Tables"]["user_training_items"]["Update"];
 
-export interface UserMistakeRow {
+export interface UserTrainingItemRow {
   id: string;
   user_id: string;
   source_type: string;
@@ -48,8 +48,8 @@ export interface UserMistakeRow {
   updated_at: string;
 }
 
-export interface NextMistakeResult {
-  mistake: UserMistakeRow | null;
+export interface NextTrainingItemResult {
+  mistake: UserTrainingItemRow | null;
   queueSource: "review" | "active" | "filler" | null;
   selectedPhase?: string;
 }
@@ -81,7 +81,7 @@ export interface ActiveAppMistake {
  * Prelude/setup fields are optional provenance only — their absence does not
  * determine serveability.
  */
-export async function getNextActiveAppMistake(
+export async function getNextActiveAppTrainingItem(
   userId: string,
   now: Date = new Date(),
   { reserve = true }: { reserve?: boolean } = {},
@@ -91,7 +91,7 @@ export async function getNextActiveAppMistake(
 
   const batchSize = 20;
   const { data: candidates, error } = await supabase
-    .from("user_mistakes" as any)
+    .from("user_training_items" as any)
     .select("*")
     .eq("user_id", userId)
     .eq("source_type", "app_training")
@@ -104,7 +104,7 @@ export async function getNextActiveAppMistake(
     .limit(batchSize);
 
   if (error) {
-    console.error("[mistake-store] active app mistake query failed", error);
+    console.error("[training-item-store] active app mistake query failed", error);
     return { mistake: null, rejectedInvalidFenCount: 0, candidateCount: 0 };
   }
 
@@ -126,7 +126,7 @@ export async function getNextActiveAppMistake(
     // Update served_count / last_served_at only when reserving
     if (reserve) {
       await supabase
-        .from("user_mistakes" as any)
+        .from("user_training_items" as any)
         .update({
           served_count: ((row.served_count ?? 0) + 1),
           last_served_at: nowISO,
@@ -165,25 +165,25 @@ export async function getNextActiveAppMistake(
   return { mistake: null, rejectedInvalidFenCount, candidateCount: rows.length };
 }
 
-export async function getNextMistakeForTraining(
+export async function getNextTrainingItemForTraining(
   userId: string,
   now: Date = new Date(),
-): Promise<NextMistakeResult> {
-  const review = await getNextReviewMistakeForTraining(userId, now, { reserve: false });
+): Promise<NextTrainingItemResult> {
+  const review = await getNextReviewTrainingItemForTraining(userId, now, { reserve: false });
   if (review.mistake) return review;
-  return getNextActiveOrFillerMistakeForTraining(userId, now, { reserve: false });
+  return getNextActiveOrFillerTrainingItemForTraining(userId, now, { reserve: false });
 }
 
-export async function getNextReviewMistakeForTraining(
+export async function getNextReviewTrainingItemForTraining(
   userId: string,
   now: Date = new Date(),
   { reserve = true }: { reserve?: boolean } = {},
-): Promise<NextMistakeResult> {
+): Promise<NextTrainingItemResult> {
   const supabase = getSupabaseAdminClient();
   const nowISO = now.toISOString();
 
   const { data: review, error: reviewError } = await supabase
-    .from("user_mistakes")
+    .from("user_training_items")
     .select("*")
     .eq("user_id", userId)
     .eq("status", "review")
@@ -197,13 +197,13 @@ export async function getNextReviewMistakeForTraining(
     .maybeSingle();
 
   if (reviewError) {
-    console.error("[mistake-store] review query failed", reviewError);
+    console.error("[training-item-store] review query failed", reviewError);
   }
 
   if (review) {
     if (reserve) {
       await supabase
-        .from("user_mistakes")
+        .from("user_training_items")
         .update({
           served_count: (review.served_count ?? 0) + 1,
           last_served_at: nowISO,
@@ -212,22 +212,22 @@ export async function getNextReviewMistakeForTraining(
         .eq("user_id", userId);
     }
 
-    return { mistake: review as unknown as UserMistakeRow, queueSource: "review" };
+    return { mistake: review as unknown as UserTrainingItemRow, queueSource: "review" };
   }
 
   return { mistake: null, queueSource: null };
 }
 
-export async function getNextActiveOrFillerMistakeForTraining(
+export async function getNextActiveOrFillerTrainingItemForTraining(
   userId: string,
   now: Date = new Date(),
   { reserve = true }: { reserve?: boolean } = {},
-): Promise<NextMistakeResult> {
+): Promise<NextTrainingItemResult> {
   const supabase = getSupabaseAdminClient();
   const nowISO = now.toISOString();
 
   const { data: active, error: activeError } = await supabase
-    .from("user_mistakes")
+    .from("user_training_items")
     .select("*")
     .eq("user_id", userId)
     .eq("status", "active")
@@ -242,13 +242,13 @@ export async function getNextActiveOrFillerMistakeForTraining(
     .maybeSingle();
 
   if (activeError) {
-    console.error("[mistake-store] active query failed", activeError);
+    console.error("[training-item-store] active query failed", activeError);
   }
 
   if (active) {
     if (reserve) {
       await supabase
-        .from("user_mistakes")
+        .from("user_training_items")
         .update({
           served_count: (active.served_count ?? 0) + 1,
           last_served_at: nowISO,
@@ -257,7 +257,7 @@ export async function getNextActiveOrFillerMistakeForTraining(
         .eq("user_id", userId);
     }
 
-    return { mistake: active as unknown as UserMistakeRow, queueSource: "active" };
+    return { mistake: active as unknown as UserTrainingItemRow, queueSource: "active" };
   }
 
   // Phase-balanced filler selection
@@ -266,7 +266,7 @@ export async function getNextActiveOrFillerMistakeForTraining(
 
   // Fetch a small batch of candidates sorted by least-recently-served
   const { data: fillerCandidates, error: fillerError } = await supabase
-    .from("user_mistakes")
+    .from("user_training_items")
     .select("*")
     .eq("user_id", userId)
     .eq("status", "active")
@@ -278,13 +278,13 @@ export async function getNextActiveOrFillerMistakeForTraining(
     .limit(10);
 
   if (fillerError) {
-    console.error("[mistake-store] filler query failed", fillerError);
+    console.error("[training-item-store] filler query failed", fillerError);
   }
 
-  const candidates = (fillerCandidates ?? []) as unknown as UserMistakeRow[];
+  const candidates = (fillerCandidates ?? []) as unknown as UserTrainingItemRow[];
 
   // Pick best candidate: prefer target phase, exclude endgame Syzygy
-  let filler: UserMistakeRow | null = null;
+  let filler: UserTrainingItemRow | null = null;
   for (const phase of phaseOrder) {
     for (const c of candidates) {
       if (phase === "endgame" && hasLikelySyzygyTablebaseEntry(c.starting_fen)) continue;
@@ -305,7 +305,7 @@ export async function getNextActiveOrFillerMistakeForTraining(
   if (filler) {
     if (reserve) {
       await supabase
-        .from("user_mistakes")
+        .from("user_training_items")
         .update({
           served_count: (filler.served_count ?? 0) + 1,
           last_served_at: nowISO,
@@ -320,27 +320,27 @@ export async function getNextActiveOrFillerMistakeForTraining(
   return { mistake: null, queueSource: null };
 }
 
-export async function updateMistakeAfterTraining(input: {
+export async function updateTrainingItemAfterAttempt(input: {
   userId: string;
-  mistakeId: string;
+  trainingItemId: string;
   outcome: TrainingOutcome;
   averageCpLoss: number;
   maxSingleCpLoss: number;
   now?: Date;
-}): Promise<UserMistakeRow> {
+}): Promise<UserTrainingItemRow> {
   const supabase = getSupabaseAdminClient();
   const now = input.now ?? new Date();
 
   const { data: row, error } = await supabase
-    .from("user_mistakes")
+    .from("user_training_items")
     .select("*")
-    .eq("id", input.mistakeId)
+    .eq("id", input.trainingItemId)
     .eq("user_id", input.userId)
     .maybeSingle();
 
   if (error || !row) {
     throw new Error(
-      `[mistake-store] Failed to load mistake ${input.mistakeId}: ${error?.message ?? "not found"}`,
+      `[training-item-store] Failed to load mistake ${input.trainingItemId}: ${error?.message ?? "not found"}`,
     );
   }
 
@@ -359,7 +359,7 @@ export async function updateMistakeAfterTraining(input: {
   }
   const nextReviewDate = addDays(now, newInterval);
 
-  const updates: UserMistakeUpdate = {
+  const updates: UserTrainingItemUpdate = {
     review_count: (row.review_count ?? 0) + 1,
     last_attempt_at: now.toISOString(),
     next_review_at: nextReviewDate.toISOString(),
@@ -385,23 +385,23 @@ export async function updateMistakeAfterTraining(input: {
   }
 
   const { data: updated, error: updateError } = await supabase
-    .from("user_mistakes")
+    .from("user_training_items")
     .update(updates)
-    .eq("id", input.mistakeId)
+    .eq("id", input.trainingItemId)
     .eq("user_id", input.userId)
     .select("*")
     .single();
 
   if (updateError || !updated) {
     throw new Error(
-      `[mistake-store] Failed to update mistake ${input.mistakeId}: ${updateError?.message ?? "no row returned"}`,
+      `[training-item-store] Failed to update mistake ${input.trainingItemId}: ${updateError?.message ?? "no row returned"}`,
     );
   }
 
-  return updated as UserMistakeRow;
+  return updated as UserTrainingItemRow;
 }
 
-export function normalizeUserMistakeForTraining(row: UserMistakeRow): {
+export function normalizeUserTrainingItemForTraining(row: UserTrainingItemRow): {
   id: string;
   fen: string;
   decisionFen: string | null;
@@ -451,26 +451,26 @@ export function normalizeUserMistakeForTraining(row: UserMistakeRow): {
  * Only reschedules and tracks consecutive_correct_count.
  * Does NOT change status (stays "active") — intermediary/graduated come later.
  */
-export async function updateActiveMistakeAfterTraining(input: {
+export async function updateActiveTrainingItemAfterAttempt(input: {
   userId: string;
-  mistakeId: string;
+  trainingItemId: string;
   outcome: TrainingOutcome;
   now?: Date;
-}): Promise<UserMistakeRow> {
+}): Promise<UserTrainingItemRow> {
   const supabase = getSupabaseAdminClient();
   const now = input.now ?? new Date();
 
   // Load current row
   const { data: row, error } = await supabase
-    .from("user_mistakes" as any)
+    .from("user_training_items" as any)
     .select("id, consecutive_correct_count, review_count, fail_count, pass_count, acceptable_count")
-    .eq("id", input.mistakeId)
+    .eq("id", input.trainingItemId)
     .eq("user_id", input.userId)
     .maybeSingle();
 
   if (error || !row) {
     throw new Error(
-      `[mistake-store] Failed to load active mistake ${input.mistakeId}: ${error?.message ?? "not found"}`,
+      `[training-item-store] Failed to load active mistake ${input.trainingItemId}: ${error?.message ?? "not found"}`,
     );
   }
 
@@ -502,18 +502,20 @@ export async function updateActiveMistakeAfterTraining(input: {
   }
 
   const { data: updated, error: updateError } = await supabase
-    .from("user_mistakes" as any)
+    .from("user_training_items" as any)
     .update(updates)
-    .eq("id", input.mistakeId)
+    .eq("id", input.trainingItemId)
     .eq("user_id", input.userId)
     .select("*")
     .single();
 
   if (updateError || !updated) {
     throw new Error(
-      `[mistake-store] Failed to update active mistake ${input.mistakeId}: ${updateError?.message ?? "no row returned"}`,
+      `[training-item-store] Failed to update active mistake ${input.trainingItemId}: ${updateError?.message ?? "no row returned"}`,
     );
   }
 
-  return updated as unknown as UserMistakeRow;
+  return updated as unknown as UserTrainingItemRow;
 }
+
+

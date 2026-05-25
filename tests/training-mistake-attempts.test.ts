@@ -45,10 +45,10 @@ test("isFailedClassification identifies bad moves", () => {
 // ── SRS bounded regression ────────────────────────────────────────
 
 test("mastered fail keeps interval at or above 30-day floor", () => {
-  // The function is in mistake-store.ts (server module) and requires Supabase.
+  // The function is in training-item-store.ts (server module) and requires Supabase.
   // We verify via source-code assertion that the constant and clamp logic exist.
   const fs = require("node:fs");
-  const source = fs.readFileSync("lib/training/mistake-store.ts", "utf8");
+  const source = fs.readFileSync("lib/training/training-item-store.ts", "utf8");
 
   assert.match(source, /MASTERED_FAIL_FLOOR_DAYS\s*=\s*30/);
   assert.match(source, /isMasteredFail/);
@@ -120,5 +120,6 @@ test("migration creates user_mistake_attempts with unique constraint and unresol
   assert.match(source, /unique\s*\(user_id,\s*decision_fen,\s*move_uci\)/);
   assert.match(source, /where resolved_at is null/);
   assert.match(source, /classification in \('inaccuracy','mistake','blunder'\)/);
-  assert.match(source, /mistake_id.*references user_mistakes/);
+  assert.match(source, /mistake_id.*references user_training_items/);
 });
+

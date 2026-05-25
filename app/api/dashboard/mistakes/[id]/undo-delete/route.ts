@@ -43,7 +43,7 @@ export async function POST(
   const now = new Date().toISOString();
 
   const { data: row, error } = await supabase
-    .from("user_mistakes")
+    .from("user_training_items")
     .update({
       status: status as any,
       next_review_at: body.nextReviewAt ?? null,
@@ -74,3 +74,4 @@ export async function POST(
 
   return NextResponse.json({ ok: true, id });
 }
+

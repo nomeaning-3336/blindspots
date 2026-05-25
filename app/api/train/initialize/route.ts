@@ -67,7 +67,7 @@ export async function GET() {
         .gte("completed_at", todayStart.toISOString())
         .lt("completed_at", tomorrowStart.toISOString()),
       supabase
-        .from("user_mistakes" as any)
+        .from("user_training_items" as any)
         .select("id", { count: "exact", head: true })
         .eq("user_id", userId)
         .not("status", "in", "(deleted,mastered,retired)")
@@ -427,3 +427,5 @@ async function getTrainingTourCheckpoint(userId: string) {
 
   return checkpoint;
 }
+
+

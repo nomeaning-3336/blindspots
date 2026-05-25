@@ -15,7 +15,7 @@ type NextPositionResponse = {
   queueSource?: "review" | "active" | "filler";
   candidateType?: "personal" | "filler";
   sourceType?: string;
-  mistakeId?: string;
+  trainingItemId?: string;
   fillerId?: string;
   fillerOrigin?: FillerOrigin;
   fillerCursor?: number;
@@ -43,7 +43,7 @@ export async function GET(request: Request) {
       queueSource: personalCandidate.queueSource,
       candidateType: "personal",
       sourceType: personalCandidate.sourceType,
-      mistakeId: personalCandidate.mistakeId,
+      trainingItemId: personalCandidate.trainingItemId,
       tags: personalCandidate.tags,
       openingName: personalCandidate.openingName,
       eco: personalCandidate.eco,
@@ -55,7 +55,7 @@ export async function GET(request: Request) {
         selector: "personal",
         queueSource: personalCandidate.queueSource,
         sourceType: personalCandidate.sourceType,
-        mistakeId: personalCandidate.mistakeId,
+        trainingItemId: personalCandidate.trainingItemId,
       };
     }
 
@@ -116,3 +116,5 @@ function normalizeFillerCursor(value: string | null): number {
 
   return Math.min(parsed, 1_000_000_000);
 }
+
+

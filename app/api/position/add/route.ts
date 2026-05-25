@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   const nowIso = new Date().toISOString();
 
   const { data: existing } = await supabase
-    .from("user_mistakes" as any)
+    .from("user_training_items" as any)
     .select("id, status")
     .eq("user_id", userId)
     .eq("starting_fen", canonicalFen)
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     const row = existing as unknown as { id: string; status: string };
     if (row.status === "deleted") {
       await supabase
-        .from("user_mistakes" as any)
+        .from("user_training_items" as any)
         .update({ status: "active", next_review_at: nowIso, last_attempt_at: null })
         .eq("id", row.id);
     }
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
   }
 
   const { data: inserted, error } = await supabase
-    .from("user_mistakes" as any)
+    .from("user_training_items" as any)
     .insert({
       user_id: userId,
       source_type: "app_training",
@@ -102,3 +102,5 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ ok: true, positionId: (inserted as any)?.id ?? null, deduped: false });
 }
+
+

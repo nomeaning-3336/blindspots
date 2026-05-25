@@ -19,7 +19,7 @@ export type ActiveTrainingSession = {
   startingFen: string;
   moves: StoredTrainingMove[];
   sequenceLength: number;
-  selectedMistakeId: string | null;
+  selectedTrainingItemId: string | null;
   queueSource: ActiveSessionQueueSource;
   fillerId: string | null;
   fillerOrigin: FillerOrigin | null;
@@ -29,7 +29,7 @@ export type ActiveTrainingSession = {
 
 type ResolvedStartCandidate = {
   startingFen: string;
-  selectedMistakeId: string | null;
+  selectedTrainingItemId: string | null;
   queueSource: ActiveSessionQueueSource;
   fillerId: string | null;
   fillerOrigin: FillerOrigin | null;
@@ -106,8 +106,8 @@ function normalizeActiveSessionRow(row: Record<string, unknown>): ActiveTraining
     startingFen: row.starting_fen,
     moves: normalizeStoredMoves(row.moves_played),
     sequenceLength: row.sequence_length,
-    selectedMistakeId:
-      typeof row.selected_mistake_id === "string" ? row.selected_mistake_id : null,
+    selectedTrainingItemId:
+      typeof row.selected_training_item_id === "string" ? row.selected_training_item_id : null,
     queueSource,
     fillerId: typeof row.filler_id === "string" ? row.filler_id : null,
     fillerOrigin: normalizeFillerOrigin(row.filler_origin),
@@ -118,11 +118,11 @@ function normalizeActiveSessionRow(row: Record<string, unknown>): ActiveTraining
 
 async function resolvePersonalCandidate(input: {
   userId: string;
-  mistakeId: unknown;
+  trainingItemId: unknown;
   queueSource: unknown;
 }): Promise<ResolvedStartCandidate> {
-  if (typeof input.mistakeId !== "string" || input.mistakeId.length === 0) {
-    throw new ActiveSessionError("Missing personal candidate mistakeId.", 400);
+  if (typeof input.trainingItemId !== "string" || input.trainingItemId.length === 0) {
+    throw new ActiveSessionError("Missing personal candidate trainingItemId.", 400);
   }
 
   if (input.queueSource !== "review" && input.queueSource !== "active") {
@@ -133,9 +133,9 @@ async function resolvePersonalCandidate(input: {
   const supabase = getSupabaseAdminClient();
 
   const { data, error } = await supabase
-    .from("user_mistakes" as any)
+    .from("user_training_items" as any)
     .select("*")
-    .eq("id", input.mistakeId)
+    .eq("id", input.trainingItemId)
     .eq("user_id", input.userId)
     .eq("status", input.queueSource)
     .is("retired_at", null)
@@ -165,7 +165,7 @@ async function resolvePersonalCandidate(input: {
 
   return {
     startingFen,
-    selectedMistakeId: input.mistakeId,
+    selectedTrainingItemId: input.trainingItemId,
     queueSource: input.queueSource,
     fillerId: null,
     fillerOrigin: null,
@@ -204,7 +204,7 @@ async function resolveFillerCandidate(input: {
 
   return {
     startingFen: filler.fen,
-    selectedMistakeId: null,
+    selectedTrainingItemId: null,
     queueSource: "filler",
     fillerId: filler.id,
     fillerOrigin: filler.origin,
@@ -244,7 +244,7 @@ export async function createActiveTrainingSession(input: {
   userId: string;
   candidateType: unknown;
   queueSource: unknown;
-  mistakeId: unknown;
+  trainingItemId: unknown;
   fillerId: unknown;
   fillerOrigin: unknown;
   firstMoveUci: unknown;
@@ -259,7 +259,7 @@ export async function createActiveTrainingSession(input: {
     input.candidateType === "personal"
       ? await resolvePersonalCandidate({
           userId: input.userId,
-          mistakeId: input.mistakeId,
+          trainingItemId: input.trainingItemId,
           queueSource: input.queueSource,
         })
       : input.candidateType === "filler"
@@ -303,7 +303,7 @@ export async function createActiveTrainingSession(input: {
       expected_score: null,
       actual_score: null,
       completed_at: null,
-      selected_mistake_id: candidate.selectedMistakeId,
+      selected_training_item_id: candidate.selectedTrainingItemId,
       queue_source: candidate.queueSource,
       training_outcome: null,
       average_cp_loss: null,
@@ -378,3 +378,5 @@ export async function updateActiveTrainingSessionMoves(input: {
 
   return normalizeActiveSessionRow(updated as unknown as Record<string, unknown>);
 }
+
+

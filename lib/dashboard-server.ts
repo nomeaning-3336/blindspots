@@ -25,7 +25,7 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
       .order("completed_at", { ascending: false })
       .limit(RECENT_SESSION_LIMIT),
     supabase
-      .from("user_mistakes")
+      .from("user_training_items")
       .select(
         "id,source_type,starting_fen,status,opening_name,review_count,pass_count,acceptable_count,fail_count,last_attempt_at,next_review_at,cp_loss,served_count,setup_previous_fen,setup_played_move_uci,eval_before_cp,consecutive_correct_count,move_key",
       )
@@ -120,3 +120,5 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
     completedToday: completedToday ?? 0,
   });
 }
+
+

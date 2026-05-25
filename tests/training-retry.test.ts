@@ -22,30 +22,30 @@ test("root page forwards positionId to TrainPage", () => {
   const fs = require("node:fs");
   const source = fs.readFileSync("app/page.tsx", "utf8");
 
-  // searchParams type must include positionId and legacy mistakeId fallback
+  // searchParams type must include positionId and legacy trainingItemId fallback
   assert.match(source, /positionId\?/);
-  assert.match(source, /mistakeId\?/);
+  assert.match(source, /trainingItemId\?/);
 
-  // initialMistakeId must be passed to <TrainPage>
-  assert.match(source, /initialMistakeId/);
-  assert.match(source, /<TrainPage[\s\S]*initialMistakeId/);
+  // initialTrainingItemId must be passed to <TrainPage>
+  assert.match(source, /initialTrainingItemId/);
+  assert.match(source, /<TrainPage[\s\S]*initialTrainingItemId/);
 });
 
 test("train-client fetches next-position with ?positionId= on retry", () => {
   const fs = require("node:fs");
   const source = fs.readFileSync("app/(shell)/train/train-client.tsx", "utf8");
 
-  // fetchNextPosition must accept optional mistakeId
-  assert.match(source, /fetchNextPosition\(mistakeId/);
+  // fetchNextPosition must accept optional trainingItemId
+  assert.match(source, /fetchNextPosition\(trainingItemId/);
 
   // URL must include ?positionId= when provided
-  assert.match(source, /\?positionId=\$\{encodeURIComponent\(mistakeId\)\}/);
+  assert.match(source, /\?positionId=\$\{encodeURIComponent\(trainingItemId\)\}/);
 
-  // autoStart must be true when initialMistakeId is used
+  // autoStart must be true when initialTrainingItemId is used
   assert.match(source, /autoStart:\s*true/);
 
   // Ref must guard single consumption
-  assert.match(source, /initialMistakeIdConsumedRef/);
+  assert.match(source, /initialTrainingItemIdConsumedRef/);
 });
 
 test("next-position API accepts ?positionId= and returns retry-shaped response shape", () => {
@@ -57,7 +57,7 @@ test("next-position API accepts ?positionId= and returns retry-shaped response s
 
   // Must extract positionId from searchParams with legacy fallback
   assert.match(source, /searchParams\.get\("positionId"\)/);
-  assert.match(source, /searchParams\.get\("mistakeId"\)/);
+  assert.match(source, /searchParams\.get\("trainingItemId"\)/);
 
   // Must set queueSource to "retry"
   assert.match(source, /queueSource:\s*"retry"/);
@@ -72,3 +72,4 @@ test("next-position API accepts ?positionId= and returns retry-shaped response s
   const fallThroughComment = source.includes("Fall through to normal queue selection");
   assert.ok(fallThroughComment, "must fall through silently on invalid/missing retry row");
 });
+

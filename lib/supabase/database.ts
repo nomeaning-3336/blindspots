@@ -210,7 +210,7 @@ export type Database = {
           started_at: string;
           completed_at: string | null;
           created_at: string;
-          selected_mistake_id: string | null;
+          selected_training_item_id: string | null;
           queue_source: string | null;
           training_outcome: "pass" | "acceptable" | "fail" | null;
           average_cp_loss: number | null;
@@ -242,7 +242,7 @@ export type Database = {
           started_at?: string;
           completed_at?: string | null;
           created_at?: string;
-          selected_mistake_id?: string | null;
+          selected_training_item_id?: string | null;
           queue_source?: string | null;
           training_outcome?: "pass" | "acceptable" | "fail" | null;
           average_cp_loss?: number | null;
@@ -274,7 +274,7 @@ export type Database = {
           started_at?: string;
           completed_at?: string | null;
           created_at?: string;
-          selected_mistake_id?: string | null;
+          selected_training_item_id?: string | null;
           queue_source?: string | null;
           training_outcome?: "pass" | "acceptable" | "fail" | null;
           average_cp_loss?: number | null;
@@ -288,14 +288,14 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "training_sessions_selected_mistake_id_fkey";
-            columns: ["selected_mistake_id"];
-            referencedRelation: "user_mistakes";
+            foreignKeyName: "training_sessions_selected_training_item_id_fkey";
+            columns: ["selected_training_item_id"];
+            referencedRelation: "user_training_items";
             referencedColumns: ["id"];
           },
         ];
       };
-      user_mistakes: {
+      user_training_items: {
         Row: {
           id: string;
           user_id: string;
@@ -415,7 +415,7 @@ export type Database = {
         };
         Relationships: [
           {
-            foreignKeyName: "user_mistakes_user_id_fkey";
+            foreignKeyName: "user_training_items_user_id_fkey";
             columns: ["user_id"];
             referencedRelation: "users";
             referencedColumns: ["id"];
@@ -539,3 +539,5 @@ export type Database = {
     CompositeTypes: Record<string, never>;
   };
 };
+
+

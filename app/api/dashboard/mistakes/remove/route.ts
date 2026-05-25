@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   const supabase = getSupabaseAdminClient();
 
   const { error } = await supabase
-    .from("user_mistakes" as any)
+    .from("user_training_items" as any)
     .update({ status: "deleted" })
     .eq("user_id", userId)
     .eq("starting_fen", canonicalFen);

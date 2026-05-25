@@ -18,7 +18,7 @@ import {
   classifyReviewedMoveOutcome,
   classifyTrainingOutcome,
 } from "@/lib/training/mistake-srs";
-import { updateMistakeAfterTraining, updateActiveMistakeAfterTraining } from "@/lib/training/mistake-store";
+import { updateTrainingItemAfterAttempt, updateActiveTrainingItemAfterAttempt } from "@/lib/training/training-item-store";
 import { mineMistakesFromSequence } from "@/lib/training/mistake-mining-persistence";
 import type { MineableMoveInput } from "@/lib/training/mistake-mining";
 import { buildDefaultBlindspotProfile } from "@/lib/training/default-profile";
@@ -59,7 +59,7 @@ type CompleteSequencePayload = {
   selectedOpeningName?: unknown;
   selectedEco?: unknown;
   challengeElo?: unknown;
-  selectedMistakeId?: unknown;
+  selectedTrainingItemId?: unknown;
   queueSource?: unknown;
   precomputedEvaluations?: unknown;
   /** Setup prelude into the first decisionFen (i.e. startingFen). */
@@ -224,7 +224,7 @@ export async function POST(request: Request) {
     : trainingOutcome;
   const reviewedMoveCpLoss = reviewedMoveScore?.cpLoss ?? null;
 
-  const selectedMistakeId = typeof payload?.selectedMistakeId === "string" ? payload.selectedMistakeId : null;
+  const selectedTrainingItemId = typeof payload?.selectedTrainingItemId === "string" ? payload.selectedTrainingItemId : null;
   const queueSource = typeof payload?.queueSource === "string" ? payload.queueSource : null;
 
   const humanRatingMoves = buildHumanRatingMoves(sequenceEvaluation.positionEvaluations);
@@ -287,7 +287,7 @@ export async function POST(request: Request) {
       expected_score: expectedScore,
       actual_score: actualScore,
       position_evaluations: sequenceEvaluation.positionEvaluations as unknown as Json,
-      selected_mistake_id: selectedMistakeId,
+      selected_training_item_id: selectedTrainingItemId,
       queue_source: queueSource,
       training_outcome: trainingOutcome,
       average_cp_loss: averageCpLoss,
@@ -345,7 +345,7 @@ export async function POST(request: Request) {
       hasPreviousFen: Boolean(initialPreviousFen),
       hasPlayedMove: Boolean(initialPlayedMove),
       startingFen,
-      selectedMistakeId,
+      selectedTrainingItemId,
       queueSource,
     });
   }
@@ -375,22 +375,22 @@ export async function POST(request: Request) {
     console.error("[complete-sequence] attempt persistence failed", err);
   });
 
-  if (selectedMistakeId) {
+  if (selectedTrainingItemId) {
     try {
       const srsUpdateStartedAt = Date.now();
 
       if (queueSource === "active_mistake") {
         // Active app-training mistake: simple reschedule, no status change.
-        await updateActiveMistakeAfterTraining({
+        await updateActiveTrainingItemAfterAttempt({
           userId,
-          mistakeId: selectedMistakeId,
+          trainingItemId: selectedTrainingItemId,
           outcome: reviewOutcome,
         });
       } else {
         // Legacy row-based / imported / puzzle-filler mistake: full SRS path.
-        await updateMistakeAfterTraining({
+        await updateTrainingItemAfterAttempt({
           userId,
-          mistakeId: selectedMistakeId,
+          trainingItemId: selectedTrainingItemId,
           outcome: reviewOutcome,
           averageCpLoss,
           maxSingleCpLoss,
@@ -456,7 +456,7 @@ export async function POST(request: Request) {
       reviewedMoveCpLoss,
       averageCpLoss,
       maxSingleCpLoss,
-      selectedMistakeId: selectedMistakeId,
+      selectedTrainingItemId: selectedTrainingItemId,
     });
     if (process.env.NODE_ENV !== "production") {
       console.log("[complete-sequence:done]", {
@@ -1521,3 +1521,5 @@ async function persistTrainingTourCheckpoint(input: {
     console.error("[training-tour-checkpoint] failed to persist checkpoint", error);
   }
 }
+
+

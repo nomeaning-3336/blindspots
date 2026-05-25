@@ -37,8 +37,8 @@ test("next position mirrors concrete position id to URL with replaceState", () =
   assert.match(syncSource, /\/\?positionId=/);
   assert.match(syncSource, /window\.history\.replaceState\(null, "", nextUrl\)/);
   assert.doesNotMatch(syncSource, /pushState/);
-  assert.match(applySource, /currentMistakeIdRef\.current\s*=\s*typeof payload\.mistakeId === "string" \? payload\.mistakeId : null/);
-  assert.match(applySource, /syncTrainPositionUrl\(currentMistakeIdRef\.current\)/);
+  assert.match(applySource, /currentTrainingItemIdRef\.current\s*=\s*typeof payload\.trainingItemId === "string" \? payload\.trainingItemId : null/);
+  assert.match(applySource, /syncTrainPositionUrl\(currentTrainingItemIdRef\.current\)/);
 });
 
 test("position transitions do not use delayed prelude timers", () => {
@@ -104,3 +104,4 @@ test("return to home collapses to the initial state in-page instead of navigatin
   // button shows "Returning..." text when transitioning
   assert.match(trainClient, /Returning\.\.\./);
 });
+
