@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { Chess } from "chess.js";
 import type { Square } from "chess.js";
 import { AnalysisBoard, type BoardMove } from "@/components/chess/analysis-board";
+import type { AppTheme } from "@/lib/app-theme";
 
 type Verdict = "best" | "inaccuracy" | "blunder" | "brilliant" | null;
 type BoardHistoryEntry = {
@@ -82,8 +83,12 @@ const TODAY = {
   ratingHistory: [1801, 1798, 1812, 1820, 1818, 1824, 1831, 1835, 1842],
 };
 
-export function BlindspotsSpaPrototype() {
-  const [theme, setTheme] = useState<"paper" | "dark">("paper");
+export function BlindspotsSpaPrototype({
+  initialTheme,
+}: {
+  initialTheme: AppTheme;
+}) {
+  const [theme, setTheme] = useState<AppTheme>(initialTheme);
   const [queueIdx, setQueueIdx] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [committed, setCommitted] = useState<{ from: string; to: string } | null>(null);
@@ -98,10 +103,7 @@ export function BlindspotsSpaPrototype() {
   const [boardHistoryIndex, setBoardHistoryIndex] = useState(0);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme === "dark" ? "dark" : "";
-    return () => {
-      document.documentElement.dataset.theme = "";
-    };
+    document.documentElement.dataset.theme = theme;
   }, [theme]);
 
   const current = QUEUE[queueIdx]!;
@@ -110,6 +112,31 @@ export function BlindspotsSpaPrototype() {
   const correct = committed && (verdict === "best" || verdict === "brilliant") ? [committed.to] : [];
   const incorrect = committed && verdict === "blunder" ? [committed.to] : [];
   const moveLabel = committed ? sanFromMove(committed, current) : "";
+
+  async function handleToggleTheme() {
+    const nextTheme: AppTheme = theme === "paper" ? "dark" : "paper";
+
+    setTheme(nextTheme);
+    document.documentElement.dataset.theme = nextTheme;
+
+    const formData = new FormData();
+    formData.set("next", "/");
+    formData.set("theme", nextTheme);
+
+    const response = await fetch("/auth/theme/save", {
+      method: "POST",
+      headers: {
+        "x-chessview-fetch": "1",
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const previousTheme: AppTheme = nextTheme === "paper" ? "dark" : "paper";
+      setTheme(previousTheme);
+      document.documentElement.dataset.theme = previousTheme;
+    }
+  }
 
   function handleBoardMove(move: BoardMove) {
     try {
@@ -208,9 +235,11 @@ export function BlindspotsSpaPrototype() {
 
   return (
     <div className="bs-kit-app">
-      <TopBar
+      <ShellActions
         theme={theme}
-        onToggleTheme={() => setTheme(theme === "paper" ? "dark" : "paper")}
+        onToggleTheme={() => {
+          void handleToggleTheme();
+        }}
         onAddFen={() => setAddFenOpen(true)}
       />
       <AddFenSheet open={addFenOpen} onClose={() => setAddFenOpen(false)} onAdd={() => setAddFenOpen(false)} />
@@ -327,37 +356,32 @@ export function BlindspotsSpaPrototype() {
   );
 }
 
-function TopBar({
+function ShellActions({
   theme,
   onToggleTheme,
   onAddFen,
 }: {
-  theme: "paper" | "dark";
+  theme: AppTheme;
   onToggleTheme: () => void;
   onAddFen: () => void;
 }) {
   return (
-    <div className="bs-kit-topbar">
-      <div className="bs-kit-brand">
-        <LogoIcon />
-        <span>blindspots<span className="tld">.gg</span></span>
-      </div>
-      <div className="right">
-        <button className="bs-kit-btn-quiet" onClick={onAddFen}>
-          <PlusIcon /> Add FEN
-        </button>
-        <button className="bs-kit-btn-quiet" onClick={onToggleTheme} title="Toggle theme">
-          {theme === "paper" ? <MoonIcon /> : <SunIcon />}
-        </button>
-        <span
-          className="bs-kit-btn-quiet"
-          aria-hidden="true"
-          data-testid="spa-settings-placeholder"
-        >
-          <SettingsIcon />
-        </span>
-        <AuthSignOutButton className="bs-kit-btn-quiet" />
-      </div>
+    <div className="bs-kit-shell-actions">
+      <button className="bs-kit-btn-quiet" onClick={onAddFen}>
+        <PlusIcon /> Add FEN
+      </button>
+      <button className="bs-kit-btn-quiet" onClick={onToggleTheme} title="Toggle theme">
+        {theme === "paper" ? <MoonIcon /> : <SunIcon />}
+      </button>
+      <button
+        type="button"
+        className="bs-kit-btn-quiet"
+        data-testid="spa-settings-placeholder"
+      >
+        <SettingsIcon />
+        <span>Settings</span>
+      </button>
+      <AuthSignOutButton className="bs-kit-btn-quiet" />
     </div>
   );
 }
@@ -539,16 +563,6 @@ function sanFromMove(move: { from: string; to: string }, current: typeof QUEUE[n
   if (move.to === current.solution.to && move.from === current.solution.from) return current.solution.san;
   if (move.to === current.distractor.to && move.from === current.distractor.from) return current.distractor.san;
   return `${move.from}→${move.to}`;
-}
-
-function LogoIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="mark">
-      <rect x="2" y="2" width="20" height="20" rx="3" stroke="currentColor" strokeWidth="1.6" />
-      <circle cx="12" cy="12" r="3.2" fill="#1F6F87" />
-      <path d="M12 4.5v3M12 16.5v3M4.5 12h3M16.5 12h3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
 }
 
 function Icon({

@@ -12,7 +12,9 @@ function readSource(relativePath: string): string {
 
 test("app/page.tsx renders BlindspotsSpaPrototype only under if (userId)", () => {
   const source = readSource("app/page.tsx");
-  const spaRenderMatch = source.match(/if\s*\(\s*userId\s*\)[^{]*\{[\s\S]*?<BlindspotsSpaPrototype\s*\/?>/s);
+  const spaRenderMatch = source.match(
+    /if\s*\(\s*userId\s*\)[^{]*\{[\s\S]*?<BlindspotsSpaPrototype\s+initialTheme=\{initialTheme\}\s*\/>/s,
+  );
   assert.ok(spaRenderMatch, "BlindspotsSpaPrototype should only be rendered inside an if (userId) block");
   assert.ok(
     !/if\s*\(\s*userId\s*\|\|.*isDebugRequest/.test(source),
@@ -102,6 +104,57 @@ test("SPA top bar replaces KD avatar with a settings placeholder icon", () => {
   assert.ok(!source.includes('const USER = { initials: "KD" }'), "SPA should no longer define KD initials");
   assert.ok(!source.includes("{USER.initials}"), "SPA should no longer render KD initials");
   assert.ok(source.includes("AuthSignOutButton"), "SPA must preserve the repaired sign-out control");
+});
+
+test("SPA initializes theme from the server-provided app theme and does not wipe it on mount", () => {
+  const pageSource = readSource("app/page.tsx");
+  const spaSource = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(
+    pageSource.includes("getCookieAppThemeOnly"),
+    "signed-in homepage must resolve the initial theme from the server-readable cookie",
+  );
+  assert.ok(
+    pageSource.includes("<BlindspotsSpaPrototype initialTheme={initialTheme} />"),
+    "signed-in homepage must pass the resolved initial theme into the SPA",
+  );
+  assert.ok(
+    spaSource.includes("initialTheme: AppTheme"),
+    "SPA must accept the server-provided initial theme",
+  );
+  assert.ok(
+    spaSource.includes("useState<AppTheme>(initialTheme)"),
+    "SPA must initialize theme state from the server-provided value",
+  );
+  assert.ok(
+    spaSource.includes("document.documentElement.dataset.theme = theme;"),
+    "SPA must apply the selected theme without collapsing paper into an empty value",
+  );
+  assert.ok(
+    !spaSource.includes('useState<"paper" | "dark">("paper")'),
+    "SPA must not hard-code paper as the initial authenticated theme",
+  );
+  assert.ok(
+    !spaSource.includes('document.documentElement.dataset.theme = "";'),
+    "SPA must not wipe the app theme during mount or unmount",
+  );
+});
+
+test("authenticated theme saves write the SSR theme cookie", () => {
+  const source = readSource("app/auth/theme/save/route.ts");
+
+  assert.ok(
+    source.includes('const THEME_COOKIE_NAME = "chessview-theme"'),
+    "theme save route must use the SSR theme cookie name",
+  );
+  assert.ok(
+    source.includes("response.cookies.set(THEME_COOKIE_NAME, theme"),
+    "successful authenticated saves must write the theme cookie",
+  );
+  assert.ok(
+    source.includes("return setThemeCookie(NextResponse.json({ ok: true, theme }), theme);"),
+    "JSON theme saves must return the updated cookie",
+  );
 });
 
 test("SPA piece selection does not call setInSession(true) — only handleBoardMove starts session", () => {

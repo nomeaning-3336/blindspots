@@ -1,6 +1,7 @@
 import { PublicHeaderClient } from "@/components/public-header";
 import { getOptionalAppUserId } from "@/lib/app-auth";
 import { AnalysisBoard } from "@/components/chess/analysis-board";
+import { getCookieAppThemeOnly } from "@/lib/app-theme-store";
 
 function TrainingBoard() {
   return (
@@ -51,7 +52,8 @@ export default async function HomePage() {
 
   if (userId) {
     const { BlindspotsSpaPrototype } = await import("@/components/blindspots-spa-prototype");
-    return <BlindspotsSpaPrototype />;
+    const initialTheme = (await getCookieAppThemeOnly()) ?? "paper";
+    return <BlindspotsSpaPrototype initialTheme={initialTheme} />;
   }
 
   return (

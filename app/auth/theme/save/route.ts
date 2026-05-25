@@ -3,8 +3,21 @@ import { DEFAULT_APP_ROUTE, getOptionalAppUserId, normalizeNextPath } from "@/li
 import { normalizeAppTheme } from "@/lib/app-theme";
 import { upsertUserAppThemeForUser } from "@/lib/app-theme-store";
 
+const THEME_COOKIE_NAME = "chessview-theme";
+const THEME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+
 function isJsonRequest(request: Request) {
   return request.headers.get("x-chessview-fetch") === "1";
+}
+
+function setThemeCookie(response: NextResponse, theme: string) {
+  response.cookies.set(THEME_COOKIE_NAME, theme, {
+    path: "/",
+    sameSite: "lax",
+    maxAge: THEME_COOKIE_MAX_AGE,
+  });
+
+  return response;
 }
 
 export async function POST(request: Request) {
@@ -44,13 +57,16 @@ export async function POST(request: Request) {
   }
 
   if (isJsonRequest(request)) {
-    return NextResponse.json({ ok: true, theme });
+    return setThemeCookie(NextResponse.json({ ok: true, theme }), theme);
   }
 
-  return redirectWithStatus(
-    request,
-    nextPath,
-    `status=theme-saved&theme=${encodeURIComponent(theme)}`,
+  return setThemeCookie(
+    redirectWithStatus(
+      request,
+      nextPath,
+      `status=theme-saved&theme=${encodeURIComponent(theme)}`,
+    ),
+    theme,
   );
 }
 
