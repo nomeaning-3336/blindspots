@@ -13,7 +13,7 @@ function readSource(relativePath: string): string {
 test("app/page.tsx renders BlindspotsSpaPrototype only under if (userId)", () => {
   const source = readSource("app/page.tsx");
   const spaRenderMatch = source.match(
-    /if\s*\(\s*userId\s*\)[^{]*\{[\s\S]*?<BlindspotsSpaPrototype\s+initialTheme=\{initialTheme\}\s*\/>/s,
+    /if\s*\(\s*userId\s*\)[^{]*\{[\s\S]*?<BlindspotsSpaPrototype\s+(?:key=\{spaMountKey\}\s+)?initialTheme=\{initialTheme\}\s*\/>/s,
   );
   assert.ok(spaRenderMatch, "BlindspotsSpaPrototype should only be rendered inside an if (userId) block");
   assert.ok(
@@ -115,8 +115,12 @@ test("SPA initializes theme from the server-provided app theme and does not wipe
     "signed-in homepage must resolve the initial theme from the server-readable cookie",
   );
   assert.ok(
-    pageSource.includes("<BlindspotsSpaPrototype initialTheme={initialTheme} />"),
-    "signed-in homepage must pass the resolved initial theme into the SPA",
+    pageSource.includes("const spaMountKey = crypto.randomUUID();"),
+    "signed-in homepage must create a fresh mount key for the SPA",
+  );
+  assert.ok(
+    pageSource.includes("<BlindspotsSpaPrototype key={spaMountKey} initialTheme={initialTheme} />"),
+    "signed-in homepage must pass the resolved initial theme into the SPA with a fresh mount key",
   );
   assert.ok(
     spaSource.includes("initialTheme: AppTheme"),
@@ -154,6 +158,72 @@ test("authenticated theme saves write the SSR theme cookie", () => {
   assert.ok(
     source.includes("return setThemeCookie(NextResponse.json({ ok: true, theme }), theme);"),
     "JSON theme saves must return the updated cookie",
+  );
+});
+
+test("signed-in SPA renders the timed branded boot splash over the loaded app", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(
+    source.includes('type SplashPhase = "blank" | "branded" | "hidden";'),
+    "SPA must define the explicit splash phases",
+  );
+  assert.ok(
+    source.includes("const SPLASH_BRAND_DELAY_MS = 250;"),
+    "SPA must keep the initial background empty for 250ms",
+  );
+  assert.ok(
+    source.includes("const SPLASH_COMPLETE_DELAY_MS = 1250;"),
+    "SPA must reveal the home SPA after 1.25s",
+  );
+  assert.ok(
+    source.includes('useState<SplashPhase>("blank")'),
+    "SPA splash must begin in the blank background phase",
+  );
+  assert.ok(
+    source.includes('data-testid="spa-boot-splash"'),
+    "SPA must render the branded boot splash",
+  );
+  assert.ok(
+    source.includes('src="/blindspots-logo.svg"'),
+    "SPA splash must use the existing Blindspots logo asset",
+  );
+  assert.ok(
+    source.includes('<span className="bs-kit-splash-tld">.gg</span>'),
+    "SPA splash must render the branded .gg suffix",
+  );
+  assert.ok(
+    source.includes('{splashPhase !== "hidden" ? <SpaBootSplash phase={splashPhase} /> : null}'),
+    "SPA must remove the splash once boot is complete",
+  );
+  assert.ok(
+    source.includes('<div className="bs-kit-app" aria-busy={splashPhase !== "hidden"}>'),
+    "SPA must remain rendered beneath the splash while booting",
+  );
+});
+
+test("SPA boot splash is an opaque theme-backed overlay", () => {
+  const source = readSource("app/globals.css");
+
+  assert.ok(
+    source.includes(".bs-kit-splash {"),
+    "global CSS must define the SPA splash overlay",
+  );
+  assert.ok(
+    source.includes('html[data-theme="dark"] .bs-kit-splash-logo'),
+    "splash logo must invert in dark theme",
+  );
+  assert.ok(
+    source.includes("position: fixed;"),
+    "splash must cover the viewport independently of SPA layout",
+  );
+  assert.ok(
+    source.includes("background: var(--app-bg);"),
+    "splash background must inherit the already-resolved app theme",
+  );
+  assert.ok(
+    source.includes('.bs-kit-splash[data-phase="branded"] .bs-kit-splash-brand'),
+    "splash must reveal the brand only during the branded phase",
   );
 });
 

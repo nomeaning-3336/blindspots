@@ -1,0 +1,34 @@
+<svg
+  width="32"
+  height="32"
+  viewBox="0 0 32 32"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <rect
+    x="1"
+    y="1"
+    width="30"
+    height="30"
+    rx="7"
+    fill="#0E0D10"
+    stroke="#1A1714"
+    stroke-width="2"
+  />
+  <rect
+    x="3.5"
+    y="3.5"
+    width="25"
+    height="25"
+    rx="4.75"
+    stroke="#ECE9E0"
+    stroke-width="1.75"
+  />
+  <circle cx="16" cy="16" r="4.25" fill="#1F6F87" />
+  <path
+    d="M16 7.25V11M16 21V24.75M7.25 16H11M21 16H24.75"
+    stroke="#ECE9E0"
+    stroke-width="2"
+    stroke-linecap="round"
+  />
+</svg>

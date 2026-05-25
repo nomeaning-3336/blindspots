@@ -20,7 +20,7 @@ test("protected shell removes the signed-in navbar", () => {
 });
 
 test("root route renders the imported SPA replacement", () => {
-  assert.match(homePageSource, /<BlindspotsSpaPrototype initialTheme=\{initialTheme\} \/>/);
+  assert.match(homePageSource, /<BlindspotsSpaPrototype key=\{spaMountKey\} initialTheme=\{initialTheme\} \/>/);
   assert.doesNotMatch(homePageSource, /getDashboardSummary/);
   assert.doesNotMatch(homePageSource, /<ProtectedAppShell/);
   assert.doesNotMatch(homePageSource, /<TrainPage/);

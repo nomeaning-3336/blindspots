@@ -24,7 +24,7 @@ const mono = JetBrains_Mono({
 export const metadata: Metadata = {
   metadataBase: "https://blindspots.gg",
   title: {
-    default: "Blindspots.gg - Chess Training for the Positions You Keep Getting Wrong",
+    default: "Blindspots.gg",
     template: "%s | Blindspots.gg",
   },
   description:

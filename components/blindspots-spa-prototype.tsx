@@ -13,6 +13,10 @@ type BoardHistoryEntry = {
   fen: string;
   lastMove: { from: string; to: string } | null;
 };
+type SplashPhase = "blank" | "branded" | "hidden";
+
+const SPLASH_BRAND_DELAY_MS = 250;
+const SPLASH_COMPLETE_DELAY_MS = 1250;
 
 const QUEUE = [
   {
@@ -89,6 +93,7 @@ export function BlindspotsSpaPrototype({
   initialTheme: AppTheme;
 }) {
   const [theme, setTheme] = useState<AppTheme>(initialTheme);
+  const [splashPhase, setSplashPhase] = useState<SplashPhase>("blank");
   const [queueIdx, setQueueIdx] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [committed, setCommitted] = useState<{ from: string; to: string } | null>(null);
@@ -105,6 +110,21 @@ export function BlindspotsSpaPrototype({
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    const brandTimer = window.setTimeout(() => {
+      setSplashPhase("branded");
+    }, SPLASH_BRAND_DELAY_MS);
+
+    const completeTimer = window.setTimeout(() => {
+      setSplashPhase("hidden");
+    }, SPLASH_COMPLETE_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(brandTimer);
+      window.clearTimeout(completeTimer);
+    };
+  }, []);
 
   const current = QUEUE[queueIdx]!;
   const stage = verdict ? "review" : inSession || committed ? "playing" : "loaded";
@@ -234,7 +254,8 @@ export function BlindspotsSpaPrototype({
   }
 
   return (
-    <div className="bs-kit-app">
+    <div className="bs-kit-app" aria-busy={splashPhase !== "hidden"}>
+      {splashPhase !== "hidden" ? <SpaBootSplash phase={splashPhase} /> : null}
       <ShellActions
         theme={theme}
         onToggleTheme={() => {
@@ -351,6 +372,35 @@ export function BlindspotsSpaPrototype({
           {stage === "review" ? <EngineLinesPanel lines={current.engineLines} /> : null}
           {verdict ? <FeedbackCard verdict={verdict} move={moveLabel} onNext={nextPosition} /> : null}
         </aside>
+      </div>
+    </div>
+  );
+}
+
+function SpaBootSplash({
+  phase,
+}: {
+  phase: Exclude<SplashPhase, "hidden">;
+}) {
+  return (
+    <div
+      className="bs-kit-splash"
+      data-phase={phase}
+      data-testid="spa-boot-splash"
+      role="status"
+      aria-label="Loading Blindspots"
+    >
+      <div className="bs-kit-splash-brand" aria-hidden="true">
+        <img
+          src="/blindspots-logo.svg"
+          width={28}
+          height={28}
+          alt=""
+          className="bs-kit-splash-logo"
+        />
+        <span className="bs-kit-splash-wordmark">
+          blindspots<span className="bs-kit-splash-tld">.gg</span>
+        </span>
       </div>
     </div>
   );

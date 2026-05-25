@@ -53,7 +53,8 @@ export default async function HomePage() {
   if (userId) {
     const { BlindspotsSpaPrototype } = await import("@/components/blindspots-spa-prototype");
     const initialTheme = (await getCookieAppThemeOnly()) ?? "paper";
-    return <BlindspotsSpaPrototype initialTheme={initialTheme} />;
+    const spaMountKey = crypto.randomUUID();
+    return <BlindspotsSpaPrototype key={spaMountKey} initialTheme={initialTheme} />;
   }
 
   return (
