@@ -440,6 +440,7 @@ export type Database = {
           cluster_stats: Json;
           recent_clusters: Json;
           total_sequences: number;
+          next_filler_cursor: number;
           last_session_at: string | null;
           profile_initialized: boolean;
           initialization_status: string;
@@ -464,6 +465,7 @@ export type Database = {
           cluster_stats?: Json;
           recent_clusters?: Json;
           total_sequences?: number;
+          next_filler_cursor?: number;
           last_session_at?: string | null;
           profile_initialized?: boolean;
           initialization_status?: string;
@@ -488,6 +490,7 @@ export type Database = {
           cluster_stats?: Json;
           recent_clusters?: Json;
           total_sequences?: number;
+          next_filler_cursor?: number;
           last_session_at?: string | null;
           profile_initialized?: boolean;
           initialization_status?: string;
