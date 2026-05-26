@@ -290,6 +290,20 @@ export function BlindspotsSpaPrototype({
     currentTurn !== null &&
     currentTurn !== learnerSide;
 
+  const learnerColor: "white" | "black" =
+    learnerSide === "b" ? "black" : "white";
+  const opponentColor: "white" | "black" =
+    learnerColor === "white" ? "black" : "white";
+
+  const learnerTurn =
+    trainingLoadState === "ready" &&
+    completionResult === null &&
+    !manualOpponentTurn;
+  const opponentTurn =
+    trainingLoadState === "ready" &&
+    completionResult === null &&
+    manualOpponentTurn;
+
   const trainingBoardInteractive =
     trainingLoadState === "ready" &&
     trainingActionState === "idle" &&
@@ -590,15 +604,15 @@ export function BlindspotsSpaPrototype({
         <div className="bs-kit-board-pane">
           <div className="bs-kit-board-stack">
             <PlayerStrip
-              side={flipped ? "white" : "black"}
-              name="Opponent"
-              turn={manualOpponentTurn}
+              side={flipped ? learnerColor : opponentColor}
+              name={flipped ? "You" : "Opponent"}
+              turn={flipped ? learnerTurn : opponentTurn}
             />
             <div className="bs-kit-board-wrap">
               <AnalysisBoard
                 fen={boardFen}
                 mode="training"
-                orientation={flipped ? "black" : "white"}
+                orientation={flipped ? opponentColor : learnerColor}
                 coordinates
                 boardTheme="paper"
                 pieceTheme="blindspots"
@@ -640,9 +654,9 @@ export function BlindspotsSpaPrototype({
               />
             </div>
             <PlayerStrip
-              side={flipped ? "black" : "white"}
-              name="You"
-              turn={!completionResult && !manualOpponentTurn}
+              side={flipped ? opponentColor : learnerColor}
+              name={flipped ? "Opponent" : "You"}
+              turn={flipped ? opponentTurn : learnerTurn}
             />
             <div className="bs-kit-board-actions">
               <div className="l">

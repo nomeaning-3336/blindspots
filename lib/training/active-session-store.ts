@@ -1,9 +1,7 @@
 import type { Json } from "@/lib/supabase/database";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
-import {
-  getFillerCatalogItemById,
-  type FillerOrigin,
-} from "./filler-catalog";
+import type { FillerOrigin } from "./filler-catalog";
+import { getCurrentFillerCandidateForUser } from "./filler-progression";
 import { validatePlayableTrainingFen } from "./position-validity";
 import {
   buildLegalStoredSequence,
@@ -221,6 +219,7 @@ async function resolvePersonalCandidate(input: {
 }
 
 async function resolveFillerCandidate(input: {
+  userId: string;
   fillerId: unknown;
   fillerOrigin: unknown;
 }): Promise<ResolvedStartCandidate> {
@@ -234,12 +233,20 @@ async function resolveFillerCandidate(input: {
     throw new ActiveSessionError("Invalid filler candidate origin.", 400);
   }
 
-  const filler = await getFillerCatalogItemById({
-    id: input.fillerId,
-    origin: fillerOrigin,
-  });
+  const { filler } = await getCurrentFillerCandidateForUser(input.userId);
 
-  if (!filler || !validatePlayableTrainingFen(filler.fen).ok) {
+  if (
+    !filler ||
+    filler.id !== input.fillerId ||
+    filler.origin !== fillerOrigin
+  ) {
+    throw new ActiveSessionError(
+      "Filler candidate is no longer current. Load the next position again.",
+      409,
+    );
+  }
+
+  if (!validatePlayableTrainingFen(filler.fen).ok) {
     throw new ActiveSessionError("Filler candidate is no longer available.", 409);
   }
 
@@ -334,6 +341,7 @@ export async function createActiveTrainingSession(input: {
         })
       : input.candidateType === "filler"
         ? await resolveFillerCandidate({
+            userId: input.userId,
             fillerId: input.fillerId,
             fillerOrigin: input.fillerOrigin,
           })

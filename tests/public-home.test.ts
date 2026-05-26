@@ -269,6 +269,34 @@ test("SPA allows non-mutating board navigation while blocking moves from histori
   assert.ok(source.includes("if (!canNavigateHistory) return;"));
 });
 
+test("active-session creation rejects stale filler candidates against server progression", () => {
+  const source = readSource("lib/training/active-session-store.ts");
+
+  assert.ok(source.includes("getCurrentFillerCandidateForUser"));
+  assert.ok(source.includes("userId: input.userId"));
+  assert.ok(source.includes("const { filler } = await getCurrentFillerCandidateForUser(input.userId);"));
+  assert.ok(source.includes("filler.id !== input.fillerId"));
+  assert.ok(source.includes("filler.origin !== fillerOrigin"));
+  assert.ok(
+    source.includes("Filler candidate is no longer current. Load the next position again."),
+  );
+  assert.ok(!source.includes("getFillerCatalogItemById"));
+});
+
+test("SPA places the learner side from the starting FEN at the bottom by default", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(source.includes('const learnerColor: "white" | "black" ='));
+  assert.ok(source.includes('learnerSide === "b" ? "black" : "white";'));
+  assert.ok(source.includes('const opponentColor: "white" | "black" ='));
+  assert.ok(source.includes('orientation={flipped ? opponentColor : learnerColor}'));
+  assert.ok(source.includes('side={flipped ? learnerColor : opponentColor}'));
+  assert.ok(source.includes('name={flipped ? "You" : "Opponent"}'));
+  assert.ok(source.includes('side={flipped ? opponentColor : learnerColor}'));
+  assert.ok(source.includes('name={flipped ? "Opponent" : "You"}'));
+  assert.ok(!source.includes('orientation={flipped ? "black" : "white"}'));
+});
+
 test("SPA boot splash is an opaque theme-backed overlay", () => {
   const source = readSource("app/globals.css");
 
@@ -324,8 +352,8 @@ test("next-position is a read-only unified cold selector route", () => {
     "next-position must use the unified personal candidate selector",
   );
   assert.ok(
-    source.includes("getDeterministicFillerCandidate"),
-    "next-position must use catalog-backed filler selection",
+    source.includes("getCurrentFillerCandidateForUser"),
+    "next-position must use shared filler progression",
   );
   assert.ok(
     source.includes('queueSource: "filler"'),
@@ -353,19 +381,24 @@ test("next-position is a read-only unified cold selector route", () => {
   assert.ok(!source.includes("cpLoss"), "route must not expose historical grading data");
 });
 
-test("next-position uses server-owned filler progression rather than client cursor input", () => {
-  const source = readSource("app/api/train/next-position/route.ts");
+test("next-position uses shared server-owned filler progression rather than client cursor input", () => {
+  const routeSource = readSource("app/api/train/next-position/route.ts");
+  const progressionSource = readSource("lib/training/filler-progression.ts");
 
-  assert.ok(source.includes('const SPA_FILLER_SEED = "spa-v1";'));
-  assert.ok(source.includes("async function getNextFillerCursor(userId: string)"));
-  assert.ok(source.includes('.select("next_filler_cursor")'));
-  assert.ok(source.includes("const fillerCursor = await getNextFillerCursor(userId);"));
-  assert.ok(source.includes("seed: SPA_FILLER_SEED"));
-  assert.ok(source.includes("cursor: fillerCursor"));
-  assert.ok(source.includes("export async function GET()"));
-  assert.ok(!source.includes("request.url"));
-  assert.ok(!source.includes("searchParams"));
-  assert.ok(!source.includes("parseFillerCursor"));
+  assert.ok(routeSource.includes("getCurrentFillerCandidateForUser"));
+  assert.ok(routeSource.includes("const { filler, cursor: fillerCursor } ="));
+  assert.ok(routeSource.includes("await getCurrentFillerCandidateForUser(userId);"));
+  assert.ok(routeSource.includes("export async function GET()"));
+  assert.ok(!routeSource.includes("request.url"));
+  assert.ok(!routeSource.includes("searchParams"));
+  assert.ok(!routeSource.includes("parseFillerCursor"));
+
+  assert.ok(progressionSource.includes('const SPA_FILLER_SEED = "spa-v1";'));
+  assert.ok(progressionSource.includes("async function getNextFillerCursor(userId: string)"));
+  assert.ok(progressionSource.includes('.select("next_filler_cursor")'));
+  assert.ok(progressionSource.includes("getDeterministicFillerCandidate"));
+  assert.ok(progressionSource.includes("seed: SPA_FILLER_SEED"));
+  assert.ok(progressionSource.includes("cursor,"));
 });
 
 test("next-position response type contains only cold candidate identifiers and display metadata", () => {
@@ -496,7 +529,7 @@ test("active-session store resolves trusted candidates and persists server-deriv
 
   assert.ok(source.includes("resolvePersonalCandidate"));
   assert.ok(source.includes("resolveFillerCandidate"));
-  assert.ok(source.includes("getFillerCatalogItemById"));
+  assert.ok(source.includes("getCurrentFillerCandidateForUser"));
   assert.ok(source.includes("buildLegalStoredSequence"));
   assert.ok(source.includes("storedSequenceIsPrefix"));
   assert.ok(source.includes('completed_at: null'));

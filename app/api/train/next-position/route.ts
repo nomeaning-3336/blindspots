@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
 import { getOptionalAppUserId } from "@/lib/app-auth";
-import { getSupabaseAdminClient } from "@/lib/supabase/server";
-import { getDeterministicFillerCandidate } from "@/lib/training/filler-catalog";
 import { getNextColdPersonalTrainingCandidate } from "@/lib/training/cold-candidate-store";
+import { getCurrentFillerCandidateForUser } from "@/lib/training/filler-progression";
 import { validatePlayableTrainingFen } from "@/lib/training/position-validity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const SPA_FILLER_SEED = "spa-v1";
 
 type NextPositionResponse = {
   fen: string;
@@ -25,32 +22,6 @@ type NextPositionResponse = {
   fillerCursor?: number;
   selectedPhase?: string;
 };
-
-async function getNextFillerCursor(userId: string): Promise<number> {
-  const supabase = getSupabaseAdminClient();
-
-  const { data, error } = await supabase
-    .from("user_blindspot_profile" as any)
-    .select("next_filler_cursor")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to load filler progression: ${error.message}`);
-  }
-
-  if (!data) {
-    return 0;
-  }
-
-  const cursor = (data as { next_filler_cursor?: unknown }).next_filler_cursor;
-
-  return typeof cursor === "number" &&
-    Number.isSafeInteger(cursor) &&
-    cursor >= 0
-    ? cursor
-    : 0;
-}
 
 export async function GET() {
   const userId = await getOptionalAppUserId();
@@ -86,12 +57,8 @@ export async function GET() {
     return NextResponse.json(response);
   }
 
-  const fillerCursor = await getNextFillerCursor(userId);
-  const filler = await getDeterministicFillerCandidate({
-    userId,
-    seed: SPA_FILLER_SEED,
-    cursor: fillerCursor,
-  });
+  const { filler, cursor: fillerCursor } =
+    await getCurrentFillerCandidateForUser(userId);
 
   if (!filler) {
     return NextResponse.json(
