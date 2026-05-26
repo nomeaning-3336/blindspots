@@ -175,7 +175,7 @@ export function BlindspotsSpaPrototype({
         }
 
         const nextResponse = await fetch(
-          "/api/train/next-position?fillerSeed=spa-v1&fillerCursor=0",
+          "/api/train/next-position",
           {
             method: "GET",
             cache: "no-store",

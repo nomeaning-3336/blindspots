@@ -19,6 +19,7 @@ export type DefaultBlindspotProfile = {
   revisit_queue: Json;
   mastered_queue: Json;
   total_sequences: number;
+  next_filler_cursor: number;
   recent_served_fens: Json;
   recent_served_modes: Json;
   bucket_stats: Json;
@@ -59,6 +60,7 @@ export function buildDefaultBlindspotProfile(
     revisit_queue: [],
     mastered_queue: [],
     total_sequences: 0,
+    next_filler_cursor: 0,
     recent_served_fens: [],
     recent_served_modes: [],
     bucket_stats: buildDefaultBucketStats(),

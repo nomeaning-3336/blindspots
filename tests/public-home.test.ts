@@ -210,7 +210,7 @@ test("signed-in SPA restores an active session before requesting a cold candidat
   const source = readSource("components/blindspots-spa-prototype.tsx");
 
   const activeFetchIndex = source.indexOf('fetch("/api/train/active-session"');
-  const nextFetchIndex = source.indexOf('"/api/train/next-position?fillerSeed=spa-v1&fillerCursor=0"');
+  const nextFetchIndex = source.indexOf('"/api/train/next-position"');
 
   assert.ok(activeFetchIndex >= 0, "SPA must request active session state first");
   assert.ok(nextFetchIndex > activeFetchIndex, "SPA must request a cold candidate only after no active session exists");
@@ -219,6 +219,8 @@ test("signed-in SPA restores an active session before requesting a cold candidat
   assert.ok(source.includes("parseColdCandidateResponse"));
   assert.ok(source.includes("setBoardHistory(restoredBoard.history)"));
   assert.ok(source.includes("setBoardFen(candidate.fen)"));
+  assert.ok(!source.includes("fillerSeed=spa-v1"));
+  assert.ok(!source.includes("fillerCursor=0"));
 });
 
 test("backend-loaded training board remains read-only until move persistence wiring is implemented", () => {
@@ -308,7 +310,6 @@ test("next-position is a read-only unified cold selector route", () => {
   assert.ok(!source.includes("getNextActiveAppTrainingItem"), "route must not have a separate app-training branch");
   assert.ok(!source.includes("getNextActiveOrFillerTrainingItemForTraining"), "route must not query database filler rows");
   assert.ok(!source.includes("getNextReviewTrainingItemForTraining"), "route must not assemble review responses separately");
-  assert.ok(!source.includes("user_blindspot_profile"), "route must not load legacy profile queues");
   assert.ok(!source.includes("ensureTrainingQueuesHavePositions"), "route must not refill legacy queues");
   assert.ok(!source.includes("chooseServeMode"), "route must not use serve-mode selection");
   assert.ok(!source.includes("thompsonSample"), "route must not use bandit selection");
@@ -319,6 +320,21 @@ test("next-position is a read-only unified cold selector route", () => {
   assert.ok(!source.includes("cpLoss"), "route must not expose historical grading data");
 });
 
+test("next-position uses server-owned filler progression rather than client cursor input", () => {
+  const source = readSource("app/api/train/next-position/route.ts");
+
+  assert.ok(source.includes('const SPA_FILLER_SEED = "spa-v1";'));
+  assert.ok(source.includes("async function getNextFillerCursor(userId: string)"));
+  assert.ok(source.includes('.select("next_filler_cursor")'));
+  assert.ok(source.includes("const fillerCursor = await getNextFillerCursor(userId);"));
+  assert.ok(source.includes("seed: SPA_FILLER_SEED"));
+  assert.ok(source.includes("cursor: fillerCursor"));
+  assert.ok(source.includes("export async function GET()"));
+  assert.ok(!source.includes("request.url"));
+  assert.ok(!source.includes("searchParams"));
+  assert.ok(!source.includes("parseFillerCursor"));
+});
+
 test("next-position response type contains only cold candidate identifiers and display metadata", () => {
   const source = readSource("app/api/train/next-position/route.ts");
   const responseTypeMatch = source.match(/type NextPositionResponse = \{[\s\S]*?\};/);
@@ -326,12 +342,12 @@ test("next-position response type contains only cold candidate identifiers and d
   assert.ok(responseTypeMatch, "NextPositionResponse type should be defined");
   const responseTypeBody = responseTypeMatch[0];
 
-  assert.ok(responseTypeBody.includes("fen?: string;"));
-  assert.ok(responseTypeBody.includes('queueSource?: "review" | "active" | "filler";'));
-  assert.ok(responseTypeBody.includes('candidateType?: "personal" | "filler";'));
+  assert.ok(responseTypeBody.includes("fen: string;"));
+  assert.ok(responseTypeBody.includes('queueSource: "review" | "active" | "filler";'));
+  assert.ok(responseTypeBody.includes('candidateType: "personal" | "filler";'));
   assert.ok(responseTypeBody.includes("trainingItemId?: string;"));
   assert.ok(responseTypeBody.includes("fillerId?: string;"));
-  assert.ok(responseTypeBody.includes("fillerOrigin?: FillerOrigin;"));
+  assert.ok(responseTypeBody.includes('fillerOrigin?: "random_position" | "lichess_puzzle";'));
 
   assert.ok(!responseTypeBody.includes("previousFen"));
   assert.ok(!responseTypeBody.includes("playedMove"));

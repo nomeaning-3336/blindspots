@@ -1,43 +1,76 @@
 import { NextResponse } from "next/server";
 import { getOptionalAppUserId } from "@/lib/app-auth";
+import { getSupabaseAdminClient } from "@/lib/supabase/server";
+import { getDeterministicFillerCandidate } from "@/lib/training/filler-catalog";
 import { getNextColdPersonalTrainingCandidate } from "@/lib/training/cold-candidate-store";
-import {
-  getDeterministicFillerCandidate,
-  type FillerOrigin,
-} from "@/lib/training/filler-catalog";
 import { validatePlayableTrainingFen } from "@/lib/training/position-validity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const SPA_FILLER_SEED = "spa-v1";
+
 type NextPositionResponse = {
-  fen?: string;
-  queueSource?: "review" | "active" | "filler";
-  candidateType?: "personal" | "filler";
+  fen: string;
+  queueSource: "review" | "active" | "filler";
+  candidateType: "personal" | "filler";
   sourceType?: string;
   trainingItemId?: string;
-  fillerId?: string;
-  fillerOrigin?: FillerOrigin;
-  fillerCursor?: number;
-  selectedPhase?: string;
   tags?: string[];
   openingName?: string;
   eco?: string;
   reviewCount?: number;
-  error?: string;
-  debug?: Record<string, unknown>;
+  fillerId?: string;
+  fillerOrigin?: "random_position" | "lichess_puzzle";
+  fillerCursor?: number;
+  selectedPhase?: string;
 };
 
-export async function GET(request: Request) {
+async function getNextFillerCursor(userId: string): Promise<number> {
+  const supabase = getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from("user_blindspot_profile" as any)
+    .select("next_filler_cursor")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load filler progression: ${error.message}`);
+  }
+
+  if (!data) {
+    return 0;
+  }
+
+  const cursor = (data as { next_filler_cursor?: unknown }).next_filler_cursor;
+
+  return typeof cursor === "number" &&
+    Number.isSafeInteger(cursor) &&
+    cursor >= 0
+    ? cursor
+    : 0;
+}
+
+export async function GET() {
   const userId = await getOptionalAppUserId();
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const personalCandidate = await getNextColdPersonalTrainingCandidate(userId, new Date());
+  const personalCandidate = await getNextColdPersonalTrainingCandidate(userId);
 
   if (personalCandidate) {
+    const playable = validatePlayableTrainingFen(personalCandidate.fen);
+
+    if (!playable.ok) {
+      return NextResponse.json(
+        { error: "Selected personal training position is not playable." },
+        { status: 409 },
+      );
+    }
+
     const response: NextPositionResponse = {
       fen: personalCandidate.fen,
       queueSource: personalCandidate.queueSource,
@@ -50,31 +83,29 @@ export async function GET(request: Request) {
       reviewCount: personalCandidate.reviewCount,
     };
 
-    if (process.env.NODE_ENV !== "production") {
-      response.debug = {
-        selector: "personal",
-        queueSource: personalCandidate.queueSource,
-        sourceType: personalCandidate.sourceType,
-        trainingItemId: personalCandidate.trainingItemId,
-      };
-    }
-
     return NextResponse.json(response);
   }
 
-  const requestUrl = new URL(request.url);
-  const fillerSeed = normalizeFillerSeed(requestUrl.searchParams.get("fillerSeed"));
-  const fillerCursor = normalizeFillerCursor(requestUrl.searchParams.get("fillerCursor"));
+  const fillerCursor = await getNextFillerCursor(userId);
   const filler = await getDeterministicFillerCandidate({
     userId,
-    seed: fillerSeed,
+    seed: SPA_FILLER_SEED,
     cursor: fillerCursor,
   });
 
-  if (!filler || !validatePlayableTrainingFen(filler.fen).ok) {
+  if (!filler) {
     return NextResponse.json(
-      { error: "No playable training positions available." },
+      { error: "No training position is currently available." },
       { status: 404 },
+    );
+  }
+
+  const playable = validatePlayableTrainingFen(filler.fen);
+
+  if (!playable.ok) {
+    return NextResponse.json(
+      { error: "Selected filler training position is not playable." },
+      { status: 409 },
     );
   }
 
@@ -90,31 +121,13 @@ export async function GET(request: Request) {
   };
 
   if (process.env.NODE_ENV !== "production") {
-    response.debug = {
-      selector: "filler_catalog",
-      fillerId: filler.id,
-      fillerOrigin: filler.origin,
+    console.log("[next-position]", {
+      candidateType: response.candidateType,
+      queueSource: response.queueSource,
+      fillerOrigin: response.fillerOrigin,
       fillerCursor,
-      selectedPhase: filler.phase,
-    };
+    });
   }
 
   return NextResponse.json(response);
 }
-
-function normalizeFillerSeed(value: string | null): string {
-  const trimmed = value?.trim() ?? "";
-  return trimmed.length > 0 && trimmed.length <= 128 ? trimmed : "default";
-}
-
-function normalizeFillerCursor(value: string | null): number {
-  const parsed = Number(value);
-
-  if (!Number.isSafeInteger(parsed) || parsed < 0) {
-    return 0;
-  }
-
-  return Math.min(parsed, 1_000_000_000);
-}
-
-
