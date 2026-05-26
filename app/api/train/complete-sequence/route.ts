@@ -51,6 +51,121 @@ type CompleteSequencePayload = {
   reflectionNote?: unknown;
 };
 
+type StoredCompletedSessionResult = {
+  id: string;
+  eval_preservation_score: number | null;
+  position_evaluations: Json;
+  elo_before: number;
+  elo_after: number;
+  elo_delta: number;
+  k_factor: number;
+  opponent_elo: number;
+  expected_score: number;
+  actual_score: number;
+  training_outcome: "pass" | "acceptable" | "fail";
+  average_cp_loss: number;
+  max_single_cp_loss: number;
+};
+
+async function getStoredCompletedSessionResult(input: {
+  userId: string;
+  sessionId: unknown;
+}): Promise<StoredCompletedSessionResult | null> {
+  if (typeof input.sessionId !== "string" || input.sessionId.length === 0) {
+    return null;
+  }
+
+  const supabase = getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from("training_sessions" as any)
+    .select(
+      "id, eval_preservation_score, position_evaluations, elo_before, elo_after, elo_delta, k_factor, opponent_elo, expected_score, actual_score, training_outcome, average_cp_loss, max_single_cp_loss",
+    )
+    .eq("id", input.sessionId)
+    .eq("user_id", input.userId)
+    .not("completed_at", "is", null)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load completed training session: ${error.message}`);
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  const row = data as unknown as Record<string, unknown>;
+
+  if (
+    typeof row.id !== "string" ||
+    (row.eval_preservation_score !== null &&
+      typeof row.eval_preservation_score !== "number") ||
+    typeof row.elo_before !== "number" ||
+    typeof row.elo_after !== "number" ||
+    typeof row.elo_delta !== "number" ||
+    typeof row.k_factor !== "number" ||
+    typeof row.opponent_elo !== "number" ||
+    typeof row.expected_score !== "number" ||
+    typeof row.actual_score !== "number" ||
+    (row.training_outcome !== "pass" &&
+      row.training_outcome !== "acceptable" &&
+      row.training_outcome !== "fail") ||
+    typeof row.average_cp_loss !== "number" ||
+    typeof row.max_single_cp_loss !== "number"
+  ) {
+    throw new Error("Stored completed training session result is invalid.");
+  }
+
+  return {
+    id: row.id,
+    eval_preservation_score: row.eval_preservation_score as number | null,
+    position_evaluations: (row.position_evaluations ?? []) as Json,
+    elo_before: row.elo_before,
+    elo_after: row.elo_after,
+    elo_delta: row.elo_delta,
+    k_factor: row.k_factor,
+    opponent_elo: row.opponent_elo,
+    expected_score: row.expected_score,
+    actual_score: row.actual_score,
+    training_outcome: row.training_outcome,
+    average_cp_loss: row.average_cp_loss,
+    max_single_cp_loss: row.max_single_cp_loss,
+  };
+}
+
+function buildStoredCompletionResponse(result: StoredCompletedSessionResult) {
+  return NextResponse.json({
+    ok: true,
+    sessionId: result.id,
+    evalPreservationScore: result.eval_preservation_score,
+    moveScores: [],
+    positionEvaluations: result.position_evaluations,
+    elo: {
+      eloBefore: result.elo_before,
+      eloAfter: result.elo_after,
+      eloDelta: result.elo_delta,
+      kFactor: result.k_factor,
+      opponentElo: result.opponent_elo,
+      expectedScore: result.expected_score,
+      actualScore: result.actual_score,
+      rawDelta: 0,
+      clampedDelta: result.elo_delta,
+      skipped: result.eval_preservation_score === null,
+      ratingDeviationBefore: null,
+      ratingDeviationAfter: null,
+      humanAvgCpl: null,
+      engineAvgCpl: null,
+      cplDiff: null,
+      ratingMethod: "stored",
+    },
+    trainingOutcome: result.training_outcome,
+    averageCpLoss: result.average_cp_loss,
+    maxSingleCpLoss: result.max_single_cp_loss,
+    recoveredCompletion: true,
+  });
+}
+
 type MoveClassification = "brilliant" | "critical" | "best" | "excellent" | "good" | "okay" | "inaccuracy" | "mistake" | "blunder";
 
 type PositionEvaluation = {
@@ -127,6 +242,17 @@ export async function POST(request: Request) {
       sessionId: payload?.sessionId,
     });
   } catch (error) {
+    if (error instanceof ActiveSessionError && error.status === 404) {
+      const completedResult = await getStoredCompletedSessionResult({
+        userId,
+        sessionId: payload?.sessionId,
+      });
+
+      if (completedResult) {
+        return buildStoredCompletionResponse(completedResult);
+      }
+    }
+
     if (error instanceof ActiveSessionError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
@@ -285,15 +411,25 @@ export async function POST(request: Request) {
   );
 
   if (finalizationError) {
-    if (
-      finalizationError.message.includes("Training session is already completed.") ||
-      finalizationError.message.includes("Active training session changed before completion.")
-    ) {
+    if (finalizationError.message.includes("Training session is already completed.")) {
+      const completedResult = await getStoredCompletedSessionResult({
+        userId,
+        sessionId: activeSession.id,
+      });
+
+      if (completedResult) {
+        return buildStoredCompletionResponse(completedResult);
+      }
+
       return NextResponse.json(
-        {
-          error:
-            "The active sequence changed or was already completed. Reload the current session.",
-        },
+        { error: "The active sequence was already completed. Reload the current session." },
+        { status: 409 },
+      );
+    }
+
+    if (finalizationError.message.includes("Active training session changed before completion.")) {
+      return NextResponse.json(
+        { error: "The active sequence changed before completion. Reload the current session." },
         { status: 409 },
       );
     }
@@ -1390,5 +1526,3 @@ async function persistTrainingTourCheckpoint(input: {
     console.error("[training-tour-checkpoint] failed to persist checkpoint", error);
   }
 }
-
-

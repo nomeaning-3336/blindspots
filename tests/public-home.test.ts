@@ -501,6 +501,19 @@ test("complete-sequence completes only the explicitly identified persisted activ
   assert.ok(!source.includes('from("user_blindspot_profile")\n    .update({'));
 });
 
+test("complete-sequence safely returns a stored result when atomic finalization already succeeded", () => {
+  const source = readSource("app/api/train/complete-sequence/route.ts");
+
+  assert.ok(source.includes("type StoredCompletedSessionResult ="));
+  assert.ok(source.includes("async function getStoredCompletedSessionResult"));
+  assert.ok(source.includes("function buildStoredCompletionResponse"));
+  assert.ok(source.includes('.not("completed_at", "is", null)'));
+  assert.ok(source.includes("recoveredCompletion: true"));
+  assert.ok(source.includes("error instanceof ActiveSessionError && error.status === 404"));
+  assert.ok(source.includes('finalizationError.message.includes("Training session is already completed.")'));
+  assert.ok(source.includes("return buildStoredCompletionResponse(completedResult);"));
+});
+
 test("active-session restoration rejects malformed persisted sequence and identity state", () => {
   const source = readSource("lib/training/active-session-store.ts");
 
@@ -638,4 +651,3 @@ test("app-auth-routing: authenticated default route is root SPA", () => {
   assert.equal(routes.normalizeNextPath("/account"), "/");
   assert.equal(routes.normalizeNextPath("/analyze"), "/");
 });
-
