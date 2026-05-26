@@ -22,7 +22,6 @@ import {
   ActiveSessionError,
   getActiveTrainingSessionById,
 } from "@/lib/training/active-session-store";
-import { updateTrainingItemAfterAttempt } from "@/lib/training/training-item-store";
 import { mineMistakesFromSequence } from "@/lib/training/mistake-mining-persistence";
 import type { MineableMoveInput } from "@/lib/training/mistake-mining";
 import { buildDefaultBlindspotProfile } from "@/lib/training/default-profile";
@@ -219,9 +218,6 @@ export async function POST(request: Request) {
     : trainingOutcome;
   const reviewedMoveCpLoss = reviewedMoveScore?.cpLoss ?? null;
 
-  const selectedTrainingItemId = activeSession.selectedTrainingItemId;
-  const queueSource = activeSession.queueSource;
-
   const humanRatingMoves = buildHumanRatingMoves(sequenceEvaluation.positionEvaluations);
   const engineRatingMoves = humanRatingMoves.length >= 4
     ? await calculateEngineRatingMoves({
@@ -261,80 +257,97 @@ export async function POST(request: Request) {
   const actualScore = eloUpdate?.actualScore ?? 0;
 
   const supabase = getSupabaseAdminClient();
-  const sessionUpdateStartedAt = Date.now();
-  const { data: session, error: sessionError } = await supabase
-    .from("training_sessions")
-    .update({
-      starting_fen: startingFen,
-      moves_played: moves as Json,
-      eval_preservation_score: evalPreservationScore,
-      opponent_mode: "standard",
-      sequence_length: sequenceLength,
-      time_pressure_mode: "none",
-      reflection_note: reflectionNote,
-      completed_at: completedAt,
-      elo_before: eloBefore,
-      elo_after: eloAfter,
-      elo_delta: eloDelta,
-      k_factor: kFactor,
-      opponent_elo: opponentElo,
-      expected_score: expectedScore,
-      actual_score: actualScore,
-      position_evaluations: sequenceEvaluation.positionEvaluations as unknown as Json,
-      selected_training_item_id: selectedTrainingItemId,
-      queue_source: queueSource,
-      training_outcome: trainingOutcome,
-      average_cp_loss: averageCpLoss,
-      max_single_cp_loss: maxSingleCpLoss,
-    })
-    .eq("id", activeSession.id)
-    .eq("user_id", userId)
-    .is("completed_at", null)
-    .select("id")
-    .single();
+  const finalizationStartedAt = Date.now();
+  const { data: finalizedSessionId, error: finalizationError } = await supabase.rpc(
+    "finalize_training_session_atomic",
+    {
+      p_user_id: userId,
+      p_session_id: activeSession.id,
+      p_evaluated_moves: moves as unknown as Json,
+      p_eval_preservation_score: evalPreservationScore,
+      p_sequence_length: sequenceLength,
+      p_reflection_note: reflectionNote,
+      p_completed_at: completedAt,
+      p_elo_before: eloBefore,
+      p_elo_after: eloAfter,
+      p_elo_delta: eloDelta,
+      p_k_factor: kFactor,
+      p_opponent_elo: opponentElo,
+      p_expected_score: expectedScore,
+      p_actual_score: actualScore,
+      p_position_evaluations: sequenceEvaluation.positionEvaluations as unknown as Json,
+      p_training_outcome: trainingOutcome,
+      p_review_outcome: reviewOutcome,
+      p_average_cp_loss: averageCpLoss,
+      p_max_single_cp_loss: maxSingleCpLoss,
+      p_rating_deviation_after: eloUpdate?.ratingDeviationAfter ?? profileRatingDeviation,
+    },
+  );
 
-  if (sessionError) {
-    throw new Error(`Failed to complete training session: ${sessionError.message}`);
+  if (finalizationError) {
+    if (
+      finalizationError.message.includes("Training session is already completed.") ||
+      finalizationError.message.includes("Active training session changed before completion.")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "The active sequence changed or was already completed. Reload the current session.",
+        },
+        { status: 409 },
+      );
+    }
+
+    throw new Error(`Failed to finalize training session: ${finalizationError.message}`);
   }
-  const sessionUpdateMs = Date.now() - sessionUpdateStartedAt;
+
+  if (typeof finalizedSessionId !== "string") {
+    throw new Error("Failed to finalize training session: no session ID returned.");
+  }
+
+  const finalizationMs = Date.now() - finalizationStartedAt;
 
   // Fire-and-forget mining of app-native active mistakes — never blocks response.
   const initialPreviousFen: string | null = null;
   const initialPlayedMove: string | null = null;
 
   if (shouldPersistTrainingTourCheckpoint(payload?.onboardingCheckpoint)) {
-    await persistTrainingTourCheckpoint({
-      userId,
-      sessionId: session.id,
-      startingFen,
-      moves,
-      sequenceLength,
-      previousFen: initialPreviousFen,
-      playedMove: initialPlayedMove,
-      moveScores: sequenceEvaluation.moveScores,
-      positionEvaluations: sequenceEvaluation.positionEvaluations,
-      elo: {
-        eloBefore,
-        eloAfter,
-        eloDelta,
-        kFactor,
-        opponentElo,
-        expectedScore,
-        actualScore,
-        rawDelta: eloUpdate?.rawDelta ?? 0,
-        clampedDelta: eloUpdate?.clampedDelta ?? 0,
-        skipped: evalPreservationScore === null,
-        ratingDeviationBefore: eloUpdate?.ratingDeviationBefore ?? profileRatingDeviation,
-        ratingDeviationAfter: eloUpdate?.ratingDeviationAfter ?? profileRatingDeviation,
-        humanAvgCpl: eloUpdate?.humanAvgCpl ?? null,
-        engineAvgCpl: eloUpdate?.engineAvgCpl ?? null,
-        cplDiff: eloUpdate?.cplDiff ?? null,
-        ratingMethod: eloUpdate?.ratingMethod ?? "legacy",
-      },
-      trainingOutcome,
-      averageCpLoss,
-      maxSingleCpLoss,
-    });
+    try {
+      await persistTrainingTourCheckpoint({
+        userId,
+        sessionId: finalizedSessionId,
+        startingFen,
+        moves,
+        sequenceLength,
+        previousFen: initialPreviousFen,
+        playedMove: initialPlayedMove,
+        moveScores: sequenceEvaluation.moveScores,
+        positionEvaluations: sequenceEvaluation.positionEvaluations,
+        elo: {
+          eloBefore,
+          eloAfter,
+          eloDelta,
+          kFactor,
+          opponentElo,
+          expectedScore,
+          actualScore,
+          rawDelta: eloUpdate?.rawDelta ?? 0,
+          clampedDelta: eloUpdate?.clampedDelta ?? 0,
+          skipped: evalPreservationScore === null,
+          ratingDeviationBefore: eloUpdate?.ratingDeviationBefore ?? profileRatingDeviation,
+          ratingDeviationAfter: eloUpdate?.ratingDeviationAfter ?? profileRatingDeviation,
+          humanAvgCpl: eloUpdate?.humanAvgCpl ?? null,
+          engineAvgCpl: eloUpdate?.engineAvgCpl ?? null,
+          cplDiff: eloUpdate?.cplDiff ?? null,
+          ratingMethod: eloUpdate?.ratingMethod ?? "legacy",
+        },
+        trainingOutcome,
+        averageCpLoss,
+        maxSingleCpLoss,
+      });
+    } catch (checkpointError) {
+      console.error("[complete-sequence] onboarding checkpoint persistence failed", checkpointError);
+    }
   }
 
   const minedMistakesInput: MineableMoveInput[] = sequenceEvaluation.positionEvaluations.map((pe, index) => ({
@@ -362,48 +375,6 @@ export async function POST(request: Request) {
     console.error("[complete-sequence] attempt persistence failed", err);
   });
 
-  if (selectedTrainingItemId) {
-    try {
-      const srsUpdateStartedAt = Date.now();
-
-      await updateTrainingItemAfterAttempt({
-        userId,
-        trainingItemId: selectedTrainingItemId,
-        outcome: reviewOutcome,
-        averageCpLoss,
-        maxSingleCpLoss,
-      });
-
-      if (process.env.NODE_ENV !== "production") {
-        console.log("[complete-sequence:srs]", {
-          srsUpdateMs: Date.now() - srsUpdateStartedAt,
-          queueSource,
-        });
-      }
-    } catch (mistakeUpdateError) {
-      console.error("[complete-sequence] SRS update failed", mistakeUpdateError);
-      return NextResponse.json(
-        { error: "Failed to update training item state." },
-        { status: 500 },
-      );
-    }
-  }
-
-  const profileUpdateStartedAt = Date.now();
-  const { error: profileError } = await supabase
-    .from("user_blindspot_profile")
-    .update({
-      blindspots_elo: eloAfter,
-      rating_deviation: eloUpdate?.ratingDeviationAfter ?? profileRatingDeviation,
-      total_sequences: profile.total_sequences + 1,
-      last_session_at: completedAt,
-    })
-    .eq("user_id", userId);
-
-  if (profileError) {
-    throw new Error(`Failed to update Blindspots Elo: ${profileError.message}`);
-  }
-
   if (process.env.NODE_ENV !== "production") {
     console.log("[complete-sequence:done]", {
       path: "active-session",
@@ -412,15 +383,14 @@ export async function POST(request: Request) {
       precomputedInputCount,
       profileMs,
       evaluationMs,
-      sessionUpdateMs,
-      profileUpdateMs: Date.now() - profileUpdateStartedAt,
+      finalizationMs,
       totalMs: Date.now() - requestStartedAt,
     });
   }
 
   return NextResponse.json({
     ok: true,
-    sessionId: session.id,
+    sessionId: finalizedSessionId,
     evalPreservationScore,
     moveScores: sequenceEvaluation.moveScores,
     positionEvaluations: sequenceEvaluation.positionEvaluations,

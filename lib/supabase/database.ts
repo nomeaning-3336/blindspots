@@ -534,7 +534,33 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      finalize_training_session_atomic: {
+        Args: {
+          p_user_id: string;
+          p_session_id: string;
+          p_evaluated_moves: Json;
+          p_eval_preservation_score: number | null;
+          p_sequence_length: number;
+          p_reflection_note: string | null;
+          p_completed_at: string;
+          p_elo_before: number;
+          p_elo_after: number;
+          p_elo_delta: number;
+          p_k_factor: number;
+          p_opponent_elo: number;
+          p_expected_score: number;
+          p_actual_score: number;
+          p_position_evaluations: Json;
+          p_training_outcome: "pass" | "acceptable" | "fail";
+          p_review_outcome: "pass" | "acceptable" | "fail";
+          p_average_cp_loss: number;
+          p_max_single_cp_loss: number;
+          p_rating_deviation_after: number;
+        };
+        Returns: string;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

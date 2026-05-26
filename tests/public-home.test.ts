@@ -362,14 +362,14 @@ test("complete-sequence completes only the explicitly identified persisted activ
   );
   assert.ok(source.includes("const startingFen = activeSession.startingFen;"));
   assert.ok(source.includes("const moves = activeSession.moves;"));
-  assert.ok(source.includes("const selectedTrainingItemId = activeSession.selectedTrainingItemId;"));
-  assert.ok(source.includes("const queueSource = activeSession.queueSource;"));
   assert.ok(source.includes("isRecord(activeSession.candidateMetadata)"));
-  assert.ok(source.includes('.eq("id", activeSession.id)'));
-  assert.ok(source.includes(".update({"));
-  assert.ok(source.includes("completed_at: completedAt"));
-  assert.ok(source.includes("sessionUpdateMs"));
+  assert.ok(source.includes('"finalize_training_session_atomic"'));
+  assert.ok(source.includes("p_session_id: activeSession.id"));
+  assert.ok(source.includes("p_evaluated_moves: moves as unknown as Json"));
+  assert.ok(source.includes("p_review_outcome: reviewOutcome"));
+  assert.ok(source.includes("finalizationMs"));
   assert.ok(source.includes('path: "active-session"'));
+  assert.ok(source.includes("onboarding checkpoint persistence failed"));
   assert.ok(!source.includes("getActiveTrainingSession(userId)"));
   assert.ok(!source.includes("payload?.startingFen"));
   assert.ok(!source.includes("payload?.moves"));
@@ -383,6 +383,8 @@ test("complete-sequence completes only the explicitly identified persisted activ
   assert.ok(!source.includes("payload?.precomputedEvaluations"));
   assert.ok(!source.includes(".insert({\n      user_id: userId"));
   assert.ok(!source.includes("updateActiveTrainingItemAfterAttempt"));
+  assert.ok(!source.includes('from("training_sessions")\n    .update({'));
+  assert.ok(!source.includes('from("user_blindspot_profile")\n    .update({'));
 });
 
 test("active-session restoration rejects malformed persisted sequence and identity state", () => {
