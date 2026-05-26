@@ -60,6 +60,18 @@ export type RestoredSpaBoardState = {
   lastMove: { from: string; to: string } | null;
 };
 
+export type SpaCompletionResult = {
+  sessionId: string;
+  trainingOutcome: "pass" | "acceptable" | "fail";
+  averageCpLoss: number;
+  maxSingleCpLoss: number;
+  elo: {
+    eloBefore: number;
+    eloAfter: number;
+    eloDelta: number;
+  };
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -248,6 +260,73 @@ export function parseActiveSessionResponse(value: unknown): SpaActiveSession | n
     fillerId,
     fillerOrigin,
     startedAt,
+  };
+}
+
+export function parseRequiredActiveSessionResponse(value: unknown): SpaActiveSession {
+  const session = parseActiveSessionResponse(value);
+
+  if (!session) {
+    throw new Error("Move persistence did not return an active session.");
+  }
+
+  return session;
+}
+
+export function parseCompleteSequenceResponse(value: unknown): SpaCompletionResult {
+  if (!isRecord(value) || value.ok !== true) {
+    throw new Error("Sequence completion response is invalid.");
+  }
+
+  const sessionId = readNonEmptyString(value.sessionId);
+  const trainingOutcome =
+    value.trainingOutcome === "pass" ||
+    value.trainingOutcome === "acceptable" ||
+    value.trainingOutcome === "fail"
+      ? value.trainingOutcome
+      : null;
+
+  const averageCpLoss =
+    typeof value.averageCpLoss === "number" && Number.isFinite(value.averageCpLoss)
+      ? value.averageCpLoss
+      : null;
+  const maxSingleCpLoss =
+    typeof value.maxSingleCpLoss === "number" && Number.isFinite(value.maxSingleCpLoss)
+      ? value.maxSingleCpLoss
+      : null;
+  const elo = isRecord(value.elo) ? value.elo : null;
+
+  if (!sessionId || !trainingOutcome || averageCpLoss === null || maxSingleCpLoss === null || !elo) {
+    throw new Error("Sequence completion response is invalid.");
+  }
+
+  const eloBefore =
+    typeof elo.eloBefore === "number" && Number.isFinite(elo.eloBefore)
+      ? elo.eloBefore
+      : null;
+  const eloAfter =
+    typeof elo.eloAfter === "number" && Number.isFinite(elo.eloAfter)
+      ? elo.eloAfter
+      : null;
+  const eloDelta =
+    typeof elo.eloDelta === "number" && Number.isFinite(elo.eloDelta)
+      ? elo.eloDelta
+      : null;
+
+  if (eloBefore === null || eloAfter === null || eloDelta === null) {
+    throw new Error("Sequence completion response is invalid.");
+  }
+
+  return {
+    sessionId,
+    trainingOutcome,
+    averageCpLoss,
+    maxSingleCpLoss,
+    elo: {
+      eloBefore,
+      eloAfter,
+      eloDelta,
+    },
   };
 }
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildRestoredBoardState,
+  parseCompleteSequenceResponse,
   parseActiveSessionResponse,
   parseColdCandidateResponse,
 } from "../lib/training/spa-training-hydration.ts";
@@ -92,4 +93,29 @@ test("SPA rejects active-session identity mismatches", () => {
       }),
     /Active-session candidate identity is invalid/,
   );
+});
+
+test("SPA parses the real persisted sequence completion result", () => {
+  const result = parseCompleteSequenceResponse({
+    ok: true,
+    sessionId: "session-1",
+    trainingOutcome: "acceptable",
+    averageCpLoss: 23,
+    maxSingleCpLoss: 41,
+    elo: {
+      eloBefore: 1200,
+      eloAfter: 1203,
+      eloDelta: 3,
+    },
+  });
+
+  assert.equal(result.sessionId, "session-1");
+  assert.equal(result.trainingOutcome, "acceptable");
+  assert.equal(result.averageCpLoss, 23);
+  assert.equal(result.maxSingleCpLoss, 41);
+  assert.deepEqual(result.elo, {
+    eloBefore: 1200,
+    eloAfter: 1203,
+    eloDelta: 3,
+  });
 });

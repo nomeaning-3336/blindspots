@@ -5,12 +5,12 @@ import test from "node:test";
 
 function readMigration(): string {
   return readFileSync(
-    resolve(
-      process.cwd(),
-      "supabase",
-      "migrations",
-      "20260526170000_track_server_owned_filler_cursor.sql",
-    ),
+      resolve(
+        process.cwd(),
+        "supabase",
+        "migrations",
+        "20260526152134_track_server_owned_filler_cursor.sql",
+      ),
     "utf8",
   );
 }

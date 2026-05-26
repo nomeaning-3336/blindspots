@@ -9,10 +9,13 @@ import { AnalysisBoard, type BoardMove } from "@/components/chess/analysis-board
 import type { AppTheme } from "@/lib/app-theme";
 import {
   buildRestoredBoardState,
+  parseCompleteSequenceResponse,
   parseActiveSessionResponse,
   parseColdCandidateResponse,
+  parseRequiredActiveSessionResponse,
   type SpaActiveSession,
   type SpaBoardHistoryEntry,
+  type SpaCompletionResult,
   type SpaColdCandidate,
 } from "@/lib/training/spa-training-hydration";
 
@@ -20,6 +23,7 @@ type Verdict = "best" | "inaccuracy" | "blunder" | "brilliant" | null;
 type BoardHistoryEntry = SpaBoardHistoryEntry;
 type SplashPhase = "blank" | "branded" | "hidden";
 type TrainingLoadState = "loading" | "ready" | "error";
+type TrainingActionState = "idle" | "saving-move" | "finishing" | "loading-next";
 
 const SPLASH_BRAND_DELAY_MS = 250;
 const SPLASH_COMPLETE_DELAY_MS = 1250;
@@ -105,6 +109,9 @@ export function BlindspotsSpaPrototype({
   const [trainingLoadError, setTrainingLoadError] = useState<string | null>(null);
   const [coldCandidate, setColdCandidate] = useState<SpaColdCandidate | null>(null);
   const [activeSession, setActiveSession] = useState<SpaActiveSession | null>(null);
+  const [completionResult, setCompletionResult] = useState<SpaCompletionResult | null>(null);
+  const [trainingActionState, setTrainingActionState] = useState<TrainingActionState>("idle");
+  const [trainingActionError, setTrainingActionError] = useState<string | null>(null);
   const [queueIdx, setQueueIdx] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [committed, setCommitted] = useState<{ from: string; to: string } | null>(null);
@@ -137,6 +144,51 @@ export function BlindspotsSpaPrototype({
     };
   }, []);
 
+  function applyColdCandidate(candidate: SpaColdCandidate) {
+    setActiveSession(null);
+    setColdCandidate(candidate);
+    setCompletionResult(null);
+    setBoardFen(candidate.fen);
+    setBoardHistory([{ fen: candidate.fen, lastMove: null }]);
+    setBoardHistoryIndex(0);
+    setCommitted(null);
+    setSelected(null);
+    setVerdict(null);
+    setInSession(false);
+  }
+
+  function applyPersistedSession(session: SpaActiveSession) {
+    const restoredBoard = buildRestoredBoardState(session);
+
+    setActiveSession(session);
+    setColdCandidate(null);
+    setCompletionResult(null);
+    setBoardFen(restoredBoard.fen);
+    setBoardHistory(restoredBoard.history);
+    setBoardHistoryIndex(restoredBoard.historyIndex);
+    setCommitted(restoredBoard.lastMove);
+    setSelected(null);
+    setVerdict(null);
+    setInSession(true);
+
+    return restoredBoard;
+  }
+
+  function readApiError(value: unknown, fallback: string): string {
+    if (
+      value !== null &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      "error" in value &&
+      typeof value.error === "string" &&
+      value.error.length > 0
+    ) {
+      return value.error;
+    }
+
+    return fallback;
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -157,19 +209,9 @@ export function BlindspotsSpaPrototype({
         const restoredSession = parseActiveSessionResponse(await activeResponse.json());
 
         if (restoredSession) {
-          const restoredBoard = buildRestoredBoardState(restoredSession);
-
           if (cancelled) return;
 
-          setActiveSession(restoredSession);
-          setColdCandidate(null);
-          setBoardFen(restoredBoard.fen);
-          setBoardHistory(restoredBoard.history);
-          setBoardHistoryIndex(restoredBoard.historyIndex);
-          setCommitted(restoredBoard.lastMove);
-          setSelected(null);
-          setVerdict(null);
-          setInSession(true);
+          applyPersistedSession(restoredSession);
           setTrainingLoadState("ready");
           return;
         }
@@ -190,21 +232,16 @@ export function BlindspotsSpaPrototype({
 
         if (cancelled) return;
 
-        setActiveSession(null);
-        setColdCandidate(candidate);
-        setBoardFen(candidate.fen);
-        setBoardHistory([{ fen: candidate.fen, lastMove: null }]);
-        setBoardHistoryIndex(0);
-        setCommitted(null);
-        setSelected(null);
-        setVerdict(null);
-        setInSession(false);
+        applyColdCandidate(candidate);
         setTrainingLoadState("ready");
       } catch (error) {
         if (cancelled) return;
 
         setActiveSession(null);
         setColdCandidate(null);
+        setCompletionResult(null);
+        setTrainingActionState("idle");
+        setTrainingActionError(null);
         setBoardFen(EMPTY_BOARD_FEN);
         setBoardHistory([{ fen: EMPTY_BOARD_FEN, lastMove: null }]);
         setBoardHistoryIndex(0);
@@ -231,7 +268,37 @@ export function BlindspotsSpaPrototype({
   const showSplash = splashPhase !== "hidden" || trainingLoadState === "loading";
   const visibleSplashPhase: Exclude<SplashPhase, "hidden"> =
     splashPhase === "blank" ? "blank" : "branded";
-  const trainingBoardInteractive = false;
+  const isLatestBoardState = boardHistoryIndex === boardHistory.length - 1;
+
+  let learnerSide: "w" | "b" | null = null;
+  let currentTurn: "w" | "b" | null = null;
+
+  try {
+    const startingFen = activeSession?.startingFen ?? coldCandidate?.fen ?? null;
+
+    learnerSide = startingFen ? new Chess(startingFen).turn() : null;
+    currentTurn = new Chess(boardFen).turn();
+  } catch {
+    learnerSide = null;
+    currentTurn = null;
+  }
+
+  const manualOpponentTurn =
+    activeSession !== null &&
+    completionResult === null &&
+    learnerSide !== null &&
+    currentTurn !== null &&
+    currentTurn !== learnerSide;
+
+  const trainingBoardInteractive =
+    trainingLoadState === "ready" &&
+    trainingActionState === "idle" &&
+    completionResult === null &&
+    isLatestBoardState &&
+    (activeSession !== null || coldCandidate !== null);
+
+  const canNavigateHistory =
+    trainingActionState === "idle" && boardHistory.length > 1;
   const lastMove = committed ? [committed.from, committed.to] : [];
   const correct = committed && (verdict === "best" || verdict === "brilliant") ? [committed.to] : [];
   const incorrect = committed && verdict === "blunder" ? [committed.to] : [];
@@ -262,25 +329,143 @@ export function BlindspotsSpaPrototype({
     }
   }
 
-  function handleBoardMove(move: BoardMove) {
+  async function completePersistedSequence(session: SpaActiveSession) {
+    setTrainingActionState("finishing");
+    setTrainingActionError(null);
+
+    try {
+      const response = await fetch("/api/train/complete-sequence", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionId: session.id,
+        }),
+      });
+
+      const responseBody = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          readApiError(responseBody, "Failed to complete the current sequence."),
+        );
+      }
+
+      const result = parseCompleteSequenceResponse(responseBody);
+
+      setCompletionResult(result);
+      setSelected(null);
+      setTrainingActionState("idle");
+    } catch (error) {
+      setTrainingActionError(
+        error instanceof Error ? error.message : "Failed to complete the current sequence.",
+      );
+      setTrainingActionState("idle");
+    }
+  }
+
+  async function handleBoardMove(move: BoardMove) {
+    if (!trainingBoardInteractive) return;
+
+    let uci = "";
+    let localNextFen = "";
+
     try {
       const chess = new Chess(boardFen);
-      const played = chess.move({ from: move.from, to: move.to, promotion: move.uci?.[4] ?? "q" });
-      if (played) {
-        const nextFen = chess.fen();
-        setBoardFen(nextFen);
-        setBoardHistory((history) => [
-          ...history.slice(0, boardHistoryIndex + 1),
-          { fen: nextFen, lastMove: { from: move.from, to: move.to } },
-        ]);
-        setBoardHistoryIndex((index) => index + 1);
-      }
+      const played = chess.move({
+        from: move.from,
+        to: move.to,
+        promotion: move.uci?.[4] ?? "q",
+      });
+
+      if (!played) return;
+
+      uci = `${played.from}${played.to}${played.promotion ?? ""}`;
+      localNextFen = chess.fen();
     } catch {
       return;
     }
-    setCommitted({ from: move.from, to: move.to });
+
+    setTrainingActionState("saving-move");
+    setTrainingActionError(null);
     setSelected(null);
-    setInSession(true);
+
+    try {
+      let response: Response;
+
+      if (activeSession) {
+        response = await fetch("/api/train/active-session", {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            sessionId: activeSession.id,
+            moveUcis: [
+              ...activeSession.moves.map((storedMove) => storedMove.uci),
+              uci,
+            ],
+          }),
+        });
+      } else {
+        if (!coldCandidate) {
+          throw new Error("No loaded training position is available.");
+        }
+
+        response = await fetch("/api/train/active-session", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(
+            coldCandidate.candidateType === "personal"
+              ? {
+                  candidateType: "personal",
+                  queueSource: coldCandidate.queueSource,
+                  trainingItemId: coldCandidate.trainingItemId,
+                  firstMoveUci: uci,
+                }
+              : {
+                  candidateType: "filler",
+                  queueSource: "filler",
+                  fillerId: coldCandidate.fillerId,
+                  fillerOrigin: coldCandidate.fillerOrigin,
+                  firstMoveUci: uci,
+                },
+          ),
+        });
+      }
+
+      const responseBody = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          readApiError(responseBody, "Failed to save the played move."),
+        );
+      }
+
+      const persistedSession = parseRequiredActiveSessionResponse(responseBody);
+      const restoredBoard = applyPersistedSession(persistedSession);
+
+      if (restoredBoard.fen !== localNextFen) {
+        throw new Error("Saved training state does not match the played move.");
+      }
+
+      const latestBoard = new Chess(restoredBoard.fen);
+
+      if (latestBoard.isGameOver()) {
+        await completePersistedSequence(persistedSession);
+        return;
+      }
+
+      setTrainingActionState("idle");
+    } catch (error) {
+      setTrainingActionError(
+        error instanceof Error ? error.message : "Failed to save the played move.",
+      );
+      setTrainingActionState("idle");
+    }
   }
 
   function resetBoardHistory(fen: string) {
@@ -300,9 +485,39 @@ export function BlindspotsSpaPrototype({
     if (boardHistory.length > 1) setInSession(true);
   }
 
+  async function loadNextSequence() {
+    setTrainingActionState("loading-next");
+    setTrainingActionError(null);
+
+    try {
+      const response = await fetch("/api/train/next-position", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      const responseBody = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          readApiError(responseBody, "Failed to load the next training position."),
+        );
+      }
+
+      const candidate = parseColdCandidateResponse(responseBody);
+
+      applyColdCandidate(candidate);
+      setTrainingActionState("idle");
+    } catch (error) {
+      setTrainingActionError(
+        error instanceof Error ? error.message : "Failed to load the next training position.",
+      );
+      setTrainingActionState("idle");
+    }
+  }
+
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (!trainingBoardInteractive) return;
+      if (!canNavigateHistory) return;
 
       const target = event.target as HTMLElement | null;
       const tagName = target?.tagName.toLowerCase();
@@ -326,7 +541,7 @@ export function BlindspotsSpaPrototype({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [boardHistory, boardHistoryIndex, trainingBoardInteractive]);
+  }, [boardHistory, boardHistoryIndex, canNavigateHistory]);
 
   function finishSequence() {
     if (!committed) return;
@@ -374,7 +589,11 @@ export function BlindspotsSpaPrototype({
       <div className="bs-kit-workspace">
         <div className="bs-kit-board-pane">
           <div className="bs-kit-board-stack">
-            <PlayerStrip side={flipped ? "white" : "black"} name="Opponent" />
+            <PlayerStrip
+              side={flipped ? "white" : "black"}
+              name="Opponent"
+              turn={manualOpponentTurn}
+            />
             <div className="bs-kit-board-wrap">
               <AnalysisBoard
                 fen={boardFen}
@@ -391,9 +610,12 @@ export function BlindspotsSpaPrototype({
                   ...correct.map((square) => ({ square, color: "rgba(111, 178, 74, 0.45)" })),
                   ...incorrect.map((square) => ({ square, color: "rgba(196, 59, 48, 0.42)" })),
                 ]}
-                disabled={true}
-                onMove={handleBoardMove}
+                disabled={!trainingBoardInteractive}
+                onMove={(move) => {
+                  void handleBoardMove(move);
+                }}
                 onSquareClick={(square) => {
+                  if (!trainingBoardInteractive) return;
                   try {
                     const chess = new Chess(boardFen);
                     const piece = chess.get(square as Square);
@@ -413,20 +635,24 @@ export function BlindspotsSpaPrototype({
                   } catch {
                     setSelected(null);
                   }
-                }}
+                  }}
                 className="bs-kit-analysis-board"
               />
             </div>
-            <PlayerStrip side={flipped ? "black" : "white"} name="You" turn={!verdict} />
+            <PlayerStrip
+              side={flipped ? "black" : "white"}
+              name="You"
+              turn={!completionResult && !manualOpponentTurn}
+            />
             <div className="bs-kit-board-actions">
               <div className="l">
-                <button className="bs-kit-btn ghost sm" onClick={() => setFlipped((value) => !value)} disabled={true}>
+                <button className="bs-kit-btn ghost sm" onClick={() => setFlipped((value) => !value)}>
                   <FlipIcon /> Flip
                 </button>
                 <button
                   className="bs-kit-btn ghost sm"
                   onClick={() => stepBoard(-1)}
-                  disabled={true}
+                  disabled={!canNavigateHistory || boardHistoryIndex === 0}
                   aria-label="Step back"
                 >
                   <StepBackIcon /> Back
@@ -434,7 +660,7 @@ export function BlindspotsSpaPrototype({
                 <button
                   className="bs-kit-btn ghost sm"
                   onClick={() => stepBoard(1)}
-                  disabled={true}
+                  disabled={!canNavigateHistory || boardHistoryIndex === boardHistory.length - 1}
                   aria-label="Step forward"
                 >
                   <StepForwardIcon /> Forward
@@ -449,6 +675,28 @@ export function BlindspotsSpaPrototype({
                     Retry load
                   </button>
                 ) : null}
+                {activeSession && !completionResult ? (
+                  <button
+                    className="bs-kit-btn ghost sm"
+                    onClick={() => {
+                      void completePersistedSequence(activeSession);
+                    }}
+                    disabled={trainingActionState !== "idle" || !isLatestBoardState}
+                  >
+                    <CheckIcon /> Finish sequence
+                  </button>
+                ) : null}
+                {completionResult ? (
+                  <button
+                    className="bs-kit-btn ghost sm"
+                    onClick={() => {
+                      void loadNextSequence();
+                    }}
+                    disabled={trainingActionState !== "idle"}
+                  >
+                    <SkipIcon /> Next sequence
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>
@@ -458,9 +706,16 @@ export function BlindspotsSpaPrototype({
           <TrainingLoadPanel
             loadState={trainingLoadState}
             error={trainingLoadError}
+            actionError={trainingActionError}
+            actionState={trainingActionState}
             activeSession={activeSession}
             candidate={coldCandidate}
+            completionResult={completionResult}
+            manualOpponentTurn={manualOpponentTurn}
           />
+          {completionResult ? (
+            <TrainingCompletionPanel result={completionResult} />
+          ) : null}
           <TodayPanel
             hideStats={inSession}
             hideRating={stage === "playing"}
@@ -468,9 +723,6 @@ export function BlindspotsSpaPrototype({
             eloAfter={stage === "review" ? current.eloAfter : null}
             eloChange={stage === "review" ? current.eloChange : null}
           />
-          {stage === "review" ? <SequencePanel history={current.history} /> : null}
-          {stage === "review" ? <EngineLinesPanel lines={current.engineLines} /> : null}
-          {verdict ? <FeedbackCard verdict={verdict} move={moveLabel} onNext={nextPosition} /> : null}
         </aside>
       </div>
     </div>
@@ -551,13 +803,21 @@ function PlayerStrip({ side, name, turn = false }: { side: "white" | "black"; na
 function TrainingLoadPanel({
   loadState,
   error,
+  actionError,
+  actionState,
   activeSession,
   candidate,
+  completionResult,
+  manualOpponentTurn,
 }: {
   loadState: TrainingLoadState;
   error: string | null;
+  actionError: string | null;
+  actionState: TrainingActionState;
   activeSession: SpaActiveSession | null;
   candidate: SpaColdCandidate | null;
+  completionResult: SpaCompletionResult | null;
+  manualOpponentTurn: boolean;
 }) {
   if (loadState === "loading") {
     return null;
@@ -567,22 +827,67 @@ function TrainingLoadPanel({
     return (
       <div className="bs-kit-panel" data-testid="spa-training-load-error">
         <div className="bs-kit-panel-title">Training unavailable</div>
-        <div className="bs-kit-muted-line">{error ?? "Failed to load training state."}</div>
+      <div className="bs-kit-muted-line">{error ?? "Failed to load training state."}</div>
       </div>
     );
   }
 
+  const title = completionResult
+    ? "Sequence completed"
+    : activeSession
+      ? "Sequence in progress"
+      : "Position ready";
+
+  const message = completionResult
+    ? "Your sequence was saved and evaluated."
+    : actionState === "saving-move"
+      ? "Saving move..."
+      : actionState === "finishing"
+        ? "Evaluating and completing sequence..."
+        : actionState === "loading-next"
+          ? "Loading next sequence..."
+          : manualOpponentTurn
+            ? "Temporary mode: play the opponent's reply manually."
+            : activeSession
+              ? "Your turn. Every legal move is saved."
+              : candidate?.queueSource === "filler"
+                ? "A fallback position is ready. Your first legal move starts a saved sequence."
+                : "A personal position is ready. Your first legal move starts a saved sequence.";
+
   return (
     <div className="bs-kit-panel" data-testid="spa-training-read-state">
-      <div className="bs-kit-panel-title">
-        {activeSession ? "Sequence restored" : "Position ready"}
+      <div className="bs-kit-panel-title">{title}</div>
+      <div className="bs-kit-muted-line">{message}</div>
+      {actionError ? (
+        <div className="bs-kit-muted-line" data-testid="spa-training-action-error">
+          {actionError}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TrainingCompletionPanel({ result }: { result: SpaCompletionResult }) {
+  const outcomeLabel =
+    result.trainingOutcome === "pass"
+      ? "Passed"
+      : result.trainingOutcome === "acceptable"
+        ? "Acceptable"
+        : "Failed";
+
+  return (
+    <div className="bs-kit-panel" data-testid="spa-training-completion-result">
+      <div className="bs-kit-panel-title">Result</div>
+      <div className="bs-kit-due-row">
+        <span>{outcomeLabel}</span>
+        <span>{result.averageCpLoss} average CPL</span>
       </div>
       <div className="bs-kit-muted-line">
-        {activeSession
-          ? "Your in-progress sequence was restored. Move saving will be connected next."
-          : candidate?.queueSource === "filler"
-            ? "A fallback training position is ready. Move saving will be connected next."
-            : "A personal training position is ready. Move saving will be connected next."}
+        Maximum CPL: <b>{result.maxSingleCpLoss}</b>
+      </div>
+      <div className="bs-kit-muted-line">
+        Rating: <b>{result.elo.eloBefore}</b> → <b>{result.elo.eloAfter}</b>{" "}
+        ({result.elo.eloDelta >= 0 ? "+" : ""}{result.elo.eloDelta})
       </div>
     </div>
   );

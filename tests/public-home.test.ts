@@ -223,17 +223,50 @@ test("signed-in SPA restores an active session before requesting a cold candidat
   assert.ok(!source.includes("fillerCursor=0"));
 });
 
-test("backend-loaded training board remains read-only until move persistence wiring is implemented", () => {
+test("SPA persists legal two-sided manual sequence moves through active-session endpoints", () => {
   const source = readSource("components/blindspots-spa-prototype.tsx");
 
   assert.ok(
-    source.includes("disabled={true}"),
-    "SPA board must be disabled while this integration is read-only",
+    source.includes("async function handleBoardMove(move: BoardMove)"),
+    "SPA must implement the move persistence handler",
   );
-  assert.ok(source.includes('data-testid="spa-training-read-state"'));
-  assert.ok(!source.includes('fetch("/api/train/active-session", {\n      method: "POST"'));
-  assert.ok(!source.includes('fetch("/api/train/active-session", {\n      method: "PATCH"'));
-  assert.ok(!source.includes('fetch("/api/train/complete-sequence"'));
+  assert.ok(source.includes('fetch("/api/train/active-session", {'));
+  assert.ok(source.includes('method: "POST"'));
+  assert.ok(source.includes("firstMoveUci: uci"));
+  assert.ok(source.includes('method: "PATCH"'));
+  assert.ok(source.includes("sessionId: activeSession.id"));
+  assert.ok(source.includes("...activeSession.moves.map((storedMove) => storedMove.uci)"));
+  assert.ok(source.includes("parseRequiredActiveSessionResponse"));
+  assert.ok(source.includes("const restoredBoard = applyPersistedSession(persistedSession);"));
+  assert.ok(source.includes("if (latestBoard.isGameOver())"));
+  assert.ok(source.includes("await completePersistedSequence(persistedSession);"));
+  assert.ok(source.includes("disabled={!trainingBoardInteractive}"));
+  assert.ok(!source.includes("disabled={true}"));
+});
+
+test("SPA makes temporary manual opponent input explicit and completes persisted sessions", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(source.includes("Temporary mode: play the opponent's reply manually."));
+  assert.ok(source.includes("Your turn. Every legal move is saved."));
+  assert.ok(source.includes('fetch("/api/train/complete-sequence", {'));
+  assert.ok(source.includes("sessionId: session.id"));
+  assert.ok(source.includes("parseCompleteSequenceResponse"));
+  assert.ok(source.includes("TrainingCompletionPanel"));
+  assert.ok(source.includes('fetch("/api/train/next-position", {'));
+  assert.ok(!source.includes("fillerSeed=spa-v1"));
+  assert.ok(!source.includes("fillerCursor=0"));
+});
+
+test("SPA allows non-mutating board navigation while blocking moves from historical states", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(source.includes("const isLatestBoardState = boardHistoryIndex === boardHistory.length - 1;"));
+  assert.ok(source.includes("isLatestBoardState &&"));
+  assert.ok(source.includes("const canNavigateHistory ="));
+  assert.ok(source.includes("disabled={!canNavigateHistory || boardHistoryIndex === 0}"));
+  assert.ok(source.includes("disabled={!canNavigateHistory || boardHistoryIndex === boardHistory.length - 1}"));
+  assert.ok(source.includes("if (!canNavigateHistory) return;"));
 });
 
 test("SPA boot splash is an opaque theme-backed overlay", () => {
