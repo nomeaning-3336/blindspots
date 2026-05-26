@@ -7,16 +7,23 @@ import { Chess } from "chess.js";
 import type { Square } from "chess.js";
 import { AnalysisBoard, type BoardMove } from "@/components/chess/analysis-board";
 import type { AppTheme } from "@/lib/app-theme";
+import {
+  buildRestoredBoardState,
+  parseActiveSessionResponse,
+  parseColdCandidateResponse,
+  type SpaActiveSession,
+  type SpaBoardHistoryEntry,
+  type SpaColdCandidate,
+} from "@/lib/training/spa-training-hydration";
 
 type Verdict = "best" | "inaccuracy" | "blunder" | "brilliant" | null;
-type BoardHistoryEntry = {
-  fen: string;
-  lastMove: { from: string; to: string } | null;
-};
+type BoardHistoryEntry = SpaBoardHistoryEntry;
 type SplashPhase = "blank" | "branded" | "hidden";
+type TrainingLoadState = "loading" | "ready" | "error";
 
 const SPLASH_BRAND_DELAY_MS = 250;
 const SPLASH_COMPLETE_DELAY_MS = 1250;
+const EMPTY_BOARD_FEN = "8/8/8/8/8/8/8/8 w - - 0 1";
 
 const QUEUE = [
   {
@@ -94,6 +101,10 @@ export function BlindspotsSpaPrototype({
 }) {
   const [theme, setTheme] = useState<AppTheme>(initialTheme);
   const [splashPhase, setSplashPhase] = useState<SplashPhase>("blank");
+  const [trainingLoadState, setTrainingLoadState] = useState<TrainingLoadState>("loading");
+  const [trainingLoadError, setTrainingLoadError] = useState<string | null>(null);
+  const [coldCandidate, setColdCandidate] = useState<SpaColdCandidate | null>(null);
+  const [activeSession, setActiveSession] = useState<SpaActiveSession | null>(null);
   const [queueIdx, setQueueIdx] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [committed, setCommitted] = useState<{ from: string; to: string } | null>(null);
@@ -101,9 +112,9 @@ export function BlindspotsSpaPrototype({
   const [flipped, setFlipped] = useState(false);
   const [addFenOpen, setAddFenOpen] = useState(false);
   const [inSession, setInSession] = useState(false);
-  const [boardFen, setBoardFen] = useState(QUEUE[0]!.fen);
+  const [boardFen, setBoardFen] = useState(EMPTY_BOARD_FEN);
   const [boardHistory, setBoardHistory] = useState<BoardHistoryEntry[]>([
-    { fen: QUEUE[0]!.fen, lastMove: null },
+    { fen: EMPTY_BOARD_FEN, lastMove: null },
   ]);
   const [boardHistoryIndex, setBoardHistoryIndex] = useState(0);
 
@@ -126,8 +137,101 @@ export function BlindspotsSpaPrototype({
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTrainingBoardState() {
+      setTrainingLoadState("loading");
+      setTrainingLoadError(null);
+
+      try {
+        const activeResponse = await fetch("/api/train/active-session", {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!activeResponse.ok) {
+          throw new Error("Failed to load active training session.");
+        }
+
+        const restoredSession = parseActiveSessionResponse(await activeResponse.json());
+
+        if (restoredSession) {
+          const restoredBoard = buildRestoredBoardState(restoredSession);
+
+          if (cancelled) return;
+
+          setActiveSession(restoredSession);
+          setColdCandidate(null);
+          setBoardFen(restoredBoard.fen);
+          setBoardHistory(restoredBoard.history);
+          setBoardHistoryIndex(restoredBoard.historyIndex);
+          setCommitted(restoredBoard.lastMove);
+          setSelected(null);
+          setVerdict(null);
+          setInSession(true);
+          setTrainingLoadState("ready");
+          return;
+        }
+
+        const nextResponse = await fetch(
+          "/api/train/next-position?fillerSeed=spa-v1&fillerCursor=0",
+          {
+            method: "GET",
+            cache: "no-store",
+          },
+        );
+
+        if (!nextResponse.ok) {
+          throw new Error("Failed to load the next training position.");
+        }
+
+        const candidate = parseColdCandidateResponse(await nextResponse.json());
+
+        if (cancelled) return;
+
+        setActiveSession(null);
+        setColdCandidate(candidate);
+        setBoardFen(candidate.fen);
+        setBoardHistory([{ fen: candidate.fen, lastMove: null }]);
+        setBoardHistoryIndex(0);
+        setCommitted(null);
+        setSelected(null);
+        setVerdict(null);
+        setInSession(false);
+        setTrainingLoadState("ready");
+      } catch (error) {
+        if (cancelled) return;
+
+        setActiveSession(null);
+        setColdCandidate(null);
+        setBoardFen(EMPTY_BOARD_FEN);
+        setBoardHistory([{ fen: EMPTY_BOARD_FEN, lastMove: null }]);
+        setBoardHistoryIndex(0);
+        setCommitted(null);
+        setSelected(null);
+        setVerdict(null);
+        setInSession(false);
+        setTrainingLoadError(
+          error instanceof Error ? error.message : "Failed to load training state.",
+        );
+        setTrainingLoadState("error");
+      }
+    }
+
+    void loadTrainingBoardState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const current = QUEUE[queueIdx]!;
   const stage = verdict ? "review" : inSession || committed ? "playing" : "loaded";
+  const showSplash = splashPhase !== "hidden" || trainingLoadState === "loading";
+  const visibleSplashPhase: Exclude<SplashPhase, "hidden"> =
+    splashPhase === "blank" ? "blank" : "branded";
+  const trainingBoardInteractive = false;
   const lastMove = committed ? [committed.from, committed.to] : [];
   const correct = committed && (verdict === "best" || verdict === "brilliant") ? [committed.to] : [];
   const incorrect = committed && verdict === "blunder" ? [committed.to] : [];
@@ -198,6 +302,8 @@ export function BlindspotsSpaPrototype({
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
+      if (!trainingBoardInteractive) return;
+
       const target = event.target as HTMLElement | null;
       const tagName = target?.tagName.toLowerCase();
       const isEditing =
@@ -220,7 +326,7 @@ export function BlindspotsSpaPrototype({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [boardHistory, boardHistoryIndex]);
+  }, [boardHistory, boardHistoryIndex, trainingBoardInteractive]);
 
   function finishSequence() {
     if (!committed) return;
@@ -254,8 +360,8 @@ export function BlindspotsSpaPrototype({
   }
 
   return (
-    <div className="bs-kit-app" aria-busy={splashPhase !== "hidden"}>
-      {splashPhase !== "hidden" ? <SpaBootSplash phase={splashPhase} /> : null}
+    <div className="bs-kit-app" aria-busy={showSplash}>
+      {showSplash ? <SpaBootSplash phase={visibleSplashPhase} /> : null}
       <ShellActions
         theme={theme}
         onToggleTheme={() => {
@@ -285,7 +391,7 @@ export function BlindspotsSpaPrototype({
                   ...correct.map((square) => ({ square, color: "rgba(111, 178, 74, 0.45)" })),
                   ...incorrect.map((square) => ({ square, color: "rgba(196, 59, 48, 0.42)" })),
                 ]}
-                disabled={stage === "review"}
+                disabled={true}
                 onMove={handleBoardMove}
                 onSquareClick={(square) => {
                   try {
@@ -314,13 +420,13 @@ export function BlindspotsSpaPrototype({
             <PlayerStrip side={flipped ? "black" : "white"} name="You" turn={!verdict} />
             <div className="bs-kit-board-actions">
               <div className="l">
-                <button className="bs-kit-btn ghost sm" onClick={() => setFlipped((value) => !value)}>
+                <button className="bs-kit-btn ghost sm" onClick={() => setFlipped((value) => !value)} disabled={true}>
                   <FlipIcon /> Flip
                 </button>
                 <button
                   className="bs-kit-btn ghost sm"
                   onClick={() => stepBoard(-1)}
-                  disabled={boardHistoryIndex <= 0}
+                  disabled={true}
                   aria-label="Step back"
                 >
                   <StepBackIcon /> Back
@@ -328,31 +434,19 @@ export function BlindspotsSpaPrototype({
                 <button
                   className="bs-kit-btn ghost sm"
                   onClick={() => stepBoard(1)}
-                  disabled={boardHistoryIndex >= boardHistory.length - 1}
+                  disabled={true}
                   aria-label="Step forward"
                 >
                   <StepForwardIcon /> Forward
                 </button>
               </div>
               <div className="r">
-                {stage === "loaded" ? (
-                  <button className="bs-kit-btn ghost sm" onClick={nextPosition}>
-                    <SkipIcon /> Skip position
-                  </button>
-                ) : null}
-                {stage === "playing" ? (
-                  <button className="bs-kit-btn ghost sm" onClick={finishSequence} disabled={!committed}>
-                    <CheckIcon /> Finish sequence
-                  </button>
-                ) : null}
-                {stage === "review" ? (
-                  <button className="bs-kit-btn ghost sm" onClick={nextPosition}>
-                    <SkipIcon /> Next sequence
-                  </button>
-                ) : null}
-                {inSession ? (
-                  <button className="bs-kit-btn ghost sm" onClick={goHome}>
-                    <HomeIcon /> Home
+                {trainingLoadState === "error" ? (
+                  <button
+                    className="bs-kit-btn ghost sm"
+                    onClick={() => window.location.reload()}
+                  >
+                    Retry load
                   </button>
                 ) : null}
               </div>
@@ -361,6 +455,12 @@ export function BlindspotsSpaPrototype({
         </div>
 
         <aside className="bs-kit-sidebar">
+          <TrainingLoadPanel
+            loadState={trainingLoadState}
+            error={trainingLoadError}
+            activeSession={activeSession}
+            candidate={coldCandidate}
+          />
           <TodayPanel
             hideStats={inSession}
             hideRating={stage === "playing"}
@@ -444,6 +544,46 @@ function PlayerStrip({ side, name, turn = false }: { side: "white" | "black"; na
         <span className="name">{name}</span>
       </div>
       {turn ? <span className="turn-cue">your turn</span> : null}
+    </div>
+  );
+}
+
+function TrainingLoadPanel({
+  loadState,
+  error,
+  activeSession,
+  candidate,
+}: {
+  loadState: TrainingLoadState;
+  error: string | null;
+  activeSession: SpaActiveSession | null;
+  candidate: SpaColdCandidate | null;
+}) {
+  if (loadState === "loading") {
+    return null;
+  }
+
+  if (loadState === "error") {
+    return (
+      <div className="bs-kit-panel" data-testid="spa-training-load-error">
+        <div className="bs-kit-panel-title">Training unavailable</div>
+        <div className="bs-kit-muted-line">{error ?? "Failed to load training state."}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bs-kit-panel" data-testid="spa-training-read-state">
+      <div className="bs-kit-panel-title">
+        {activeSession ? "Sequence restored" : "Position ready"}
+      </div>
+      <div className="bs-kit-muted-line">
+        {activeSession
+          ? "Your in-progress sequence was restored. Move saving will be connected next."
+          : candidate?.queueSource === "filler"
+            ? "A fallback training position is ready. Move saving will be connected next."
+            : "A personal training position is ready. Move saving will be connected next."}
+      </div>
     </div>
   );
 }

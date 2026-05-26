@@ -193,13 +193,45 @@ test("signed-in SPA renders the timed branded boot splash over the loaded app", 
     "SPA splash must render the branded .gg suffix",
   );
   assert.ok(
-    source.includes('{splashPhase !== "hidden" ? <SpaBootSplash phase={splashPhase} /> : null}'),
-    "SPA must remove the splash once boot is complete",
+    source.includes('const showSplash = splashPhase !== "hidden" || trainingLoadState === "loading";'),
+    "SPA must keep the splash visible while authenticated training state loads",
   );
   assert.ok(
-    source.includes('<div className="bs-kit-app" aria-busy={splashPhase !== "hidden"}>'),
-    "SPA must remain rendered beneath the splash while booting",
+    source.includes('{showSplash ? <SpaBootSplash phase={visibleSplashPhase} /> : null}'),
+    "SPA must remove the splash only after boot timing and training hydration complete",
   );
+  assert.ok(
+    source.includes('<div className="bs-kit-app" aria-busy={showSplash}>'),
+    "SPA must report itself busy while boot or training hydration is pending",
+  );
+});
+
+test("signed-in SPA restores an active session before requesting a cold candidate", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  const activeFetchIndex = source.indexOf('fetch("/api/train/active-session"');
+  const nextFetchIndex = source.indexOf('"/api/train/next-position?fillerSeed=spa-v1&fillerCursor=0"');
+
+  assert.ok(activeFetchIndex >= 0, "SPA must request active session state first");
+  assert.ok(nextFetchIndex > activeFetchIndex, "SPA must request a cold candidate only after no active session exists");
+  assert.ok(source.includes("parseActiveSessionResponse"));
+  assert.ok(source.includes("buildRestoredBoardState"));
+  assert.ok(source.includes("parseColdCandidateResponse"));
+  assert.ok(source.includes("setBoardHistory(restoredBoard.history)"));
+  assert.ok(source.includes("setBoardFen(candidate.fen)"));
+});
+
+test("backend-loaded training board remains read-only until move persistence wiring is implemented", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(
+    source.includes("disabled={true}"),
+    "SPA board must be disabled while this integration is read-only",
+  );
+  assert.ok(source.includes('data-testid="spa-training-read-state"'));
+  assert.ok(!source.includes('fetch("/api/train/active-session", {\n      method: "POST"'));
+  assert.ok(!source.includes('fetch("/api/train/active-session", {\n      method: "PATCH"'));
+  assert.ok(!source.includes('fetch("/api/train/complete-sequence"'));
 });
 
 test("SPA boot splash is an opaque theme-backed overlay", () => {
