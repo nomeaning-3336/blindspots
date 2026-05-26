@@ -18,7 +18,9 @@ import {
   classifyReviewedMoveOutcome,
   classifyTrainingOutcome,
 } from "@/lib/training/mistake-srs";
-import { updateTrainingItemAfterAttempt, updateActiveTrainingItemAfterAttempt } from "@/lib/training/training-item-store";
+import { getActiveTrainingSession } from "@/lib/training/active-session-store";
+import { updateTrainingItemAfterAttempt } from "@/lib/training/training-item-store";
+import { storedSequenceIsPrefix, type StoredTrainingMove } from "@/lib/training/session-sequence";
 import { mineMistakesFromSequence } from "@/lib/training/mistake-mining-persistence";
 import type { MineableMoveInput } from "@/lib/training/mistake-mining";
 import { buildDefaultBlindspotProfile } from "@/lib/training/default-profile";
@@ -135,16 +137,7 @@ export async function POST(request: Request) {
   }
 
   const payload = (await request.json().catch(() => null)) as CompleteSequencePayload | null;
-  const startingFen = typeof payload?.startingFen === "string" ? payload.startingFen : "";
-  const moves = normalizeMoves(payload?.moves);
   const selectedPhase = typeof payload?.selectedPhase === "string" ? payload.selectedPhase : null;
-  const selectedBucket =
-    typeof payload?.selectedBucket === "string" && payload.selectedBucket.length > 0
-      ? payload.selectedBucket
-      : classifyTrainingBucket({
-          fen: startingFen,
-          phase: selectedPhase as "opening" | "middlegame" | "endgame" | "tactic" | "unknown" | undefined,
-        });
   const selectedServeMode = typeof payload?.selectedServeMode === "string" ? payload.selectedServeMode : null;
 
   const selectedTags = normalizeTags(payload?.selectedTags);
@@ -152,6 +145,27 @@ export async function POST(request: Request) {
   const selectedTacticRating = typeof payload?.selectedTacticRating === "number" ? payload.selectedTacticRating : null;
   const selectedOpeningName = typeof payload?.selectedOpeningName === "string" ? payload.selectedOpeningName : null;
   const selectedEco = typeof payload?.selectedEco === "string" ? payload.selectedEco : null;
+
+  const activeSession = await getActiveTrainingSession(userId);
+
+  if (!activeSession) {
+    return NextResponse.json({ error: "No active training session found." }, { status: 409 });
+  }
+
+  const startingFen = activeSession.startingFen;
+  const payloadMoves = normalizeMoves(payload?.moves);
+  if (payloadMoves.length > 0 && !storedSequenceIsPrefix(activeSession.moves, payloadMoves)) {
+    return NextResponse.json({ error: "Invalid sequence." }, { status: 400 });
+  }
+
+  const moves = payloadMoves.length > 0 ? payloadMoves : activeSession.moves;
+  const selectedBucket =
+    typeof payload?.selectedBucket === "string" && payload.selectedBucket.length > 0
+      ? payload.selectedBucket
+      : classifyTrainingBucket({
+          fen: startingFen,
+          phase: selectedPhase as "opening" | "middlegame" | "endgame" | "tactic" | "unknown" | undefined,
+        });
 
   if (!isValidFen(startingFen) || moves.length === 0) {
     return NextResponse.json({ error: "Invalid sequence." }, { status: 400 });
@@ -224,8 +238,8 @@ export async function POST(request: Request) {
     : trainingOutcome;
   const reviewedMoveCpLoss = reviewedMoveScore?.cpLoss ?? null;
 
-  const selectedTrainingItemId = typeof payload?.selectedTrainingItemId === "string" ? payload.selectedTrainingItemId : null;
-  const queueSource = typeof payload?.queueSource === "string" ? payload.queueSource : null;
+  const selectedTrainingItemId = activeSession.selectedTrainingItemId;
+  const queueSource = activeSession.queueSource;
 
   const humanRatingMoves = buildHumanRatingMoves(sequenceEvaluation.positionEvaluations);
   const engineRatingMoves = humanRatingMoves.length >= 4
@@ -266,11 +280,10 @@ export async function POST(request: Request) {
   const actualScore = eloUpdate?.actualScore ?? 0;
 
   const supabase = getSupabaseAdminClient();
-  const sessionInsertStartedAt = Date.now();
+  const sessionUpdateStartedAt = Date.now();
   const { data: session, error: sessionError } = await supabase
     .from("training_sessions")
-    .insert({
-      user_id: userId,
+    .update({
       starting_fen: startingFen,
       moves_played: moves as Json,
       eval_preservation_score: evalPreservationScore,
@@ -293,13 +306,16 @@ export async function POST(request: Request) {
       average_cp_loss: averageCpLoss,
       max_single_cp_loss: maxSingleCpLoss,
     })
+    .eq("id", activeSession.id)
+    .eq("user_id", userId)
+    .is("completed_at", null)
     .select("id")
     .single();
 
   if (sessionError) {
-    throw new Error(`Failed to save training session: ${sessionError.message}`);
+    throw new Error(`Failed to complete training session: ${sessionError.message}`);
   }
-  const sessionInsertMs = Date.now() - sessionInsertStartedAt;
+  const sessionUpdateMs = Date.now() - sessionUpdateStartedAt;
 
   // Fire-and-forget mining of app-native active mistakes — never blocks response.
   const initialPreviousFen = typeof payload?.previousFen === "string" ? payload.previousFen : null;
@@ -379,101 +395,29 @@ export async function POST(request: Request) {
     try {
       const srsUpdateStartedAt = Date.now();
 
-      if (queueSource === "active_mistake") {
-        // Active app-training mistake: simple reschedule, no status change.
-        await updateActiveTrainingItemAfterAttempt({
-          userId,
-          trainingItemId: selectedTrainingItemId,
-          outcome: reviewOutcome,
-        });
-      } else {
-        // Legacy row-based / imported / puzzle-filler mistake: full SRS path.
-        await updateTrainingItemAfterAttempt({
-          userId,
-          trainingItemId: selectedTrainingItemId,
-          outcome: reviewOutcome,
-          averageCpLoss,
-          maxSingleCpLoss,
-        });
-      }
+      await updateTrainingItemAfterAttempt({
+        userId,
+        trainingItemId: selectedTrainingItemId,
+        outcome: reviewOutcome,
+        averageCpLoss,
+        maxSingleCpLoss,
+      });
 
       if (process.env.NODE_ENV !== "production") {
         console.log("[complete-sequence:srs]", {
           srsUpdateMs: Date.now() - srsUpdateStartedAt,
-          activeMistake: queueSource === "active_mistake",
+          queueSource,
         });
       }
     } catch (mistakeUpdateError) {
       console.error("[complete-sequence] SRS update failed", mistakeUpdateError);
       return NextResponse.json(
-        { error: "Failed to update mistake SRS state." },
+        { error: "Failed to update training item state." },
         { status: 500 },
       );
     }
-
-    // Update Elo only, skip legacy queue/bucket/cluster stats
-    const profileUpdateStartedAt = Date.now();
-    const { error: profileError } = await supabase
-      .from("user_blindspot_profile")
-      .update({
-        blindspots_elo: eloAfter,
-        rating_deviation: eloUpdate?.ratingDeviationAfter ?? profileRatingDeviation,
-        total_sequences: profile.total_sequences + 1,
-        last_session_at: completedAt,
-      })
-      .eq("user_id", userId);
-
-    if (profileError) {
-      throw new Error(`Failed to update Blindspots Elo: ${profileError.message}`);
-    }
-
-    return NextResponse.json({
-      ok: true,
-      sessionId: session.id,
-      evalPreservationScore,
-      moveScores: sequenceEvaluation.moveScores,
-      positionEvaluations: sequenceEvaluation.positionEvaluations,
-      elo: {
-        eloBefore,
-        eloAfter,
-        eloDelta,
-        kFactor,
-        opponentElo,
-        expectedScore,
-        actualScore,
-        rawDelta: eloUpdate?.rawDelta ?? 0,
-        clampedDelta: eloUpdate?.clampedDelta ?? 0,
-        skipped: evalPreservationScore === null,
-        ratingDeviationBefore: eloUpdate?.ratingDeviationBefore ?? profileRatingDeviation,
-        ratingDeviationAfter: eloUpdate?.ratingDeviationAfter ?? profileRatingDeviation,
-        humanAvgCpl: eloUpdate?.humanAvgCpl ?? null,
-        engineAvgCpl: eloUpdate?.engineAvgCpl ?? null,
-        cplDiff: eloUpdate?.cplDiff ?? null,
-        ratingMethod: eloUpdate?.ratingMethod ?? "legacy",
-      },
-      trainingOutcome,
-      reviewOutcome,
-      reviewedMoveCpLoss,
-      averageCpLoss,
-      maxSingleCpLoss,
-      selectedTrainingItemId: selectedTrainingItemId,
-    });
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[complete-sequence:done]", {
-        path: "row-based",
-        usedPrecomputedEvaluations,
-        usedPartialPrecomputedEvaluations,
-        precomputedInputCount,
-        profileMs,
-        evaluationMs,
-        sessionInsertMs,
-        profileUpdateMs: Date.now() - profileUpdateStartedAt,
-        totalMs: Date.now() - requestStartedAt,
-      });
-    }
   }
 
-  // Catalog filler path: record completion and Elo without mutating obsolete legacy queues.
   const profileUpdateStartedAt = Date.now();
   const { error: profileError } = await supabase
     .from("user_blindspot_profile")
@@ -491,13 +435,13 @@ export async function POST(request: Request) {
 
   if (process.env.NODE_ENV !== "production") {
     console.log("[complete-sequence:done]", {
-      path: "catalog-filler",
+      path: "active-session",
       usedPrecomputedEvaluations,
       usedPartialPrecomputedEvaluations,
       precomputedInputCount,
       profileMs,
       evaluationMs,
-      sessionInsertMs,
+      sessionUpdateMs,
       profileUpdateMs: Date.now() - profileUpdateStartedAt,
       totalMs: Date.now() - requestStartedAt,
     });
@@ -1342,13 +1286,13 @@ async function getOrCreateProfile(userId: string) {
   return inserted;
 }
 
-function normalizeMoves(value: unknown) {
+function normalizeMoves(value: unknown): StoredTrainingMove[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((move: SequenceMove) => {
     const san = typeof move?.san === "string" ? move.san : "";
     const uci = typeof move?.uci === "string" ? move.uci : "";
-    const side = typeof move?.side === "string" ? move.side : "";
-    return san && /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(uci)
+    const side = move?.side === "w" || move?.side === "b" ? move.side : "";
+    return san && side && /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(uci)
       ? [{ san, uci, side }]
       : [];
   });

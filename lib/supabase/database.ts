@@ -288,7 +288,7 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "training_sessions_selected_training_item_id_fkey";
+            foreignKeyName: "training_sessions_selected_mistake_id_fkey";
             columns: ["selected_training_item_id"];
             referencedRelation: "user_training_items";
             referencedColumns: ["id"];
@@ -415,7 +415,7 @@ export type Database = {
         };
         Relationships: [
           {
-            foreignKeyName: "user_training_items_user_id_fkey";
+            foreignKeyName: "user_mistakes_user_id_fkey";
             columns: ["user_id"];
             referencedRelation: "users";
             referencedColumns: ["id"];

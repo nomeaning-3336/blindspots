@@ -349,32 +349,26 @@ test("filler catalog selection is cached, deterministic, and includes both origi
   assert.ok(!source.includes("Math.random"));
 });
 
-test("complete-sequence uses variable-length completion without legacy queue mutation", () => {
+test("complete-sequence completes the active session row in place", () => {
   const source = readSource("app/api/train/complete-sequence/route.ts");
 
   assert.ok(
-    source.includes("const sequenceLength = countUserMovesInSequence(startingFen, moves);"),
-    "completed sessions must store the actual number of user moves",
+    source.includes("getActiveTrainingSession"),
+    "complete-sequence must load the active session row",
   );
   assert.ok(
-    !source.includes("const sequenceLength = 4;"),
-    "complete-sequence must not hard-code four user moves",
+    source.includes("storedSequenceIsPrefix(activeSession.moves, payloadMoves)"),
+    "complete-sequence must extend the stored active sequence prefix only",
   );
-  assert.ok(
-    source.includes("Catalog filler path: record completion and Elo without mutating obsolete legacy queues."),
-    "catalog filler completion must use the unified completion path",
-  );
-  assert.ok(!source.includes("updateQueuesAfterSequence"));
-  assert.ok(!source.includes("normalizeRecentServedFens"));
-  assert.ok(!source.includes("normalizeQueue("));
-  assert.ok(!source.includes("recordBucketResult"));
-  assert.ok(!source.includes("normalizeBucketStats"));
-  assert.ok(!source.includes("legacy-json-queue"));
-  assert.ok(!source.includes("legacyQueueStartedAt"));
-  assert.ok(!source.includes("exploit_queue:"));
-  assert.ok(!source.includes("explore_queue:"));
-  assert.ok(!source.includes("revisit_queue:"));
-  assert.ok(!source.includes("mastered_queue:"));
+  assert.ok(source.includes("const selectedTrainingItemId = activeSession.selectedTrainingItemId;"));
+  assert.ok(source.includes("const queueSource = activeSession.queueSource;"));
+  assert.ok(source.includes('.eq("id", activeSession.id)'));
+  assert.ok(source.includes(".update({"));
+  assert.ok(source.includes("completed_at: completedAt"));
+  assert.ok(source.includes("sessionUpdateMs"));
+  assert.ok(source.includes("path: \"active-session\""));
+  assert.ok(!source.includes(".insert({\n      user_id: userId"));
+  assert.ok(!source.includes("updateActiveTrainingItemAfterAttempt"));
 });
 
 test("active-session route exposes read start and update operations only", () => {
@@ -426,6 +420,8 @@ test("personal scheduled queue is named as training items rather than mistakes",
 
   assert.ok(databaseSource.includes("user_training_items:"));
   assert.ok(databaseSource.includes("selected_training_item_id: string | null;"));
+  assert.ok(databaseSource.includes('foreignKeyName: "training_sessions_selected_mistake_id_fkey";'));
+  assert.ok(databaseSource.includes('foreignKeyName: "user_mistakes_user_id_fkey";'));
   assert.ok(!databaseSource.includes(legacyUserTrainingTable + ":"));
   assert.ok(!databaseSource.includes(legacySelectedColumn + ": string | null;"));
 });
