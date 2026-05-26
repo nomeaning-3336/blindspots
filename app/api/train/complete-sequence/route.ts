@@ -18,9 +18,11 @@ import {
   classifyReviewedMoveOutcome,
   classifyTrainingOutcome,
 } from "@/lib/training/mistake-srs";
-import { getActiveTrainingSession } from "@/lib/training/active-session-store";
+import {
+  ActiveSessionError,
+  getActiveTrainingSessionById,
+} from "@/lib/training/active-session-store";
 import { updateTrainingItemAfterAttempt } from "@/lib/training/training-item-store";
-import { storedSequenceIsPrefix, type StoredTrainingMove } from "@/lib/training/session-sequence";
 import { mineMistakesFromSequence } from "@/lib/training/mistake-mining-persistence";
 import type { MineableMoveInput } from "@/lib/training/mistake-mining";
 import { buildDefaultBlindspotProfile } from "@/lib/training/default-profile";
@@ -40,33 +42,14 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-type SequenceMove = {
-  san?: unknown;
-  uci?: unknown;
-  side?: unknown;
-};
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
 
 type CompleteSequencePayload = {
+  sessionId?: unknown;
   onboardingCheckpoint?: unknown;
-  startingFen?: unknown;
-  moves?: unknown;
-  sequenceLength?: unknown;
   reflectionNote?: unknown;
-  selectedBucket?: unknown;
-  selectedServeMode?: unknown;
-  selectedPhase?: unknown;
-  selectedTags?: unknown;
-  selectedIsTactic?: unknown;
-  selectedTacticRating?: unknown;
-  selectedOpeningName?: unknown;
-  selectedEco?: unknown;
-  challengeElo?: unknown;
-  selectedTrainingItemId?: unknown;
-  queueSource?: unknown;
-  precomputedEvaluations?: unknown;
-  /** Setup prelude into the first decisionFen (i.e. startingFen). */
-  previousFen?: unknown;
-  playedMove?: unknown;
 };
 
 type MoveClassification = "brilliant" | "critical" | "best" | "excellent" | "good" | "okay" | "inaccuracy" | "mistake" | "blunder";
@@ -137,35 +120,43 @@ export async function POST(request: Request) {
   }
 
   const payload = (await request.json().catch(() => null)) as CompleteSequencePayload | null;
-  const selectedPhase = typeof payload?.selectedPhase === "string" ? payload.selectedPhase : null;
-  const selectedServeMode = typeof payload?.selectedServeMode === "string" ? payload.selectedServeMode : null;
+  let activeSession;
 
-  const selectedTags = normalizeTags(payload?.selectedTags);
-  const selectedIsTactic = typeof payload?.selectedIsTactic === "boolean" ? payload.selectedIsTactic : null;
-  const selectedTacticRating = typeof payload?.selectedTacticRating === "number" ? payload.selectedTacticRating : null;
-  const selectedOpeningName = typeof payload?.selectedOpeningName === "string" ? payload.selectedOpeningName : null;
-  const selectedEco = typeof payload?.selectedEco === "string" ? payload.selectedEco : null;
+  try {
+    activeSession = await getActiveTrainingSessionById({
+      userId,
+      sessionId: payload?.sessionId,
+    });
+  } catch (error) {
+    if (error instanceof ActiveSessionError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
 
-  const activeSession = await getActiveTrainingSession(userId);
-
-  if (!activeSession) {
-    return NextResponse.json({ error: "No active training session found." }, { status: 409 });
+    throw error;
   }
+
+  const candidateMetadata = isRecord(activeSession.candidateMetadata) ? activeSession.candidateMetadata : {};
 
   const startingFen = activeSession.startingFen;
-  const payloadMoves = normalizeMoves(payload?.moves);
-  if (payloadMoves.length > 0 && !storedSequenceIsPrefix(activeSession.moves, payloadMoves)) {
-    return NextResponse.json({ error: "Invalid sequence." }, { status: 400 });
-  }
-
-  const moves = payloadMoves.length > 0 ? payloadMoves : activeSession.moves;
-  const selectedBucket =
-    typeof payload?.selectedBucket === "string" && payload.selectedBucket.length > 0
-      ? payload.selectedBucket
-      : classifyTrainingBucket({
-          fen: startingFen,
-          phase: selectedPhase as "opening" | "middlegame" | "endgame" | "tactic" | "unknown" | undefined,
-        });
+  const moves = activeSession.moves;
+  const selectedPhase =
+    typeof candidateMetadata.selectedPhase === "string"
+      ? candidateMetadata.selectedPhase
+      : null;
+  const selectedTags = normalizeTags(candidateMetadata.tags);
+  const selectedIsTactic = selectedPhase === "tactic";
+  const selectedOpeningName =
+    typeof candidateMetadata.openingName === "string"
+      ? candidateMetadata.openingName
+      : null;
+  const selectedEco =
+    typeof candidateMetadata.eco === "string"
+      ? candidateMetadata.eco
+      : null;
+  const selectedBucket = classifyTrainingBucket({
+    fen: startingFen,
+    phase: selectedPhase as "opening" | "middlegame" | "endgame" | "tactic" | "unknown" | undefined,
+  });
 
   if (!isValidFen(startingFen) || moves.length === 0) {
     return NextResponse.json({ error: "Invalid sequence." }, { status: 400 });
@@ -173,36 +164,26 @@ export async function POST(request: Request) {
 
   const sequenceLength = countUserMovesInSequence(startingFen, moves);
   const reflectionNote = typeof payload?.reflectionNote === "string" ? payload.reflectionNote : null;
-  const precomputedInputCount = Array.isArray(payload?.precomputedEvaluations)
-    ? payload.precomputedEvaluations.length
-    : 0;
+  const precomputedInputCount = 0;
 
   const profileStartedAt = Date.now();
   const profile = await getOrCreateProfile(userId);
   const profileMs = Date.now() - profileStartedAt;
 
+  const usedPrecomputedEvaluations = false;
+  const usedPartialPrecomputedEvaluations = false;
   const evaluationStartedAt = Date.now();
-  const precomputedSequenceEvaluation = buildPrecomputedSequenceEvaluation({
-    rawEvaluations: payload?.precomputedEvaluations,
+  const sequenceEvaluation = await calculateSequenceEvaluation({
     startingFen,
     moves,
+    selectedBucket,
+    selectedPhase,
+    selectedTags,
+    selectedIsTactic,
+    selectedOpeningName,
+    selectedEco,
+    rawPrecomputedEvaluations: undefined,
   });
-  const usedPrecomputedEvaluations = Boolean(precomputedSequenceEvaluation);
-  const usedPartialPrecomputedEvaluations =
-    !usedPrecomputedEvaluations && precomputedInputCount > 0;
-  const sequenceEvaluation =
-    precomputedSequenceEvaluation ??
-    await calculateSequenceEvaluation({
-      startingFen,
-      moves,
-      selectedBucket,
-      selectedPhase,
-      selectedTags,
-      selectedIsTactic,
-      selectedOpeningName,
-      selectedEco,
-      rawPrecomputedEvaluations: payload?.precomputedEvaluations,
-    });
   const evaluationMs = Date.now() - evaluationStartedAt;
 
   if (process.env.NODE_ENV !== "production") {
@@ -318,8 +299,8 @@ export async function POST(request: Request) {
   const sessionUpdateMs = Date.now() - sessionUpdateStartedAt;
 
   // Fire-and-forget mining of app-native active mistakes — never blocks response.
-  const initialPreviousFen = typeof payload?.previousFen === "string" ? payload.previousFen : null;
-  const initialPlayedMove = typeof payload?.playedMove === "string" ? payload.playedMove : null;
+  const initialPreviousFen: string | null = null;
+  const initialPlayedMove: string | null = null;
 
   if (shouldPersistTrainingTourCheckpoint(payload?.onboardingCheckpoint)) {
     await persistTrainingTourCheckpoint({
@@ -353,16 +334,6 @@ export async function POST(request: Request) {
       trainingOutcome,
       averageCpLoss,
       maxSingleCpLoss,
-    });
-  }
-
-  if (process.env.NODE_ENV !== "production" && (!initialPreviousFen || !initialPlayedMove)) {
-    console.warn("[complete-sequence] missing served-position prelude in completion payload", {
-      hasPreviousFen: Boolean(initialPreviousFen),
-      hasPlayedMove: Boolean(initialPlayedMove),
-      startingFen,
-      selectedTrainingItemId,
-      queueSource,
     });
   }
 
@@ -1023,10 +994,6 @@ function buildValidPrecomputedEvaluationMap({
   return byIndex;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
 function classifyCpLoss(cpLoss: number): MoveClassification {
   if (cpLoss <= 30) return "good";
   if (cpLoss <= 90) return "good";
@@ -1284,18 +1251,6 @@ async function getOrCreateProfile(userId: string) {
   }
 
   return inserted;
-}
-
-function normalizeMoves(value: unknown): StoredTrainingMove[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((move: SequenceMove) => {
-    const san = typeof move?.san === "string" ? move.san : "";
-    const uci = typeof move?.uci === "string" ? move.uci : "";
-    const side = move?.side === "w" || move?.side === "b" ? move.side : "";
-    return san && side && /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(uci)
-      ? [{ san, uci, side }]
-      : [];
-  });
 }
 
 function normalizeSequenceLength(value: unknown) {

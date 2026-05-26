@@ -349,26 +349,51 @@ test("filler catalog selection is cached, deterministic, and includes both origi
   assert.ok(!source.includes("Math.random"));
 });
 
-test("complete-sequence completes the active session row in place", () => {
+test("complete-sequence completes only the explicitly identified persisted active session", () => {
   const source = readSource("app/api/train/complete-sequence/route.ts");
 
   assert.ok(
-    source.includes("getActiveTrainingSession"),
-    "complete-sequence must load the active session row",
+    source.includes("getActiveTrainingSessionById"),
+    "complete-sequence must load an active session by explicit session ID",
   );
   assert.ok(
-    source.includes("storedSequenceIsPrefix(activeSession.moves, payloadMoves)"),
-    "complete-sequence must extend the stored active sequence prefix only",
+    source.includes("sessionId: payload?.sessionId"),
+    "complete-sequence must require the requested active session identity",
   );
+  assert.ok(source.includes("const startingFen = activeSession.startingFen;"));
+  assert.ok(source.includes("const moves = activeSession.moves;"));
   assert.ok(source.includes("const selectedTrainingItemId = activeSession.selectedTrainingItemId;"));
   assert.ok(source.includes("const queueSource = activeSession.queueSource;"));
+  assert.ok(source.includes("isRecord(activeSession.candidateMetadata)"));
   assert.ok(source.includes('.eq("id", activeSession.id)'));
   assert.ok(source.includes(".update({"));
   assert.ok(source.includes("completed_at: completedAt"));
   assert.ok(source.includes("sessionUpdateMs"));
-  assert.ok(source.includes("path: \"active-session\""));
+  assert.ok(source.includes('path: "active-session"'));
+  assert.ok(!source.includes("getActiveTrainingSession(userId)"));
+  assert.ok(!source.includes("payload?.startingFen"));
+  assert.ok(!source.includes("payload?.moves"));
+  assert.ok(!source.includes("payload?.selectedBucket"));
+  assert.ok(!source.includes("payload?.selectedPhase"));
+  assert.ok(!source.includes("payload?.selectedTags"));
+  assert.ok(!source.includes("payload?.selectedTrainingItemId"));
+  assert.ok(!source.includes("payload?.queueSource"));
+  assert.ok(!source.includes("payload?.previousFen"));
+  assert.ok(!source.includes("payload?.playedMove"));
+  assert.ok(!source.includes("payload?.precomputedEvaluations"));
   assert.ok(!source.includes(".insert({\n      user_id: userId"));
   assert.ok(!source.includes("updateActiveTrainingItemAfterAttempt"));
+});
+
+test("active-session restoration rejects malformed persisted sequence and identity state", () => {
+  const source = readSource("lib/training/active-session-store.ts");
+
+  assert.ok(source.includes("getActiveTrainingSessionById"));
+  assert.ok(source.includes("Stored active training session moves are invalid."));
+  assert.ok(source.includes("Stored active training session length is invalid."));
+  assert.ok(source.includes("Stored active training session candidate identity is invalid."));
+  assert.ok(source.includes("buildLegalStoredSequence("));
+  assert.ok(source.includes("countUserMovesInStoredSequence("));
 });
 
 test("active-session route exposes read start and update operations only", () => {

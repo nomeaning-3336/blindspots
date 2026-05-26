@@ -59,11 +59,15 @@ function normalizeTags(value: unknown): string[] | undefined {
   return tags.length > 0 ? tags : undefined;
 }
 
-function normalizeStoredMoves(value: unknown): StoredTrainingMove[] {
-  if (!Array.isArray(value)) return [];
+function normalizeStoredMoves(value: unknown): StoredTrainingMove[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
 
-  return value.flatMap((move) => {
-    if (!move || typeof move !== "object" || Array.isArray(move)) return [];
+  const moves: StoredTrainingMove[] = [];
+
+  for (const move of value) {
+    if (!move || typeof move !== "object" || Array.isArray(move)) {
+      return null;
+    }
 
     const row = move as Record<string, unknown>;
 
@@ -72,15 +76,17 @@ function normalizeStoredMoves(value: unknown): StoredTrainingMove[] {
       typeof row.uci !== "string" ||
       (row.side !== "w" && row.side !== "b")
     ) {
-      return [];
+      return null;
     }
 
-    return [{
+    moves.push({
       san: row.san,
       uci: row.uci,
       side: row.side,
-    }];
-  });
+    });
+  }
+
+  return moves;
 }
 
 function normalizeActiveSessionRow(row: Record<string, unknown>): ActiveTrainingSession {
@@ -101,16 +107,51 @@ function normalizeActiveSessionRow(row: Record<string, unknown>): ActiveTraining
     throw new ActiveSessionError("Stored active training session is invalid.", 500);
   }
 
+  const rawMoves = normalizeStoredMoves(row.moves_played);
+  const validatedMoves = rawMoves
+    ? buildLegalStoredSequence(
+        row.starting_fen,
+        rawMoves.map((move) => move.uci),
+      )
+    : null;
+
+  if (!rawMoves || !validatedMoves || validatedMoves.length !== rawMoves.length) {
+    throw new ActiveSessionError("Stored active training session moves are invalid.", 500);
+  }
+
+  const sequenceLength = countUserMovesInStoredSequence(
+    row.starting_fen,
+    validatedMoves,
+  );
+
+  if (row.sequence_length !== sequenceLength) {
+    throw new ActiveSessionError("Stored active training session length is invalid.", 500);
+  }
+
+  const selectedTrainingItemId =
+    typeof row.selected_training_item_id === "string"
+      ? row.selected_training_item_id
+      : null;
+  const fillerId = typeof row.filler_id === "string" ? row.filler_id : null;
+  const fillerOrigin = normalizeFillerOrigin(row.filler_origin);
+
+  if (
+    queueSource === "filler"
+      ? selectedTrainingItemId !== null || !fillerId || !fillerOrigin
+      : !selectedTrainingItemId || fillerId !== null || fillerOrigin !== null
+  ) {
+    throw new ActiveSessionError("Stored active training session candidate identity is invalid.", 500);
+  }
+
   return {
     id: row.id,
     startingFen: row.starting_fen,
-    moves: normalizeStoredMoves(row.moves_played),
-    sequenceLength: row.sequence_length,
-    selectedTrainingItemId:
-      typeof row.selected_training_item_id === "string" ? row.selected_training_item_id : null,
+    moves: validatedMoves,
+    sequenceLength,
+    selectedTrainingItemId,
     queueSource,
-    fillerId: typeof row.filler_id === "string" ? row.filler_id : null,
-    fillerOrigin: normalizeFillerOrigin(row.filler_origin),
+    fillerId,
+    fillerOrigin,
     candidateMetadata: (row.candidate_metadata ?? {}) as Json,
     startedAt: row.started_at,
   };
@@ -238,6 +279,35 @@ export async function getActiveTrainingSession(
   return data
     ? normalizeActiveSessionRow(data as unknown as Record<string, unknown>)
     : null;
+}
+
+export async function getActiveTrainingSessionById(input: {
+  userId: string;
+  sessionId: unknown;
+}): Promise<ActiveTrainingSession> {
+  if (typeof input.sessionId !== "string" || input.sessionId.length === 0) {
+    throw new ActiveSessionError("Missing active session ID.", 400);
+  }
+
+  const supabase = getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from("training_sessions" as any)
+    .select("*")
+    .eq("id", input.sessionId)
+    .eq("user_id", input.userId)
+    .is("completed_at", null)
+    .maybeSingle();
+
+  if (error) {
+    throw new ActiveSessionError(`Failed to load active session: ${error.message}`, 500);
+  }
+
+  if (!data) {
+    throw new ActiveSessionError("Active training session was not found.", 404);
+  }
+
+  return normalizeActiveSessionRow(data as unknown as Record<string, unknown>);
 }
 
 export async function createActiveTrainingSession(input: {
