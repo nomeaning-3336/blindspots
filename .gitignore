@@ -35,6 +35,7 @@ logs/
 cache/
 cache/corpus/
 artifacts/
+qa-artifacts/
 
 # corpus / eval cache
 *.jsonl

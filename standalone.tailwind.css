@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @source "./standalone.html";
 @source "./standalone.js";
+@source not "./qa-artifacts";
 
 :root {
   --bg: var(--app-bg);
