@@ -227,51 +227,71 @@ test("SPA persists legal two-sided manual sequence moves through active-session 
   const source = readSource("components/blindspots-spa-prototype.tsx");
 
   assert.ok(
-    source.includes("async function handleBoardMove(move: BoardMove)"),
+    source.includes("function handleBoardMove(move: BoardMove)"),
     "SPA must implement the move persistence handler",
   );
   assert.ok(source.includes('fetch("/api/train/active-session", {'));
   assert.ok(source.includes('method: "POST"'));
-  assert.ok(source.includes("firstMoveUci: uci"));
+  assert.ok(source.includes("firstMoveUci"));
   assert.ok(source.includes('method: "PATCH"'));
-  assert.ok(source.includes("sessionId: activeSession.id"));
-  assert.ok(source.includes("...activeSession.moves.map((storedMove) => storedMove.uci)"));
+  assert.ok(source.includes("sessionId: session.id"));
+  assert.ok(source.includes("moveUcis,"));
   assert.ok(source.includes("parseRequiredActiveSessionResponse"));
-  assert.ok(source.includes("const restoredBoard = applyPersistedSession(persistedSession);"));
-  assert.ok(source.includes("if (latestBoard.isGameOver())"));
-  assert.ok(source.includes("await completePersistedSequence(persistedSession);"));
+  assert.ok(source.includes("confirmedSessionRef.current = persistedSession;"));
+  assert.ok(source.includes("if (isTerminal)"));
+  assert.ok(source.includes("completionRequestedGenerationRef.current = generation;"));
   assert.ok(source.includes("disabled={!trainingBoardInteractive}"));
   assert.ok(!source.includes("disabled={true}"));
 });
 
-test("SPA renders legal moves optimistically and rolls back when persistence fails", () => {
+test("SPA renders legal moves optimistically while background synchronization catches up", () => {
   const source = readSource("components/blindspots-spa-prototype.tsx");
-  const moveHandlerIndex = source.indexOf("async function handleBoardMove(move: BoardMove)");
+  const moveHandlerIndex = source.indexOf("function handleBoardMove(move: BoardMove)");
   const moveHandlerSource = source.slice(moveHandlerIndex);
 
   const optimisticRenderIndex = moveHandlerSource.indexOf("setBoardFen(localNextFen);");
-  const persistenceFetchIndex = moveHandlerSource.indexOf('fetch("/api/train/active-session", {');
+  const flushIndex = moveHandlerSource.indexOf("void flushOptimisticMovesToServer(generation);");
 
   assert.ok(moveHandlerIndex >= 0);
-  assert.ok(moveHandlerSource.includes("const confirmedState = {"));
-  assert.ok(moveHandlerSource.includes("boardFen,"));
-  assert.ok(moveHandlerSource.includes("boardHistory,"));
-  assert.ok(moveHandlerSource.includes("boardHistoryIndex,"));
-  assert.ok(moveHandlerSource.includes("activeSession,"));
-  assert.ok(moveHandlerSource.includes("coldCandidate,"));
+  assert.ok(source.includes("const optimisticMoveUcisRef = useRef<string[]>([]);"));
+  assert.ok(source.includes("const confirmedSessionRef = useRef<SpaActiveSession | null>(null);"));
+  assert.ok(source.includes("const syncInFlightRef = useRef(false);"));
+  assert.ok(source.includes("const syncGenerationRef = useRef(0);"));
   assert.ok(optimisticRenderIndex >= 0, "SPA must render the local legal move immediately");
   assert.ok(
-    persistenceFetchIndex > optimisticRenderIndex,
-    "SPA must start persistence after the optimistic board update",
+    flushIndex > optimisticRenderIndex,
+    "SPA must start background synchronization after the optimistic board update",
   );
+  assert.ok(moveHandlerSource.includes("optimisticMoveUcisRef.current = [...optimisticMoveUcisRef.current, uci];"));
   assert.ok(moveHandlerSource.includes("setBoardHistory(optimisticHistory);"));
   assert.ok(moveHandlerSource.includes("setBoardHistoryIndex(optimisticHistory.length - 1);"));
-  assert.ok(moveHandlerSource.includes("setBoardFen(confirmedState.boardFen);"));
-  assert.ok(moveHandlerSource.includes("setBoardHistory(confirmedState.boardHistory);"));
-  assert.ok(moveHandlerSource.includes("setBoardHistoryIndex(confirmedState.boardHistoryIndex);"));
-  assert.ok(moveHandlerSource.includes("setActiveSession(confirmedState.activeSession);"));
-  assert.ok(moveHandlerSource.includes("setColdCandidate(confirmedState.coldCandidate);"));
-  assert.ok(moveHandlerSource.includes("const restoredBoard = applyPersistedSession(persistedSession);"));
+  assert.ok(!source.includes('"saving-move"'));
+  assert.ok(!source.includes("Saving move..."));
+});
+
+test("SPA rolls failed background synchronization back to the last saved state", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(source.includes("function rollbackUnsyncedMoves()"));
+  assert.ok(source.includes("const confirmedSession = confirmedSessionRef.current;"));
+  assert.ok(source.includes("const restoredBoard = buildRestoredBoardState(confirmedSession);"));
+  assert.ok(source.includes("optimisticMoveUcisRef.current = confirmedSession.moves.map((move) => move.uci);"));
+  assert.ok(source.includes("optimisticMoveUcisRef.current = [];"));
+  assert.ok(source.includes("Your recent moves could not be synced. The board was restored to the last saved position."));
+  assert.ok(source.includes('data-testid="spa-training-sync-error"'));
+});
+
+test("SPA serializes background move synchronization and catches up full optimistic continuations", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(source.includes("async function flushOptimisticMovesToServer(generation: number)"));
+  assert.ok(source.includes("if (syncInFlightRef.current) return;"));
+  assert.ok(source.includes("syncInFlightRef.current = true;"));
+  assert.ok(source.includes("persistFirstOptimisticMove(candidate, optimisticMoveUcis[0]!)"));
+  assert.ok(source.includes("persistOptimisticMoveList(confirmedSession, moveUcisSnapshot)"));
+  assert.ok(source.includes("while (generation === syncGenerationRef.current)"));
+  assert.ok(source.includes("if (confirmedMoveUcis.length < optimisticMoveUcis.length)"));
+  assert.ok(source.includes("void flushOptimisticMovesToServer(generation);"));
 });
 
 test("SPA makes temporary manual opponent input explicit and completes persisted sessions", () => {
@@ -298,6 +318,18 @@ test("SPA retries Finish once and renders recovered completion through the norma
   assert.ok(source.includes("catch {\n        result = await requestCompletionResult();"));
   assert.ok(source.includes("return parseCompleteSequenceResponse(responseBody);"));
   assert.ok(source.includes("setCompletionResult(result);"));
+});
+
+test("SPA flushes optimistic moves before Finish or terminal auto-completion", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(source.includes("function completePersistedSequence()"));
+  assert.ok(source.includes("completionRequestedGenerationRef.current = generation;"));
+  assert.ok(source.includes("void flushOptimisticMovesToServer(generation);"));
+  assert.ok(source.includes("if (completionRequestedGenerationRef.current === generation)"));
+  assert.ok(source.includes("await completeConfirmedSequence(confirmedSession);"));
+  assert.ok(source.includes("if (isTerminal)"));
+  assert.ok(source.includes('setTrainingActionState("finishing");'));
 });
 
 test("SPA allows non-mutating board navigation while blocking moves from historical states", () => {

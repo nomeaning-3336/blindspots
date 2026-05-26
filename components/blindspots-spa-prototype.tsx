@@ -1,7 +1,7 @@
 "use client";
 
 import { AuthSignOutButton } from "@/components/auth-sign-out-button";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Chess } from "chess.js";
 import type { Square } from "chess.js";
@@ -22,7 +22,7 @@ import {
 type BoardHistoryEntry = SpaBoardHistoryEntry;
 type SplashPhase = "blank" | "branded" | "hidden";
 type TrainingLoadState = "loading" | "ready" | "error";
-type TrainingActionState = "idle" | "saving-move" | "finishing" | "loading-next";
+type TrainingActionState = "idle" | "finishing" | "loading-next";
 
 const SPLASH_BRAND_DELAY_MS = 250;
 const SPLASH_COMPLETE_DELAY_MS = 1250;
@@ -52,6 +52,7 @@ export function BlindspotsSpaPrototype({
   const [completionResult, setCompletionResult] = useState<SpaCompletionResult | null>(null);
   const [trainingActionState, setTrainingActionState] = useState<TrainingActionState>("idle");
   const [trainingActionError, setTrainingActionError] = useState<string | null>(null);
+  const [moveSyncError, setMoveSyncError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [committed, setCommitted] = useState<{ from: string; to: string } | null>(null);
   const [flipped, setFlipped] = useState(false);
@@ -62,6 +63,13 @@ export function BlindspotsSpaPrototype({
     { fen: EMPTY_BOARD_FEN, lastMove: null },
   ]);
   const [boardHistoryIndex, setBoardHistoryIndex] = useState(0);
+  const optimisticMoveUcisRef = useRef<string[]>([]);
+  const confirmedSessionRef = useRef<SpaActiveSession | null>(null);
+  const coldCandidateRef = useRef<SpaColdCandidate | null>(null);
+  const syncInFlightRef = useRef(false);
+  const syncGenerationRef = useRef(0);
+  const completionRequestedGenerationRef = useRef<number | null>(null);
+  const visibleBoardFenRef = useRef(EMPTY_BOARD_FEN);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -83,6 +91,13 @@ export function BlindspotsSpaPrototype({
   }, []);
 
   function applyColdCandidate(candidate: SpaColdCandidate) {
+    syncGenerationRef.current += 1;
+    optimisticMoveUcisRef.current = [];
+    confirmedSessionRef.current = null;
+    coldCandidateRef.current = candidate;
+    completionRequestedGenerationRef.current = null;
+    visibleBoardFenRef.current = candidate.fen;
+    setMoveSyncError(null);
     setActiveSession(null);
     setColdCandidate(candidate);
     setCompletionResult(null);
@@ -97,6 +112,11 @@ export function BlindspotsSpaPrototype({
   function applyPersistedSession(session: SpaActiveSession) {
     const restoredBoard = buildRestoredBoardState(session);
 
+    confirmedSessionRef.current = session;
+    coldCandidateRef.current = null;
+    optimisticMoveUcisRef.current = session.moves.map((move) => move.uci);
+    visibleBoardFenRef.current = restoredBoard.fen;
+    setMoveSyncError(null);
     setActiveSession(session);
     setColdCandidate(null);
     setCompletionResult(null);
@@ -178,6 +198,13 @@ export function BlindspotsSpaPrototype({
         setCompletionResult(null);
         setTrainingActionState("idle");
         setTrainingActionError(null);
+        setMoveSyncError(null);
+        confirmedSessionRef.current = null;
+        coldCandidateRef.current = null;
+        optimisticMoveUcisRef.current = [];
+        completionRequestedGenerationRef.current = null;
+        syncGenerationRef.current += 1;
+        visibleBoardFenRef.current = EMPTY_BOARD_FEN;
         setBoardFen(EMPTY_BOARD_FEN);
         setBoardHistory([{ fen: EMPTY_BOARD_FEN, lastMove: null }]);
         setBoardHistoryIndex(0);
@@ -218,7 +245,7 @@ export function BlindspotsSpaPrototype({
   }
 
   const manualOpponentTurn =
-    activeSession !== null &&
+    (activeSession !== null || coldCandidate !== null || inSession) &&
     completionResult === null &&
     learnerSide !== null &&
     currentTurn !== null &&
@@ -240,7 +267,7 @@ export function BlindspotsSpaPrototype({
 
   const trainingBoardInteractive =
     trainingLoadState === "ready" &&
-    trainingActionState === "idle" &&
+    (trainingActionState === "idle") &&
     completionResult === null &&
     isLatestBoardState &&
     (activeSession !== null || coldCandidate !== null);
@@ -274,7 +301,85 @@ export function BlindspotsSpaPrototype({
     }
   }
 
-  async function completePersistedSequence(session: SpaActiveSession) {
+  function sameMoveUcis(left: string[], right: string[]) {
+    return left.length === right.length && left.every((move, index) => move === right[index]);
+  }
+
+  async function persistFirstOptimisticMove(candidate: SpaColdCandidate, firstMoveUci: string) {
+    return fetch("/api/train/active-session", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(
+        candidate.candidateType === "personal"
+          ? {
+              candidateType: "personal",
+              queueSource: candidate.queueSource,
+              trainingItemId: candidate.trainingItemId,
+              firstMoveUci,
+            }
+          : {
+              candidateType: "filler",
+              queueSource: "filler",
+              fillerId: candidate.fillerId,
+              fillerOrigin: candidate.fillerOrigin,
+              firstMoveUci,
+            },
+      ),
+    });
+  }
+
+  async function persistOptimisticMoveList(session: SpaActiveSession, moveUcis: string[]) {
+    return fetch("/api/train/active-session", {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        sessionId: session.id,
+        moveUcis,
+      }),
+    });
+  }
+
+  function rollbackUnsyncedMoves() {
+    completionRequestedGenerationRef.current = null;
+    const confirmedSession = confirmedSessionRef.current;
+
+    if (confirmedSession) {
+      const restoredBoard = buildRestoredBoardState(confirmedSession);
+      optimisticMoveUcisRef.current = confirmedSession.moves.map((move) => move.uci);
+      visibleBoardFenRef.current = restoredBoard.fen;
+      setActiveSession(confirmedSession);
+      setColdCandidate(null);
+      setBoardFen(restoredBoard.fen);
+      setBoardHistory(restoredBoard.history);
+      setBoardHistoryIndex(restoredBoard.historyIndex);
+      setCommitted(restoredBoard.lastMove);
+      setSelected(null);
+      setInSession(true);
+    } else {
+      const candidate = coldCandidateRef.current;
+      optimisticMoveUcisRef.current = [];
+      setActiveSession(null);
+      setColdCandidate(candidate);
+      setBoardFen(candidate?.fen ?? EMPTY_BOARD_FEN);
+      setBoardHistory([{ fen: candidate?.fen ?? EMPTY_BOARD_FEN, lastMove: null }]);
+      setBoardHistoryIndex(0);
+      setCommitted(null);
+      setSelected(null);
+      setInSession(false);
+      visibleBoardFenRef.current = candidate?.fen ?? EMPTY_BOARD_FEN;
+    }
+
+    setTrainingActionState("idle");
+    setMoveSyncError(
+      "Your recent moves could not be synced. The board was restored to the last saved position.",
+    );
+  }
+
+  async function completeConfirmedSequence(session: SpaActiveSession) {
     setTrainingActionState("finishing");
     setTrainingActionError(null);
 
@@ -320,22 +425,125 @@ export function BlindspotsSpaPrototype({
     }
   }
 
-  async function handleBoardMove(move: BoardMove) {
+  async function flushOptimisticMovesToServer(generation: number) {
+    if (syncInFlightRef.current) return;
+
+    syncInFlightRef.current = true;
+
+    try {
+      while (generation === syncGenerationRef.current) {
+        const optimisticMoveUcis = optimisticMoveUcisRef.current;
+        let confirmedSession = confirmedSessionRef.current;
+
+        if (optimisticMoveUcis.length === 0) {
+          break;
+        }
+
+        if (!confirmedSession) {
+          const candidate = coldCandidateRef.current;
+
+          if (!candidate) {
+            throw new Error("No loaded training position is available.");
+          }
+
+          const response = await persistFirstOptimisticMove(candidate, optimisticMoveUcis[0]!);
+          const responseBody = await response.json().catch(() => null);
+
+          if (!response.ok) {
+            throw new Error(readApiError(responseBody, "Failed to save the played move."));
+          }
+
+          const persistedSession = parseRequiredActiveSessionResponse(responseBody);
+
+          if (generation !== syncGenerationRef.current) {
+            return;
+          }
+
+          confirmedSessionRef.current = persistedSession;
+          confirmedSession = persistedSession;
+          coldCandidateRef.current = null;
+          setActiveSession(persistedSession);
+          setColdCandidate(null);
+          continue;
+        }
+
+        const confirmedMoveUcis = confirmedSession.moves.map((move) => move.uci);
+
+        if (confirmedMoveUcis.length < optimisticMoveUcis.length) {
+          const moveUcisSnapshot = optimisticMoveUcis.slice();
+          const response = await persistOptimisticMoveList(confirmedSession, moveUcisSnapshot);
+          const responseBody = await response.json().catch(() => null);
+
+          if (!response.ok) {
+            throw new Error(readApiError(responseBody, "Failed to save the played move."));
+          }
+
+          const persistedSession = parseRequiredActiveSessionResponse(responseBody);
+
+          if (generation !== syncGenerationRef.current) {
+            return;
+          }
+
+          confirmedSessionRef.current = persistedSession;
+          setActiveSession(persistedSession);
+          continue;
+        }
+
+        if (!sameMoveUcis(confirmedMoveUcis, optimisticMoveUcis)) {
+          throw new Error("Saved training state does not match the played moves.");
+        }
+
+        const restoredBoard = buildRestoredBoardState(confirmedSession);
+
+        if (restoredBoard.fen !== visibleBoardFenRef.current) {
+          throw new Error("Saved training state does not match the played moves.");
+        }
+
+        if (completionRequestedGenerationRef.current === generation) {
+          completionRequestedGenerationRef.current = null;
+          await completeConfirmedSequence(confirmedSession);
+        }
+
+        break;
+      }
+    } catch {
+      if (generation === syncGenerationRef.current) {
+        rollbackUnsyncedMoves();
+      }
+    } finally {
+      syncInFlightRef.current = false;
+
+      if (
+        generation === syncGenerationRef.current &&
+        completionRequestedGenerationRef.current === null
+      ) {
+        const confirmedLength = confirmedSessionRef.current?.moves.length ?? 0;
+
+        if (optimisticMoveUcisRef.current.length > confirmedLength) {
+          void flushOptimisticMovesToServer(generation);
+        }
+      }
+    }
+  }
+
+  function completePersistedSequence() {
+    const generation = syncGenerationRef.current;
+
+    setTrainingActionState("finishing");
+    setTrainingActionError(null);
+    setMoveSyncError(null);
+    completionRequestedGenerationRef.current = generation;
+
+    void flushOptimisticMovesToServer(generation);
+  }
+
+  function handleBoardMove(move: BoardMove) {
     if (!trainingBoardInteractive) return;
 
-    const confirmedState = {
-      boardFen,
-      boardHistory,
-      boardHistoryIndex,
-      committed,
-      selected,
-      activeSession,
-      coldCandidate,
-      inSession,
-    };
     let uci = "";
     let localNextFen = "";
     let optimisticHistory: BoardHistoryEntry[] = [];
+    let isTerminal = false;
 
     try {
       const chess = new Chess(boardFen);
@@ -349,6 +557,7 @@ export function BlindspotsSpaPrototype({
 
       uci = `${played.from}${played.to}${played.promotion ?? ""}`;
       localNextFen = chess.fen();
+      isTerminal = chess.isGameOver();
       optimisticHistory = [
         ...boardHistory.slice(0, boardHistoryIndex + 1),
         { fen: localNextFen, lastMove: { from: played.from, to: played.to } },
@@ -357,98 +566,25 @@ export function BlindspotsSpaPrototype({
       return;
     }
 
+    const generation = syncGenerationRef.current;
+
+    optimisticMoveUcisRef.current = [...optimisticMoveUcisRef.current, uci];
+    visibleBoardFenRef.current = localNextFen;
     setBoardFen(localNextFen);
     setBoardHistory(optimisticHistory);
     setBoardHistoryIndex(optimisticHistory.length - 1);
     setCommitted({ from: move.from, to: move.to });
     setSelected(null);
     setInSession(true);
-    setTrainingActionState("saving-move");
     setTrainingActionError(null);
+    setMoveSyncError(null);
 
-    try {
-      let response: Response;
-
-      if (activeSession) {
-        response = await fetch("/api/train/active-session", {
-          method: "PATCH",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            sessionId: activeSession.id,
-            moveUcis: [
-              ...activeSession.moves.map((storedMove) => storedMove.uci),
-              uci,
-            ],
-          }),
-        });
-      } else {
-        if (!coldCandidate) {
-          throw new Error("No loaded training position is available.");
-        }
-
-        response = await fetch("/api/train/active-session", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify(
-            coldCandidate.candidateType === "personal"
-              ? {
-                  candidateType: "personal",
-                  queueSource: coldCandidate.queueSource,
-                  trainingItemId: coldCandidate.trainingItemId,
-                  firstMoveUci: uci,
-                }
-              : {
-                  candidateType: "filler",
-                  queueSource: "filler",
-                  fillerId: coldCandidate.fillerId,
-                  fillerOrigin: coldCandidate.fillerOrigin,
-                  firstMoveUci: uci,
-                },
-          ),
-        });
-      }
-
-      const responseBody = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(
-          readApiError(responseBody, "Failed to save the played move."),
-        );
-      }
-
-      const persistedSession = parseRequiredActiveSessionResponse(responseBody);
-      const restoredBoard = applyPersistedSession(persistedSession);
-
-      if (restoredBoard.fen !== localNextFen) {
-        throw new Error("Saved training state does not match the played move.");
-      }
-
-      const latestBoard = new Chess(restoredBoard.fen);
-
-      if (latestBoard.isGameOver()) {
-        await completePersistedSequence(persistedSession);
-        return;
-      }
-
-      setTrainingActionState("idle");
-    } catch (error) {
-      setBoardFen(confirmedState.boardFen);
-      setBoardHistory(confirmedState.boardHistory);
-      setBoardHistoryIndex(confirmedState.boardHistoryIndex);
-      setCommitted(confirmedState.committed);
-      setSelected(confirmedState.selected);
-      setActiveSession(confirmedState.activeSession);
-      setColdCandidate(confirmedState.coldCandidate);
-      setInSession(confirmedState.inSession);
-      setTrainingActionError(
-        error instanceof Error ? error.message : "Failed to save the played move.",
-      );
-      setTrainingActionState("idle");
+    if (isTerminal) {
+      setTrainingActionState("finishing");
+      completionRequestedGenerationRef.current = generation;
     }
+
+    void flushOptimisticMovesToServer(generation);
   }
 
   function stepBoard(delta: -1 | 1) {
@@ -622,7 +758,7 @@ export function BlindspotsSpaPrototype({
                   <button
                     className="bs-kit-btn ghost sm"
                     onClick={() => {
-                      void completePersistedSequence(activeSession);
+                      completePersistedSequence();
                     }}
                     disabled={trainingActionState !== "idle" || !isLatestBoardState}
                   >
@@ -650,6 +786,7 @@ export function BlindspotsSpaPrototype({
             loadState={trainingLoadState}
             error={trainingLoadError}
             actionError={trainingActionError}
+            moveSyncError={moveSyncError}
             actionState={trainingActionState}
             activeSession={activeSession}
             candidate={coldCandidate}
@@ -747,6 +884,7 @@ function TrainingLoadPanel({
   loadState,
   error,
   actionError,
+  moveSyncError,
   actionState,
   activeSession,
   candidate,
@@ -756,6 +894,7 @@ function TrainingLoadPanel({
   loadState: TrainingLoadState;
   error: string | null;
   actionError: string | null;
+  moveSyncError: string | null;
   actionState: TrainingActionState;
   activeSession: SpaActiveSession | null;
   candidate: SpaColdCandidate | null;
@@ -783,9 +922,7 @@ function TrainingLoadPanel({
 
   const message = completionResult
     ? "Your sequence was saved and evaluated."
-    : actionState === "saving-move"
-      ? "Saving move..."
-      : actionState === "finishing"
+    : actionState === "finishing"
         ? "Evaluating and completing sequence..."
         : actionState === "loading-next"
           ? "Loading next sequence..."
@@ -804,6 +941,11 @@ function TrainingLoadPanel({
       {actionError ? (
         <div className="bs-kit-muted-line" data-testid="spa-training-action-error">
           {actionError}
+        </div>
+      ) : null}
+      {moveSyncError ? (
+        <div className="bs-kit-muted-line" data-testid="spa-training-sync-error">
+          {moveSyncError}
         </div>
       ) : null}
     </div>
