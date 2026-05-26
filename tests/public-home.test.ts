@@ -244,6 +244,36 @@ test("SPA persists legal two-sided manual sequence moves through active-session 
   assert.ok(!source.includes("disabled={true}"));
 });
 
+test("SPA renders legal moves optimistically and rolls back when persistence fails", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+  const moveHandlerIndex = source.indexOf("async function handleBoardMove(move: BoardMove)");
+  const moveHandlerSource = source.slice(moveHandlerIndex);
+
+  const optimisticRenderIndex = moveHandlerSource.indexOf("setBoardFen(localNextFen);");
+  const persistenceFetchIndex = moveHandlerSource.indexOf('fetch("/api/train/active-session", {');
+
+  assert.ok(moveHandlerIndex >= 0);
+  assert.ok(moveHandlerSource.includes("const confirmedState = {"));
+  assert.ok(moveHandlerSource.includes("boardFen,"));
+  assert.ok(moveHandlerSource.includes("boardHistory,"));
+  assert.ok(moveHandlerSource.includes("boardHistoryIndex,"));
+  assert.ok(moveHandlerSource.includes("activeSession,"));
+  assert.ok(moveHandlerSource.includes("coldCandidate,"));
+  assert.ok(optimisticRenderIndex >= 0, "SPA must render the local legal move immediately");
+  assert.ok(
+    persistenceFetchIndex > optimisticRenderIndex,
+    "SPA must start persistence after the optimistic board update",
+  );
+  assert.ok(moveHandlerSource.includes("setBoardHistory(optimisticHistory);"));
+  assert.ok(moveHandlerSource.includes("setBoardHistoryIndex(optimisticHistory.length - 1);"));
+  assert.ok(moveHandlerSource.includes("setBoardFen(confirmedState.boardFen);"));
+  assert.ok(moveHandlerSource.includes("setBoardHistory(confirmedState.boardHistory);"));
+  assert.ok(moveHandlerSource.includes("setBoardHistoryIndex(confirmedState.boardHistoryIndex);"));
+  assert.ok(moveHandlerSource.includes("setActiveSession(confirmedState.activeSession);"));
+  assert.ok(moveHandlerSource.includes("setColdCandidate(confirmedState.coldCandidate);"));
+  assert.ok(moveHandlerSource.includes("const restoredBoard = applyPersistedSession(persistedSession);"));
+});
+
 test("SPA makes temporary manual opponent input explicit and completes persisted sessions", () => {
   const source = readSource("components/blindspots-spa-prototype.tsx");
 
@@ -258,6 +288,18 @@ test("SPA makes temporary manual opponent input explicit and completes persisted
   assert.ok(!source.includes("fillerCursor=0"));
 });
 
+test("SPA retries Finish once and renders recovered completion through the normal result state", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+  const completionRequestCalls = source.match(/requestCompletionResult\(\)/g) ?? [];
+
+  assert.ok(source.includes("async function requestCompletionResult()"));
+  assert.equal(completionRequestCalls.length, 3);
+  assert.ok(source.includes("result = await requestCompletionResult();"));
+  assert.ok(source.includes("catch {\n        result = await requestCompletionResult();"));
+  assert.ok(source.includes("return parseCompleteSequenceResponse(responseBody);"));
+  assert.ok(source.includes("setCompletionResult(result);"));
+});
+
 test("SPA allows non-mutating board navigation while blocking moves from historical states", () => {
   const source = readSource("components/blindspots-spa-prototype.tsx");
 
@@ -267,6 +309,19 @@ test("SPA allows non-mutating board navigation while blocking moves from histori
   assert.ok(source.includes("disabled={!canNavigateHistory || boardHistoryIndex === 0}"));
   assert.ok(source.includes("disabled={!canNavigateHistory || boardHistoryIndex === boardHistory.length - 1}"));
   assert.ok(source.includes("if (!canNavigateHistory) return;"));
+});
+
+test("SPA no longer exposes fake QUEUE-driven review controls or panels", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(!source.includes("const QUEUE ="));
+  assert.ok(!source.includes("function finishSequence()"));
+  assert.ok(!source.includes("function nextPosition()"));
+  assert.ok(!source.includes("function goHome()"));
+  assert.ok(!source.includes("function SequencePanel"));
+  assert.ok(!source.includes("function EngineLinesPanel"));
+  assert.ok(!source.includes("function FeedbackCard"));
+  assert.ok(!source.includes("const REASONS ="));
 });
 
 test("active-session creation rejects stale filler candidates against server progression", () => {
@@ -503,6 +558,8 @@ test("complete-sequence completes only the explicitly identified persisted activ
 
 test("complete-sequence safely returns a stored result when atomic finalization already succeeded", () => {
   const source = readSource("app/api/train/complete-sequence/route.ts");
+  const initialRecoveryIndex = source.indexOf("error instanceof ActiveSessionError && error.status === 404");
+  const rpcIndex = source.indexOf('"finalize_training_session_atomic"');
 
   assert.ok(source.includes("type StoredCompletedSessionResult ="));
   assert.ok(source.includes("async function getStoredCompletedSessionResult"));
@@ -512,6 +569,8 @@ test("complete-sequence safely returns a stored result when atomic finalization 
   assert.ok(source.includes("error instanceof ActiveSessionError && error.status === 404"));
   assert.ok(source.includes('finalizationError.message.includes("Training session is already completed.")'));
   assert.ok(source.includes("return buildStoredCompletionResponse(completedResult);"));
+  assert.ok(initialRecoveryIndex >= 0);
+  assert.ok(rpcIndex > initialRecoveryIndex, "stored recovery must be checked before invoking the atomic RPC");
 });
 
 test("active-session restoration rejects malformed persisted sequence and identity state", () => {

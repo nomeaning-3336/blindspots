@@ -19,7 +19,6 @@ import {
   type SpaColdCandidate,
 } from "@/lib/training/spa-training-hydration";
 
-type Verdict = "best" | "inaccuracy" | "blunder" | "brilliant" | null;
 type BoardHistoryEntry = SpaBoardHistoryEntry;
 type SplashPhase = "blank" | "branded" | "hidden";
 type TrainingLoadState = "loading" | "ready" | "error";
@@ -28,65 +27,6 @@ type TrainingActionState = "idle" | "saving-move" | "finishing" | "loading-next"
 const SPLASH_BRAND_DELAY_MS = 250;
 const SPLASH_COMPLETE_DELAY_MS = 1250;
 const EMPTY_BOARD_FEN = "8/8/8/8/8/8/8/8 w - - 0 1";
-
-const QUEUE = [
-  {
-    fen: "r1bq1rk1/pp1bpppp/2npn3/8/3PP3/2NB1N2/PPP2PPP/R1BQK2R w KQ - 0 1",
-    solution: { from: "g3", to: "f5", san: "Nf5" },
-    distractor: { from: "f3", to: "h4", san: "Nh4" },
-    history: [
-      { quality: "brilliant", san: "Nf5", cpl: 0, eloDelta: +12 },
-      { quality: "best", san: "exf5", cpl: 0, eloDelta: +3 },
-      { quality: "best", san: "Rxe7", cpl: 4, eloDelta: +2 },
-      { quality: "excellent", san: "Qxe7", cpl: 8, eloDelta: +1 },
-    ],
-    engineLines: [
-      { eval: "+2.4", line: "Nf5 exf5 Rxe7 Qxe7 Qxf5" },
-      { eval: "+2.1", line: "Bxc6 Nxc6 Re1 Bf6 d4" },
-      { eval: "+1.8", line: "d4 exd4 Nxd4 Nxd4 Qxd4" },
-      { eval: "+1.2", line: "Nxe5 Nxe5 d4 Bg6 dxe5" },
-      { eval: "+0.9", line: "Re1 Nf6 Bxc6 dxc6 d4" },
-    ],
-    eloBefore: 1842,
-    eloAfter: 1860,
-    eloChange: +18,
-  },
-  {
-    fen: "8/7k/5p2/1P6/2K5/8/2R5/6r1 w - - 0 1",
-    solution: { from: "c4", to: "c5", san: "Kc5" },
-    distractor: { from: "b5", to: "b6", san: "b6" },
-    history: [
-      { quality: "best", san: "Kc5", cpl: 0, eloDelta: +10 },
-      { quality: "best", san: "Rxb5", cpl: 0, eloDelta: +4 },
-      { quality: "okay", san: "Kd6", cpl: 12, eloDelta: +1 },
-    ],
-    engineLines: [
-      { eval: "+5.2", line: "Kc5 Rxb5 Kd6 Rb6+ Kc7" },
-      { eval: "+4.6", line: "b6 Rxb6 Kc5 Rb1 Kc6" },
-      { eval: "+3.9", line: "Kb4 Rxb5+ Kxb5 Kg5 a4" },
-    ],
-    eloBefore: 1860,
-    eloAfter: 1871,
-    eloChange: +11,
-  },
-  {
-    fen: "r2qkb1r/p2p1ppp/1pn2n2/4p1b1/4P3/2N2N2/PPP2PPP/R1BQKB1R w KQkq - 0 1",
-    solution: { from: "f3", to: "e5", san: "Nxe5" },
-    distractor: { from: "c3", to: "d5", san: "Nd5" },
-    history: [
-      { quality: "brilliant", san: "Nxe5", cpl: 0, eloDelta: +14 },
-      { quality: "best", san: "d4", cpl: 0, eloDelta: +2 },
-    ],
-    engineLines: [
-      { eval: "+1.9", line: "Nxe5 Nxe5 d4 Bg6 dxe5" },
-      { eval: "+1.3", line: "Nd5 exd5 exd5 Nxd5 Re1+" },
-      { eval: "+0.8", line: "d4 exd4 Nxd4 Nxd4 Qxd4" },
-    ],
-    eloBefore: 1871,
-    eloAfter: 1888,
-    eloChange: +17,
-  },
-];
 
 const TODAY = {
   due: 3,
@@ -112,10 +52,8 @@ export function BlindspotsSpaPrototype({
   const [completionResult, setCompletionResult] = useState<SpaCompletionResult | null>(null);
   const [trainingActionState, setTrainingActionState] = useState<TrainingActionState>("idle");
   const [trainingActionError, setTrainingActionError] = useState<string | null>(null);
-  const [queueIdx, setQueueIdx] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [committed, setCommitted] = useState<{ from: string; to: string } | null>(null);
-  const [verdict, setVerdict] = useState<Verdict>(null);
   const [flipped, setFlipped] = useState(false);
   const [addFenOpen, setAddFenOpen] = useState(false);
   const [inSession, setInSession] = useState(false);
@@ -153,7 +91,6 @@ export function BlindspotsSpaPrototype({
     setBoardHistoryIndex(0);
     setCommitted(null);
     setSelected(null);
-    setVerdict(null);
     setInSession(false);
   }
 
@@ -168,7 +105,6 @@ export function BlindspotsSpaPrototype({
     setBoardHistoryIndex(restoredBoard.historyIndex);
     setCommitted(restoredBoard.lastMove);
     setSelected(null);
-    setVerdict(null);
     setInSession(true);
 
     return restoredBoard;
@@ -247,7 +183,6 @@ export function BlindspotsSpaPrototype({
         setBoardHistoryIndex(0);
         setCommitted(null);
         setSelected(null);
-        setVerdict(null);
         setInSession(false);
         setTrainingLoadError(
           error instanceof Error ? error.message : "Failed to load training state.",
@@ -263,8 +198,7 @@ export function BlindspotsSpaPrototype({
     };
   }, []);
 
-  const current = QUEUE[queueIdx]!;
-  const stage = verdict ? "review" : inSession || committed ? "playing" : "loaded";
+  const stage = completionResult ? "review" : inSession || committed ? "playing" : "loaded";
   const showSplash = splashPhase !== "hidden" || trainingLoadState === "loading";
   const visibleSplashPhase: Exclude<SplashPhase, "hidden"> =
     splashPhase === "blank" ? "blank" : "branded";
@@ -314,9 +248,6 @@ export function BlindspotsSpaPrototype({
   const canNavigateHistory =
     trainingActionState === "idle" && boardHistory.length > 1;
   const lastMove = committed ? [committed.from, committed.to] : [];
-  const correct = committed && (verdict === "best" || verdict === "brilliant") ? [committed.to] : [];
-  const incorrect = committed && verdict === "blunder" ? [committed.to] : [];
-  const moveLabel = committed ? sanFromMove(committed, current) : "";
 
   async function handleToggleTheme() {
     const nextTheme: AppTheme = theme === "paper" ? "dark" : "paper";
@@ -347,7 +278,7 @@ export function BlindspotsSpaPrototype({
     setTrainingActionState("finishing");
     setTrainingActionError(null);
 
-    try {
+    async function requestCompletionResult() {
       const response = await fetch("/api/train/complete-sequence", {
         method: "POST",
         headers: {
@@ -366,7 +297,17 @@ export function BlindspotsSpaPrototype({
         );
       }
 
-      const result = parseCompleteSequenceResponse(responseBody);
+      return parseCompleteSequenceResponse(responseBody);
+    }
+
+    try {
+      let result: SpaCompletionResult;
+
+      try {
+        result = await requestCompletionResult();
+      } catch {
+        result = await requestCompletionResult();
+      }
 
       setCompletionResult(result);
       setSelected(null);
@@ -382,8 +323,19 @@ export function BlindspotsSpaPrototype({
   async function handleBoardMove(move: BoardMove) {
     if (!trainingBoardInteractive) return;
 
+    const confirmedState = {
+      boardFen,
+      boardHistory,
+      boardHistoryIndex,
+      committed,
+      selected,
+      activeSession,
+      coldCandidate,
+      inSession,
+    };
     let uci = "";
     let localNextFen = "";
+    let optimisticHistory: BoardHistoryEntry[] = [];
 
     try {
       const chess = new Chess(boardFen);
@@ -397,13 +349,22 @@ export function BlindspotsSpaPrototype({
 
       uci = `${played.from}${played.to}${played.promotion ?? ""}`;
       localNextFen = chess.fen();
+      optimisticHistory = [
+        ...boardHistory.slice(0, boardHistoryIndex + 1),
+        { fen: localNextFen, lastMove: { from: played.from, to: played.to } },
+      ];
     } catch {
       return;
     }
 
+    setBoardFen(localNextFen);
+    setBoardHistory(optimisticHistory);
+    setBoardHistoryIndex(optimisticHistory.length - 1);
+    setCommitted({ from: move.from, to: move.to });
+    setSelected(null);
+    setInSession(true);
     setTrainingActionState("saving-move");
     setTrainingActionError(null);
-    setSelected(null);
 
     try {
       let response: Response;
@@ -475,17 +436,19 @@ export function BlindspotsSpaPrototype({
 
       setTrainingActionState("idle");
     } catch (error) {
+      setBoardFen(confirmedState.boardFen);
+      setBoardHistory(confirmedState.boardHistory);
+      setBoardHistoryIndex(confirmedState.boardHistoryIndex);
+      setCommitted(confirmedState.committed);
+      setSelected(confirmedState.selected);
+      setActiveSession(confirmedState.activeSession);
+      setColdCandidate(confirmedState.coldCandidate);
+      setInSession(confirmedState.inSession);
       setTrainingActionError(
         error instanceof Error ? error.message : "Failed to save the played move.",
       );
       setTrainingActionState("idle");
     }
-  }
-
-  function resetBoardHistory(fen: string) {
-    setBoardFen(fen);
-    setBoardHistory([{ fen, lastMove: null }]);
-    setBoardHistoryIndex(0);
   }
 
   function stepBoard(delta: -1 | 1) {
@@ -557,37 +520,6 @@ export function BlindspotsSpaPrototype({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [boardHistory, boardHistoryIndex, canNavigateHistory]);
 
-  function finishSequence() {
-    if (!committed) return;
-    if (committed.from === current.solution.from && committed.to === current.solution.to) {
-      setVerdict(queueIdx === 2 ? "brilliant" : "best");
-    } else if (committed.from === current.distractor.from && committed.to === current.distractor.to) {
-      setVerdict("inaccuracy");
-    } else {
-      setVerdict("blunder");
-    }
-  }
-
-  function nextPosition() {
-    setQueueIdx((index) => {
-      const nextIndex = (index + 1) % QUEUE.length;
-      resetBoardHistory(QUEUE[nextIndex]!.fen);
-      return nextIndex;
-    });
-    setSelected(null);
-    setCommitted(null);
-    setVerdict(null);
-  }
-
-  function goHome() {
-    setQueueIdx(0);
-    resetBoardHistory(QUEUE[0]!.fen);
-    setSelected(null);
-    setCommitted(null);
-    setVerdict(null);
-    setInSession(false);
-  }
-
   return (
     <div className="bs-kit-app" aria-busy={showSplash}>
       {showSplash ? <SpaBootSplash phase={visibleSplashPhase} /> : null}
@@ -620,10 +552,7 @@ export function BlindspotsSpaPrototype({
                 showLegalTargets
                 selectedSquare={selected}
                 lastMove={committed}
-                highlightedSquares={[
-                  ...correct.map((square) => ({ square, color: "rgba(111, 178, 74, 0.45)" })),
-                  ...incorrect.map((square) => ({ square, color: "rgba(196, 59, 48, 0.42)" })),
-                ]}
+                highlightedSquares={[]}
                 disabled={!trainingBoardInteractive}
                 onMove={(move) => {
                   void handleBoardMove(move);
@@ -733,9 +662,9 @@ export function BlindspotsSpaPrototype({
           <TodayPanel
             hideStats={inSession}
             hideRating={stage === "playing"}
-            eloBefore={stage === "review" ? current.eloBefore : null}
-            eloAfter={stage === "review" ? current.eloAfter : null}
-            eloChange={stage === "review" ? current.eloChange : null}
+            eloBefore={completionResult?.elo.eloBefore ?? null}
+            eloAfter={completionResult?.elo.eloAfter ?? null}
+            eloChange={completionResult?.elo.eloDelta ?? null}
           />
         </aside>
       </div>
@@ -981,55 +910,6 @@ function RatingSparkline({ points }: { points: number[] }) {
   );
 }
 
-function SequencePanel({ history }: { history: Array<{ quality: string; san: string; cpl: number; eloDelta: number }> }) {
-  return (
-    <div className="bs-kit-panel">
-      <div className="bs-kit-panel-title">Sequence</div>
-      <div className="bs-kit-sequence-grid header"><span /><span /><span>CPL</span><span>Rating</span></div>
-      {history.map((move, index) => (
-        <div className="bs-kit-sequence-grid" key={`${move.san}-${index}`}>
-          <img src={`/analyze/classification-icons/${move.quality}.png`} alt="" />
-          <span>{move.san}</span>
-          <span>{move.cpl}</span>
-          <b>{move.eloDelta >= 0 ? "+" : ""}{move.eloDelta}</b>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function EngineLinesPanel({ lines }: { lines: Array<{ eval: string; line: string }> }) {
-  return (
-    <div className="bs-kit-panel">
-      <div className="bs-kit-panel-title">Engine analysis</div>
-      <div className="bs-kit-engine-lines">
-        {lines.map((line, index) => (
-          <div key={`${line.eval}-${index}`}>
-            <b>{line.eval}</b>
-            <span>{line.line}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function FeedbackCard({ verdict, move, onNext }: { verdict: NonNullable<Verdict>; move: string; onNext: () => void }) {
-  return (
-    <div className="bs-kit-feedback">
-      <div className="head">
-        <img src={`/analyze/classification-icons/${verdict}.png`} alt="" />
-        <div>
-          <div className={`verdict ${verdict}`}>{verdict.charAt(0).toUpperCase() + verdict.slice(1)}.</div>
-          <div className="played">you played {move}</div>
-        </div>
-      </div>
-      <p>{REASONS[verdict]}</p>
-      <button className="bs-kit-btn primary sm" onClick={onNext}>Next position</button>
-    </div>
-  );
-}
-
 function AddFenSheet({
   open,
   onClose,
@@ -1059,19 +939,6 @@ function AddFenSheet({
       </div>
     </div>
   );
-}
-
-const REASONS = {
-  best: "Best move. Engine agrees at depth 22.",
-  brilliant: "Brilliant. Engine needed depth 22 to find this.",
-  inaccuracy: "Inaccuracy. Holds the position but cedes the initiative.",
-  blunder: "Blunder. Material drops within two moves.",
-};
-
-function sanFromMove(move: { from: string; to: string }, current: typeof QUEUE[number]) {
-  if (move.to === current.solution.to && move.from === current.solution.from) return current.solution.san;
-  if (move.to === current.distractor.to && move.from === current.distractor.from) return current.distractor.san;
-  return `${move.from}→${move.to}`;
 }
 
 function Icon({
@@ -1107,4 +974,3 @@ function SkipIcon() { return <Icon><polyline points="9 18 15 12 9 6" /></Icon>; 
 function StepBackIcon() { return <Icon><polyline points="15 18 9 12 15 6" /></Icon>; }
 function StepForwardIcon() { return <Icon><polyline points="9 18 15 12 9 6" /></Icon>; }
 function CheckIcon() { return <Icon><polyline points="20 6 9 17 4 12" /></Icon>; }
-function HomeIcon() { return <Icon><path d="M3 11 12 3l9 8M5 10v10h14V10" /></Icon>; }
