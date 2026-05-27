@@ -359,6 +359,29 @@ test("SPA replaces manual opponent input with Maia worker replies and completes 
   assert.ok(!source.includes("fillerCursor=0"));
 });
 
+test("SPA keeps Maia replies visible as a short thinking turn before applying the move", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(source.includes("const MAIA_MIN_THINK_MS = 1000;"));
+  assert.ok(source.includes("const MAIA_MAX_THINK_MS = 3000;"));
+  assert.ok(source.includes("const maiaThinkingStartedAtRef = useRef(0);"));
+  assert.ok(source.includes("maiaThinkingStartedAtRef.current = performance.now();"));
+  assert.ok(source.includes("MAIA_MIN_THINK_MS + Math.random() * (MAIA_MAX_THINK_MS - MAIA_MIN_THINK_MS)"));
+  assert.ok(source.includes("const delayMs = Math.max(0, targetThinkMs - elapsed);"));
+  assert.ok(source.includes("window.setTimeout(() => {"));
+  assert.ok(source.includes("requestId !== maiaRequestIdRef.current"));
+  assert.ok(source.includes("appendOptimisticMoveUci(response.uci);"));
+});
+
+test("SPA plays existing train move and capture sounds for visible board moves", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(source.includes("playTrainMoveSound"));
+  assert.ok(source.includes("primeTrainAudio"));
+  assert.ok(source.includes("setupTrainAudioUnlockOnGesture"));
+  assert.ok(source.includes("playTrainMoveSound({ move: played, plyRef: moveSoundPlyRef });"));
+});
+
 test("SPA disables learner moves during Maia turn without normal status text", () => {
   const source = readSource("components/blindspots-spa-prototype.tsx");
 
@@ -366,6 +389,30 @@ test("SPA disables learner moves during Maia turn without normal status text", (
   assert.ok(source.includes("!maiaThinking"));
   assert.ok(source.includes("disabled={!trainingBoardInteractive}"));
   assert.ok(!source.includes("Maia is thinking..."));
+});
+
+test("SPA shows a compact opponent thinking cue only in the player strip", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(source.includes("thinking={!flipped && maiaThinking}"));
+  assert.ok(source.includes("thinking={flipped && maiaThinking}"));
+  assert.ok(source.includes("bs-kit-thinking-cue"));
+  assert.ok(source.includes("(Thinking<span aria-hidden=\"true\" className=\"bs-kit-thinking-dots\">...</span>)"));
+  assert.ok(source.includes('aria-label="Opponent thinking"'));
+  assert.ok(!source.includes("Maia is thinking..."));
+});
+
+test("SPA shows learner and fixed Maia Elo beside the player strip names", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+  const styleSource = readSource("app/globals.css");
+
+  assert.ok(source.includes('fetch("/api/train/initialize"'));
+  assert.ok(source.includes("readLearnerElo"));
+  assert.ok(source.includes("const opponentElo = MAIA3_DEFAULT_OPPO_ELO;"));
+  assert.ok(source.includes('rating={flipped ? learnerElo : opponentElo}'));
+  assert.ok(source.includes('rating={flipped ? opponentElo : learnerElo}'));
+  assert.ok(source.includes('<span className="rating">({rating})</span>'));
+  assert.ok(styleSource.includes(".bs-kit-player-strip .rating"));
 });
 
 test("SPA does not block learner-side moves on Maia model readiness", () => {

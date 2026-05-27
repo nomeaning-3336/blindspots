@@ -17,6 +17,11 @@ import type { Maia3WorkerRequest, Maia3WorkerResponse } from "@/lib/maia3/maia3-
 import type { StockfishAnalysisRequest, StockfishAnalysisResponse } from "@/lib/stockfish-client/stockfish-analysis-protocol";
 import type { ClientSequenceAnalysis } from "@/lib/stockfish-client/stockfish-analysis-types";
 import {
+  playTrainMoveSound,
+  primeTrainAudio,
+  setupTrainAudioUnlockOnGesture,
+} from "@/lib/train-audio";
+import {
   buildRestoredBoardState,
   parseCompleteSequenceResponse,
   parseActiveSessionResponse,
@@ -39,6 +44,8 @@ const SPLASH_BRAND_DELAY_MS = 150;
 // hydration + Maia readiness, so this is only a lower bound, not added latency.
 const SPLASH_COMPLETE_DELAY_MS = 450;
 const MAIA_INITIALIZATION_TIMEOUT_MS = 30000;
+const MAIA_MIN_THINK_MS = 1000;
+const MAIA_MAX_THINK_MS = 3000;
 const EMPTY_BOARD_FEN = "8/8/8/8/8/8/8/8 w - - 0 1";
 
 export function BlindspotsSpaPrototype({
@@ -66,6 +73,7 @@ export function BlindspotsSpaPrototype({
   const [maiaReady, setMaiaReady] = useState(false);
   const [maiaThinking, setMaiaThinking] = useState(false);
   const [maiaError, setMaiaError] = useState<string | null>(null);
+  const [learnerElo, setLearnerElo] = useState<number | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [committed, setCommitted] = useState<{ from: string; to: string } | null>(null);
   const [flipped, setFlipped] = useState(false);
@@ -90,12 +98,14 @@ export function BlindspotsSpaPrototype({
   const maiaWorkerRef = useRef<Worker | null>(null);
   const maiaRequestIdRef = useRef<string | null>(null);
   const maiaRequestedKeyRef = useRef<string | null>(null);
+  const maiaThinkingStartedAtRef = useRef(0);
   const stockfishWorkerRef = useRef<Worker | null>(null);
   const stockfishReadyRef = useRef(false);
   const stockfishRequestIdRef = useRef<string | null>(null);
   const pendingAnalysisGenerationRef = useRef<number | null>(null);
   const clientAnalysisRef = useRef<ClientSequenceAnalysis | null>(null);
   const completionStartedGenerationRef = useRef<number | null>(null);
+  const moveSoundPlyRef = useRef(0);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -103,6 +113,11 @@ export function BlindspotsSpaPrototype({
 
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    void primeTrainAudio();
+    setupTrainAudioUnlockOnGesture();
   }, []);
 
   useEffect(() => {
@@ -181,26 +196,41 @@ export function BlindspotsSpaPrototype({
         return;
       }
 
-      setMaiaThinking(false);
-
       if (response.type === "error") {
+        setMaiaThinking(false);
         setMaiaError("Opponent unavailable.");
         return;
       }
 
       const generation = syncGenerationRef.current;
+      const requestId = response.requestId;
+      const elapsed = performance.now() - maiaThinkingStartedAtRef.current;
+      const targetThinkMs =
+        MAIA_MIN_THINK_MS + Math.random() * (MAIA_MAX_THINK_MS - MAIA_MIN_THINK_MS);
+      const delayMs = Math.max(0, targetThinkMs - elapsed);
 
-      try {
-        const isTerminal = appendOptimisticMoveUci(response.uci);
-
-        if (isTerminal) {
-          beginAnalysisTransition("terminal");
+      window.setTimeout(() => {
+        if (
+          generation !== syncGenerationRef.current ||
+          requestId !== maiaRequestIdRef.current
+        ) {
+          return;
         }
 
-        void flushOptimisticMovesToServer(generation);
-      } catch {
-        setMaiaError("Opponent unavailable.");
-      }
+        setMaiaThinking(false);
+
+        try {
+          const isTerminal = appendOptimisticMoveUci(response.uci);
+
+          if (isTerminal) {
+            beginAnalysisTransition("terminal");
+          }
+
+          void flushOptimisticMovesToServer(generation);
+        } catch {
+          setMaiaError("Opponent unavailable.");
+        }
+      }, delayMs);
     };
 
     const request: Maia3WorkerRequest = {
@@ -366,6 +396,15 @@ export function BlindspotsSpaPrototype({
     return fallback;
   }
 
+  function readLearnerElo(value: unknown): number | null {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+    const profile = (value as { profile?: unknown }).profile;
+    if (profile === null || typeof profile !== "object" || Array.isArray(profile)) return null;
+    const elo = (profile as { blindspots_elo?: unknown }).blindspots_elo;
+
+    return typeof elo === "number" && Number.isFinite(elo) ? Math.round(elo) : null;
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -458,6 +497,37 @@ export function BlindspotsSpaPrototype({
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLearnerElo() {
+      try {
+        const response = await fetch("/api/train/initialize", {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!response.ok) return;
+
+        const elo = readLearnerElo(await response.json());
+
+        if (!cancelled) {
+          setLearnerElo(elo);
+        }
+      } catch {
+        if (!cancelled) {
+          setLearnerElo(null);
+        }
+      }
+    }
+
+    void loadLearnerElo();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const hasBlockingInitializationError = trainingLoadState === "error" || maiaError !== null;
   const showSplash = !hasBlockingInitializationError && (splashPhase !== "hidden" || trainingLoadState === "loading");
   const visibleSplashPhase: Exclude<SplashPhase, "hidden"> =
@@ -490,6 +560,7 @@ export function BlindspotsSpaPrototype({
     learnerSide === "b" ? "black" : "white";
   const opponentColor: "white" | "black" =
     learnerColor === "white" ? "black" : "white";
+  const opponentElo = MAIA3_DEFAULT_OPPO_ELO;
 
   const learnerTurn =
     trainingLoadState === "ready" &&
@@ -886,6 +957,7 @@ export function BlindspotsSpaPrototype({
     setInSession(true);
     setTrainingActionError(null);
     setMoveSyncError(null);
+    playTrainMoveSound({ move: played, plyRef: moveSoundPlyRef });
 
     return chess.isGameOver();
   }
@@ -935,6 +1007,7 @@ export function BlindspotsSpaPrototype({
     const requestId = `maia-${generation}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     maiaRequestedKeyRef.current = requestKey;
     maiaRequestIdRef.current = requestId;
+    maiaThinkingStartedAtRef.current = performance.now();
     setMaiaThinking(true);
     setMaiaError(null);
 
@@ -1154,7 +1227,9 @@ export function BlindspotsSpaPrototype({
             <PlayerStrip
               side={flipped ? learnerColor : opponentColor}
               name={flipped ? "You" : "Opponent"}
+              rating={flipped ? learnerElo : opponentElo}
               turn={flipped ? learnerTurn : opponentTurn}
+              thinking={!flipped && maiaThinking}
             />
             <div className="bs-kit-board-wrap">
               <AnalysisBoard
@@ -1201,7 +1276,9 @@ export function BlindspotsSpaPrototype({
             <PlayerStrip
               side={flipped ? opponentColor : learnerColor}
               name={flipped ? "Opponent" : "You"}
+              rating={flipped ? opponentElo : learnerElo}
               turn={flipped ? opponentTurn : learnerTurn}
+              thinking={flipped && maiaThinking}
             />
             <div className="bs-kit-board-actions">
               <div className="l">
@@ -1340,12 +1417,30 @@ function ShellActions({
   );
 }
 
-function PlayerStrip({ side, name, turn = false }: { side: "white" | "black"; name: string; turn?: boolean }) {
+function PlayerStrip({
+  side,
+  name,
+  rating,
+  turn = false,
+  thinking = false,
+}: {
+  side: "white" | "black";
+  name: string;
+  rating: number | null;
+  turn?: boolean;
+  thinking?: boolean;
+}) {
   return (
     <div className="bs-kit-player-strip" aria-label={turn ? `${name} to move` : name}>
       <div className="who">
         <span className={`side ${side}`} />
         <span className="name">{name}</span>
+        {rating !== null ? <span className="rating">({rating})</span> : null}
+        {thinking ? (
+          <span className="bs-kit-thinking-cue" aria-label="Opponent thinking">
+            (Thinking<span aria-hidden="true" className="bs-kit-thinking-dots">...</span>)
+          </span>
+        ) : null}
       </div>
     </div>
   );

@@ -1155,10 +1155,30 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
 .bs-kit-board-actions .r { display: flex; align-items: center; gap: 8px; }
 .bs-kit-player-strip .who { gap: 10px; font-size: 16px; }
 .bs-kit-player-strip .name { font-weight: 700; }
+.bs-kit-player-strip .rating { color: var(--bs-fg-2); font-size: 14px; font-weight: 700; }
 .bs-kit-player-strip .side { width: 14px; height: 14px; border: 1px solid var(--bs-border); border-radius: 3px; }
 .bs-kit-player-strip .side.white { background: #fff; }
 .bs-kit-player-strip .side.black { background: #1a1714; }
 .bs-kit-player-strip .turn-cue { color: var(--bs-accent); font-size: 15px; font-weight: 700; }
+.bs-kit-thinking-cue {
+  color: var(--bs-accent);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.bs-kit-thinking-dots {
+  display: inline-block;
+  width: 1.35em;
+  overflow: hidden;
+  vertical-align: bottom;
+  animation: bs-kit-thinking-dots 1.05s steps(4, end) infinite;
+}
+
+@keyframes bs-kit-thinking-dots {
+  0% { width: 0; }
+  100% { width: 1.35em; }
+}
 
 .bs-kit-btn {
   border: 1px solid transparent;
