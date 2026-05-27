@@ -314,11 +314,17 @@ test("SPA serializes background move synchronization and catches up full optimis
 
 test("SPA replaces manual opponent input with Maia worker replies and completes sessions", () => {
   const source = readSource("components/blindspots-spa-prototype.tsx");
+  const workerSource = readSource("workers/maia3-opponent.worker.ts");
 
   assert.ok(source.includes("new Worker(new URL(\"../workers/maia3-opponent.worker.ts\", import.meta.url)"));
   assert.ok(source.includes("MAIA3_MODEL_URL"));
+  assert.ok(source.includes("MAIA_INITIALIZATION_TIMEOUT_MS"));
+  assert.ok(source.includes("worker.onerror"));
   assert.ok(source.includes("Opponent unavailable."));
   assert.ok(source.includes("Retry"));
+  assert.ok(workerSource.includes('from "onnxruntime-web/wasm"'));
+  assert.ok(workerSource.includes('ort.env.wasm.wasmPaths = "/models/maia3/ort/";'));
+  assert.ok(workerSource.includes("ort.env.wasm.numThreads = 1;"));
   assert.ok(!source.includes("Temporary mode: play the opponent's reply manually."));
   assert.ok(!source.includes("Maia could not generate a reply."));
   assert.ok(source.includes('fetch("/api/train/complete-sequence", {'));

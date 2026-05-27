@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 
 import { Chess } from "chess.js";
-import * as ort from "onnxruntime-web";
+import * as ort from "onnxruntime-web/wasm";
 import { buildMaiaHistoryTokens } from "@/lib/maia3/maia3-tokenizer";
 import {
   decodeMaiaMoveIndex,
@@ -13,6 +13,9 @@ import type {
 } from "@/lib/maia3/maia3-worker-protocol";
 
 let session: ort.InferenceSession | null = null;
+
+ort.env.wasm.numThreads = 1;
+ort.env.wasm.wasmPaths = "/models/maia3/ort/";
 
 function post(response: Maia3WorkerResponse) {
   self.postMessage(response);

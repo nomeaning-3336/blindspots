@@ -36,6 +36,7 @@ type TrainingViewMode = "playing" | "analysis";
 
 const SPLASH_BRAND_DELAY_MS = 250;
 const SPLASH_COMPLETE_DELAY_MS = 1250;
+const MAIA_INITIALIZATION_TIMEOUT_MS = 30000;
 const EMPTY_BOARD_FEN = "8/8/8/8/8/8/8/8 w - - 0 1";
 
 const TODAY = {
@@ -132,12 +133,19 @@ export function BlindspotsSpaPrototype({
     const worker = new Worker(new URL("../workers/maia3-opponent.worker.ts", import.meta.url), {
       type: "module",
     });
+    const initTimer = window.setTimeout(() => {
+      if (maiaWorkerRef.current !== worker) return;
+      setMaiaThinking(false);
+      setMaiaReady(false);
+      setMaiaError("Opponent unavailable.");
+    }, MAIA_INITIALIZATION_TIMEOUT_MS);
 
     maiaWorkerRef.current = worker;
     worker.onmessage = (event: MessageEvent<Maia3WorkerResponse>) => {
       const response = event.data;
 
       if (response.type === "ready") {
+        window.clearTimeout(initTimer);
         setMaiaReady(true);
         return;
       }
@@ -152,6 +160,7 @@ export function BlindspotsSpaPrototype({
       setMaiaThinking(false);
 
       if (response.type === "error") {
+        window.clearTimeout(initTimer);
         setMaiaError("Opponent unavailable.");
         return;
       }
@@ -176,6 +185,13 @@ export function BlindspotsSpaPrototype({
       modelUrl: MAIA3_MODEL_URL,
     };
     worker.postMessage(request);
+
+    worker.onerror = () => {
+      window.clearTimeout(initTimer);
+      setMaiaThinking(false);
+      setMaiaReady(false);
+      setMaiaError("Opponent unavailable.");
+    };
   }
 
   useEffect(() => {
