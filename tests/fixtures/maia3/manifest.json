@@ -1,0 +1,50 @@
+[
+  {
+    "name": "startpos_white_short_history",
+    "sideToMove": "b",
+    "expectedDecodedIndex": 80,
+    "expectedDecodedUci": "b8a6",
+    "topPolicyIndex": 796,
+    "topSelectedLegalUci": "e7e5"
+  },
+  {
+    "name": "black_to_move_arbitrary_fen",
+    "sideToMove": "b",
+    "expectedDecodedIndex": 1,
+    "expectedDecodedUci": "a8b8",
+    "topPolicyIndex": 1681,
+    "topSelectedLegalUci": "c5b6"
+  },
+  {
+    "name": "castling_history_black_to_move",
+    "sideToMove": "b",
+    "expectedDecodedIndex": 1,
+    "expectedDecodedUci": "a8b8",
+    "topPolicyIndex": 1049,
+    "topSelectedLegalUci": "a6b5"
+  },
+  {
+    "name": "queens_gambit_black_to_move",
+    "sideToMove": "b",
+    "expectedDecodedIndex": 75,
+    "expectedDecodedUci": "b8d7",
+    "topPolicyIndex": 1762,
+    "topSelectedLegalUci": "d5c4"
+  },
+  {
+    "name": "white_promotion_position",
+    "sideToMove": "w",
+    "expectedDecodedIndex": 901,
+    "expectedDecodedUci": "g2f1",
+    "topPolicyIndex": 4096,
+    "topSelectedLegalUci": "a7a8q"
+  },
+  {
+    "name": "onnx_parity_fixture",
+    "sideToMove": "w",
+    "expectedDecodedIndex": 80,
+    "expectedDecodedUci": "b1a3",
+    "topPolicyIndex": 346,
+    "topSelectedLegalUci": "f1c4"
+  }
+]
