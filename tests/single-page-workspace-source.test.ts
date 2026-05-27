@@ -51,7 +51,11 @@ test("SPA shell toolbar keeps visible labels and adds a sign-out icon", () => {
   );
 
   assert.match(shellActionsSource, /<PlusIcon \/> Add FEN/);
-  assert.match(shellActionsSource, /<SettingsIcon \/>[\s\S]*<span>Settings<\/span>/);
+  assert.doesNotMatch(
+    shellActionsSource,
+    /<span>Settings<\/span>/,
+    "the non-functional Settings control is removed from the MVP toolbar",
+  );
   assert.match(shellActionsSource, /<AuthSignOutButton className="bs-kit-btn-quiet" \/>/);
   assert.match(signOutSource, /function SignOutIcon/);
   assert.match(signOutSource, /<SignOutIcon \/>/);

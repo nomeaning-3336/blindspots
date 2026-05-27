@@ -96,11 +96,14 @@ test("components/auth-sign-out-button.tsx calls window.location.assign with sign
   );
 });
 
-test("SPA top bar replaces KD avatar with a settings placeholder icon", () => {
+test("SPA top bar omits the inert settings control and keeps the repaired sign-out", () => {
   const source = readSource("components/blindspots-spa-prototype.tsx");
 
-  assert.ok(source.includes("SettingsIcon"), "SPA should include a settings icon");
-  assert.ok(source.includes('data-testid="spa-settings-placeholder"'), "SPA should render the settings placeholder");
+  assert.ok(
+    !source.includes('data-testid="spa-settings-placeholder"'),
+    "SPA must not render a non-functional settings placeholder",
+  );
+  assert.ok(!source.includes("SettingsIcon"), "SPA must not ship a dead settings icon");
   assert.ok(!source.includes('const USER = { initials: "KD" }'), "SPA should no longer define KD initials");
   assert.ok(!source.includes("{USER.initials}"), "SPA should no longer render KD initials");
   assert.ok(source.includes("AuthSignOutButton"), "SPA must preserve the repaired sign-out control");
@@ -168,13 +171,28 @@ test("signed-in SPA renders the timed branded boot splash over the loaded app", 
     source.includes('type SplashPhase = "blank" | "branded" | "hidden";'),
     "SPA must define the explicit splash phases",
   );
-  assert.ok(
-    source.includes("const SPLASH_BRAND_DELAY_MS = 250;"),
-    "SPA must keep the initial background empty for 250ms",
+  assert.match(
+    source,
+    /const SPLASH_BRAND_DELAY_MS = \d+;/,
+    "SPA must keep a short blank phase before revealing the brand",
+  );
+  assert.match(
+    source,
+    /const SPLASH_COMPLETE_DELAY_MS = \d+;/,
+    "SPA must keep a minimum branded-hold floor before it may dismiss",
+  );
+  // The branded-hold is only a lower bound; real dismissal is gated on Maia
+  // readiness, so it must not add long fixed latency once the app is ready.
+  const completeDelay = Number(
+    /const SPLASH_COMPLETE_DELAY_MS = (\d+);/.exec(source)?.[1] ?? "0",
   );
   assert.ok(
-    source.includes("const SPLASH_COMPLETE_DELAY_MS = 1250;"),
-    "SPA must reveal the home SPA after 1.25s",
+    completeDelay > 0 && completeDelay <= 1250,
+    "SPA branded-hold floor must stay short so the splash does not pad ready boots",
+  );
+  assert.ok(
+    source.includes("|| !maiaReady)"),
+    "SPA must keep the splash visible until Maia is actually ready",
   );
   assert.ok(
     source.includes('useState<SplashPhase>("blank")'),
@@ -330,7 +348,14 @@ test("SPA replaces manual opponent input with Maia worker replies and completes 
   assert.ok(source.includes('fetch("/api/train/complete-sequence", {'));
   assert.ok(source.includes("sessionId: session.id"));
   assert.ok(source.includes("parseCompleteSequenceResponse"));
-  assert.ok(source.includes("TrainingCompletionPanel"));
+  assert.ok(
+    source.includes("ClientAnalysisPanel"),
+    "unrated Maia sessions report results through the client analysis panel",
+  );
+  assert.ok(
+    !source.includes("TrainingCompletionPanel"),
+    "the duplicate rated completion panel is removed from the unrated MVP",
+  );
   assert.ok(source.includes('fetch("/api/train/next-position", {'));
   assert.ok(!source.includes("fillerSeed=spa-v1"));
   assert.ok(!source.includes("fillerCursor=0"));
@@ -705,10 +730,17 @@ test("complete-sequence marks Maia client sessions unrated and avoids rated side
 test("SPA displays unrated Maia completion without a misleading rating transition", () => {
   const source = readSource("components/blindspots-spa-prototype.tsx");
 
-  assert.ok(source.includes("Unrated"));
+  assert.ok(source.includes("Unrated"), "unrated sessions are labelled Unrated");
   assert.ok(!source.includes("Unrated Maia preview"));
   assert.ok(!source.includes("Rating not updated"));
-  assert.ok(source.includes("result.rated ?"));
+  // No fake rating surface remains: no masked rating, no static sample rating,
+  // no sparkline, no +0 transition card.
+  assert.ok(!source.includes("????"), "no masked rating placeholder");
+  assert.ok(!source.includes("RatingSparkline"), "no fake rating sparkline");
+  assert.ok(!source.includes("const TODAY ="), "no fabricated Today/rating constant");
+  assert.ok(!source.includes("TodayPanel"), "no fake Today statistics panel");
+  // The unrated outcome is communicated through the real client-analysis panel.
+  assert.ok(source.includes('isUnrated={activeSession?.opponentMode === MAIA3_OPPONENT_MODE}'));
 });
 
 test("active-session restoration rejects malformed persisted sequence and identity state", () => {
@@ -722,16 +754,25 @@ test("active-session restoration rejects malformed persisted sequence and identi
   assert.ok(source.includes("countUserMovesInStoredSequence("));
 });
 
-test("active-session route exposes read start and update operations only", () => {
+test("active-session route exposes read, start, update, and discard operations", () => {
   const source = readSource("app/api/train/active-session/route.ts");
+  const storeSource = readSource("lib/training/active-session-store.ts");
 
   assert.ok(source.includes("export async function GET()"));
   assert.ok(source.includes("export async function POST(request: Request)"));
   assert.ok(source.includes("export async function PATCH(request: Request)"));
+  assert.ok(source.includes("export async function DELETE(request: Request)"));
   assert.ok(source.includes("createActiveTrainingSession"));
   assert.ok(source.includes("updateActiveTrainingSessionMoves"));
   assert.ok(source.includes("getActiveTrainingSession"));
-  assert.ok(!source.includes("export async function DELETE"));
+  assert.ok(source.includes("abandonActiveTrainingSession"));
+
+  // Discard must be non-grading: it only deletes an uncompleted row and never
+  // touches Elo, rating deviation, SRS schedules, or filler progression.
+  assert.ok(storeSource.includes("abandonActiveTrainingSession"));
+  assert.ok(storeSource.includes('.is("completed_at", null)'));
+  assert.ok(!/abandonActiveTrainingSession[\s\S]*blindspots_elo/.test(storeSource));
+  assert.ok(!/abandonActiveTrainingSession[\s\S]*next_filler_cursor/.test(storeSource));
 });
 
 test("active-session store resolves trusted candidates and persists server-derived moves", () => {
