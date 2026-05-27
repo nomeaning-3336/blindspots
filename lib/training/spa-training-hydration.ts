@@ -45,6 +45,7 @@ export type SpaActiveSession = {
   queueSource: SpaQueueSource;
   fillerId: string | null;
   fillerOrigin: SpaFillerOrigin | null;
+  opponentMode: string;
   startedAt: string;
 };
 
@@ -221,6 +222,7 @@ export function parseActiveSessionResponse(value: unknown): SpaActiveSession | n
     typeof session.fillerId === "string" ? session.fillerId : null;
   const fillerOrigin = parseFillerOrigin(session.fillerOrigin);
   const startedAt = readNonEmptyString(session.startedAt);
+  const opponentMode = readNonEmptyString(session.opponentMode);
   const sequenceLength =
     typeof session.sequenceLength === "number" &&
     Number.isSafeInteger(session.sequenceLength) &&
@@ -232,6 +234,7 @@ export function parseActiveSessionResponse(value: unknown): SpaActiveSession | n
     !id ||
     !startingFen ||
     !queueSource ||
+    !opponentMode ||
     !startedAt ||
     sequenceLength === null ||
     !Array.isArray(session.moves) ||
@@ -259,6 +262,7 @@ export function parseActiveSessionResponse(value: unknown): SpaActiveSession | n
     queueSource,
     fillerId,
     fillerOrigin,
+    opponentMode,
     startedAt,
   };
 }

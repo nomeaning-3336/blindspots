@@ -223,7 +223,7 @@ test("signed-in SPA restores an active session before requesting a cold candidat
   assert.ok(!source.includes("fillerCursor=0"));
 });
 
-test("SPA persists legal two-sided manual sequence moves through active-session endpoints", () => {
+test("SPA persists learner and Maia sequence moves through active-session endpoints", () => {
   const source = readSource("components/blindspots-spa-prototype.tsx");
 
   assert.ok(
@@ -240,16 +240,18 @@ test("SPA persists legal two-sided manual sequence moves through active-session 
   assert.ok(source.includes("confirmedSessionRef.current = persistedSession;"));
   assert.ok(source.includes("if (isTerminal)"));
   assert.ok(source.includes("completionRequestedGenerationRef.current = generation;"));
+  assert.ok(source.includes("requestMaiaReplyForCurrentPosition();"));
+  assert.ok(source.includes("appendOptimisticMoveUci(response.uci);"));
   assert.ok(source.includes("disabled={!trainingBoardInteractive}"));
   assert.ok(!source.includes("disabled={true}"));
 });
 
 test("SPA renders legal moves optimistically while background synchronization catches up", () => {
   const source = readSource("components/blindspots-spa-prototype.tsx");
-  const moveHandlerIndex = source.indexOf("function handleBoardMove(move: BoardMove)");
+  const moveHandlerIndex = source.indexOf("function appendOptimisticMoveUci(uci: string)");
   const moveHandlerSource = source.slice(moveHandlerIndex);
 
-  const optimisticRenderIndex = moveHandlerSource.indexOf("setBoardFen(localNextFen);");
+  const optimisticRenderIndex = moveHandlerSource.indexOf("setBoardFen(nextFen);");
   const flushIndex = moveHandlerSource.indexOf("void flushOptimisticMovesToServer(generation);");
 
   assert.ok(moveHandlerIndex >= 0);
@@ -262,9 +264,10 @@ test("SPA renders legal moves optimistically while background synchronization ca
     flushIndex > optimisticRenderIndex,
     "SPA must start background synchronization after the optimistic board update",
   );
-  assert.ok(moveHandlerSource.includes("optimisticMoveUcisRef.current = [...optimisticMoveUcisRef.current, uci];"));
-  assert.ok(moveHandlerSource.includes("setBoardHistory(optimisticHistory);"));
-  assert.ok(moveHandlerSource.includes("setBoardHistoryIndex(optimisticHistory.length - 1);"));
+  assert.ok(moveHandlerSource.includes("function appendOptimisticMoveUci(uci: string)"));
+  assert.ok(moveHandlerSource.includes("...optimisticMoveUcisRef.current,"));
+  assert.ok(moveHandlerSource.includes("setBoardHistory(nextHistory);"));
+  assert.ok(moveHandlerSource.includes("setBoardHistoryIndex(nextHistory.length - 1);"));
   assert.ok(!source.includes('"saving-move"'));
   assert.ok(!source.includes("Saving move..."));
 });
@@ -294,11 +297,16 @@ test("SPA serializes background move synchronization and catches up full optimis
   assert.ok(source.includes("void flushOptimisticMovesToServer(generation);"));
 });
 
-test("SPA makes temporary manual opponent input explicit and completes persisted sessions", () => {
+test("SPA replaces manual opponent input with Maia worker replies and completes sessions", () => {
   const source = readSource("components/blindspots-spa-prototype.tsx");
 
-  assert.ok(source.includes("Temporary mode: play the opponent's reply manually."));
-  assert.ok(source.includes("Your turn. Every legal move is saved."));
+  assert.ok(source.includes("new Worker(new URL(\"../workers/maia3-opponent.worker.ts\", import.meta.url)"));
+  assert.ok(source.includes("MAIA3_MODEL_URL"));
+  assert.ok(source.includes("Maia is thinking..."));
+  assert.ok(source.includes("Maia could not generate a reply."));
+  assert.ok(source.includes("Retry Maia reply"));
+  assert.ok(source.includes("Your turn."));
+  assert.ok(!source.includes("Temporary mode: play the opponent's reply manually."));
   assert.ok(source.includes('fetch("/api/train/complete-sequence", {'));
   assert.ok(source.includes("sessionId: session.id"));
   assert.ok(source.includes("parseCompleteSequenceResponse"));
@@ -306,6 +314,17 @@ test("SPA makes temporary manual opponent input explicit and completes persisted
   assert.ok(source.includes('fetch("/api/train/next-position", {'));
   assert.ok(!source.includes("fillerSeed=spa-v1"));
   assert.ok(!source.includes("fillerCursor=0"));
+});
+
+test("active-session store persists Maia unrated opponent mode for new sessions", () => {
+  const source = readSource("lib/training/active-session-store.ts");
+
+  assert.ok(source.includes("MAIA3_OPPONENT_MODE"));
+  assert.ok(source.includes("opponentMode: string;"));
+  assert.ok(source.includes("typeof row.opponent_mode !== \"string\""));
+  assert.ok(source.includes("opponentMode: row.opponent_mode"));
+  assert.ok(source.includes("opponent_mode: MAIA3_OPPONENT_MODE"));
+  assert.ok(!source.includes('opponent_mode: "standard"'));
 });
 
 test("SPA retries Finish once and renders recovered completion through the normal result state", () => {

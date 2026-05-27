@@ -1,4 +1,5 @@
 import type { Json } from "@/lib/supabase/database";
+import { MAIA3_OPPONENT_MODE } from "@/lib/maia3/maia3-constants";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import type { FillerOrigin } from "./filler-catalog";
 import { getCurrentFillerCandidateForUser } from "./filler-progression";
@@ -22,6 +23,7 @@ export type ActiveTrainingSession = {
   fillerId: string | null;
   fillerOrigin: FillerOrigin | null;
   candidateMetadata: Json;
+  opponentMode: string;
   startedAt: string;
 };
 
@@ -98,6 +100,7 @@ function normalizeActiveSessionRow(row: Record<string, unknown>): ActiveTraining
   if (
     typeof row.id !== "string" ||
     typeof row.starting_fen !== "string" ||
+    typeof row.opponent_mode !== "string" ||
     typeof row.sequence_length !== "number" ||
     typeof row.started_at !== "string" ||
     !queueSource
@@ -151,6 +154,7 @@ function normalizeActiveSessionRow(row: Record<string, unknown>): ActiveTraining
     fillerId,
     fillerOrigin,
     candidateMetadata: (row.candidate_metadata ?? {}) as Json,
+    opponentMode: row.opponent_mode,
     startedAt: row.started_at,
   };
 }
@@ -365,7 +369,7 @@ export async function createActiveTrainingSession(input: {
       starting_fen: candidate.startingFen,
       moves_played: moves as unknown as Json,
       eval_preservation_score: null,
-      opponent_mode: "standard",
+      opponent_mode: MAIA3_OPPONENT_MODE,
       sequence_length: countUserMovesInStoredSequence(candidate.startingFen, moves),
       time_pressure_mode: "none",
       reflection_note: null,
@@ -456,5 +460,4 @@ export async function updateActiveTrainingSessionMoves(input: {
 
   return normalizeActiveSessionRow(updated as unknown as Record<string, unknown>);
 }
-
 

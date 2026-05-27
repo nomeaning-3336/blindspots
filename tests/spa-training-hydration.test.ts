@@ -58,6 +58,7 @@ test("SPA restores an active persisted sequence to its exact latest board state"
       queueSource: "review",
       fillerId: null,
       fillerOrigin: null,
+      opponentMode: "maia3_client_unrated",
       startedAt: "2026-05-26T00:00:00.000Z",
     },
   });
@@ -88,6 +89,7 @@ test("SPA rejects active-session identity mismatches", () => {
           queueSource: "filler",
           fillerId: null,
           fillerOrigin: null,
+          opponentMode: "maia3_client_unrated",
           startedAt: "2026-05-26T00:00:00.000Z",
         },
       }),

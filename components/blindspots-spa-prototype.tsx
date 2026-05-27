@@ -8,6 +8,13 @@ import type { Square } from "chess.js";
 import { AnalysisBoard, type BoardMove } from "@/components/chess/analysis-board";
 import type { AppTheme } from "@/lib/app-theme";
 import {
+  MAIA3_DEFAULT_OPPO_ELO,
+  MAIA3_DEFAULT_SELF_ELO,
+  MAIA3_MODEL_URL,
+  MAIA3_OPPONENT_MODE,
+} from "@/lib/maia3/maia3-constants";
+import type { Maia3WorkerRequest, Maia3WorkerResponse } from "@/lib/maia3/maia3-worker-protocol";
+import {
   buildRestoredBoardState,
   parseCompleteSequenceResponse,
   parseActiveSessionResponse,
@@ -53,6 +60,9 @@ export function BlindspotsSpaPrototype({
   const [trainingActionState, setTrainingActionState] = useState<TrainingActionState>("idle");
   const [trainingActionError, setTrainingActionError] = useState<string | null>(null);
   const [moveSyncError, setMoveSyncError] = useState<string | null>(null);
+  const [maiaReady, setMaiaReady] = useState(false);
+  const [maiaThinking, setMaiaThinking] = useState(false);
+  const [maiaError, setMaiaError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [committed, setCommitted] = useState<{ from: string; to: string } | null>(null);
   const [flipped, setFlipped] = useState(false);
@@ -70,6 +80,13 @@ export function BlindspotsSpaPrototype({
   const syncGenerationRef = useRef(0);
   const completionRequestedGenerationRef = useRef<number | null>(null);
   const visibleBoardFenRef = useRef(EMPTY_BOARD_FEN);
+  const visibleBoardHistoryRef = useRef<BoardHistoryEntry[]>([
+    { fen: EMPTY_BOARD_FEN, lastMove: null },
+  ]);
+  const visibleBoardHistoryIndexRef = useRef(0);
+  const maiaWorkerRef = useRef<Worker | null>(null);
+  const maiaRequestIdRef = useRef<string | null>(null);
+  const maiaRequestedKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -90,6 +107,62 @@ export function BlindspotsSpaPrototype({
     };
   }, []);
 
+  useEffect(() => {
+    const worker = new Worker(new URL("../workers/maia3-opponent.worker.ts", import.meta.url), {
+      type: "module",
+    });
+
+    maiaWorkerRef.current = worker;
+    worker.onmessage = (event: MessageEvent<Maia3WorkerResponse>) => {
+      const response = event.data;
+
+      if (response.type === "ready") {
+        setMaiaReady(true);
+        return;
+      }
+
+      if (
+        response.requestId &&
+        response.requestId !== maiaRequestIdRef.current
+      ) {
+        return;
+      }
+
+      setMaiaThinking(false);
+
+      if (response.type === "error") {
+        setMaiaError("Maia could not generate a reply.");
+        return;
+      }
+
+      const generation = syncGenerationRef.current;
+
+      try {
+        const isTerminal = appendOptimisticMoveUci(response.uci);
+
+        if (isTerminal) {
+          setTrainingActionState("finishing");
+          completionRequestedGenerationRef.current = generation;
+        }
+
+        void flushOptimisticMovesToServer(generation);
+      } catch {
+        setMaiaError("Maia could not generate a reply.");
+      }
+    };
+
+    const request: Maia3WorkerRequest = {
+      type: "initialize",
+      modelUrl: MAIA3_MODEL_URL,
+    };
+    worker.postMessage(request);
+
+    return () => {
+      maiaWorkerRef.current = null;
+      worker.terminate();
+    };
+  }, []);
+
   function applyColdCandidate(candidate: SpaColdCandidate) {
     syncGenerationRef.current += 1;
     optimisticMoveUcisRef.current = [];
@@ -97,6 +170,12 @@ export function BlindspotsSpaPrototype({
     coldCandidateRef.current = candidate;
     completionRequestedGenerationRef.current = null;
     visibleBoardFenRef.current = candidate.fen;
+    visibleBoardHistoryRef.current = [{ fen: candidate.fen, lastMove: null }];
+    visibleBoardHistoryIndexRef.current = 0;
+    maiaRequestIdRef.current = null;
+    maiaRequestedKeyRef.current = null;
+    setMaiaThinking(false);
+    setMaiaError(null);
     setMoveSyncError(null);
     setActiveSession(null);
     setColdCandidate(candidate);
@@ -116,6 +195,12 @@ export function BlindspotsSpaPrototype({
     coldCandidateRef.current = null;
     optimisticMoveUcisRef.current = session.moves.map((move) => move.uci);
     visibleBoardFenRef.current = restoredBoard.fen;
+    visibleBoardHistoryRef.current = restoredBoard.history;
+    visibleBoardHistoryIndexRef.current = restoredBoard.historyIndex;
+    maiaRequestIdRef.current = null;
+    maiaRequestedKeyRef.current = null;
+    setMaiaThinking(false);
+    setMaiaError(null);
     setMoveSyncError(null);
     setActiveSession(session);
     setColdCandidate(null);
@@ -205,6 +290,12 @@ export function BlindspotsSpaPrototype({
         completionRequestedGenerationRef.current = null;
         syncGenerationRef.current += 1;
         visibleBoardFenRef.current = EMPTY_BOARD_FEN;
+        visibleBoardHistoryRef.current = [{ fen: EMPTY_BOARD_FEN, lastMove: null }];
+        visibleBoardHistoryIndexRef.current = 0;
+        maiaRequestIdRef.current = null;
+        maiaRequestedKeyRef.current = null;
+        setMaiaThinking(false);
+        setMaiaError(null);
         setBoardFen(EMPTY_BOARD_FEN);
         setBoardHistory([{ fen: EMPTY_BOARD_FEN, lastMove: null }]);
         setBoardHistoryIndex(0);
@@ -244,12 +335,14 @@ export function BlindspotsSpaPrototype({
     currentTurn = null;
   }
 
-  const manualOpponentTurn =
+  const isOpponentTurn =
     (activeSession !== null || coldCandidate !== null || inSession) &&
     completionResult === null &&
     learnerSide !== null &&
     currentTurn !== null &&
     currentTurn !== learnerSide;
+  const legacySessionBlocked =
+    activeSession !== null && activeSession.opponentMode !== MAIA3_OPPONENT_MODE;
 
   const learnerColor: "white" | "black" =
     learnerSide === "b" ? "black" : "white";
@@ -259,16 +352,22 @@ export function BlindspotsSpaPrototype({
   const learnerTurn =
     trainingLoadState === "ready" &&
     completionResult === null &&
-    !manualOpponentTurn;
+    !isOpponentTurn;
   const opponentTurn =
     trainingLoadState === "ready" &&
     completionResult === null &&
-    manualOpponentTurn;
+    isOpponentTurn;
 
   const trainingBoardInteractive =
     trainingLoadState === "ready" &&
     (trainingActionState === "idle") &&
+    maiaReady &&
+    !maiaThinking &&
+    !maiaError &&
+    !legacySessionBlocked &&
     completionResult === null &&
+    learnerSide !== null &&
+    currentTurn === learnerSide &&
     isLatestBoardState &&
     (activeSession !== null || coldCandidate !== null);
 
@@ -351,6 +450,8 @@ export function BlindspotsSpaPrototype({
       const restoredBoard = buildRestoredBoardState(confirmedSession);
       optimisticMoveUcisRef.current = confirmedSession.moves.map((move) => move.uci);
       visibleBoardFenRef.current = restoredBoard.fen;
+      visibleBoardHistoryRef.current = restoredBoard.history;
+      visibleBoardHistoryIndexRef.current = restoredBoard.historyIndex;
       setActiveSession(confirmedSession);
       setColdCandidate(null);
       setBoardFen(restoredBoard.fen);
@@ -362,6 +463,9 @@ export function BlindspotsSpaPrototype({
     } else {
       const candidate = coldCandidateRef.current;
       optimisticMoveUcisRef.current = [];
+      visibleBoardFenRef.current = candidate?.fen ?? EMPTY_BOARD_FEN;
+      visibleBoardHistoryRef.current = [{ fen: candidate?.fen ?? EMPTY_BOARD_FEN, lastMove: null }];
+      visibleBoardHistoryIndexRef.current = 0;
       setActiveSession(null);
       setColdCandidate(candidate);
       setBoardFen(candidate?.fen ?? EMPTY_BOARD_FEN);
@@ -370,7 +474,6 @@ export function BlindspotsSpaPrototype({
       setCommitted(null);
       setSelected(null);
       setInSession(false);
-      visibleBoardFenRef.current = candidate?.fen ?? EMPTY_BOARD_FEN;
     }
 
     setTrainingActionState("idle");
@@ -537,51 +640,104 @@ export function BlindspotsSpaPrototype({
     void flushOptimisticMovesToServer(generation);
   }
 
+  function appendOptimisticMoveUci(uci: string): boolean {
+    const chess = new Chess(visibleBoardFenRef.current);
+    const played = chess.move({
+      from: uci.slice(0, 2),
+      to: uci.slice(2, 4),
+      promotion: uci.length === 5 ? uci[4] : undefined,
+    });
+
+    if (!played) {
+      throw new Error("Move is not legal on the visible board.");
+    }
+
+    const nextFen = chess.fen();
+    const nextHistory = [
+      ...visibleBoardHistoryRef.current.slice(0, visibleBoardHistoryIndexRef.current + 1),
+      { fen: nextFen, lastMove: { from: played.from, to: played.to } },
+    ];
+
+    optimisticMoveUcisRef.current = [
+      ...optimisticMoveUcisRef.current,
+      `${played.from}${played.to}${played.promotion ?? ""}`,
+    ];
+    visibleBoardFenRef.current = nextFen;
+    visibleBoardHistoryRef.current = nextHistory;
+    visibleBoardHistoryIndexRef.current = nextHistory.length - 1;
+    maiaRequestedKeyRef.current = null;
+    setBoardFen(nextFen);
+    setBoardHistory(nextHistory);
+    setBoardHistoryIndex(nextHistory.length - 1);
+    setCommitted({ from: played.from, to: played.to });
+    setSelected(null);
+    setInSession(true);
+    setTrainingActionError(null);
+    setMoveSyncError(null);
+
+    return chess.isGameOver();
+  }
+
+  function requestMaiaReplyForCurrentPosition() {
+    if (!maiaReady || maiaThinking || maiaError || completionResult || legacySessionBlocked) {
+      return;
+    }
+
+    const worker = maiaWorkerRef.current;
+    const startingFen = confirmedSessionRef.current?.startingFen ?? coldCandidateRef.current?.fen;
+
+    if (!worker || !startingFen) return;
+
+    const chess = new Chess(visibleBoardFenRef.current);
+
+    if (chess.isGameOver() || learnerSide === null || chess.turn() === learnerSide) {
+      return;
+    }
+
+    const generation = syncGenerationRef.current;
+    const moveUcis = optimisticMoveUcisRef.current.slice();
+    const requestKey = `${generation}:${moveUcis.join(" ")}`;
+
+    if (maiaRequestedKeyRef.current === requestKey) {
+      return;
+    }
+
+    const requestId = `maia-${generation}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    maiaRequestedKeyRef.current = requestKey;
+    maiaRequestIdRef.current = requestId;
+    setMaiaThinking(true);
+    setMaiaError(null);
+
+    const request: Maia3WorkerRequest = {
+      type: "generate-move",
+      requestId,
+      startingFen,
+      moveUcis,
+      selfElo: MAIA3_DEFAULT_SELF_ELO,
+      oppoElo: MAIA3_DEFAULT_OPPO_ELO,
+    };
+    worker.postMessage(request);
+  }
+
   function handleBoardMove(move: BoardMove) {
     if (!trainingBoardInteractive) return;
 
-    let uci = "";
-    let localNextFen = "";
-    let optimisticHistory: BoardHistoryEntry[] = [];
     let isTerminal = false;
 
     try {
-      const chess = new Chess(boardFen);
-      const played = chess.move({
-        from: move.from,
-        to: move.to,
-        promotion: move.uci?.[4] ?? "q",
-      });
-
-      if (!played) return;
-
-      uci = `${played.from}${played.to}${played.promotion ?? ""}`;
-      localNextFen = chess.fen();
-      isTerminal = chess.isGameOver();
-      optimisticHistory = [
-        ...boardHistory.slice(0, boardHistoryIndex + 1),
-        { fen: localNextFen, lastMove: { from: played.from, to: played.to } },
-      ];
+      const uci = `${move.from}${move.to}${move.uci?.[4] ?? ""}`;
+      isTerminal = appendOptimisticMoveUci(uci);
     } catch {
       return;
     }
 
     const generation = syncGenerationRef.current;
 
-    optimisticMoveUcisRef.current = [...optimisticMoveUcisRef.current, uci];
-    visibleBoardFenRef.current = localNextFen;
-    setBoardFen(localNextFen);
-    setBoardHistory(optimisticHistory);
-    setBoardHistoryIndex(optimisticHistory.length - 1);
-    setCommitted({ from: move.from, to: move.to });
-    setSelected(null);
-    setInSession(true);
-    setTrainingActionError(null);
-    setMoveSyncError(null);
-
     if (isTerminal) {
       setTrainingActionState("finishing");
       completionRequestedGenerationRef.current = generation;
+    } else {
+      requestMaiaReplyForCurrentPosition();
     }
 
     void flushOptimisticMovesToServer(generation);
@@ -591,6 +747,8 @@ export function BlindspotsSpaPrototype({
     const nextIndex = boardHistoryIndex + delta;
     const entry = boardHistory[nextIndex];
     if (!entry) return;
+    visibleBoardFenRef.current = entry.fen;
+    visibleBoardHistoryIndexRef.current = nextIndex;
     setBoardHistoryIndex(nextIndex);
     setBoardFen(entry.fen);
     setCommitted(entry.lastMove);
@@ -655,6 +813,21 @@ export function BlindspotsSpaPrototype({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [boardHistory, boardHistoryIndex, canNavigateHistory]);
+
+  useEffect(() => {
+    if (trainingLoadState !== "ready" || !isLatestBoardState) return;
+    requestMaiaReplyForCurrentPosition();
+  }, [
+    trainingLoadState,
+    isLatestBoardState,
+    maiaReady,
+    maiaThinking,
+    maiaError,
+    boardFen,
+    activeSession,
+    completionResult,
+    legacySessionBlocked,
+  ]);
 
   return (
     <div className="bs-kit-app" aria-busy={showSplash}>
@@ -760,7 +933,7 @@ export function BlindspotsSpaPrototype({
                     onClick={() => {
                       completePersistedSequence();
                     }}
-                    disabled={trainingActionState !== "idle" || !isLatestBoardState}
+                    disabled={trainingActionState !== "idle" || !isLatestBoardState || isOpponentTurn}
                   >
                     <CheckIcon /> Finish sequence
                   </button>
@@ -791,7 +964,11 @@ export function BlindspotsSpaPrototype({
             activeSession={activeSession}
             candidate={coldCandidate}
             completionResult={completionResult}
-            manualOpponentTurn={manualOpponentTurn}
+            isOpponentTurn={isOpponentTurn}
+            maiaThinking={maiaThinking}
+            maiaError={maiaError}
+            legacySessionBlocked={legacySessionBlocked}
+            onRetryMaiaReply={requestMaiaReplyForCurrentPosition}
           />
           {completionResult ? (
             <TrainingCompletionPanel result={completionResult} />
@@ -889,7 +1066,11 @@ function TrainingLoadPanel({
   activeSession,
   candidate,
   completionResult,
-  manualOpponentTurn,
+  isOpponentTurn,
+  maiaThinking,
+  maiaError,
+  legacySessionBlocked,
+  onRetryMaiaReply,
 }: {
   loadState: TrainingLoadState;
   error: string | null;
@@ -899,7 +1080,11 @@ function TrainingLoadPanel({
   activeSession: SpaActiveSession | null;
   candidate: SpaColdCandidate | null;
   completionResult: SpaCompletionResult | null;
-  manualOpponentTurn: boolean;
+  isOpponentTurn: boolean;
+  maiaThinking: boolean;
+  maiaError: string | null;
+  legacySessionBlocked: boolean;
+  onRetryMaiaReply: () => void;
 }) {
   if (loadState === "loading") {
     return null;
@@ -922,14 +1107,18 @@ function TrainingLoadPanel({
 
   const message = completionResult
     ? "Your sequence was saved and evaluated."
+    : legacySessionBlocked
+      ? "This older in-progress session cannot continue in Maia mode. Discard support will be added next."
     : actionState === "finishing"
         ? "Evaluating and completing sequence..."
         : actionState === "loading-next"
           ? "Loading next sequence..."
-          : manualOpponentTurn
-            ? "Temporary mode: play the opponent's reply manually."
+          : maiaError
+            ? "Maia could not generate a reply."
+          : maiaThinking || isOpponentTurn
+            ? "Maia is thinking..."
             : activeSession
-              ? "Your turn. Every legal move is saved."
+              ? "Your turn."
               : candidate?.queueSource === "filler"
                 ? "A fallback position is ready. Your first legal move starts a saved sequence."
                 : "A personal position is ready. Your first legal move starts a saved sequence.";
@@ -947,6 +1136,11 @@ function TrainingLoadPanel({
         <div className="bs-kit-muted-line" data-testid="spa-training-sync-error">
           {moveSyncError}
         </div>
+      ) : null}
+      {maiaError ? (
+        <button className="bs-kit-btn ghost sm" onClick={onRetryMaiaReply}>
+          Retry Maia reply
+        </button>
       ) : null}
     </div>
   );
