@@ -34,26 +34,19 @@ type TrainingLoadState = "loading" | "ready" | "error";
 type TrainingActionState = "idle" | "finishing" | "loading-next";
 type TrainingViewMode = "playing" | "analysis";
 
-const SPLASH_BRAND_DELAY_MS = 250;
-const SPLASH_COMPLETE_DELAY_MS = 1250;
+const SPLASH_BRAND_DELAY_MS = 150;
+// Minimum branded-hold so the splash never flickers; real dismissal is gated on
+// hydration + Maia readiness, so this is only a lower bound, not added latency.
+const SPLASH_COMPLETE_DELAY_MS = 450;
 const MAIA_INITIALIZATION_TIMEOUT_MS = 30000;
 const EMPTY_BOARD_FEN = "8/8/8/8/8/8/8/8 w - - 0 1";
-
-const TODAY = {
-  due: 3,
-  done: 2,
-  target: 10,
-  reviewDue: 2,
-  newFromGames: 1,
-  rating: 1842,
-  ratingHistory: [1801, 1798, 1812, 1820, 1818, 1824, 1831, 1835, 1842],
-};
 
 export function BlindspotsSpaPrototype({
   initialTheme,
 }: {
   initialTheme: AppTheme;
 }) {
+  const [mounted, setMounted] = useState(false);
   const [theme, setTheme] = useState<AppTheme>(initialTheme);
   const [splashPhase, setSplashPhase] = useState<SplashPhase>("blank");
   const [trainingLoadState, setTrainingLoadState] = useState<TrainingLoadState>("loading");
@@ -69,7 +62,6 @@ export function BlindspotsSpaPrototype({
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [completionSaveError, setCompletionSaveError] = useState<string | null>(null);
   const [selectedAnalysisMoveIndex, setSelectedAnalysisMoveIndex] = useState<number | null>(null);
-  const [stockfishReady, setStockfishReady] = useState(false);
   const [stockfishInitStarted, setStockfishInitStarted] = useState(false);
   const [maiaReady, setMaiaReady] = useState(false);
   const [maiaThinking, setMaiaThinking] = useState(false);
@@ -99,6 +91,7 @@ export function BlindspotsSpaPrototype({
   const maiaRequestIdRef = useRef<string | null>(null);
   const maiaRequestedKeyRef = useRef<string | null>(null);
   const stockfishWorkerRef = useRef<Worker | null>(null);
+  const stockfishReadyRef = useRef(false);
   const stockfishRequestIdRef = useRef<string | null>(null);
   const pendingAnalysisGenerationRef = useRef<number | null>(null);
   const clientAnalysisRef = useRef<ClientSequenceAnalysis | null>(null);
@@ -107,6 +100,10 @@ export function BlindspotsSpaPrototype({
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const brandTimer = window.setTimeout(() => {
@@ -210,7 +207,7 @@ export function BlindspotsSpaPrototype({
       stockfishWorkerRef.current = null;
     }
 
-    setStockfishReady(false);
+    stockfishReadyRef.current = false;
 
     const worker = new Worker(new URL("../workers/stockfish-analysis.worker.ts", import.meta.url), {
       type: "module",
@@ -221,7 +218,7 @@ export function BlindspotsSpaPrototype({
       const response = event.data;
 
       if (response.type === "ready") {
-        setStockfishReady(true);
+        stockfishReadyRef.current = true;
         const generation = pendingAnalysisGenerationRef.current;
         if (generation !== null) startClientSequenceAnalysis(generation);
         return;
@@ -430,7 +427,6 @@ export function BlindspotsSpaPrototype({
     };
   }, []);
 
-  const stage = completionResult || viewMode === "analysis" ? "review" : inSession || committed ? "playing" : "loaded";
   const hasBlockingInitializationError = trainingLoadState === "error" || maiaError !== null;
   const showSplash = !hasBlockingInitializationError && (splashPhase !== "hidden" || trainingLoadState === "loading" || !maiaReady);
   const visibleSplashPhase: Exclude<SplashPhase, "hidden"> =
@@ -778,7 +774,6 @@ export function BlindspotsSpaPrototype({
   function retryClientSequenceAnalysis() {
     const generation = syncGenerationRef.current;
     setAnalysisError(null);
-    setStockfishReady(false);
     pendingAnalysisGenerationRef.current = generation;
     createStockfishWorker();
   }
@@ -789,7 +784,7 @@ export function BlindspotsSpaPrototype({
 
     pendingAnalysisGenerationRef.current = generation;
 
-    if (!worker || !startingFen || !stockfishReady) return;
+    if (!worker || !startingFen || !stockfishReadyRef.current) return;
 
     const learnerSideForAnalysis = new Chess(startingFen).turn();
     const requestId = `stockfish-${generation}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -1004,6 +999,58 @@ export function BlindspotsSpaPrototype({
     }
   }
 
+  async function discardActiveSequence() {
+    if (trainingActionState !== "idle") return;
+
+    setTrainingActionState("loading-next");
+    setTrainingActionError(null);
+
+    // Invalidate any in-flight move sync / completion so a late flush cannot
+    // resurrect the discarded session.
+    syncGenerationRef.current += 1;
+    syncInFlightRef.current = false;
+    completionRequestedGenerationRef.current = null;
+    completionStartedGenerationRef.current = null;
+
+    const sessionToAbandon = confirmedSessionRef.current;
+
+    try {
+      if (sessionToAbandon) {
+        const response = await fetch("/api/train/active-session", {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionId: sessionToAbandon.id }),
+        });
+
+        if (!response.ok && response.status !== 404) {
+          const body = await response.json().catch(() => null);
+          throw new Error(readApiError(body, "Failed to discard the current sequence."));
+        }
+      }
+
+      const response = await fetch("/api/train/next-position", {
+        method: "GET",
+        cache: "no-store",
+      });
+      const responseBody = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          readApiError(responseBody, "Failed to load the next training position."),
+        );
+      }
+
+      const candidate = parseColdCandidateResponse(responseBody);
+      applyColdCandidate(candidate);
+      setTrainingActionState("idle");
+    } catch (error) {
+      setTrainingActionError(
+        error instanceof Error ? error.message : "Failed to discard the current sequence.",
+      );
+      setTrainingActionState("idle");
+    }
+  }
+
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (!canNavigateHistory) return;
@@ -1047,6 +1094,18 @@ export function BlindspotsSpaPrototype({
     legacySessionBlocked,
   ]);
 
+  // The training surface is fully client-driven (workers, persisted session
+  // hydration, live board state). Render only the boot splash during SSR and
+  // the first client paint so server and client markup match; the splash is
+  // visible until Maia is ready regardless.
+  if (!mounted) {
+    return (
+      <div className="bs-kit-app" aria-busy>
+        <SpaBootSplash phase="blank" />
+      </div>
+    );
+  }
+
   return (
     <div className="bs-kit-app" aria-busy={showSplash}>
       {showSplash ? <SpaBootSplash phase={visibleSplashPhase} /> : null}
@@ -1057,7 +1116,7 @@ export function BlindspotsSpaPrototype({
         }}
         onAddFen={() => setAddFenOpen(true)}
       />
-      <AddFenSheet open={addFenOpen} onClose={() => setAddFenOpen(false)} onAdd={() => setAddFenOpen(false)} />
+      <AddFenSheet open={addFenOpen} onClose={() => setAddFenOpen(false)} onAdded={() => setAddFenOpen(false)} />
 
       <div className="bs-kit-workspace">
         <div className="bs-kit-board-pane">
@@ -1145,7 +1204,23 @@ export function BlindspotsSpaPrototype({
                     Retry load
                   </button>
                 ) : null}
-                {activeSession && !completionResult && viewMode === "playing" ? (
+                {trainingLoadState === "ready" &&
+                !completionResult &&
+                viewMode === "playing" &&
+                (activeSession !== null || legacySessionBlocked) ? (
+                  <button
+                    className="bs-kit-btn ghost sm"
+                    data-testid="spa-discard-sequence"
+                    onClick={() => {
+                      void discardActiveSequence();
+                    }}
+                    disabled={trainingActionState !== "idle"}
+                    aria-label="Discard sequence"
+                  >
+                    <DiscardIcon /> Discard
+                  </button>
+                ) : null}
+                {activeSession && !completionResult && viewMode === "playing" && !legacySessionBlocked ? (
                   <button
                     className="bs-kit-btn ghost sm"
                     onClick={() => {
@@ -1183,9 +1258,6 @@ export function BlindspotsSpaPrototype({
             onRetryAnalysis={retryClientSequenceAnalysis}
             onRetryMaiaReply={() => requestMaiaReplyForCurrentPosition({ retry: true })}
           />
-          {completionResult && completionResult.rated ? (
-            <TrainingCompletionPanel result={completionResult} />
-          ) : null}
           {viewMode === "analysis" ? (
             <ClientAnalysisPanel
               analysis={clientAnalysis}
@@ -1197,13 +1269,6 @@ export function BlindspotsSpaPrototype({
               onRetrySave={() => maybeCompleteAnalyzedSequence(syncGenerationRef.current)}
             />
           ) : null}
-          <TodayPanel
-            hideStats={inSession}
-            hideRating={stage === "playing"}
-            eloBefore={completionResult?.rated ? (completionResult.elo.eloBefore ?? null) : null}
-            eloAfter={completionResult?.rated ? (completionResult.elo.eloAfter ?? null) : null}
-            eloChange={completionResult?.rated ? (completionResult.elo.eloDelta ?? null) : null}
-          />
         </aside>
       </div>
     </div>
@@ -1255,14 +1320,6 @@ function ShellActions({
       </button>
       <button className="bs-kit-btn-quiet" onClick={onToggleTheme} title="Toggle theme">
         {theme === "paper" ? <MoonIcon /> : <SunIcon />}
-      </button>
-      <button
-        type="button"
-        className="bs-kit-btn-quiet"
-        data-testid="spa-settings-placeholder"
-      >
-        <SettingsIcon />
-        <span>Settings</span>
       </button>
       <AuthSignOutButton className="bs-kit-btn-quiet" />
     </div>
@@ -1423,139 +1480,90 @@ function ClientAnalysisPanel({
   );
 }
 
-function TrainingCompletionPanel({ result }: { result: SpaCompletionResult }) {
-  const outcomeLabel =
-    result.trainingOutcome === "pass"
-      ? "Passed"
-      : result.trainingOutcome === "acceptable"
-        ? "Acceptable"
-        : "Failed";
-
-  return (
-    <div className="bs-kit-panel" data-testid="spa-training-completion-result">
-      <div className="bs-kit-panel-title">Result</div>
-      <div className="bs-kit-due-row">
-        <span>{outcomeLabel}</span>
-        <span>{result.averageCpLoss} average CPL</span>
-      </div>
-      <div className="bs-kit-muted-line">
-        Maximum CPL: <b>{result.maxSingleCpLoss}</b>
-      </div>
-      <div className="bs-kit-muted-line">
-        {result.rated ? (
-          <>
-            Rating: <b>{result.elo.eloBefore}</b> → <b>{result.elo.eloAfter}</b>{" "}
-            ({result.elo.eloDelta >= 0 ? "+" : ""}{result.elo.eloDelta})
-          </>
-        ) : (
-          <b>Unrated</b>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function TodayPanel({
-  hideRating,
-  hideStats,
-  eloBefore,
-  eloAfter,
-  eloChange,
-}: {
-  hideRating: boolean;
-  hideStats: boolean;
-  eloBefore: number | null;
-  eloAfter: number | null;
-  eloChange: number | null;
-}) {
-  const showEloChange = eloBefore != null && eloAfter != null;
-  return (
-    <div className="bs-kit-panel">
-      {!hideStats ? (
-        <div>
-          <div className="bs-kit-panel-title">Today</div>
-          <div className="bs-kit-due-row">
-            <span>{TODAY.due}</span>
-            <span>positions due</span>
-          </div>
-          <div className="bs-kit-muted-line"><b>{TODAY.done}</b> / {TODAY.target} complete</div>
-        </div>
-      ) : null}
-      {!hideStats ? (
-        <div className="bs-kit-stat-list">
-          <div><span>Review due</span><b>{TODAY.reviewDue}</b></div>
-          <div><span>New from your games</span><b>{TODAY.newFromGames}</b></div>
-        </div>
-      ) : null}
-      <div className="bs-kit-rating" data-compact={hideStats ? "true" : "false"}>
-        <div className="bs-kit-panel-title">Rating</div>
-        {hideRating ? (
-          <span className="masked">????</span>
-        ) : showEloChange ? (
-          <div className="elo-change">
-            <span className="old">{eloBefore}</span>
-            <span className="arrow">→</span>
-            <span className="new">{eloAfter}</span>
-            <b>{eloChange! >= 0 ? "+" : ""}{eloChange}</b>
-          </div>
-        ) : (
-          <>
-            <span className="rating-number">{TODAY.rating}</span>
-            <RatingSparkline points={TODAY.ratingHistory} />
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function RatingSparkline({ points }: { points: number[] }) {
-  const width = 252;
-  const height = 36;
-  const min = Math.min(...points);
-  const max = Math.max(...points);
-  const range = Math.max(max - min, 1);
-  const stepX = width / (points.length - 1);
-  const d = points.map((value, index) => {
-    const x = index * stepX;
-    const y = height - ((value - min) / range) * (height - 4) - 2;
-    return `${index === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} preserveAspectRatio="none">
-      <path d={`${d} L${width},${height} L0,${height} Z`} fill="var(--bs-accent)" opacity="0.12" />
-      <path d={d} fill="none" stroke="var(--bs-accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 function AddFenSheet({
   open,
   onClose,
-  onAdd,
+  onAdded,
 }: {
   open: boolean;
   onClose: () => void;
-  onAdd: (fen: string) => void;
+  onAdded: () => void;
 }) {
   const [value, setValue] = useState("");
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setValue("");
+      setStatus("idle");
+      setError(null);
+    }
+  }, [open]);
+
   if (!open) return null;
+
+  async function submit() {
+    const fen = value.trim();
+    if (!fen || status === "saving") return;
+
+    setStatus("saving");
+    setError(null);
+
+    try {
+      const response = await fetch("/api/position/add", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ decisionFen: fen }),
+      });
+      const body = (await response.json().catch(() => null)) as { error?: string } | null;
+
+      if (!response.ok) {
+        setError(typeof body?.error === "string" ? body.error : "Could not add that position.");
+        setStatus("error");
+        return;
+      }
+
+      setStatus("saved");
+      onAdded();
+    } catch {
+      setError("Could not add that position.");
+      setStatus("error");
+    }
+  }
+
   return (
     <div className="bs-kit-add-fen">
       <div className="inner">
         <input
           autoFocus
           value={value}
-          onChange={(event) => setValue(event.target.value)}
+          disabled={status === "saving"}
+          onChange={(event) => {
+            setValue(event.target.value);
+            if (status === "error") {
+              setStatus("idle");
+              setError(null);
+            }
+          }}
           placeholder="r1bqk2r/pp2bppp/2n1pn2/3p4/3PP3/2NB1N2/PPP2PPP/R1BQK2R w KQkq - 0 7"
           onKeyDown={(event) => {
-            if (event.key === "Enter" && value.trim()) onAdd(value.trim());
+            if (event.key === "Enter") void submit();
             if (event.key === "Escape") onClose();
           }}
         />
-        <button className="bs-kit-btn primary sm" onClick={() => value.trim() && onAdd(value.trim())}>Add</button>
+        <button
+          className="bs-kit-btn primary sm"
+          disabled={!value.trim() || status === "saving"}
+          onClick={() => void submit()}
+        >
+          {status === "saving" ? "Adding…" : "Add"}
+        </button>
         <button className="bs-kit-btn ghost sm" onClick={onClose}>Cancel</button>
       </div>
+      {error ? (
+        <div className="bs-kit-muted-line" data-testid="spa-add-fen-error">{error}</div>
+      ) : null}
     </div>
   );
 }
@@ -1580,16 +1588,9 @@ function Icon({
 function PlusIcon() { return <Icon width={14} height={14} strokeWidth={2}><path d="M12 5v14M5 12h14" /></Icon>; }
 function MoonIcon() { return <Icon><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></Icon>; }
 function SunIcon() { return <Icon><circle cx="12" cy="12" r="4" /><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4" /></Icon>; }
-function SettingsIcon() {
-  return (
-    <Icon>
-      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.33 1V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8.6 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1-.33H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 8.6a1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 1 1 7.04 3.9l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-.6 1.65 1.65 0 0 0 .33-1V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15.4 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.18.38.52.68.93.82.2.07.42.1.63.1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1.08Z" />
-    </Icon>
-  );
-}
 function FlipIcon() { return <Icon><path d="M3 7h13M16 7l-3-3M16 7l-3 3M21 17H8M8 17l3-3M8 17l3 3" /></Icon>; }
 function SkipIcon() { return <Icon><polyline points="9 18 15 12 9 6" /></Icon>; }
 function StepBackIcon() { return <Icon><polyline points="15 18 9 12 15 6" /></Icon>; }
 function StepForwardIcon() { return <Icon><polyline points="9 18 15 12 9 6" /></Icon>; }
 function CheckIcon() { return <Icon><polyline points="20 6 9 17 4 12" /></Icon>; }
+function DiscardIcon() { return <Icon width={14} height={14}><path d="M18 6 6 18M6 6l12 12" /></Icon>; }
