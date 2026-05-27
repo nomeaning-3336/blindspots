@@ -5,6 +5,17 @@
   fill="none"
   xmlns="http://www.w3.org/2000/svg"
 >
+  <style>
+    .center-dot {
+      fill: #0E0D10;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .center-dot {
+        fill: #FFFFFF;
+      }
+    }
+  </style>
   <rect
     x="1"
     y="1"
@@ -24,7 +35,7 @@
     stroke="#ECE9E0"
     stroke-width="1.75"
   />
-  <circle cx="16" cy="16" r="4.25" fill="#1F6F87" />
+  <circle class="center-dot" cx="16" cy="16" r="4.25" />
   <path
     d="M16 7.25V11M16 21V24.75M7.25 16H11M21 16H24.75"
     stroke="#ECE9E0"
