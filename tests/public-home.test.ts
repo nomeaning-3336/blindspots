@@ -129,6 +129,14 @@ test("SPA renders a board-aligned path root for the current training hierarchy",
   assert.ok(!styleSource.includes("html[data-theme=\"dark\"] .bs-kit-path-logo"));
 });
 
+test("SPA home screen omits the unintended Train action", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(!source.includes("onStartTraining"));
+  assert.ok(!source.includes('className="bs-kit-btn primary sm" onClick={onStartTraining}'));
+  assert.ok(!source.includes("> Train"));
+});
+
 test("SPA initializes theme from the server-provided app theme and does not wipe it on mount", () => {
   const pageSource = readSource("app/page.tsx");
   const spaSource = readSource("components/blindspots-spa-prototype.tsx");
@@ -538,12 +546,13 @@ test("SPA no longer exposes fake QUEUE-driven review controls or panels", () => 
   assert.ok(!source.includes("const REASONS ="));
 });
 
-test("SPA does not render a Discard sequence control", () => {
+test("SPA renders a discard control only when an active sequence exists", () => {
   const source = readSource("components/blindspots-spa-prototype.tsx");
 
+  assert.ok(source.includes("Active Sequence"));
+  assert.ok(source.includes("<DiscardIcon /> Discard"));
+  assert.ok(source.includes('onDiscard={() => { void discardActiveSequence(); }}'));
   assert.ok(!source.includes('data-testid="spa-discard-sequence"'));
-  assert.ok(!source.includes("> Discard"));
-  assert.ok(!source.includes('aria-label="Discard sequence"'));
 });
 
 test("active-session creation rejects stale filler candidates against server progression", () => {

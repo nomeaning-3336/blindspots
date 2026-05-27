@@ -35,6 +35,7 @@ import {
 
 type BoardHistoryEntry = SpaBoardHistoryEntry;
 type SplashPhase = "blank" | "branded" | "hidden";
+type SpaScreen = "home" | "import-fen" | "training";
 type TrainingLoadState = "loading" | "ready" | "error";
 type TrainingActionState = "idle" | "finishing" | "loading-next";
 type TrainingViewMode = "playing" | "analysis";
@@ -56,6 +57,7 @@ export function BlindspotsSpaPrototype({
   const [mounted, setMounted] = useState(false);
   const [theme, setTheme] = useState<AppTheme>(initialTheme);
   const [splashPhase, setSplashPhase] = useState<SplashPhase>("blank");
+  const [screen, setScreen] = useState<SpaScreen>("home");
   const [trainingLoadState, setTrainingLoadState] = useState<TrainingLoadState>("loading");
   const [trainingLoadError, setTrainingLoadError] = useState<string | null>(null);
   const [coldCandidate, setColdCandidate] = useState<SpaColdCandidate | null>(null);
@@ -77,7 +79,6 @@ export function BlindspotsSpaPrototype({
   const [selected, setSelected] = useState<string | null>(null);
   const [committed, setCommitted] = useState<{ from: string; to: string } | null>(null);
   const [flipped, setFlipped] = useState(false);
-  const [addFenOpen, setAddFenOpen] = useState(false);
   const [inSession, setInSession] = useState(false);
   const [boardFen, setBoardFen] = useState(EMPTY_BOARD_FEN);
   const [boardHistory, setBoardHistory] = useState<BoardHistoryEntry[]>([
@@ -336,6 +337,7 @@ export function BlindspotsSpaPrototype({
     setCommitted(null);
     setSelected(null);
     setInSession(false);
+    setScreen("training");
   }
 
   function applyPersistedSession(session: SpaActiveSession, options?: { restoreTerminalToAnalysis?: boolean }) {
@@ -377,6 +379,7 @@ export function BlindspotsSpaPrototype({
     setCommitted(restoredBoard.lastMove);
     setSelected(null);
     setInSession(true);
+    setScreen("training");
 
     return { restoredBoard, restoredIsTerminal, generation };
   }
@@ -427,7 +430,11 @@ export function BlindspotsSpaPrototype({
         if (restoredSession) {
           if (cancelled) return;
 
+          // Hydrate all board state but stay on Home — show Active Sequence card.
           const { restoredIsTerminal } = applyPersistedSession(restoredSession, { restoreTerminalToAnalysis: true });
+          // applyPersistedSession sets screen to "training"; override to "home"
+          // so the user sees the Resume / Discard card before being thrown into play.
+          setScreen("home");
           setTrainingLoadState("ready");
 
           if (restoredIsTerminal) {
@@ -1055,8 +1062,14 @@ export function BlindspotsSpaPrototype({
     const nextIndex = boardHistoryIndex + delta;
     const entry = boardHistory[nextIndex];
     if (!entry) return;
-    visibleBoardFenRef.current = entry.fen;
-    visibleBoardHistoryIndexRef.current = nextIndex;
+    // Only update the canonical live-board refs when in analysis mode.
+    // In playing mode the refs track the actual game position; stepping back to
+    // browse history must not overwrite them or it would corrupt Maia requests
+    // and completion detection.
+    if (viewMode === "analysis") {
+      visibleBoardFenRef.current = entry.fen;
+      visibleBoardHistoryIndexRef.current = nextIndex;
+    }
     setBoardHistoryIndex(nextIndex);
     setBoardFen(entry.fen);
     setCommitted(entry.lastMove);
@@ -1151,6 +1164,9 @@ export function BlindspotsSpaPrototype({
 
       const candidate = parseColdCandidateResponse(responseBody);
       applyColdCandidate(candidate);
+      // After discard, return to Home so the user can choose Import FEN or begin
+      // the next sequence when ready.
+      setScreen("home");
       setTrainingActionState("idle");
     } catch (error) {
       setTrainingActionError(
@@ -1215,6 +1231,48 @@ export function BlindspotsSpaPrototype({
     );
   }
 
+  const hasActiveSequence = (activeSession !== null || inSession) && completionResult === null;
+
+  if (screen === "home") {
+    return (
+      <div className="bs-kit-app" aria-busy={showSplash}>
+        {showSplash ? <SpaBootSplash phase={visibleSplashPhase} /> : null}
+        <ShellActions
+          theme={theme}
+          onToggleTheme={() => { void handleToggleTheme(); }}
+          showAddFen={false}
+        />
+        <HomeScreen
+          loadState={trainingLoadState}
+          hasActiveSequence={hasActiveSequence}
+          actionState={trainingActionState}
+          actionError={trainingActionError}
+          onResume={() => setScreen("training")}
+          onDiscard={() => { void discardActiveSequence(); }}
+          onImportFen={() => setScreen("import-fen")}
+        />
+      </div>
+    );
+  }
+
+  if (screen === "import-fen") {
+    return (
+      <div className="bs-kit-app">
+        <ShellActions
+          theme={theme}
+          onToggleTheme={() => { void handleToggleTheme(); }}
+          showAddFen={false}
+        />
+        <ImportFenScreen
+          onBack={() => setScreen("home")}
+          onImported={(candidate) => {
+            applyColdCandidate(candidate);
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="bs-kit-app" aria-busy={showSplash}>
       {showSplash ? <SpaBootSplash phase={visibleSplashPhase} /> : null}
@@ -1223,10 +1281,9 @@ export function BlindspotsSpaPrototype({
         onToggleTheme={() => {
           void handleToggleTheme();
         }}
-        onAddFen={() => setAddFenOpen(true)}
+        showAddFen={false}
       />
       <PathRoot segments={pathRootSegments} />
-      <AddFenSheet open={addFenOpen} onClose={() => setAddFenOpen(false)} onAdded={() => setAddFenOpen(false)} />
 
       <div className="bs-kit-workspace">
         <div className="bs-kit-board-pane">
@@ -1346,6 +1403,15 @@ export function BlindspotsSpaPrototype({
         </div>
 
         <aside className="bs-kit-sidebar">
+          <div className="bs-kit-sidebar-back">
+            <button
+              className="bs-kit-btn ghost sm"
+              onClick={() => setScreen("home")}
+              aria-label="Back to Home"
+            >
+              <ChevronLeftIcon /> Home
+            </button>
+          </div>
           <TrainingErrorPanel
             loadState={trainingLoadState}
             error={trainingLoadError}
@@ -1405,17 +1471,14 @@ function SpaBootSplash({
 function ShellActions({
   theme,
   onToggleTheme,
-  onAddFen,
+  showAddFen: _showAddFen,
 }: {
   theme: AppTheme;
   onToggleTheme: () => void;
-  onAddFen: () => void;
+  showAddFen?: boolean;
 }) {
   return (
     <div className="bs-kit-shell-actions">
-      <button className="bs-kit-btn-quiet" onClick={onAddFen}>
-        <PlusIcon /> Add FEN
-      </button>
       <button className="bs-kit-btn-quiet" onClick={onToggleTheme} title="Toggle theme">
         {theme === "paper" ? <MoonIcon /> : <SunIcon />}
       </button>
@@ -1440,6 +1503,167 @@ function PathRoot({ segments }: { segments: string[] }) {
           <span>{segment}</span>
         </span>
       ))}
+    </div>
+  );
+}
+
+function HomeScreen({
+  loadState,
+  hasActiveSequence,
+  actionState,
+  actionError,
+  onResume,
+  onDiscard,
+  onImportFen,
+}: {
+  loadState: TrainingLoadState;
+  hasActiveSequence: boolean;
+  actionState: TrainingActionState;
+  actionError: string | null;
+  onResume: () => void;
+  onDiscard: () => void;
+  onImportFen: () => void;
+}) {
+  return (
+    <div className="bs-kit-home">
+      <div className="bs-kit-home-brand">
+        <img src="/blindspots-logo.svg" width={40} height={40} alt="" className="bs-kit-home-logo" />
+        <span className="bs-kit-home-wordmark">
+          blindspots<span className="bs-kit-home-tld">.gg</span>
+        </span>
+      </div>
+
+      {loadState === "loading" ? (
+        <div className="bs-kit-home-loading" aria-live="polite">Loading…</div>
+      ) : loadState === "error" ? (
+        <div className="bs-kit-home-actions">
+          <button className="bs-kit-btn ghost sm" onClick={() => window.location.reload()}>
+            Retry
+          </button>
+        </div>
+      ) : hasActiveSequence ? (
+        <div className="bs-kit-home-active-card">
+          <div className="bs-kit-home-active-label">Active Sequence</div>
+          {actionError ? (
+            <div className="bs-kit-muted-line">{actionError}</div>
+          ) : null}
+          <div className="bs-kit-home-active-actions">
+            <button
+              className="bs-kit-btn primary sm"
+              onClick={onResume}
+              disabled={actionState !== "idle"}
+            >
+              Resume
+            </button>
+            <button
+              className="bs-kit-btn ghost sm"
+              onClick={onDiscard}
+              disabled={actionState !== "idle"}
+            >
+              <DiscardIcon /> Discard
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="bs-kit-home-actions">
+          <button className="bs-kit-btn ghost sm" onClick={onImportFen}>
+            <PlusIcon /> Import FEN
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ImportFenScreen({
+  onBack,
+  onImported,
+}: {
+  onBack: () => void;
+  onImported: (candidate: SpaColdCandidate) => void;
+}) {
+  const [value, setValue] = useState("");
+  const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    const fen = value.trim();
+    if (!fen || status === "saving") return;
+
+    setStatus("saving");
+    setError(null);
+
+    try {
+      const addResponse = await fetch("/api/position/add", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ decisionFen: fen }),
+      });
+      const addBody = (await addResponse.json().catch(() => null)) as { error?: string; positionId?: string } | null;
+
+      if (!addResponse.ok) {
+        setError(typeof addBody?.error === "string" ? addBody.error : "Could not add that position.");
+        setStatus("error");
+        return;
+      }
+
+      // Load the next position — it will be the just-imported FEN since it was
+      // inserted with next_review_at = now.
+      const nextResponse = await fetch("/api/train/next-position", {
+        method: "GET",
+        cache: "no-store",
+      });
+      const nextBody = await nextResponse.json().catch(() => null);
+
+      if (!nextResponse.ok) {
+        setError("Position added, but failed to load it for training.");
+        setStatus("error");
+        return;
+      }
+
+      const candidate = parseColdCandidateResponse(nextBody);
+      onImported(candidate);
+    } catch {
+      setError("Could not add that position.");
+      setStatus("error");
+    }
+  }
+
+  return (
+    <div className="bs-kit-import-fen-screen">
+      <div className="bs-kit-import-fen-header">
+        <button className="bs-kit-btn ghost sm" onClick={onBack} aria-label="Back to Home">
+          <ChevronLeftIcon /> Back
+        </button>
+        <span className="bs-kit-import-fen-title">Import FEN</span>
+      </div>
+      <div className="bs-kit-import-fen-body">
+        <input
+          autoFocus
+          className="bs-kit-import-fen-input"
+          value={value}
+          disabled={status === "saving"}
+          onChange={(e) => {
+            setValue(e.target.value);
+            if (status === "error") { setStatus("idle"); setError(null); }
+          }}
+          placeholder="r1bqk2r/pp2bppp/2n1pn2/3p4/3PP3/2NB1N2/PPP2PPP/R1BQK2R w KQkq - 0 7"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void submit();
+            if (e.key === "Escape") onBack();
+          }}
+        />
+        <button
+          className="bs-kit-btn primary sm"
+          disabled={!value.trim() || status === "saving"}
+          onClick={() => void submit()}
+        >
+          {status === "saving" ? "Importing…" : "Import"}
+        </button>
+        {error ? (
+          <div className="bs-kit-muted-line" data-testid="spa-import-fen-error">{error}</div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -1616,93 +1840,6 @@ function ClientAnalysisPanel({
   );
 }
 
-function AddFenSheet({
-  open,
-  onClose,
-  onAdded,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onAdded: () => void;
-}) {
-  const [value, setValue] = useState("");
-  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (open) {
-      setValue("");
-      setStatus("idle");
-      setError(null);
-    }
-  }, [open]);
-
-  if (!open) return null;
-
-  async function submit() {
-    const fen = value.trim();
-    if (!fen || status === "saving") return;
-
-    setStatus("saving");
-    setError(null);
-
-    try {
-      const response = await fetch("/api/position/add", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ decisionFen: fen }),
-      });
-      const body = (await response.json().catch(() => null)) as { error?: string } | null;
-
-      if (!response.ok) {
-        setError(typeof body?.error === "string" ? body.error : "Could not add that position.");
-        setStatus("error");
-        return;
-      }
-
-      setStatus("saved");
-      onAdded();
-    } catch {
-      setError("Could not add that position.");
-      setStatus("error");
-    }
-  }
-
-  return (
-    <div className="bs-kit-add-fen">
-      <div className="inner">
-        <input
-          autoFocus
-          value={value}
-          disabled={status === "saving"}
-          onChange={(event) => {
-            setValue(event.target.value);
-            if (status === "error") {
-              setStatus("idle");
-              setError(null);
-            }
-          }}
-          placeholder="r1bqk2r/pp2bppp/2n1pn2/3p4/3PP3/2NB1N2/PPP2PPP/R1BQK2R w KQkq - 0 7"
-          onKeyDown={(event) => {
-            if (event.key === "Enter") void submit();
-            if (event.key === "Escape") onClose();
-          }}
-        />
-        <button
-          className="bs-kit-btn primary sm"
-          disabled={!value.trim() || status === "saving"}
-          onClick={() => void submit()}
-        >
-          {status === "saving" ? "Adding…" : "Add"}
-        </button>
-        <button className="bs-kit-btn ghost sm" onClick={onClose}>Cancel</button>
-      </div>
-      {error ? (
-        <div className="bs-kit-muted-line" data-testid="spa-add-fen-error">{error}</div>
-      ) : null}
-    </div>
-  );
-}
 
 function Icon({
   children,
@@ -1730,3 +1867,4 @@ function StepBackIcon() { return <Icon><polyline points="15 18 9 12 15 6" /></Ic
 function StepForwardIcon() { return <Icon><polyline points="9 18 15 12 9 6" /></Icon>; }
 function CheckIcon() { return <Icon><polyline points="20 6 9 17 4 12" /></Icon>; }
 function DiscardIcon() { return <Icon width={14} height={14}><path d="M18 6 6 18M6 6l12 12" /></Icon>; }
+function ChevronLeftIcon() { return <Icon><polyline points="15 18 9 12 15 6" /></Icon>; }
