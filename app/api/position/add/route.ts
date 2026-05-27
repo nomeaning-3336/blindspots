@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getOptionalAppUserId } from "@/lib/app-auth";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import { normalizeDecisionFen } from "@/lib/training/mistake-memory";
+import { validatePlayableTrainingFen } from "@/lib/training/position-validity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,6 +36,16 @@ export async function POST(request: Request) {
 
   if (!decisionFen) {
     return NextResponse.json({ error: "Missing decisionFen" }, { status: 400 });
+  }
+
+  const playable = validatePlayableTrainingFen(decisionFen);
+
+  if (!playable.ok) {
+    const message =
+      playable.reason === "invalid_fen"
+        ? "That FEN is not a valid chess position."
+        : "That position is already over — there is no move to train.";
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 
   const canonicalFen = normalizeDecisionFen(decisionFen);

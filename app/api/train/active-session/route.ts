@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getOptionalAppUserId } from "@/lib/app-auth";
 import {
   ActiveSessionError,
+  abandonActiveTrainingSession,
   createActiveTrainingSession,
   getActiveTrainingSession,
   updateActiveTrainingSessionMoves,
@@ -54,6 +55,27 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ session }, { status: 201 });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
+
+export async function DELETE(request: Request) {
+  const userId = await getOptionalAppUserId();
+
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const payload = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+
+  try {
+    await abandonActiveTrainingSession({
+      userId,
+      sessionId: payload?.sessionId,
+    });
+
+    return NextResponse.json({ ok: true });
   } catch (error) {
     return handleRouteError(error);
   }

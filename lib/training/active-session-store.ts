@@ -405,6 +405,37 @@ export async function createActiveTrainingSession(input: {
   return normalizeActiveSessionRow(data as unknown as Record<string, unknown>);
 }
 
+export async function abandonActiveTrainingSession(input: {
+  userId: string;
+  sessionId: unknown;
+}): Promise<void> {
+  if (typeof input.sessionId !== "string" || input.sessionId.length === 0) {
+    throw new ActiveSessionError("Missing active session ID.", 400);
+  }
+
+  const supabase = getSupabaseAdminClient();
+
+  // Abandoning removes the unfinished session from active restoration without
+  // grading it: no Elo, rating deviation, SRS schedule, or filler cursor change.
+  // Only sessions that were never completed are eligible for deletion.
+  const { data, error } = await supabase
+    .from("training_sessions" as any)
+    .delete()
+    .eq("id", input.sessionId)
+    .eq("user_id", input.userId)
+    .is("completed_at", null)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    throw new ActiveSessionError(`Failed to discard active session: ${error.message}`, 500);
+  }
+
+  if (!data) {
+    throw new ActiveSessionError("Active training session was not found.", 404);
+  }
+}
+
 export async function updateActiveTrainingSessionMoves(input: {
   userId: string;
   sessionId: unknown;
