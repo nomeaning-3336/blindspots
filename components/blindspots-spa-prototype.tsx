@@ -1428,7 +1428,7 @@ function PathRoot({ segments }: { segments: string[] }) {
   return (
     <div className="bs-kit-path-root" aria-label={["Blindspots", ...segments].join(" > ")}>
       <img
-        src="/blindspots-logo.svg"
+        src="/icon.svg"
         width={20}
         height={20}
         alt=""

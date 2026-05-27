@@ -119,11 +119,14 @@ test("SPA renders a board-aligned path root for the current training hierarchy",
   assert.ok(source.includes('["Active Sequence"]'));
   assert.ok(source.includes('function PathRoot({ segments }: { segments: string[] })'));
   assert.ok(source.includes('className="bs-kit-path-root"'));
-  assert.ok(source.includes('src="/blindspots-logo.svg"'));
+  assert.ok(source.includes('src="/icon.svg"'));
   assert.ok(source.includes('aria-label={["Blindspots", ...segments].join(" > ")}'));
   assert.ok(styleSource.includes(".bs-kit-path-root"));
   assert.ok(styleSource.includes("left: max("));
+  assert.ok(styleSource.includes("calc((100vw - var(--bs-workspace-max)) / 2)"));
   assert.ok(styleSource.includes("min-height: 34px;"));
+  assert.ok(styleSource.includes("padding: 6px 0;"));
+  assert.ok(!styleSource.includes("html[data-theme=\"dark\"] .bs-kit-path-logo"));
 });
 
 test("SPA initializes theme from the server-provided app theme and does not wipe it on mount", () => {

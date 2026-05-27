@@ -1054,19 +1054,16 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   z-index: 20;
   top: 10px;
   left: max(
-    var(--bs-sidebar-pad-x),
-    calc((100vw - var(--bs-workspace-max)) / 2 + var(--bs-sidebar-pad-x))
+    12px,
+    calc((100vw - var(--bs-workspace-max)) / 2)
   );
   display: inline-flex;
   min-height: 34px;
   max-width: min(calc(100vw - 24px), var(--bs-board-max));
   align-items: center;
   gap: 10px;
-  border: 1px solid var(--bs-border);
-  border-radius: 8px;
-  background: var(--bs-bg);
   color: var(--bs-fg-2);
-  padding: 6px 12px;
+  padding: 6px 0;
   font-family: var(--bs-font-display);
   font-size: 13px;
   font-weight: 650;
@@ -1077,10 +1074,6 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   width: 20px;
   height: 20px;
   flex: 0 0 auto;
-}
-
-html[data-theme="dark"] .bs-kit-path-logo {
-  filter: invert(1);
 }
 
 .bs-kit-path-segment {
