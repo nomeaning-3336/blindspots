@@ -109,6 +109,23 @@ test("SPA top bar omits the inert settings control and keeps the repaired sign-o
   assert.ok(source.includes("AuthSignOutButton"), "SPA must preserve the repaired sign-out control");
 });
 
+test("SPA renders a board-aligned path root for the current training hierarchy", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+  const styleSource = readSource("app/globals.css");
+
+  assert.ok(source.includes("<PathRoot segments={pathRootSegments} />"));
+  assert.ok(source.includes('viewMode === "analysis"'));
+  assert.ok(source.includes('["Analysis"]'));
+  assert.ok(source.includes('["Active Sequence"]'));
+  assert.ok(source.includes('function PathRoot({ segments }: { segments: string[] })'));
+  assert.ok(source.includes('className="bs-kit-path-root"'));
+  assert.ok(source.includes('src="/blindspots-logo.svg"'));
+  assert.ok(source.includes('aria-label={["Blindspots", ...segments].join(" > ")}'));
+  assert.ok(styleSource.includes(".bs-kit-path-root"));
+  assert.ok(styleSource.includes("left: max("));
+  assert.ok(styleSource.includes("min-height: 34px;"));
+});
+
 test("SPA initializes theme from the server-provided app theme and does not wipe it on mount", () => {
   const pageSource = readSource("app/page.tsx");
   const spaSource = readSource("components/blindspots-spa-prototype.tsx");

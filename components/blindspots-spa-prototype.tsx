@@ -561,6 +561,12 @@ export function BlindspotsSpaPrototype({
   const opponentColor: "white" | "black" =
     learnerColor === "white" ? "black" : "white";
   const opponentElo = MAIA3_DEFAULT_OPPO_ELO;
+  const pathRootSegments =
+    viewMode === "analysis"
+      ? ["Analysis"]
+      : activeSession || inSession
+        ? ["Active Sequence"]
+        : [];
 
   const learnerTurn =
     trainingLoadState === "ready" &&
@@ -1219,6 +1225,7 @@ export function BlindspotsSpaPrototype({
         }}
         onAddFen={() => setAddFenOpen(true)}
       />
+      <PathRoot segments={pathRootSegments} />
       <AddFenSheet open={addFenOpen} onClose={() => setAddFenOpen(false)} onAdded={() => setAddFenOpen(false)} />
 
       <div className="bs-kit-workspace">
@@ -1413,6 +1420,26 @@ function ShellActions({
         {theme === "paper" ? <MoonIcon /> : <SunIcon />}
       </button>
       <AuthSignOutButton className="bs-kit-btn-quiet" />
+    </div>
+  );
+}
+
+function PathRoot({ segments }: { segments: string[] }) {
+  return (
+    <div className="bs-kit-path-root" aria-label={["Blindspots", ...segments].join(" > ")}>
+      <img
+        src="/blindspots-logo.svg"
+        width={20}
+        height={20}
+        alt=""
+        className="bs-kit-path-logo"
+      />
+      {segments.map((segment) => (
+        <span className="bs-kit-path-segment" key={segment}>
+          <span className="bs-kit-path-separator" aria-hidden="true">&gt;</span>
+          <span>{segment}</span>
+        </span>
+      ))}
     </div>
   );
 }
