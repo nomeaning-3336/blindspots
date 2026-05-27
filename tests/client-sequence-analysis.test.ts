@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   analyzeClientSequence,
-  classifyClientTrainingOutcome,
 } from "../lib/stockfish-client/sequence-analysis.ts";
+import { classifyTrainingOutcome } from "../lib/training/mistake-srs.ts";
 
 test("client sequence analysis evaluates only learner-side moves", async () => {
   const analysis = await analyzeClientSequence({
@@ -48,8 +48,38 @@ test("client sequence analysis treats learner-delivered checkmate as best", asyn
   assert.equal(analysis.trainingOutcome, "pass");
 });
 
-test("client training outcome classification is deterministic", () => {
-  assert.equal(classifyClientTrainingOutcome(40, 100), "pass");
-  assert.equal(classifyClientTrainingOutcome(100, 250), "acceptable");
-  assert.equal(classifyClientTrainingOutcome(200, 500), "fail");
+test("client analysis uses the shared classifyTrainingOutcome function", async () => {
+  // average=49, max=300 → pass (shared: avg<50, max<=300)
+  const analysis = await analyzeClientSequence({
+    startingFen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    moveUcis: ["e2e4", "e7e5"],
+    learnerSide: "w",
+    evaluateFen: async (_fen) => ({
+      cp: 49,
+      mate: null,
+      bestMoveUci: null,
+      bestLineUcis: [],
+    }),
+  });
+  assert.equal(analysis.trainingOutcome, classifyTrainingOutcome({ averageCpLoss: analysis.averageCpLoss, maxSingleCpLoss: analysis.maxSingleCpLoss }));
+});
+
+test("shared outcome boundary: average 49 max 300 → pass", () => {
+  assert.equal(classifyTrainingOutcome({ averageCpLoss: 49, maxSingleCpLoss: 300 }), "pass");
+});
+
+test("shared outcome boundary: average 50 max 300 → acceptable", () => {
+  assert.equal(classifyTrainingOutcome({ averageCpLoss: 50, maxSingleCpLoss: 300 }), "acceptable");
+});
+
+test("shared outcome boundary: average 149 max 300 → acceptable", () => {
+  assert.equal(classifyTrainingOutcome({ averageCpLoss: 149, maxSingleCpLoss: 300 }), "acceptable");
+});
+
+test("shared outcome boundary: average 150 max 0 → fail", () => {
+  assert.equal(classifyTrainingOutcome({ averageCpLoss: 150, maxSingleCpLoss: 0 }), "fail");
+});
+
+test("shared outcome boundary: average 20 max 301 → fail", () => {
+  assert.equal(classifyTrainingOutcome({ averageCpLoss: 20, maxSingleCpLoss: 301 }), "fail");
 });

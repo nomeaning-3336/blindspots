@@ -369,43 +369,58 @@ export async function POST(request: Request) {
       })
     : trainingOutcome;
   const reviewedMoveCpLoss = reviewedMoveScore?.cpLoss ?? null;
-  const humanRatingMoves = buildHumanRatingMoves(sequenceEvaluation.positionEvaluations);
-  const engineRatingMoves = isRatedSession && humanRatingMoves.length >= 4
-    ? await calculateEngineRatingMoves({
-        startingFen,
-        moves,
-      })
-    : [];
-  const cplEloUpdate = calculateMatchedEngineCplEloUpdate({
-    userEloAtGameStart: profile.blindspots_elo,
-    ratingDeviation: profileRatingDeviation,
-    totalSequences: profile.total_sequences,
-    humanMoves: humanRatingMoves,
-    engineMoves: engineRatingMoves,
-  });
-
-  const legacyEloUpdate = calculateEloUpdate({
-    currentElo: profile.blindspots_elo,
-    ratingDeviation: profileRatingDeviation,
-    totalSequences: profile.total_sequences,
-    evalPreservationScore,
-    totalCpLoss: sequenceEvaluation.totalCpLoss,
-    opponentElo: profile.blindspots_elo,
-    averageCpDelta: sequenceEvaluation.averageCpDelta,
-    worstCpDelta: sequenceEvaluation.worstCpDelta,
-  });
-  const eloUpdate = cplEloUpdate ?? legacyEloUpdate;
-
-  const fallbackOpponentElo = eloUpdate?.opponentElo ?? getOpponentElo(profile.blindspots_elo);
-  const fallbackExpectedScore = calculateExpectedScore(profile.blindspots_elo, fallbackOpponentElo);
-  const kFactor = eloUpdate?.kFactor ?? getKFactor(profile.total_sequences, profileRatingDeviation);
   const completedAt = new Date().toISOString();
-  const eloBefore = isRatedSession ? (eloUpdate?.eloBefore ?? profile.blindspots_elo) : profile.blindspots_elo;
-  const eloAfter = isRatedSession ? (eloUpdate?.eloAfter ?? profile.blindspots_elo) : profile.blindspots_elo;
-  const eloDelta = isRatedSession ? (eloUpdate?.eloDelta ?? 0) : 0;
-  const opponentElo = eloUpdate?.opponentElo ?? fallbackOpponentElo;
-  const expectedScore = eloUpdate?.expectedScore ?? fallbackExpectedScore;
-  const actualScore = eloUpdate?.actualScore ?? 0;
+  let eloBefore: number;
+  let eloAfter: number;
+  let eloDelta: number;
+  let opponentElo: number;
+  let expectedScore: number;
+  let actualScore: number;
+  let kFactor: number;
+  let eloUpdate: { rawDelta?: number; clampedDelta?: number; ratingDeviationBefore?: number; ratingDeviationAfter?: number; humanAvgCpl?: number | null; engineAvgCpl?: number | null; cplDiff?: number | null; ratingMethod?: string; eloBefore?: number; eloAfter?: number; eloDelta?: number; opponentElo?: number; expectedScore?: number; actualScore?: number; kFactor?: number; } | null;
+
+  if (isRatedSession) {
+    const humanRatingMoves = buildHumanRatingMoves(sequenceEvaluation.positionEvaluations);
+    const engineRatingMoves = humanRatingMoves.length >= 4
+      ? await calculateEngineRatingMoves({ startingFen, moves })
+      : [];
+    const cplEloUpdate = calculateMatchedEngineCplEloUpdate({
+      userEloAtGameStart: profile.blindspots_elo,
+      ratingDeviation: profileRatingDeviation,
+      totalSequences: profile.total_sequences,
+      humanMoves: humanRatingMoves,
+      engineMoves: engineRatingMoves,
+    });
+    const legacyEloUpdate = calculateEloUpdate({
+      currentElo: profile.blindspots_elo,
+      ratingDeviation: profileRatingDeviation,
+      totalSequences: profile.total_sequences,
+      evalPreservationScore,
+      totalCpLoss: sequenceEvaluation.totalCpLoss,
+      opponentElo: profile.blindspots_elo,
+      averageCpDelta: sequenceEvaluation.averageCpDelta,
+      worstCpDelta: sequenceEvaluation.worstCpDelta,
+    });
+    eloUpdate = cplEloUpdate ?? legacyEloUpdate;
+    const fallbackOpponentElo = eloUpdate?.opponentElo ?? getOpponentElo(profile.blindspots_elo);
+    const fallbackExpectedScore = calculateExpectedScore(profile.blindspots_elo, fallbackOpponentElo);
+    kFactor = eloUpdate?.kFactor ?? getKFactor(profile.total_sequences, profileRatingDeviation);
+    eloBefore = eloUpdate?.eloBefore ?? profile.blindspots_elo;
+    eloAfter = eloUpdate?.eloAfter ?? profile.blindspots_elo;
+    eloDelta = eloUpdate?.eloDelta ?? 0;
+    opponentElo = eloUpdate?.opponentElo ?? fallbackOpponentElo;
+    expectedScore = eloUpdate?.expectedScore ?? fallbackExpectedScore;
+    actualScore = eloUpdate?.actualScore ?? 0;
+  } else {
+    eloUpdate = null;
+    eloBefore = profile.blindspots_elo;
+    eloAfter = profile.blindspots_elo;
+    eloDelta = 0;
+    opponentElo = getOpponentElo(profile.blindspots_elo);
+    expectedScore = calculateExpectedScore(profile.blindspots_elo, opponentElo);
+    actualScore = 0;
+    kFactor = getKFactor(profile.total_sequences, profileRatingDeviation);
+  }
 
   const supabase = getSupabaseAdminClient();
   const finalizationStartedAt = Date.now();

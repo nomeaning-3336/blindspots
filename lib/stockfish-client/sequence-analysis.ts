@@ -1,5 +1,6 @@
 import { Chess } from "chess.js";
 import type { ClientMoveEvaluation, ClientSequenceAnalysis } from "./stockfish-analysis-types";
+import { classifyTrainingOutcome } from "../training/mistake-srs.ts";
 
 const MATE_CP = 10000;
 
@@ -80,7 +81,7 @@ export async function analyzeClientSequence(
     learnerMoves,
     averageCpLoss,
     maxSingleCpLoss,
-    trainingOutcome: classifyClientTrainingOutcome(averageCpLoss, maxSingleCpLoss),
+    trainingOutcome: classifyTrainingOutcome({ averageCpLoss, maxSingleCpLoss }),
     terminal: {
       gameOver: chess.isGameOver(),
       checkmate: chess.isCheckmate(),
@@ -97,15 +98,6 @@ export function classifyClientMove(cpLoss: number): ClientMoveEvaluation["classi
   if (cpLoss <= 200) return "inaccuracy";
   if (cpLoss <= 400) return "mistake";
   return "blunder";
-}
-
-export function classifyClientTrainingOutcome(
-  averageCpLoss: number,
-  maxSingleCpLoss: number,
-): ClientSequenceAnalysis["trainingOutcome"] {
-  if (averageCpLoss <= 60 && maxSingleCpLoss <= 160) return "pass";
-  if (averageCpLoss <= 140 && maxSingleCpLoss <= 350) return "acceptable";
-  return "fail";
 }
 
 function evaluationToLearnerCentipawns(

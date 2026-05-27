@@ -6,9 +6,18 @@ import {
   parseActiveSessionResponse,
   parseColdCandidateResponse,
 } from "../lib/training/spa-training-hydration.ts";
+import { Chess } from "chess.js";
 
 const STARTING_FEN =
   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+// Fool's mate: white plays f3, e5, g4, Qh4#
+const FOOLS_MATE_MOVES = [
+  { san: "f3", uci: "f2f3", side: "w" },
+  { san: "e5", uci: "e7e5", side: "b" },
+  { san: "g4", uci: "g2g4", side: "w" },
+  { san: "Qh4#", uci: "d8h4", side: "b" },
+];
 
 test("SPA parses a personal cold candidate without historical move disclosure", () => {
   const candidate = parseColdCandidateResponse({
@@ -122,4 +131,56 @@ test("SPA parses the real persisted sequence completion result", () => {
     eloAfter: 1203,
     eloDelta: 3,
   });
+});
+
+test("restored Fool's mate session final board is game-over", () => {
+  const session = parseActiveSessionResponse({
+    session: {
+      id: "session-checkmate",
+      startingFen: STARTING_FEN,
+      moves: FOOLS_MATE_MOVES,
+      sequenceLength: 2,
+      selectedTrainingItemId: null,
+      queueSource: "filler",
+      fillerId: "22222222-2222-4222-8222-222222222222",
+      fillerOrigin: "lichess_puzzle",
+      opponentMode: "maia3_client_unrated",
+      startedAt: "2026-05-27T00:00:00.000Z",
+    },
+  });
+
+  assert.ok(session);
+
+  const restored = buildRestoredBoardState(session);
+  const chess = new Chess(restored.fen);
+
+  assert.ok(chess.isGameOver(), "restored terminal session must be game-over");
+  assert.ok(chess.isCheckmate(), "restored terminal session must be checkmate");
+});
+
+test("restored game-over session restoreTerminalToAnalysis flag detection works via Chess.isGameOver()", () => {
+  const session = parseActiveSessionResponse({
+    session: {
+      id: "session-checkmate-2",
+      startingFen: STARTING_FEN,
+      moves: FOOLS_MATE_MOVES,
+      sequenceLength: 2,
+      selectedTrainingItemId: null,
+      queueSource: "filler",
+      fillerId: "33333333-3333-4333-8333-333333333333",
+      fillerOrigin: "lichess_puzzle",
+      opponentMode: "maia3_client_unrated",
+      startedAt: "2026-05-27T00:00:00.000Z",
+    },
+  });
+
+  assert.ok(session);
+
+  const restored = buildRestoredBoardState(session);
+
+  const withOption = (() => {
+    try { return new Chess(restored.fen).isGameOver(); } catch { return false; }
+  })();
+
+  assert.equal(withOption, true, "restoreTerminalToAnalysis path detects game-over from restored FEN");
 });

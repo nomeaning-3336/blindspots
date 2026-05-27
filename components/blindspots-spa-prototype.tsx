@@ -66,8 +66,10 @@ export function BlindspotsSpaPrototype({
   const [viewMode, setViewMode] = useState<TrainingViewMode>("playing");
   const [clientAnalysis, setClientAnalysis] = useState<ClientSequenceAnalysis | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [completionSaveError, setCompletionSaveError] = useState<string | null>(null);
   const [selectedAnalysisMoveIndex, setSelectedAnalysisMoveIndex] = useState<number | null>(null);
   const [stockfishReady, setStockfishReady] = useState(false);
+  const [stockfishInitStarted, setStockfishInitStarted] = useState(false);
   const [maiaReady, setMaiaReady] = useState(false);
   const [maiaThinking, setMaiaThinking] = useState(false);
   const [maiaError, setMaiaError] = useState<string | null>(null);
@@ -120,7 +122,13 @@ export function BlindspotsSpaPrototype({
     };
   }, []);
 
-  useEffect(() => {
+  function createMaiaWorker() {
+    const existingWorker = maiaWorkerRef.current;
+    if (existingWorker) {
+      existingWorker.terminate();
+      maiaWorkerRef.current = null;
+    }
+
     const worker = new Worker(new URL("../workers/maia3-opponent.worker.ts", import.meta.url), {
       type: "module",
     });
@@ -168,14 +176,26 @@ export function BlindspotsSpaPrototype({
       modelUrl: MAIA3_MODEL_URL,
     };
     worker.postMessage(request);
+  }
+
+  useEffect(() => {
+    createMaiaWorker();
 
     return () => {
+      maiaWorkerRef.current?.terminate();
       maiaWorkerRef.current = null;
-      worker.terminate();
     };
   }, []);
 
-  useEffect(() => {
+  function createStockfishWorker() {
+    const existingWorker = stockfishWorkerRef.current;
+    if (existingWorker) {
+      existingWorker.terminate();
+      stockfishWorkerRef.current = null;
+    }
+
+    setStockfishReady(false);
+
     const worker = new Worker(new URL("../workers/stockfish-analysis.worker.ts", import.meta.url), {
       type: "module",
     });
@@ -209,12 +229,7 @@ export function BlindspotsSpaPrototype({
 
     const request: StockfishAnalysisRequest = { type: "initialize" };
     worker.postMessage(request);
-
-    return () => {
-      stockfishWorkerRef.current = null;
-      worker.terminate();
-    };
-  }, []);
+  }
 
   function applyColdCandidate(candidate: SpaColdCandidate) {
     syncGenerationRef.current += 1;
@@ -236,6 +251,7 @@ export function BlindspotsSpaPrototype({
     setViewMode("playing");
     setClientAnalysis(null);
     setAnalysisError(null);
+    setCompletionSaveError(null);
     setSelectedAnalysisMoveIndex(null);
     setActiveSession(null);
     setColdCandidate(candidate);
@@ -248,15 +264,21 @@ export function BlindspotsSpaPrototype({
     setInSession(false);
   }
 
-  function applyPersistedSession(session: SpaActiveSession) {
+  function applyPersistedSession(session: SpaActiveSession, options?: { restoreTerminalToAnalysis?: boolean }) {
     const restoredBoard = buildRestoredBoardState(session);
+    const restoredIsTerminal = options?.restoreTerminalToAnalysis && (() => {
+      try { return new Chess(restoredBoard.fen).isGameOver(); } catch { return false; }
+    })();
+
+    const generation = syncGenerationRef.current + 1;
+    syncGenerationRef.current = generation;
 
     confirmedSessionRef.current = session;
     coldCandidateRef.current = null;
     optimisticMoveUcisRef.current = session.moves.map((move) => move.uci);
-    completionRequestedGenerationRef.current = null;
+    completionRequestedGenerationRef.current = restoredIsTerminal ? generation : null;
     completionStartedGenerationRef.current = null;
-    pendingAnalysisGenerationRef.current = null;
+    pendingAnalysisGenerationRef.current = restoredIsTerminal ? generation : null;
     clientAnalysisRef.current = null;
     visibleBoardFenRef.current = restoredBoard.fen;
     visibleBoardHistoryRef.current = restoredBoard.history;
@@ -266,13 +288,15 @@ export function BlindspotsSpaPrototype({
     setMaiaThinking(false);
     setMaiaError(null);
     setMoveSyncError(null);
-    setViewMode("playing");
+    setViewMode(restoredIsTerminal ? "analysis" : "playing");
     setClientAnalysis(null);
     setAnalysisError(null);
+    setCompletionSaveError(null);
     setSelectedAnalysisMoveIndex(null);
     setActiveSession(session);
     setColdCandidate(null);
     setCompletionResult(null);
+    setTrainingActionState(restoredIsTerminal ? "finishing" : "idle");
     setBoardFen(restoredBoard.fen);
     setBoardHistory(restoredBoard.history);
     setBoardHistoryIndex(restoredBoard.historyIndex);
@@ -280,7 +304,7 @@ export function BlindspotsSpaPrototype({
     setSelected(null);
     setInSession(true);
 
-    return restoredBoard;
+    return { restoredBoard, restoredIsTerminal, generation };
   }
 
   function readApiError(value: unknown, fallback: string): string {
@@ -320,8 +344,14 @@ export function BlindspotsSpaPrototype({
         if (restoredSession) {
           if (cancelled) return;
 
-          applyPersistedSession(restoredSession);
+          const { restoredIsTerminal } = applyPersistedSession(restoredSession, { restoreTerminalToAnalysis: true });
           setTrainingLoadState("ready");
+
+          if (restoredIsTerminal) {
+            createStockfishWorker();
+            setStockfishInitStarted(true);
+          }
+
           return;
         }
 
@@ -385,7 +415,8 @@ export function BlindspotsSpaPrototype({
   }, []);
 
   const stage = completionResult || viewMode === "analysis" ? "review" : inSession || committed ? "playing" : "loaded";
-  const showSplash = splashPhase !== "hidden" || trainingLoadState === "loading" || !maiaReady;
+  const hasBlockingInitializationError = trainingLoadState === "error" || maiaError !== null;
+  const showSplash = !hasBlockingInitializationError && (splashPhase !== "hidden" || trainingLoadState === "loading" || !maiaReady);
   const visibleSplashPhase: Exclude<SplashPhase, "hidden"> =
     splashPhase === "blank" ? "blank" : "branded";
   const isLatestBoardState = boardHistoryIndex === boardHistory.length - 1;
@@ -441,7 +472,7 @@ export function BlindspotsSpaPrototype({
     (activeSession !== null || coldCandidate !== null);
 
   const canNavigateHistory =
-    trainingActionState === "idle" && boardHistory.length > 1;
+    (trainingActionState === "idle" || viewMode === "analysis") && boardHistory.length > 1;
   const lastMove = committed ? [committed.from, committed.to] : [];
 
   async function handleToggleTheme() {
@@ -554,6 +585,7 @@ export function BlindspotsSpaPrototype({
   async function completeConfirmedSequence(session: SpaActiveSession, analysis: ClientSequenceAnalysis | null) {
     setTrainingActionState("finishing");
     setTrainingActionError(null);
+    setCompletionSaveError(null);
 
     async function requestCompletionResult() {
       const response = await fetch("/api/train/complete-sequence", {
@@ -591,8 +623,9 @@ export function BlindspotsSpaPrototype({
       setSelected(null);
       setTrainingActionState("idle");
     } catch (error) {
-      setTrainingActionError(
-        error instanceof Error ? error.message : "Failed to complete the current sequence.",
+      completionStartedGenerationRef.current = null;
+      setCompletionSaveError(
+        error instanceof Error ? error.message : "Could not save result.",
       );
       setTrainingActionState("idle");
     }
@@ -708,6 +741,7 @@ export function BlindspotsSpaPrototype({
     setTrainingActionError(null);
     setMoveSyncError(null);
     setAnalysisError(null);
+    setCompletionSaveError(null);
     setClientAnalysis(null);
     setMaiaThinking(false);
     maiaRequestIdRef.current = null;
@@ -716,8 +750,21 @@ export function BlindspotsSpaPrototype({
     completionStartedGenerationRef.current = null;
     clientAnalysisRef.current = null;
 
+    if (!stockfishInitStarted) {
+      setStockfishInitStarted(true);
+      createStockfishWorker();
+    }
+
     startClientSequenceAnalysis(generation);
     void flushOptimisticMovesToServer(generation);
+  }
+
+  function retryClientSequenceAnalysis() {
+    const generation = syncGenerationRef.current;
+    setAnalysisError(null);
+    setStockfishReady(false);
+    pendingAnalysisGenerationRef.current = generation;
+    createStockfishWorker();
   }
 
   function startClientSequenceAnalysis(generation: number) {
@@ -802,17 +849,28 @@ export function BlindspotsSpaPrototype({
     return chess.isGameOver();
   }
 
+  function retryMaiaInitialization() {
+    setMaiaReady(false);
+    setMaiaError(null);
+    setMaiaThinking(false);
+    maiaRequestIdRef.current = null;
+    maiaRequestedKeyRef.current = null;
+    createMaiaWorker();
+  }
+
   function requestMaiaReplyForCurrentPosition(options?: { retry?: boolean }) {
-    if (
-      !maiaReady ||
-      maiaThinking ||
-      (!options?.retry && maiaError) ||
-      viewMode === "analysis" ||
-      completionResult ||
-      legacySessionBlocked
-    ) {
+    if (maiaThinking || viewMode === "analysis" || completionResult || legacySessionBlocked) {
       return;
     }
+
+    if (!maiaReady) {
+      if (options?.retry) {
+        retryMaiaInitialization();
+      }
+      return;
+    }
+
+    if (!options?.retry && maiaError) return;
 
     const worker = maiaWorkerRef.current;
     const startingFen = confirmedSessionRef.current?.startingFen ?? coldCandidateRef.current?.fen;
@@ -1106,10 +1164,10 @@ export function BlindspotsSpaPrototype({
             moveSyncError={moveSyncError}
             analysisError={analysisError}
             maiaError={maiaError}
-            onRetryAnalysis={() => startClientSequenceAnalysis(syncGenerationRef.current)}
+            onRetryAnalysis={retryClientSequenceAnalysis}
             onRetryMaiaReply={() => requestMaiaReplyForCurrentPosition({ retry: true })}
           />
-          {completionResult ? (
+          {completionResult && completionResult.rated ? (
             <TrainingCompletionPanel result={completionResult} />
           ) : null}
           {viewMode === "analysis" ? (
@@ -1117,14 +1175,18 @@ export function BlindspotsSpaPrototype({
               analysis={clientAnalysis}
               selectedMoveIndex={selectedAnalysisMoveIndex}
               onSelectMove={selectAnalyzedMove}
+              isUnrated={activeSession?.opponentMode === MAIA3_OPPONENT_MODE}
+              completionSaveError={completionSaveError}
+              completionDone={completionResult !== null}
+              onRetrySave={() => maybeCompleteAnalyzedSequence(syncGenerationRef.current)}
             />
           ) : null}
           <TodayPanel
             hideStats={inSession}
             hideRating={stage === "playing"}
-            eloBefore={completionResult?.elo.eloBefore ?? null}
-            eloAfter={completionResult?.elo.eloAfter ?? null}
-            eloChange={completionResult?.elo.eloDelta ?? null}
+            eloBefore={completionResult?.rated ? (completionResult.elo.eloBefore ?? null) : null}
+            eloAfter={completionResult?.rated ? (completionResult.elo.eloAfter ?? null) : null}
+            eloChange={completionResult?.rated ? (completionResult.elo.eloDelta ?? null) : null}
           />
         </aside>
       </div>
@@ -1273,10 +1335,18 @@ function ClientAnalysisPanel({
   analysis,
   selectedMoveIndex,
   onSelectMove,
+  isUnrated,
+  completionSaveError,
+  completionDone,
+  onRetrySave,
 }: {
   analysis: ClientSequenceAnalysis | null;
   selectedMoveIndex: number | null;
   onSelectMove: (moveIndex: number) => void;
+  isUnrated?: boolean;
+  completionSaveError?: string | null;
+  completionDone?: boolean;
+  onRetrySave?: () => void;
 }) {
   if (!analysis) {
     return <div className="bs-kit-panel" data-testid="spa-client-analysis" />;
@@ -1303,6 +1373,19 @@ function ClientAnalysisPanel({
       <div className="bs-kit-muted-line">
         Maximum CPL: <b>{analysis.maxSingleCpLoss}</b>
       </div>
+      {isUnrated ? (
+        <div className="bs-kit-muted-line"><b>Unrated</b></div>
+      ) : null}
+      {completionSaveError ? (
+        <>
+          <div className="bs-kit-muted-line" data-testid="spa-completion-save-error">
+            Could not save result.
+          </div>
+          <button className="bs-kit-btn ghost sm" onClick={onRetrySave}>
+            Retry
+          </button>
+        </>
+      ) : null}
       <div className="bs-kit-stat-list">
         {analysis.learnerMoves.map((move) => (
           <button

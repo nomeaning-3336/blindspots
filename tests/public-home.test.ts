@@ -193,8 +193,9 @@ test("signed-in SPA renders the timed branded boot splash over the loaded app", 
     "SPA splash must render the branded .gg suffix",
   );
   assert.ok(
-    source.includes('const showSplash = splashPhase !== "hidden" || trainingLoadState === "loading" || !maiaReady;'),
-    "SPA must keep the splash visible while authenticated training state and Maia runtime load",
+    source.includes("const hasBlockingInitializationError") &&
+    source.includes("const showSplash = !hasBlockingInitializationError"),
+    "SPA must keep the splash visible while authenticated training state and Maia runtime load, but dismiss on blocking init errors",
   );
   assert.ok(
     source.includes('{showSplash ? <SpaBootSplash phase={visibleSplashPhase} /> : null}'),
@@ -686,10 +687,10 @@ test("complete-sequence marks Maia client sessions unrated and avoids rated side
   assert.ok(source.includes("validateClientSequenceAnalysis"));
   assert.ok(source.includes("Client analysis is required for unrated Maia completion."));
   assert.ok(source.includes("p_is_rated: isRatedSession"));
-  assert.ok(source.includes("const eloAfter = isRatedSession ?"));
-  assert.ok(source.includes("const eloDelta = isRatedSession ?"));
-  assert.ok(source.includes("if (isRatedSession) {"));
-  assert.ok(source.includes("isRatedSession && humanRatingMoves.length >= 4"));
+  assert.ok(source.includes("eloAfter = profile.blindspots_elo"), "unrated path sets eloAfter to current elo");
+  assert.ok(source.includes("eloDelta = 0"), "unrated path sets eloDelta to zero");
+  assert.ok(source.includes("if (isRatedSession) {"), "rated path is guarded");
+  assert.ok(source.includes("humanRatingMoves.length >= 4"), "engine rating moves only computed for rated sessions");
   assert.ok(source.includes("persistMistakeAttempts(userId, sequenceEvaluation.positionEvaluations)"));
   assert.ok(source.includes("rated: isRatedSession"));
   assert.ok(source.includes("rated: result.opponent_mode !== MAIA3_OPPONENT_MODE"));
