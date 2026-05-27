@@ -193,17 +193,31 @@ test("signed-in SPA renders the timed branded boot splash over the loaded app", 
     "SPA splash must render the branded .gg suffix",
   );
   assert.ok(
-    source.includes('const showSplash = splashPhase !== "hidden" || trainingLoadState === "loading";'),
-    "SPA must keep the splash visible while authenticated training state loads",
+    source.includes('const showSplash = splashPhase !== "hidden" || trainingLoadState === "loading" || !maiaReady;'),
+    "SPA must keep the splash visible while authenticated training state and Maia runtime load",
   );
   assert.ok(
     source.includes('{showSplash ? <SpaBootSplash phase={visibleSplashPhase} /> : null}'),
-    "SPA must remove the splash only after boot timing and training hydration complete",
+    "SPA must remove the splash only after boot timing, training hydration, and Maia readiness complete",
   );
   assert.ok(
     source.includes('<div className="bs-kit-app" aria-busy={showSplash}>'),
-    "SPA must report itself busy while boot or training hydration is pending",
+    "SPA must report itself busy while boot, training hydration, or Maia readiness is pending",
   );
+});
+
+test("SPA omits normal-state training narration from the visible UI", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(!source.includes("Sequence in progress"));
+  assert.ok(!source.includes("Position ready"));
+  assert.ok(!source.includes("Your turn."));
+  assert.ok(!source.includes("Your turn. Every legal move is saved."));
+  assert.ok(!source.includes("Maia is thinking..."));
+  assert.ok(!source.includes("Temporary mode:"));
+  assert.ok(!source.includes("Saving move"));
+  assert.ok(!source.includes("Evaluating and completing sequence"));
+  assert.ok(!source.includes("Loading next sequence"));
 });
 
 test("signed-in SPA restores an active session before requesting a cold candidate", () => {
@@ -302,11 +316,10 @@ test("SPA replaces manual opponent input with Maia worker replies and completes 
 
   assert.ok(source.includes("new Worker(new URL(\"../workers/maia3-opponent.worker.ts\", import.meta.url)"));
   assert.ok(source.includes("MAIA3_MODEL_URL"));
-  assert.ok(source.includes("Maia is thinking..."));
-  assert.ok(source.includes("Maia could not generate a reply."));
-  assert.ok(source.includes("Retry Maia reply"));
-  assert.ok(source.includes("Your turn."));
+  assert.ok(source.includes("Opponent unavailable."));
+  assert.ok(source.includes("Retry"));
   assert.ok(!source.includes("Temporary mode: play the opponent's reply manually."));
+  assert.ok(!source.includes("Maia could not generate a reply."));
   assert.ok(source.includes('fetch("/api/train/complete-sequence", {'));
   assert.ok(source.includes("sessionId: session.id"));
   assert.ok(source.includes("parseCompleteSequenceResponse"));
@@ -314,6 +327,28 @@ test("SPA replaces manual opponent input with Maia worker replies and completes 
   assert.ok(source.includes('fetch("/api/train/next-position", {'));
   assert.ok(!source.includes("fillerSeed=spa-v1"));
   assert.ok(!source.includes("fillerCursor=0"));
+});
+
+test("SPA disables learner moves during Maia turn without normal status text", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(source.includes("currentTurn === learnerSide"));
+  assert.ok(source.includes("!maiaThinking"));
+  assert.ok(source.includes("disabled={!trainingBoardInteractive}"));
+  assert.ok(!source.includes("Maia is thinking..."));
+});
+
+test("SPA renders training status panel only for actionable errors", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(source.includes("function TrainingErrorPanel("));
+  assert.ok(source.includes("loadState === \"error\""));
+  assert.ok(source.includes("actionError"));
+  assert.ok(source.includes("moveSyncError"));
+  assert.ok(source.includes("maiaError"));
+  assert.ok(source.includes("Opponent unavailable."));
+  assert.ok(source.includes("Retry"));
+  assert.ok(!source.includes("data-testid=\"spa-training-read-state\""));
 });
 
 test("active-session store persists Maia unrated opponent mode for new sessions", () => {
@@ -641,8 +676,9 @@ test("complete-sequence marks Maia client sessions unrated and avoids rated side
 test("SPA displays unrated Maia completion without a misleading rating transition", () => {
   const source = readSource("components/blindspots-spa-prototype.tsx");
 
-  assert.ok(source.includes("Unrated Maia preview"));
-  assert.ok(source.includes("Rating not updated"));
+  assert.ok(source.includes("Unrated"));
+  assert.ok(!source.includes("Unrated Maia preview"));
+  assert.ok(!source.includes("Rating not updated"));
   assert.ok(source.includes("result.rated ?"));
 });
 

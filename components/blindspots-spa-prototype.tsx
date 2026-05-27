@@ -131,7 +131,7 @@ export function BlindspotsSpaPrototype({
       setMaiaThinking(false);
 
       if (response.type === "error") {
-        setMaiaError("Maia could not generate a reply.");
+        setMaiaError("Opponent unavailable.");
         return;
       }
 
@@ -147,7 +147,7 @@ export function BlindspotsSpaPrototype({
 
         void flushOptimisticMovesToServer(generation);
       } catch {
-        setMaiaError("Maia could not generate a reply.");
+        setMaiaError("Opponent unavailable.");
       }
     };
 
@@ -317,7 +317,7 @@ export function BlindspotsSpaPrototype({
   }, []);
 
   const stage = completionResult ? "review" : inSession || committed ? "playing" : "loaded";
-  const showSplash = splashPhase !== "hidden" || trainingLoadState === "loading";
+  const showSplash = splashPhase !== "hidden" || trainingLoadState === "loading" || !maiaReady;
   const visibleSplashPhase: Exclude<SplashPhase, "hidden"> =
     splashPhase === "blank" ? "blank" : "branded";
   const isLatestBoardState = boardHistoryIndex === boardHistory.length - 1;
@@ -678,8 +678,14 @@ export function BlindspotsSpaPrototype({
     return chess.isGameOver();
   }
 
-  function requestMaiaReplyForCurrentPosition() {
-    if (!maiaReady || maiaThinking || maiaError || completionResult || legacySessionBlocked) {
+  function requestMaiaReplyForCurrentPosition(options?: { retry?: boolean }) {
+    if (
+      !maiaReady ||
+      maiaThinking ||
+      (!options?.retry && maiaError) ||
+      completionResult ||
+      legacySessionBlocked
+    ) {
       return;
     }
 
@@ -955,20 +961,13 @@ export function BlindspotsSpaPrototype({
         </div>
 
         <aside className="bs-kit-sidebar">
-          <TrainingLoadPanel
+          <TrainingErrorPanel
             loadState={trainingLoadState}
             error={trainingLoadError}
             actionError={trainingActionError}
             moveSyncError={moveSyncError}
-            actionState={trainingActionState}
-            activeSession={activeSession}
-            candidate={coldCandidate}
-            completionResult={completionResult}
-            isOpponentTurn={isOpponentTurn}
-            maiaThinking={maiaThinking}
             maiaError={maiaError}
-            legacySessionBlocked={legacySessionBlocked}
-            onRetryMaiaReply={requestMaiaReplyForCurrentPosition}
+            onRetryMaiaReply={() => requestMaiaReplyForCurrentPosition({ retry: true })}
           />
           {completionResult ? (
             <TrainingCompletionPanel result={completionResult} />
@@ -1047,86 +1046,56 @@ function ShellActions({
 
 function PlayerStrip({ side, name, turn = false }: { side: "white" | "black"; name: string; turn?: boolean }) {
   return (
-    <div className="bs-kit-player-strip">
+    <div className="bs-kit-player-strip" aria-label={turn ? `${name} to move` : name}>
       <div className="who">
         <span className={`side ${side}`} />
         <span className="name">{name}</span>
       </div>
-      {turn ? <span className="turn-cue">your turn</span> : null}
     </div>
   );
 }
 
-function TrainingLoadPanel({
+function TrainingErrorPanel({
   loadState,
   error,
   actionError,
   moveSyncError,
-  actionState,
-  activeSession,
-  candidate,
-  completionResult,
-  isOpponentTurn,
-  maiaThinking,
   maiaError,
-  legacySessionBlocked,
   onRetryMaiaReply,
 }: {
   loadState: TrainingLoadState;
   error: string | null;
   actionError: string | null;
   moveSyncError: string | null;
-  actionState: TrainingActionState;
-  activeSession: SpaActiveSession | null;
-  candidate: SpaColdCandidate | null;
-  completionResult: SpaCompletionResult | null;
-  isOpponentTurn: boolean;
-  maiaThinking: boolean;
   maiaError: string | null;
-  legacySessionBlocked: boolean;
   onRetryMaiaReply: () => void;
 }) {
-  if (loadState === "loading") {
-    return null;
-  }
-
   if (loadState === "error") {
     return (
       <div className="bs-kit-panel" data-testid="spa-training-load-error">
         <div className="bs-kit-panel-title">Training unavailable</div>
-      <div className="bs-kit-muted-line">{error ?? "Failed to load training state."}</div>
+        <div className="bs-kit-muted-line">{error ?? "Failed to load training state."}</div>
+        <button className="bs-kit-btn ghost sm" onClick={() => window.location.reload()}>
+          Retry
+        </button>
       </div>
     );
   }
 
-  const title = completionResult
-    ? "Sequence completed"
-    : activeSession
-      ? "Sequence in progress"
-      : "Position ready";
-
-  const message = completionResult
-    ? "Your sequence was saved and evaluated."
-    : legacySessionBlocked
-      ? "This older in-progress session cannot continue in Maia mode. Discard support will be added next."
-    : actionState === "finishing"
-        ? "Evaluating and completing sequence..."
-        : actionState === "loading-next"
-          ? "Loading next sequence..."
-          : maiaError
-            ? "Maia could not generate a reply."
-          : maiaThinking || isOpponentTurn
-            ? "Maia is thinking..."
-            : activeSession
-              ? "Your turn."
-              : candidate?.queueSource === "filler"
-                ? "A fallback position is ready. Your first legal move starts a saved sequence."
-                : "A personal position is ready. Your first legal move starts a saved sequence.";
+  if (!actionError && !moveSyncError && !maiaError) {
+    return null;
+  }
 
   return (
-    <div className="bs-kit-panel" data-testid="spa-training-read-state">
-      <div className="bs-kit-panel-title">{title}</div>
-      <div className="bs-kit-muted-line">{message}</div>
+    <div className="bs-kit-panel" data-testid="spa-training-error">
+      {maiaError ? (
+        <>
+          <div className="bs-kit-panel-title">Opponent unavailable.</div>
+          <button className="bs-kit-btn ghost sm" onClick={onRetryMaiaReply}>
+            Retry
+          </button>
+        </>
+      ) : null}
       {actionError ? (
         <div className="bs-kit-muted-line" data-testid="spa-training-action-error">
           {actionError}
@@ -1136,11 +1105,6 @@ function TrainingLoadPanel({
         <div className="bs-kit-muted-line" data-testid="spa-training-sync-error">
           {moveSyncError}
         </div>
-      ) : null}
-      {maiaError ? (
-        <button className="bs-kit-btn ghost sm" onClick={onRetryMaiaReply}>
-          Retry Maia reply
-        </button>
       ) : null}
     </div>
   );
@@ -1171,9 +1135,7 @@ function TrainingCompletionPanel({ result }: { result: SpaCompletionResult }) {
             ({result.elo.eloDelta >= 0 ? "+" : ""}{result.elo.eloDelta})
           </>
         ) : (
-          <>
-            <b>Unrated Maia preview</b>. Rating not updated.
-          </>
+          <b>Unrated</b>
         )}
       </div>
     </div>
