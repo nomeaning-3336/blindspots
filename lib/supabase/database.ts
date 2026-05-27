@@ -560,6 +560,7 @@ export type Database = {
           p_average_cp_loss: number;
           p_max_single_cp_loss: number;
           p_rating_deviation_after: number;
+          p_is_rated?: boolean;
         };
         Returns: string;
       };

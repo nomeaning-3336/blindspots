@@ -1165,8 +1165,16 @@ function TrainingCompletionPanel({ result }: { result: SpaCompletionResult }) {
         Maximum CPL: <b>{result.maxSingleCpLoss}</b>
       </div>
       <div className="bs-kit-muted-line">
-        Rating: <b>{result.elo.eloBefore}</b> → <b>{result.elo.eloAfter}</b>{" "}
-        ({result.elo.eloDelta >= 0 ? "+" : ""}{result.elo.eloDelta})
+        {result.rated ? (
+          <>
+            Rating: <b>{result.elo.eloBefore}</b> → <b>{result.elo.eloAfter}</b>{" "}
+            ({result.elo.eloDelta >= 0 ? "+" : ""}{result.elo.eloDelta})
+          </>
+        ) : (
+          <>
+            <b>Unrated Maia preview</b>. Rating not updated.
+          </>
+        )}
       </div>
     </div>
   );

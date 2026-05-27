@@ -27,6 +27,7 @@ import type { MineableMoveInput } from "@/lib/training/mistake-mining";
 import { buildDefaultBlindspotProfile } from "@/lib/training/default-profile";
 import { normalizeDecisionFen } from "@/lib/training/mistake-memory";
 import { normalizeReviewGradingConfig } from "@/lib/training/training-preferences";
+import { MAIA3_OPPONENT_MODE } from "@/lib/maia3/maia3-constants";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,6 +66,7 @@ type StoredCompletedSessionResult = {
   training_outcome: "pass" | "acceptable" | "fail";
   average_cp_loss: number;
   max_single_cp_loss: number;
+  opponent_mode: string;
 };
 
 async function getStoredCompletedSessionResult(input: {
@@ -80,7 +82,7 @@ async function getStoredCompletedSessionResult(input: {
   const { data, error } = await supabase
     .from("training_sessions" as any)
     .select(
-      "id, eval_preservation_score, position_evaluations, elo_before, elo_after, elo_delta, k_factor, opponent_elo, expected_score, actual_score, training_outcome, average_cp_loss, max_single_cp_loss",
+      "id, eval_preservation_score, position_evaluations, elo_before, elo_after, elo_delta, k_factor, opponent_elo, expected_score, actual_score, training_outcome, average_cp_loss, max_single_cp_loss, opponent_mode",
     )
     .eq("id", input.sessionId)
     .eq("user_id", input.userId)
@@ -131,6 +133,7 @@ async function getStoredCompletedSessionResult(input: {
     training_outcome: row.training_outcome,
     average_cp_loss: row.average_cp_loss,
     max_single_cp_loss: row.max_single_cp_loss,
+    opponent_mode: typeof row.opponent_mode === "string" ? row.opponent_mode : "standard",
   };
 }
 
@@ -162,6 +165,7 @@ function buildStoredCompletionResponse(result: StoredCompletedSessionResult) {
     trainingOutcome: result.training_outcome,
     averageCpLoss: result.average_cp_loss,
     maxSingleCpLoss: result.max_single_cp_loss,
+    rated: result.opponent_mode !== MAIA3_OPPONENT_MODE,
     recoveredCompletion: true,
   });
 }
@@ -343,6 +347,7 @@ export async function POST(request: Request) {
       })
     : trainingOutcome;
   const reviewedMoveCpLoss = reviewedMoveScore?.cpLoss ?? null;
+  const isRatedSession = activeSession.opponentMode !== MAIA3_OPPONENT_MODE;
 
   const humanRatingMoves = buildHumanRatingMoves(sequenceEvaluation.positionEvaluations);
   const engineRatingMoves = humanRatingMoves.length >= 4
@@ -375,9 +380,9 @@ export async function POST(request: Request) {
   const fallbackExpectedScore = calculateExpectedScore(profile.blindspots_elo, fallbackOpponentElo);
   const kFactor = eloUpdate?.kFactor ?? getKFactor(profile.total_sequences, profileRatingDeviation);
   const completedAt = new Date().toISOString();
-  const eloBefore = eloUpdate?.eloBefore ?? profile.blindspots_elo;
-  const eloAfter = eloUpdate?.eloAfter ?? profile.blindspots_elo;
-  const eloDelta = eloUpdate?.eloDelta ?? 0;
+  const eloBefore = isRatedSession ? (eloUpdate?.eloBefore ?? profile.blindspots_elo) : profile.blindspots_elo;
+  const eloAfter = isRatedSession ? (eloUpdate?.eloAfter ?? profile.blindspots_elo) : profile.blindspots_elo;
+  const eloDelta = isRatedSession ? (eloUpdate?.eloDelta ?? 0) : 0;
   const opponentElo = eloUpdate?.opponentElo ?? fallbackOpponentElo;
   const expectedScore = eloUpdate?.expectedScore ?? fallbackExpectedScore;
   const actualScore = eloUpdate?.actualScore ?? 0;
@@ -406,7 +411,10 @@ export async function POST(request: Request) {
       p_review_outcome: reviewOutcome,
       p_average_cp_loss: averageCpLoss,
       p_max_single_cp_loss: maxSingleCpLoss,
-      p_rating_deviation_after: eloUpdate?.ratingDeviationAfter ?? profileRatingDeviation,
+      p_rating_deviation_after: isRatedSession
+        ? (eloUpdate?.ratingDeviationAfter ?? profileRatingDeviation)
+        : profileRatingDeviation,
+      p_is_rated: isRatedSession,
     },
   );
 
@@ -507,9 +515,11 @@ export async function POST(request: Request) {
   void minedMistakesInput;
 
   // Persist mistake attempts — best-effort, never blocks the response.
-  persistMistakeAttempts(userId, sequenceEvaluation.positionEvaluations).catch((err) => {
-    console.error("[complete-sequence] attempt persistence failed", err);
-  });
+  if (isRatedSession) {
+    persistMistakeAttempts(userId, sequenceEvaluation.positionEvaluations).catch((err) => {
+      console.error("[complete-sequence] attempt persistence failed", err);
+    });
+  }
 
   if (process.env.NODE_ENV !== "production") {
     console.log("[complete-sequence:done]", {
@@ -551,6 +561,7 @@ export async function POST(request: Request) {
     trainingOutcome,
     averageCpLoss,
     maxSingleCpLoss,
+    rated: isRatedSession,
   });
 }
 

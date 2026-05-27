@@ -624,6 +624,28 @@ test("complete-sequence safely returns a stored result when atomic finalization 
   assert.ok(rpcIndex > initialRecoveryIndex, "stored recovery must be checked before invoking the atomic RPC");
 });
 
+test("complete-sequence marks Maia client sessions unrated and avoids rated side effects", () => {
+  const source = readSource("app/api/train/complete-sequence/route.ts");
+
+  assert.ok(source.includes("MAIA3_OPPONENT_MODE"));
+  assert.ok(source.includes("const isRatedSession = activeSession.opponentMode !== MAIA3_OPPONENT_MODE;"));
+  assert.ok(source.includes("p_is_rated: isRatedSession"));
+  assert.ok(source.includes("const eloAfter = isRatedSession ?"));
+  assert.ok(source.includes("const eloDelta = isRatedSession ?"));
+  assert.ok(source.includes("if (isRatedSession) {"));
+  assert.ok(source.includes("persistMistakeAttempts(userId, sequenceEvaluation.positionEvaluations)"));
+  assert.ok(source.includes("rated: isRatedSession"));
+  assert.ok(source.includes("rated: result.opponent_mode !== MAIA3_OPPONENT_MODE"));
+});
+
+test("SPA displays unrated Maia completion without a misleading rating transition", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(source.includes("Unrated Maia preview"));
+  assert.ok(source.includes("Rating not updated"));
+  assert.ok(source.includes("result.rated ?"));
+});
+
 test("active-session restoration rejects malformed persisted sequence and identity state", () => {
   const source = readSource("lib/training/active-session-store.ts");
 

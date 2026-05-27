@@ -104,6 +104,7 @@ test("SPA parses the real persisted sequence completion result", () => {
     trainingOutcome: "acceptable",
     averageCpLoss: 23,
     maxSingleCpLoss: 41,
+    rated: false,
     elo: {
       eloBefore: 1200,
       eloAfter: 1203,
@@ -115,6 +116,7 @@ test("SPA parses the real persisted sequence completion result", () => {
   assert.equal(result.trainingOutcome, "acceptable");
   assert.equal(result.averageCpLoss, 23);
   assert.equal(result.maxSingleCpLoss, 41);
+  assert.equal(result.rated, false);
   assert.deepEqual(result.elo, {
     eloBefore: 1200,
     eloAfter: 1203,

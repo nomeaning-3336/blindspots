@@ -66,6 +66,7 @@ export type SpaCompletionResult = {
   trainingOutcome: "pass" | "acceptable" | "fail";
   averageCpLoss: number;
   maxSingleCpLoss: number;
+  rated: boolean;
   elo: {
     eloBefore: number;
     eloAfter: number;
@@ -326,6 +327,7 @@ export function parseCompleteSequenceResponse(value: unknown): SpaCompletionResu
     trainingOutcome,
     averageCpLoss,
     maxSingleCpLoss,
+    rated: value.rated === false ? false : true,
     elo: {
       eloBefore,
       eloAfter,
