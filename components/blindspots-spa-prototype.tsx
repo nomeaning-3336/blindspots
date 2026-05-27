@@ -1234,22 +1234,6 @@ export function BlindspotsSpaPrototype({
                     Retry load
                   </button>
                 ) : null}
-                {trainingLoadState === "ready" &&
-                !completionResult &&
-                viewMode === "playing" &&
-                (activeSession !== null || legacySessionBlocked) ? (
-                  <button
-                    className="bs-kit-btn ghost sm"
-                    data-testid="spa-discard-sequence"
-                    onClick={() => {
-                      void discardActiveSequence();
-                    }}
-                    disabled={trainingActionState !== "idle"}
-                    aria-label="Discard sequence"
-                  >
-                    <DiscardIcon /> Discard
-                  </button>
-                ) : null}
                 {activeSession && !completionResult && viewMode === "playing" && !legacySessionBlocked ? (
                   <button
                     className="bs-kit-btn ghost sm"

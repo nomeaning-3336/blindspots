@@ -471,6 +471,14 @@ test("SPA no longer exposes fake QUEUE-driven review controls or panels", () => 
   assert.ok(!source.includes("const REASONS ="));
 });
 
+test("SPA does not render a Discard sequence control", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(!source.includes('data-testid="spa-discard-sequence"'));
+  assert.ok(!source.includes("> Discard"));
+  assert.ok(!source.includes('aria-label="Discard sequence"'));
+});
+
 test("active-session creation rejects stale filler candidates against server progression", () => {
   const source = readSource("lib/training/active-session-store.ts");
 
