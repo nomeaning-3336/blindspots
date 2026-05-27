@@ -377,13 +377,32 @@ test("SPA retries Finish once and renders recovered completion through the norma
 test("SPA flushes optimistic moves before Finish or terminal auto-completion", () => {
   const source = readSource("components/blindspots-spa-prototype.tsx");
 
+  assert.ok(source.includes('type TrainingViewMode = "playing" | "analysis";'));
+  assert.ok(source.includes('function beginAnalysisTransition(_reason: "finish" | "terminal")'));
   assert.ok(source.includes("function completePersistedSequence()"));
+  assert.ok(source.includes('beginAnalysisTransition("finish");'));
+  assert.ok(source.includes('beginAnalysisTransition("terminal");'));
+  assert.ok(source.includes('setViewMode("analysis");'));
+  assert.ok(source.includes("startClientSequenceAnalysis(generation);"));
   assert.ok(source.includes("completionRequestedGenerationRef.current = generation;"));
   assert.ok(source.includes("void flushOptimisticMovesToServer(generation);"));
-  assert.ok(source.includes("if (completionRequestedGenerationRef.current === generation)"));
-  assert.ok(source.includes("await completeConfirmedSequence(confirmedSession);"));
+  assert.ok(source.includes("maybeCompleteAnalyzedSequence(generation);"));
+  assert.ok(source.includes("void completeConfirmedSequence(session, analysis);"));
   assert.ok(source.includes("if (isTerminal)"));
-  assert.ok(source.includes('setTrainingActionState("finishing");'));
+  assert.ok(source.includes('viewMode === "playing"'));
+  assert.ok(source.includes('viewMode === "analysis"'));
+});
+
+test("SPA uses client Stockfish analysis state before completing Maia preview sessions", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+
+  assert.ok(source.includes("workers/stockfish-analysis.worker.ts"));
+  assert.ok(source.includes("StockfishAnalysisRequest"));
+  assert.ok(source.includes("ClientAnalysisPanel"));
+  assert.ok(source.includes("clientAnalysis: analysis"));
+  assert.ok(source.includes("Analysis unavailable."));
+  assert.ok(source.includes("onRetryAnalysis"));
+  assert.ok(!source.includes("Maia is thinking..."));
 });
 
 test("SPA allows non-mutating board navigation while blocking moves from historical states", () => {
@@ -664,10 +683,13 @@ test("complete-sequence marks Maia client sessions unrated and avoids rated side
 
   assert.ok(source.includes("MAIA3_OPPONENT_MODE"));
   assert.ok(source.includes("const isRatedSession = activeSession.opponentMode !== MAIA3_OPPONENT_MODE;"));
+  assert.ok(source.includes("validateClientSequenceAnalysis"));
+  assert.ok(source.includes("Client analysis is required for unrated Maia completion."));
   assert.ok(source.includes("p_is_rated: isRatedSession"));
   assert.ok(source.includes("const eloAfter = isRatedSession ?"));
   assert.ok(source.includes("const eloDelta = isRatedSession ?"));
   assert.ok(source.includes("if (isRatedSession) {"));
+  assert.ok(source.includes("isRatedSession && humanRatingMoves.length >= 4"));
   assert.ok(source.includes("persistMistakeAttempts(userId, sequenceEvaluation.positionEvaluations)"));
   assert.ok(source.includes("rated: isRatedSession"));
   assert.ok(source.includes("rated: result.opponent_mode !== MAIA3_OPPONENT_MODE"));

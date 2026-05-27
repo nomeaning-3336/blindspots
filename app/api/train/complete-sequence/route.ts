@@ -28,6 +28,7 @@ import { buildDefaultBlindspotProfile } from "@/lib/training/default-profile";
 import { normalizeDecisionFen } from "@/lib/training/mistake-memory";
 import { normalizeReviewGradingConfig } from "@/lib/training/training-preferences";
 import { MAIA3_OPPONENT_MODE } from "@/lib/maia3/maia3-constants";
+import type { ClientSequenceAnalysis } from "@/lib/stockfish-client/stockfish-analysis-types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,6 +51,7 @@ type CompleteSequencePayload = {
   sessionId?: unknown;
   onboardingCheckpoint?: unknown;
   reflectionNote?: unknown;
+  clientAnalysis?: unknown;
 };
 
 type StoredCompletedSessionResult = {
@@ -298,21 +300,41 @@ export async function POST(request: Request) {
   const profileStartedAt = Date.now();
   const profile = await getOrCreateProfile(userId);
   const profileMs = Date.now() - profileStartedAt;
+  const isRatedSession = activeSession.opponentMode !== MAIA3_OPPONENT_MODE;
 
   const usedPrecomputedEvaluations = false;
   const usedPartialPrecomputedEvaluations = false;
   const evaluationStartedAt = Date.now();
-  const sequenceEvaluation = await calculateSequenceEvaluation({
-    startingFen,
-    moves,
-    selectedBucket,
-    selectedPhase,
-    selectedTags,
-    selectedIsTactic,
-    selectedOpeningName,
-    selectedEco,
-    rawPrecomputedEvaluations: undefined,
-  });
+  let sequenceEvaluation: SequenceEvaluationResult;
+  try {
+    sequenceEvaluation = isRatedSession
+      ? await calculateSequenceEvaluation({
+          startingFen,
+          moves,
+          selectedBucket,
+          selectedPhase,
+          selectedTags: selectedTags ?? [],
+          selectedIsTactic,
+          selectedOpeningName,
+          selectedEco,
+          rawPrecomputedEvaluations: undefined,
+        })
+      : validateClientSequenceAnalysis({
+          raw: payload?.clientAnalysis,
+          startingFen,
+          moves,
+          selectedBucket,
+          selectedPhase,
+          selectedTags: selectedTags ?? [],
+          selectedOpeningName,
+          selectedEco,
+        });
+  } catch (error) {
+    if (error instanceof ActiveSessionError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    throw error;
+  }
   const evaluationMs = Date.now() - evaluationStartedAt;
 
   if (process.env.NODE_ENV !== "production") {
@@ -347,10 +369,8 @@ export async function POST(request: Request) {
       })
     : trainingOutcome;
   const reviewedMoveCpLoss = reviewedMoveScore?.cpLoss ?? null;
-  const isRatedSession = activeSession.opponentMode !== MAIA3_OPPONENT_MODE;
-
   const humanRatingMoves = buildHumanRatingMoves(sequenceEvaluation.positionEvaluations);
-  const engineRatingMoves = humanRatingMoves.length >= 4
+  const engineRatingMoves = isRatedSession && humanRatingMoves.length >= 4
     ? await calculateEngineRatingMoves({
         startingFen,
         moves,
@@ -947,6 +967,171 @@ function countUserMovesInSequence(
   } catch {
     return 0;
   }
+}
+
+function validateClientSequenceAnalysis(input: {
+  raw: unknown;
+  startingFen: string;
+  moves: Array<{ san: string; uci: string; side: string }>;
+  selectedBucket: string;
+  selectedPhase: string | null;
+  selectedTags: string[];
+  selectedOpeningName: string | null;
+  selectedEco: string | null;
+}): SequenceEvaluationResult {
+  if (!isRecord(input.raw)) {
+    throw new ActiveSessionError("Client analysis is required for unrated Maia completion.", 400);
+  }
+
+  const analysis = input.raw as Partial<ClientSequenceAnalysis>;
+  const learnerSide = analysis.learnerSide;
+
+  if (learnerSide !== "w" && learnerSide !== "b") {
+    throw new ActiveSessionError("Client analysis learner side is invalid.", 400);
+  }
+
+  const chess = new Chess(input.startingFen);
+  const expectedLearnerSide = chess.turn();
+
+  if (learnerSide !== expectedLearnerSide) {
+    throw new ActiveSessionError("Client analysis learner side does not match session.", 400);
+  }
+
+  if (!Array.isArray(analysis.learnerMoves)) {
+    throw new ActiveSessionError("Client analysis moves are invalid.", 400);
+  }
+
+  const positionEvaluations: PositionEvaluation[] = [];
+  const moveScores: SequenceEvaluationResult["moveScores"] = [];
+  let learnerMoveCursor = 0;
+
+  for (let moveIndex = 0; moveIndex < input.moves.length; moveIndex += 1) {
+    const storedMove = input.moves[moveIndex]!;
+    const decisionFen = chess.fen();
+    const isLearnerMove = chess.turn() === learnerSide;
+    const played = chess.move({
+      from: storedMove.uci.slice(0, 2),
+      to: storedMove.uci.slice(2, 4),
+      promotion: storedMove.uci[4],
+    });
+
+    if (!played || played.san !== storedMove.san) {
+      throw new ActiveSessionError("Client analysis session reconstruction failed.", 400);
+    }
+
+    if (!isLearnerMove) continue;
+
+    const clientMove = analysis.learnerMoves[learnerMoveCursor];
+    learnerMoveCursor += 1;
+
+    if (!isRecord(clientMove)) {
+      throw new ActiveSessionError("Client analysis move order is invalid.", 400);
+    }
+
+    if (
+      clientMove.moveIndex !== moveIndex ||
+      clientMove.decisionFen !== decisionFen ||
+      clientMove.playedUci !== storedMove.uci ||
+      clientMove.playedSan !== storedMove.san
+    ) {
+      throw new ActiveSessionError("Client analysis move identity does not match session.", 400);
+    }
+
+    const evalBefore = validateFiniteClientNumber(clientMove.evalBefore, "evalBefore");
+    const evalAfter = validateFiniteClientNumber(clientMove.evalAfter, "evalAfter");
+    const cpLoss = validateClientCpLoss(clientMove.cpLoss);
+    const classification = normalizeMoveClassification(clientMove.classification);
+
+    if (!classification) {
+      throw new ActiveSessionError("Client analysis classification is invalid.", 400);
+    }
+
+    const positionEvaluation: PositionEvaluation = {
+      index: positionEvaluations.length,
+      decisionFen,
+      userMove: {
+        san: storedMove.san,
+        uci: storedMove.uci,
+      },
+      evalBefore,
+      evalAfter,
+      mateBefore: normalizeOptionalMate(clientMove.mateBefore),
+      mateAfter: normalizeOptionalMate(clientMove.mateAfter),
+      cpLoss,
+      classification,
+      banditResult: classification === "blunder" || classification === "mistake" ? "failure" : "neutral",
+      fenAfterUserMove: chess.fen(),
+      fenAfterEngineMove: null,
+      phase: input.selectedPhase ?? "unknown",
+      bucket: input.selectedBucket,
+      clusterId: deriveAppClusterId({
+        isTactic: input.selectedPhase === "tactic",
+        openingName: input.selectedOpeningName,
+        eco: input.selectedEco,
+        tags: input.selectedTags,
+        phase: input.selectedPhase ?? "unknown",
+        bucket: input.selectedBucket,
+      }),
+      tags: input.selectedTags,
+    };
+
+    positionEvaluations.push(positionEvaluation);
+    moveScores.push({
+      userMoveIndex: moveIndex,
+      cpLoss,
+      evalBefore,
+      evalAfter,
+      mateBefore: positionEvaluation.mateBefore ?? null,
+      mateAfter: positionEvaluation.mateAfter ?? null,
+      classification,
+    });
+  }
+
+  if (learnerMoveCursor !== analysis.learnerMoves.length) {
+    throw new ActiveSessionError("Client analysis contains extra learner moves.", 400);
+  }
+
+  const totalCpLoss = moveScores.reduce((sum, score) => sum + score.cpLoss, 0);
+  const averageCpLoss = Math.max(0, Math.round(moveScores.length > 0 ? totalCpLoss / moveScores.length : 0));
+  const maxSingleCpLoss = Math.max(0, ...moveScores.map((score) => score.cpLoss), 0);
+  const trainingOutcome = classifyTrainingOutcome({ averageCpLoss, maxSingleCpLoss });
+
+  if (
+    analysis.averageCpLoss !== averageCpLoss ||
+    analysis.maxSingleCpLoss !== maxSingleCpLoss ||
+    analysis.trainingOutcome !== trainingOutcome ||
+    !isRecord(analysis.terminal) ||
+    analysis.terminal.gameOver !== chess.isGameOver() ||
+    analysis.terminal.checkmate !== chess.isCheckmate() ||
+    analysis.terminal.draw !== chess.isDraw()
+  ) {
+    throw new ActiveSessionError("Client analysis aggregate does not match session.", 400);
+  }
+
+  return {
+    evalPreservationScore: null,
+    moveScores,
+    totalCpLoss,
+    positionEvaluations,
+    averageCpDelta: null,
+    worstCpDelta: null,
+  };
+}
+
+function validateFiniteClientNumber(value: unknown, field: string) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new ActiveSessionError(`Client analysis ${field} is invalid.`, 400);
+  }
+
+  return Math.round(value);
+}
+
+function validateClientCpLoss(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1000) {
+    throw new ActiveSessionError("Client analysis CPL is invalid.", 400);
+  }
+
+  return Math.round(value);
 }
 
 function normalizePrecomputedMoveScore(
