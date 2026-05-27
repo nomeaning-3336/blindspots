@@ -146,18 +146,24 @@ test("5. Finish enters analysis, Stockfish renders real results, completion save
 
   await page.goto("/");
   await waitForBoard(page);
-  await page.waitForTimeout(4_000);
+  await page.getByTestId("spa-boot-splash").waitFor({ state: "detached", timeout: 90_000 });
+  await page.waitForTimeout(2_000);
 
-  // Ensure an active sequence exists; if not, create one.
-  let session = await activeSession(page);
-  if (!session?.session) {
-    const fen = await loadedFen(page);
-    await playLearnerMove(page, fen);
-    for (let i = 0; i < 40; i++) {
-      session = await activeSession(page);
-      if (session?.session && session.session.moves.length >= 2) break;
-      await page.waitForTimeout(1_500);
-    }
+  // Establish a clean, fresh playing sequence so the Finish button is present
+  // regardless of state left by earlier serial tests.
+  if (await page.getByTestId("spa-discard-sequence").count()) {
+    await page.getByTestId("spa-discard-sequence").click();
+    await page.waitForTimeout(5_000);
+    await waitForBoard(page);
+    await page.waitForTimeout(2_000);
+  }
+
+  const fen = await loadedFen(page);
+  await playLearnerMove(page, fen);
+  for (let i = 0; i < 40; i++) {
+    const session = await activeSession(page);
+    if (session?.session && session.session.moves.length >= 2) break;
+    await page.waitForTimeout(1_500);
   }
 
   await page.locator('button:has-text("Finish sequence")').click({ timeout: 15_000 });

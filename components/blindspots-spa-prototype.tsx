@@ -120,7 +120,8 @@ export function BlindspotsSpaPrototype({
     };
   }, []);
 
-  function createMaiaWorker() {
+  function createMaiaWorker(options?: { autoRetry?: boolean }) {
+    const allowAutoRetry = options?.autoRetry ?? true;
     const existingWorker = maiaWorkerRef.current;
     if (existingWorker) {
       existingWorker.terminate();
@@ -130,11 +131,29 @@ export function BlindspotsSpaPrototype({
     const worker = new Worker(new URL("../workers/maia3-opponent.worker.ts", import.meta.url), {
       type: "module",
     });
-    const initTimer = window.setTimeout(() => {
+    let initialized = false;
+
+    // One transient init failure (slow model fetch, worker spawn race) is
+    // recovered automatically with a fresh worker before surfacing the error.
+    function handleInitFailure() {
       if (maiaWorkerRef.current !== worker) return;
+      window.clearTimeout(initTimer);
       setMaiaThinking(false);
       setMaiaReady(false);
+      worker.terminate();
+      if (maiaWorkerRef.current === worker) maiaWorkerRef.current = null;
+
+      if (allowAutoRetry) {
+        createMaiaWorker({ autoRetry: false });
+        return;
+      }
+
       setMaiaError("Opponent unavailable.");
+    }
+
+    const initTimer = window.setTimeout(() => {
+      if (initialized) return;
+      handleInitFailure();
     }, MAIA_INITIALIZATION_TIMEOUT_MS);
 
     maiaWorkerRef.current = worker;
@@ -142,8 +161,16 @@ export function BlindspotsSpaPrototype({
       const response = event.data;
 
       if (response.type === "ready") {
+        initialized = true;
         window.clearTimeout(initTimer);
         setMaiaReady(true);
+        setMaiaError(null);
+        return;
+      }
+
+      // An error before the worker ever became ready is an init failure.
+      if (response.type === "error" && !initialized) {
+        handleInitFailure();
         return;
       }
 
@@ -157,7 +184,6 @@ export function BlindspotsSpaPrototype({
       setMaiaThinking(false);
 
       if (response.type === "error") {
-        window.clearTimeout(initTimer);
         setMaiaError("Opponent unavailable.");
         return;
       }
@@ -184,10 +210,15 @@ export function BlindspotsSpaPrototype({
     worker.postMessage(request);
 
     worker.onerror = () => {
-      window.clearTimeout(initTimer);
-      setMaiaThinking(false);
-      setMaiaReady(false);
-      setMaiaError("Opponent unavailable.");
+      if (initialized) {
+        if (maiaWorkerRef.current !== worker) return;
+        window.clearTimeout(initTimer);
+        setMaiaThinking(false);
+        setMaiaReady(false);
+        setMaiaError("Opponent unavailable.");
+        return;
+      }
+      handleInitFailure();
     };
   }
 
