@@ -14,6 +14,8 @@ import {
   MAIA3_OPPONENT_MODE,
 } from "@/lib/maia3/maia3-constants";
 import type { Maia3WorkerRequest, Maia3WorkerResponse } from "@/lib/maia3/maia3-worker-protocol";
+import type { StockfishAnalysisRequest, StockfishAnalysisResponse } from "@/lib/stockfish-client/stockfish-analysis-protocol";
+import type { ClientSequenceAnalysis } from "@/lib/stockfish-client/stockfish-analysis-types";
 import {
   buildRestoredBoardState,
   parseCompleteSequenceResponse,
@@ -30,6 +32,7 @@ type BoardHistoryEntry = SpaBoardHistoryEntry;
 type SplashPhase = "blank" | "branded" | "hidden";
 type TrainingLoadState = "loading" | "ready" | "error";
 type TrainingActionState = "idle" | "finishing" | "loading-next";
+type TrainingViewMode = "playing" | "analysis";
 
 const SPLASH_BRAND_DELAY_MS = 250;
 const SPLASH_COMPLETE_DELAY_MS = 1250;
@@ -60,6 +63,11 @@ export function BlindspotsSpaPrototype({
   const [trainingActionState, setTrainingActionState] = useState<TrainingActionState>("idle");
   const [trainingActionError, setTrainingActionError] = useState<string | null>(null);
   const [moveSyncError, setMoveSyncError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<TrainingViewMode>("playing");
+  const [clientAnalysis, setClientAnalysis] = useState<ClientSequenceAnalysis | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [selectedAnalysisMoveIndex, setSelectedAnalysisMoveIndex] = useState<number | null>(null);
+  const [stockfishReady, setStockfishReady] = useState(false);
   const [maiaReady, setMaiaReady] = useState(false);
   const [maiaThinking, setMaiaThinking] = useState(false);
   const [maiaError, setMaiaError] = useState<string | null>(null);
@@ -87,6 +95,11 @@ export function BlindspotsSpaPrototype({
   const maiaWorkerRef = useRef<Worker | null>(null);
   const maiaRequestIdRef = useRef<string | null>(null);
   const maiaRequestedKeyRef = useRef<string | null>(null);
+  const stockfishWorkerRef = useRef<Worker | null>(null);
+  const stockfishRequestIdRef = useRef<string | null>(null);
+  const pendingAnalysisGenerationRef = useRef<number | null>(null);
+  const clientAnalysisRef = useRef<ClientSequenceAnalysis | null>(null);
+  const completionStartedGenerationRef = useRef<number | null>(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -141,8 +154,7 @@ export function BlindspotsSpaPrototype({
         const isTerminal = appendOptimisticMoveUci(response.uci);
 
         if (isTerminal) {
-          setTrainingActionState("finishing");
-          completionRequestedGenerationRef.current = generation;
+          beginAnalysisTransition("terminal");
         }
 
         void flushOptimisticMovesToServer(generation);
@@ -163,12 +175,56 @@ export function BlindspotsSpaPrototype({
     };
   }, []);
 
+  useEffect(() => {
+    const worker = new Worker(new URL("../workers/stockfish-analysis.worker.ts", import.meta.url), {
+      type: "module",
+    });
+
+    stockfishWorkerRef.current = worker;
+    worker.onmessage = (event: MessageEvent<StockfishAnalysisResponse>) => {
+      const response = event.data;
+
+      if (response.type === "ready") {
+        setStockfishReady(true);
+        const generation = pendingAnalysisGenerationRef.current;
+        if (generation !== null) startClientSequenceAnalysis(generation);
+        return;
+      }
+
+      if (response.requestId && response.requestId !== stockfishRequestIdRef.current) {
+        return;
+      }
+
+      if (response.type === "error") {
+        setAnalysisError("Analysis unavailable.");
+        setTrainingActionState("idle");
+        return;
+      }
+
+      clientAnalysisRef.current = response.analysis;
+      setClientAnalysis(response.analysis);
+      setSelectedAnalysisMoveIndex(response.analysis.learnerMoves[0]?.moveIndex ?? null);
+      maybeCompleteAnalyzedSequence(syncGenerationRef.current);
+    };
+
+    const request: StockfishAnalysisRequest = { type: "initialize" };
+    worker.postMessage(request);
+
+    return () => {
+      stockfishWorkerRef.current = null;
+      worker.terminate();
+    };
+  }, []);
+
   function applyColdCandidate(candidate: SpaColdCandidate) {
     syncGenerationRef.current += 1;
     optimisticMoveUcisRef.current = [];
     confirmedSessionRef.current = null;
     coldCandidateRef.current = candidate;
     completionRequestedGenerationRef.current = null;
+    completionStartedGenerationRef.current = null;
+    pendingAnalysisGenerationRef.current = null;
+    clientAnalysisRef.current = null;
     visibleBoardFenRef.current = candidate.fen;
     visibleBoardHistoryRef.current = [{ fen: candidate.fen, lastMove: null }];
     visibleBoardHistoryIndexRef.current = 0;
@@ -177,6 +233,10 @@ export function BlindspotsSpaPrototype({
     setMaiaThinking(false);
     setMaiaError(null);
     setMoveSyncError(null);
+    setViewMode("playing");
+    setClientAnalysis(null);
+    setAnalysisError(null);
+    setSelectedAnalysisMoveIndex(null);
     setActiveSession(null);
     setColdCandidate(candidate);
     setCompletionResult(null);
@@ -194,6 +254,10 @@ export function BlindspotsSpaPrototype({
     confirmedSessionRef.current = session;
     coldCandidateRef.current = null;
     optimisticMoveUcisRef.current = session.moves.map((move) => move.uci);
+    completionRequestedGenerationRef.current = null;
+    completionStartedGenerationRef.current = null;
+    pendingAnalysisGenerationRef.current = null;
+    clientAnalysisRef.current = null;
     visibleBoardFenRef.current = restoredBoard.fen;
     visibleBoardHistoryRef.current = restoredBoard.history;
     visibleBoardHistoryIndexRef.current = restoredBoard.historyIndex;
@@ -202,6 +266,10 @@ export function BlindspotsSpaPrototype({
     setMaiaThinking(false);
     setMaiaError(null);
     setMoveSyncError(null);
+    setViewMode("playing");
+    setClientAnalysis(null);
+    setAnalysisError(null);
+    setSelectedAnalysisMoveIndex(null);
     setActiveSession(session);
     setColdCandidate(null);
     setCompletionResult(null);
@@ -316,7 +384,7 @@ export function BlindspotsSpaPrototype({
     };
   }, []);
 
-  const stage = completionResult ? "review" : inSession || committed ? "playing" : "loaded";
+  const stage = completionResult || viewMode === "analysis" ? "review" : inSession || committed ? "playing" : "loaded";
   const showSplash = splashPhase !== "hidden" || trainingLoadState === "loading" || !maiaReady;
   const visibleSplashPhase: Exclude<SplashPhase, "hidden"> =
     splashPhase === "blank" ? "blank" : "branded";
@@ -361,6 +429,7 @@ export function BlindspotsSpaPrototype({
   const trainingBoardInteractive =
     trainingLoadState === "ready" &&
     (trainingActionState === "idle") &&
+    viewMode === "playing" &&
     maiaReady &&
     !maiaThinking &&
     !maiaError &&
@@ -482,7 +551,7 @@ export function BlindspotsSpaPrototype({
     );
   }
 
-  async function completeConfirmedSequence(session: SpaActiveSession) {
+  async function completeConfirmedSequence(session: SpaActiveSession, analysis: ClientSequenceAnalysis | null) {
     setTrainingActionState("finishing");
     setTrainingActionError(null);
 
@@ -494,6 +563,7 @@ export function BlindspotsSpaPrototype({
         },
         body: JSON.stringify({
           sessionId: session.id,
+          clientAnalysis: analysis,
         }),
       });
 
@@ -602,10 +672,7 @@ export function BlindspotsSpaPrototype({
           throw new Error("Saved training state does not match the played moves.");
         }
 
-        if (completionRequestedGenerationRef.current === generation) {
-          completionRequestedGenerationRef.current = null;
-          await completeConfirmedSequence(confirmedSession);
-        }
+        maybeCompleteAnalyzedSequence(generation);
 
         break;
       }
@@ -630,14 +697,71 @@ export function BlindspotsSpaPrototype({
   }
 
   function completePersistedSequence() {
+    beginAnalysisTransition("finish");
+  }
+
+  function beginAnalysisTransition(_reason: "finish" | "terminal") {
     const generation = syncGenerationRef.current;
 
+    setViewMode("analysis");
     setTrainingActionState("finishing");
     setTrainingActionError(null);
     setMoveSyncError(null);
+    setAnalysisError(null);
+    setClientAnalysis(null);
+    setMaiaThinking(false);
+    maiaRequestIdRef.current = null;
+    maiaRequestedKeyRef.current = null;
     completionRequestedGenerationRef.current = generation;
+    completionStartedGenerationRef.current = null;
+    clientAnalysisRef.current = null;
 
+    startClientSequenceAnalysis(generation);
     void flushOptimisticMovesToServer(generation);
+  }
+
+  function startClientSequenceAnalysis(generation: number) {
+    const worker = stockfishWorkerRef.current;
+    const startingFen = confirmedSessionRef.current?.startingFen ?? coldCandidateRef.current?.fen;
+
+    pendingAnalysisGenerationRef.current = generation;
+
+    if (!worker || !startingFen || !stockfishReady) return;
+
+    const learnerSideForAnalysis = new Chess(startingFen).turn();
+    const requestId = `stockfish-${generation}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    stockfishRequestIdRef.current = requestId;
+    pendingAnalysisGenerationRef.current = null;
+
+    const request: StockfishAnalysisRequest = {
+      type: "analyze-sequence",
+      requestId,
+      startingFen,
+      moveUcis: optimisticMoveUcisRef.current.slice(),
+      learnerSide: learnerSideForAnalysis,
+    };
+    worker.postMessage(request);
+  }
+
+  function maybeCompleteAnalyzedSequence(generation: number) {
+    if (
+      generation !== syncGenerationRef.current ||
+      completionRequestedGenerationRef.current !== generation ||
+      completionStartedGenerationRef.current === generation
+    ) {
+      return;
+    }
+
+    const session = confirmedSessionRef.current;
+    const analysis = clientAnalysisRef.current;
+
+    if (!session || !analysis) return;
+
+    const confirmedUcis = session.moves.map((move) => move.uci);
+    if (!sameMoveUcis(confirmedUcis, optimisticMoveUcisRef.current)) return;
+
+    completionStartedGenerationRef.current = generation;
+    void completeConfirmedSequence(session, analysis);
   }
 
   function appendOptimisticMoveUci(uci: string): boolean {
@@ -683,6 +807,7 @@ export function BlindspotsSpaPrototype({
       !maiaReady ||
       maiaThinking ||
       (!options?.retry && maiaError) ||
+      viewMode === "analysis" ||
       completionResult ||
       legacySessionBlocked
     ) {
@@ -740,8 +865,7 @@ export function BlindspotsSpaPrototype({
     const generation = syncGenerationRef.current;
 
     if (isTerminal) {
-      setTrainingActionState("finishing");
-      completionRequestedGenerationRef.current = generation;
+      beginAnalysisTransition("terminal");
     } else {
       requestMaiaReplyForCurrentPosition();
     }
@@ -760,6 +884,20 @@ export function BlindspotsSpaPrototype({
     setCommitted(entry.lastMove);
     setSelected(null);
     if (boardHistory.length > 1) setInSession(true);
+  }
+
+  function selectAnalyzedMove(moveIndex: number) {
+    const historyIndex = moveIndex + 1;
+    const entry = boardHistory[historyIndex];
+    if (!entry) return;
+
+    visibleBoardFenRef.current = entry.fen;
+    visibleBoardHistoryIndexRef.current = historyIndex;
+    setSelectedAnalysisMoveIndex(moveIndex);
+    setBoardHistoryIndex(historyIndex);
+    setBoardFen(entry.fen);
+    setCommitted(entry.lastMove);
+    setSelected(null);
   }
 
   async function loadNextSequence() {
@@ -933,7 +1071,7 @@ export function BlindspotsSpaPrototype({
                     Retry load
                   </button>
                 ) : null}
-                {activeSession && !completionResult ? (
+                {activeSession && !completionResult && viewMode === "playing" ? (
                   <button
                     className="bs-kit-btn ghost sm"
                     onClick={() => {
@@ -966,11 +1104,20 @@ export function BlindspotsSpaPrototype({
             error={trainingLoadError}
             actionError={trainingActionError}
             moveSyncError={moveSyncError}
+            analysisError={analysisError}
             maiaError={maiaError}
+            onRetryAnalysis={() => startClientSequenceAnalysis(syncGenerationRef.current)}
             onRetryMaiaReply={() => requestMaiaReplyForCurrentPosition({ retry: true })}
           />
           {completionResult ? (
             <TrainingCompletionPanel result={completionResult} />
+          ) : null}
+          {viewMode === "analysis" ? (
+            <ClientAnalysisPanel
+              analysis={clientAnalysis}
+              selectedMoveIndex={selectedAnalysisMoveIndex}
+              onSelectMove={selectAnalyzedMove}
+            />
           ) : null}
           <TodayPanel
             hideStats={inSession}
@@ -1060,14 +1207,18 @@ function TrainingErrorPanel({
   error,
   actionError,
   moveSyncError,
+  analysisError,
   maiaError,
+  onRetryAnalysis,
   onRetryMaiaReply,
 }: {
   loadState: TrainingLoadState;
   error: string | null;
   actionError: string | null;
   moveSyncError: string | null;
+  analysisError: string | null;
   maiaError: string | null;
+  onRetryAnalysis: () => void;
   onRetryMaiaReply: () => void;
 }) {
   if (loadState === "error") {
@@ -1082,7 +1233,7 @@ function TrainingErrorPanel({
     );
   }
 
-  if (!actionError && !moveSyncError && !maiaError) {
+  if (!actionError && !moveSyncError && !analysisError && !maiaError) {
     return null;
   }
 
@@ -1101,9 +1252,72 @@ function TrainingErrorPanel({
           {actionError}
         </div>
       ) : null}
+      {analysisError ? (
+        <>
+          <div className="bs-kit-panel-title">Analysis unavailable.</div>
+          <button className="bs-kit-btn ghost sm" onClick={onRetryAnalysis}>
+            Retry
+          </button>
+        </>
+      ) : null}
       {moveSyncError ? (
         <div className="bs-kit-muted-line" data-testid="spa-training-sync-error">
           {moveSyncError}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ClientAnalysisPanel({
+  analysis,
+  selectedMoveIndex,
+  onSelectMove,
+}: {
+  analysis: ClientSequenceAnalysis | null;
+  selectedMoveIndex: number | null;
+  onSelectMove: (moveIndex: number) => void;
+}) {
+  if (!analysis) {
+    return <div className="bs-kit-panel" data-testid="spa-client-analysis" />;
+  }
+
+  const outcomeLabel =
+    analysis.trainingOutcome === "pass"
+      ? "Passed"
+      : analysis.trainingOutcome === "acceptable"
+        ? "Acceptable"
+        : "Failed";
+  const selectedMove =
+    analysis.learnerMoves.find((move) => move.moveIndex === selectedMoveIndex) ??
+    analysis.learnerMoves[0] ??
+    null;
+
+  return (
+    <div className="bs-kit-panel" data-testid="spa-client-analysis">
+      <div className="bs-kit-panel-title">Analysis</div>
+      <div className="bs-kit-due-row">
+        <span>{outcomeLabel}</span>
+        <span>{analysis.averageCpLoss} average CPL</span>
+      </div>
+      <div className="bs-kit-muted-line">
+        Maximum CPL: <b>{analysis.maxSingleCpLoss}</b>
+      </div>
+      <div className="bs-kit-stat-list">
+        {analysis.learnerMoves.map((move) => (
+          <button
+            key={move.moveIndex}
+            className="bs-kit-btn ghost sm"
+            data-selected={move.moveIndex === selectedMove?.moveIndex ? "true" : "false"}
+            onClick={() => onSelectMove(move.moveIndex)}
+          >
+            {move.playedSan} · {move.classification} · {move.cpLoss} CPL
+          </button>
+        ))}
+      </div>
+      {selectedMove?.bestLineUcis.length ? (
+        <div className="bs-kit-muted-line">
+          Best line: <b>{selectedMove.bestLineUcis.join(" ")}</b>
         </div>
       ) : null}
     </div>
