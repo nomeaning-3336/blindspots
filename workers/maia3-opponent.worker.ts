@@ -15,7 +15,10 @@ import type {
 let session: ort.InferenceSession | null = null;
 
 ort.env.wasm.numThreads = 1;
-ort.env.wasm.wasmPaths = "/models/maia3/ort/";
+ort.env.wasm.wasmPaths = {
+  mjs: "/models/maia3/ort/ort-wasm-simd-threaded.mjs",
+  wasm: "/models/maia3/ort/ort-wasm-simd-threaded.wasm",
+};
 
 function post(response: Maia3WorkerResponse) {
   self.postMessage(response);

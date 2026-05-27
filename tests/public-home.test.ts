@@ -181,8 +181,8 @@ test("signed-in SPA renders the timed branded boot splash over the loaded app", 
     /const SPLASH_COMPLETE_DELAY_MS = \d+;/,
     "SPA must keep a minimum branded-hold floor before it may dismiss",
   );
-  // The branded-hold is only a lower bound; real dismissal is gated on Maia
-  // readiness, so it must not add long fixed latency once the app is ready.
+  // The branded-hold is only a lower bound; model readiness must not be able
+  // to trap users behind the splash if the worker fails.
   const completeDelay = Number(
     /const SPLASH_COMPLETE_DELAY_MS = (\d+);/.exec(source)?.[1] ?? "0",
   );
@@ -190,10 +190,7 @@ test("signed-in SPA renders the timed branded boot splash over the loaded app", 
     completeDelay > 0 && completeDelay <= 1250,
     "SPA branded-hold floor must stay short so the splash does not pad ready boots",
   );
-  assert.ok(
-    source.includes("|| !maiaReady)"),
-    "SPA must keep the splash visible until Maia is actually ready",
-  );
+  assert.ok(!source.includes("|| !maiaReady)"));
   assert.ok(
     source.includes('useState<SplashPhase>("blank")'),
     "SPA splash must begin in the blank background phase",
@@ -213,15 +210,15 @@ test("signed-in SPA renders the timed branded boot splash over the loaded app", 
   assert.ok(
     source.includes("const hasBlockingInitializationError") &&
     source.includes("const showSplash = !hasBlockingInitializationError"),
-    "SPA must keep the splash visible while authenticated training state and Maia runtime load, but dismiss on blocking init errors",
+    "SPA must keep the splash visible while authenticated training state loads, but dismiss on blocking init errors",
   );
   assert.ok(
     source.includes('{showSplash ? <SpaBootSplash phase={visibleSplashPhase} /> : null}'),
-    "SPA must remove the splash only after boot timing, training hydration, and Maia readiness complete",
+    "SPA must remove the splash after boot timing and training hydration complete",
   );
   assert.ok(
     source.includes('<div className="bs-kit-app" aria-busy={showSplash}>'),
-    "SPA must report itself busy while boot, training hydration, or Maia readiness is pending",
+    "SPA must report itself busy while boot or training hydration is pending",
   );
 });
 
@@ -341,7 +338,8 @@ test("SPA replaces manual opponent input with Maia worker replies and completes 
   assert.ok(source.includes("Opponent unavailable."));
   assert.ok(source.includes("Retry"));
   assert.ok(workerSource.includes('from "onnxruntime-web/wasm"'));
-  assert.ok(workerSource.includes('ort.env.wasm.wasmPaths = "/models/maia3/ort/";'));
+  assert.ok(workerSource.includes('mjs: "/models/maia3/ort/ort-wasm-simd-threaded.mjs"'));
+  assert.ok(workerSource.includes('wasm: "/models/maia3/ort/ort-wasm-simd-threaded.wasm"'));
   assert.ok(workerSource.includes("ort.env.wasm.numThreads = 1;"));
   assert.ok(!source.includes("Temporary mode: play the opponent's reply manually."));
   assert.ok(!source.includes("Maia could not generate a reply."));

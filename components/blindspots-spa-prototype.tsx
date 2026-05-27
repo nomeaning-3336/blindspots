@@ -459,7 +459,7 @@ export function BlindspotsSpaPrototype({
   }, []);
 
   const hasBlockingInitializationError = trainingLoadState === "error" || maiaError !== null;
-  const showSplash = !hasBlockingInitializationError && (splashPhase !== "hidden" || trainingLoadState === "loading" || !maiaReady);
+  const showSplash = !hasBlockingInitializationError && (splashPhase !== "hidden" || trainingLoadState === "loading");
   const visibleSplashPhase: Exclude<SplashPhase, "hidden"> =
     splashPhase === "blank" ? "blank" : "branded";
   const isLatestBoardState = boardHistoryIndex === boardHistory.length - 1;
