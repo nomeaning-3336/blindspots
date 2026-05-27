@@ -504,7 +504,6 @@ export function BlindspotsSpaPrototype({
     trainingLoadState === "ready" &&
     (trainingActionState === "idle") &&
     viewMode === "playing" &&
-    maiaReady &&
     !maiaThinking &&
     !maiaError &&
     !legacySessionBlocked &&

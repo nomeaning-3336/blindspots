@@ -368,6 +368,18 @@ test("SPA disables learner moves during Maia turn without normal status text", (
   assert.ok(!source.includes("Maia is thinking..."));
 });
 
+test("SPA does not block learner-side moves on Maia model readiness", () => {
+  const source = readSource("components/blindspots-spa-prototype.tsx");
+  const interactiveBlock = source.slice(
+    source.indexOf("const trainingBoardInteractive ="),
+    source.indexOf("const canNavigateHistory ="),
+  );
+
+  assert.ok(interactiveBlock.includes('viewMode === "playing"'));
+  assert.ok(interactiveBlock.includes("currentTurn === learnerSide"));
+  assert.ok(!interactiveBlock.includes("maiaReady"));
+});
+
 test("SPA renders training status panel only for actionable errors", () => {
   const source = readSource("components/blindspots-spa-prototype.tsx");
 
