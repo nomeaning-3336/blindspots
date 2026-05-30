@@ -4,7 +4,7 @@ import { getOptionalAppUserId } from "@/lib/app-auth";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import { fetchGamesForProfile } from "@/lib/chess-performance-server";
 import { Chess } from "chess.js";
-import type { NormalizedGame } from "@/lib/chess-performance";
+import type { NormalizedGame } from "@/lib/chess-performance-report";
 
 export const dynamic = "force-dynamic";
 
@@ -20,15 +20,12 @@ type CloneTrainingGame = {
 
 function buildCloneTrainingGames(games: NormalizedGame[]): CloneTrainingGame[] {
   return games
-    .filter((g) => g.rules === "chess" && g.moves && g.moves.length > 0)
     .map((g) => {
       let movesUci: string[] = [];
 
-      if (g.provider === "lichess" && g.moves) {
-        // Lichess already provides moves in UCI format from NDJSON
-        movesUci = g.moves.split(" ").filter(Boolean);
-      } else if (g.provider === "chesscom" && g.pgn) {
-        // Chess.com: parse PGN with chess.js to get legal UCI moves
+      if (typeof g.movesUci === "string" && g.movesUci.trim().length > 0) {
+        movesUci = g.movesUci.split(/\s+/).filter(Boolean);
+      } else if (typeof g.pgn === "string" && g.pgn.trim().length > 0) {
         try {
           const chess = new Chess();
           chess.loadPgn(g.pgn);
@@ -39,9 +36,24 @@ function buildCloneTrainingGames(games: NormalizedGame[]): CloneTrainingGame[] {
         } catch {
           return null;
         }
+      } else {
+        return null;
       }
 
       if (movesUci.length === 0) return null;
+
+      try {
+        const replay = new Chess();
+        for (const uci of movesUci) {
+          const from = uci.slice(0, 2);
+          const to = uci.slice(2, 4);
+          const promotion = uci.length > 4 ? uci.slice(4) : undefined;
+          const applied = replay.move({ from, to, promotion });
+          if (!applied) return null;
+        }
+      } catch {
+        return null;
+      }
 
       return {
         id: g.id,
@@ -104,13 +116,9 @@ export async function POST() {
       sinceMs
     );
 
-    // Sort newest first, take20 most recent eligible games
-    const sorted = [...games]
-      .filter((g) => g.rules === "chess")
-      .sort((a, b) => b.endTimeMs - a.endTimeMs)
-      .slice(0, 20);
-
-    const trainingGames = buildCloneTrainingGames(sorted);
+    const trainingGames = buildCloneTrainingGames(
+      [...games].sort((a, b) => b.endTimeMs - a.endTimeMs)
+    ).slice(0, 20);
 
     if (trainingGames.length < 20) {
       // Revert to needs_training on insufficient games
