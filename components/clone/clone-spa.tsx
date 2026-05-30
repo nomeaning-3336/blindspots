@@ -267,7 +267,7 @@ export function CloneSpa() {
         <aside className="bs-kit-sidebar">
           {onboardingScreen ? (
             state.screen === "training" ? (
-              <div className="flex flex-col gap-3 rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] p-8 shadow-lg">
+              <div className="flex flex-col gap-3 rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] p-6">
                 <h2 className="text-xl font-bold text-[var(--app-text)]">
                   Training your clone…
                 </h2>

@@ -41,7 +41,6 @@ export function CloneOnboarding({
         const data = await res.json();
         throw new Error(data.error ?? "Failed to save profile");
       }
-      // Transition to needs-training screen
       await onSuccess(provider, username.trim());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to save profile");
@@ -72,7 +71,7 @@ export function CloneOnboarding({
     return (
       <form
         onSubmit={handleProfileSubmit}
-        className="flex flex-col gap-4 rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] p-8 shadow-lg"
+        className="flex flex-col gap-4 rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] p-6"
       >
         <h2 className="text-xl font-bold text-[var(--app-text)]">
           Connect your chess profile
@@ -130,9 +129,8 @@ export function CloneOnboarding({
     );
   }
 
-  // needs-training screen
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] p-8 shadow-lg">
+    <div className="flex flex-col gap-4 rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] p-6">
       <h2 className="text-xl font-bold text-[var(--app-text)]">
         Ready to train your clone
       </h2>
