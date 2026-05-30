@@ -27,6 +27,9 @@ type CloneSpaState =
   | { screen: "playing"; game: CloneGameView }
   | { screen: "postmortem"; game: CloneGameView };
 
+const STARTING_FEN =
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
 async function fetchCloneStatus() {
   const res = await fetch("/api/clone/status");
   if (!res.ok) throw new Error("Failed to fetch clone status");
@@ -187,59 +190,58 @@ export function CloneSpa() {
 
   if (state.screen === "loading") {
     return (
-      <div className="clone-workspace flex items-center justify-center">
+      <div className="flex h-[100dvh] items-center justify-center">
         <div className="text-[var(--app-muted)]">Loading…</div>
       </div>
     );
   }
 
-  if (
+  // Board-first SPA: the workspace shell is always rendered after loading.
+  // Onboarding/training live in the right panel; during active play there is
+  // no right panel; after the game ends the postmortem panel appears.
+  const onboardingScreen =
     state.screen === "needs-profile" ||
-    state.screen === "needs-training"
-  ) {
-    return (
-      <CloneOnboarding
-        screen={state.screen}
-        onSuccess={handleTrainingSuccess}
-        onError={handleTrainingError}
-      />
-    );
-  }
-
-  if (state.screen === "training") {
-    return (
-      <div className="clone-workspace flex items-center justify-center">
-        <div className="text-[var(--app-muted)]">Training your clone…</div>
-      </div>
-    );
-  }
+    state.screen === "needs-training" ||
+    state.screen === "training";
 
   const game =
     state.screen === "playing" || state.screen === "postmortem"
       ? state.game
       : null;
-  if (!game) return null;
 
   const isPostmortem = state.screen === "postmortem";
+  const hasPanel = onboardingScreen || isPostmortem;
+
+  const visibleFen = game?.currentFen ?? STARTING_FEN;
+  const boardOrientation = game?.userColor ?? "white";
+  const boardDisabled = onboardingScreen || isPostmortem || cloneThinking;
+  const dataMode = isPostmortem
+    ? "postmortem"
+    : onboardingScreen
+      ? "onboarding"
+      : "playing";
 
   return (
     <div
       className="clone-workspace"
-      data-mode={isPostmortem ? "postmortem" : "playing"}
+      data-mode={dataMode}
+      data-panel={hasPanel ? "true" : "false"}
     >
       <div className="bs-kit-board-pane">
         <div className="bs-kit-board-stack">
-          <ClonePlayerStrip
-            cloneUsername={cloneUsername}
-            cloneColor={game.cloneColor}
-            thinking={cloneThinking}
-          />
+          {game && (
+            <ClonePlayerStrip
+              cloneUsername={cloneUsername}
+              cloneColor={game.cloneColor}
+              thinking={cloneThinking}
+            />
+          )}
           <div className="bs-kit-board-wrap">
             <AnalysisBoard
-              fen={game.currentFen}
-              orientation={game.userColor}
+              fen={visibleFen}
+              orientation={boardOrientation}
               onMove={handleMove}
-              disabled={isPostmortem}
+              disabled={boardDisabled}
               mode={isPostmortem ? "analysis" : "training"}
               coordinates={true}
               className="!rounded-[10px]"
@@ -247,9 +249,39 @@ export function CloneSpa() {
           </div>
         </div>
       </div>
-      {isPostmortem && (
+      {hasPanel && (
         <aside className="bs-kit-sidebar">
-          <ClonePostmortemPanel game={game} />
+          {onboardingScreen ? (
+            state.screen === "training" ? (
+              <div className="flex flex-col gap-3 rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] p-8 shadow-lg">
+                <h2 className="text-xl font-bold text-[var(--app-text)]">
+                  Training your clone…
+                </h2>
+                <p className="text-sm text-[var(--app-muted)]">
+                  Importing your recent games and learning your style. This
+                  only takes a moment.
+                </p>
+              </div>
+            ) : (
+              <CloneOnboarding
+                screen={state.screen}
+                initialProvider={
+                  state.screen === "needs-training"
+                    ? state.provider
+                    : undefined
+                }
+                initialUsername={
+                  state.screen === "needs-training"
+                    ? state.username
+                    : undefined
+                }
+                onSuccess={handleTrainingSuccess}
+                onError={handleTrainingError}
+              />
+            )
+          ) : (
+            game && <ClonePostmortemPanel game={game} />
+          )}
         </aside>
       )}
     </div>
