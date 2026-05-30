@@ -4,6 +4,8 @@ import type { CloneGameView } from "@/components/clone/clone-spa";
 
 interface ClonePostmortemPanelProps {
   game: CloneGameView;
+  onNewGame: () => void;
+  newGamePending?: boolean;
 }
 
 function resultLabel(result: CloneGameView["result"], userColor: "white" | "black"): string {
@@ -12,16 +14,29 @@ function resultLabel(result: CloneGameView["result"], userColor: "white" | "blac
   return result === userColor ? "You won!" : "You lost";
 }
 
-export function ClonePostmortemPanel({ game }: ClonePostmortemPanelProps) {
+export function ClonePostmortemPanel({
+  game,
+  onNewGame,
+  newGamePending = false,
+}: ClonePostmortemPanelProps) {
   const result = resultLabel(game.result, game.userColor);
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h3 className="text-lg font-bold text-[var(--app-text)]">{result}</h3>
-        <p className="text-sm text-[var(--app-muted)]">
-          {game.movesUci.length} moves played
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-bold text-[var(--app-text)]">{result}</h3>
+          <p className="text-sm text-[var(--app-muted)]">
+            {game.movesUci.length} moves played
+          </p>
+        </div>
+        <button
+          className="bs-kit-btn primary sm"
+          onClick={onNewGame}
+          disabled={newGamePending}
+        >
+          {newGamePending ? "Starting…" : "New game"}
+        </button>
       </div>
 
       <div>

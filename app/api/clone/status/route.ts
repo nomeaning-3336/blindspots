@@ -23,7 +23,8 @@ export async function GET() {
     return NextResponse.json({ status: "no-clone" });
   }
 
-  // Only restore active playing games, not postmortem
+  // Restore the newest non-abandoned game so a refresh during postmortem
+  // brings back the board + postmortem panel, not just live games.
   const { data: activeGame } = await supabase
     .from("clone_games")
     .select(
@@ -31,7 +32,8 @@ export async function GET() {
     )
     .eq("user_id", userId)
     .eq("clone_id", clone.id)
-    .eq("state", "playing")
+    .in("state", ["playing", "postmortem"])
+    .order("updated_at", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

@@ -76,6 +76,13 @@ create table if not exists clone_games (
 create index if not exists clone_games_user_state_created_idx
 on clone_games (user_id, state, created_at desc);
 
+-- At most one active (playing) game per user. Lets game creation be
+-- idempotent: concurrent inserts collide here and fall back to the
+-- existing playing game instead of leaking duplicate rows.
+create unique index if not exists clone_games_one_playing_per_user_idx
+on clone_games (user_id)
+where state = 'playing';
+
 -- ============================================================
 -- clone_game_events
 -- ============================================================

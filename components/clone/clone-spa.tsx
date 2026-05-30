@@ -60,6 +60,7 @@ export function CloneSpa() {
   const [state, setState] = useState<CloneSpaState>({ screen: "loading" });
   const [cloneThinking, setCloneThinking] = useState(false);
   const [cloneUsername, setCloneUsername] = useState<string>("Your Clone");
+  const [newGamePending, setNewGamePending] = useState(false);
 
   // Mount: fetch status and route
   useEffect(() => {
@@ -188,6 +189,19 @@ export function CloneSpa() {
     []
   );
 
+  const handleNewGame = useCallback(async () => {
+    if (newGamePending) return;
+    setNewGamePending(true);
+    try {
+      const game = await createCloneGame();
+      setState({ screen: "playing", game });
+    } catch {
+      // Keep the postmortem panel visible if creation fails.
+    } finally {
+      setNewGamePending(false);
+    }
+  }, [newGamePending]);
+
   if (state.screen === "loading") {
     return (
       <div className="flex h-[100dvh] items-center justify-center">
@@ -280,7 +294,13 @@ export function CloneSpa() {
               />
             )
           ) : (
-            game && <ClonePostmortemPanel game={game} />
+            game && (
+              <ClonePostmortemPanel
+                game={game}
+                onNewGame={handleNewGame}
+                newGamePending={newGamePending}
+              />
+            )
           )}
         </aside>
       )}
