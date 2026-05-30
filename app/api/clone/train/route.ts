@@ -8,6 +8,7 @@ import type { ChessProvider } from "@/lib/chess-profile";
 export const dynamic = "force-dynamic";
 
 const TRAINING_FETCH_TIMEOUT_MS = 35000;
+const MAIA4ALL_REQUEST_TIMEOUT_MS = 120000;
 
 type CloneTrainingGame = {
   id: string;
@@ -30,6 +31,14 @@ type TrainingSourceGame = {
 };
 
 type PlayerColor = "white" | "black";
+
+type Maia4AllEmbeddingResponse = {
+  embedding?: unknown;
+  embeddingModel?: unknown;
+  embeddingVersion?: unknown;
+  sourceGameCount?: unknown;
+  sourcePositionCount?: unknown;
+};
 
 function buildCloneTrainingGames(games: TrainingSourceGame[]): CloneTrainingGame[] {
   return games
@@ -83,6 +92,90 @@ function normalizeMoveTextToUci(moveText: string) {
 
 function currentCloneRating(trainingGames: CloneTrainingGame[]) {
   return trainingGames.find((game) => game.userRating !== null)?.userRating ?? null;
+}
+
+function getMaia4AllUrl() {
+  return process.env.MAIA4ALL_URL?.replace(/\/+$/, "") ?? null;
+}
+
+function validateMaia4AllEmbeddingResponse(
+  payload: Maia4AllEmbeddingResponse
+): {
+  embedding: number[];
+  embeddingModel: string;
+  embeddingVersion: string;
+  sourceGameCount: number;
+  sourcePositionCount: number;
+} {
+  if (!Array.isArray(payload.embedding) || payload.embedding.length !== 128) {
+    throw new Error("Maia4All returned an embedding that is not 128-dimensional");
+  }
+
+  const embedding = payload.embedding.map((value) => Number(value));
+  if (!embedding.every((value) => Number.isFinite(value))) {
+    throw new Error("Maia4All returned a non-finite embedding value");
+  }
+
+  if (embedding.every((value) => value === 0)) {
+    throw new Error("Maia4All returned an all-zero embedding");
+  }
+
+  if (payload.embeddingModel !== "maia4all") {
+    throw new Error("Maia4All returned an unexpected embedding model");
+  }
+
+  if (typeof payload.embeddingVersion !== "string" || payload.embeddingVersion.length === 0) {
+    throw new Error("Maia4All returned a missing embedding version");
+  }
+
+  const sourceGameCount = Number(payload.sourceGameCount);
+  const sourcePositionCount = Number(payload.sourcePositionCount);
+  if (!Number.isInteger(sourceGameCount) || sourceGameCount < 1) {
+    throw new Error("Maia4All returned an invalid source game count");
+  }
+  if (!Number.isInteger(sourcePositionCount) || sourcePositionCount < 1) {
+    throw new Error("Maia4All returned an invalid source position count");
+  }
+
+  return {
+    embedding,
+    embeddingModel: payload.embeddingModel,
+    embeddingVersion: payload.embeddingVersion,
+    sourceGameCount,
+    sourcePositionCount,
+  };
+}
+
+async function trainMaia4AllEmbedding({
+  maia4AllUrl,
+  userId,
+  games,
+}: {
+  maia4AllUrl: string;
+  userId: string;
+  games: CloneTrainingGame[];
+}) {
+  const response = await fetch(`${maia4AllUrl}/v1/embeddings/train`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({
+      userId,
+      games: games.map(({ totalPlies: _totalPlies, ...game }) => game),
+    }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(MAIA4ALL_REQUEST_TIMEOUT_MS),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(
+      `Maia4All training failed with status ${response.status}${body ? `: ${body.slice(0, 500)}` : ""}`
+    );
+  }
+
+  return validateMaia4AllEmbeddingResponse(
+    (await response.json()) as Maia4AllEmbeddingResponse
+  );
 }
 
 async function fetchCloneTrainingSourceGames({
@@ -314,6 +407,11 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const maia4AllUrl = getMaia4AllUrl();
+  if (!maia4AllUrl) {
+    return NextResponse.json({ error: "maia4all_not_configured" }, { status: 503 });
+  }
+
   const supabase = getSupabaseAdminClient();
 
   // Get clone record — allow needs_training, failed, or stale training
@@ -371,21 +469,23 @@ export async function POST() {
       );
     }
 
-    const totalPlies = trainingGames.reduce((sum, g) => sum + g.totalPlies, 0);
-
-    // MVP placeholder:128-length zero vector
-    const placeholderEmbedding = Array.from({ length: 128 }, () => 0);
+    const trainedEmbedding = await trainMaia4AllEmbedding({
+      maia4AllUrl,
+      userId,
+      games: trainingGames,
+    });
 
     await supabase
       .from("user_clones")
       .update({
         status: "ready",
         rating: currentCloneRating(trainingGames),
-        embedding: placeholderEmbedding,
-        embedding_model: "placeholder-random-v0",
-        embedding_version: "placeholder-v0",
-        source_game_count: trainingGames.length,
-        source_position_count: totalPlies,
+        embedding: trainedEmbedding.embedding,
+        embedding_model: trainedEmbedding.embeddingModel,
+        embedding_version: trainedEmbedding.embeddingVersion,
+        source_game_count: trainedEmbedding.sourceGameCount,
+        source_position_count: trainedEmbedding.sourcePositionCount,
+        training_error: null,
         trained_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -393,8 +493,10 @@ export async function POST() {
 
     return NextResponse.json({
       ok: true,
-      sourceGameCount: trainingGames.length,
-      sourcePositionCount: totalPlies,
+      sourceGameCount: trainedEmbedding.sourceGameCount,
+      sourcePositionCount: trainedEmbedding.sourcePositionCount,
+      embeddingModel: trainedEmbedding.embeddingModel,
+      embeddingVersion: trainedEmbedding.embeddingVersion,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
