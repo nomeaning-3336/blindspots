@@ -1033,52 +1033,14 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
   color: var(--bs-fg-1);
 }
 
-/* Clone SPA workspace — board-first surface with an optional right panel.
-   Owns the layout variables the bs-kit-* children expect (the old
-   .bs-kit-app wrapper that defined them was removed with the legacy shell). */
-.clone-workspace {
-  --bs-workspace-gap: 36px;
-  --bs-board-max: 480px;
-  --bs-sidebar-width: 424px;
-  --bs-sidebar-pad-x: 24px;
-  --bs-workspace-top: 56px;
-  --bs-workspace-bottom: 20px;
-  --bs-workspace-max: calc(
-    var(--bs-board-max) + var(--bs-workspace-gap) + var(--bs-sidebar-width)
-  );
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, var(--bs-board-max)) var(--bs-sidebar-width);
-  gap: var(--bs-workspace-gap);
-  width: min(100%, var(--bs-workspace-max));
-  height: 100dvh;
-  margin: 0 auto;
-  padding-top: var(--bs-workspace-top);
-  padding-bottom: var(--bs-workspace-bottom);
-  min-height: 0;
-  overflow: hidden;
-  background: var(--bs-bg);
-  color: var(--bs-fg-1);
+/* No right panel (active play / loading): single centered board column. */
+.bs-kit-app[data-panel="false"] {
+  --bs-workspace-max: var(--bs-board-max);
 }
 
-/* No right panel (active play / loading): single centered board column. */
-.clone-workspace[data-panel="false"] {
-  --bs-workspace-max: var(--bs-board-max);
+.bs-kit-app[data-panel="false"] .clone-workspace {
   grid-template-columns: minmax(0, var(--bs-board-max));
   width: min(100%, var(--bs-board-max));
-}
-
-@media (min-width: 1280px) {
-  .clone-workspace {
-    --bs-workspace-gap: 48px;
-    --bs-board-max: 520px;
-  }
-}
-
-@media (min-width: 1536px) {
-  .clone-workspace {
-    --bs-board-max: 650px;
-  }
 }
 
 .bs-kit-shell-actions {
@@ -1429,28 +1391,37 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
 }
 
 @media (max-width: 1100px) {
-  .clone-workspace {
+  .bs-kit-app {
     --bs-workspace-gap: 24px;
     --bs-board-max: min(44vw, 420px);
     --bs-sidebar-width: min(42vw, 380px);
     --bs-sidebar-pad-x: 16px;
   }
+
+  .clone-workspace {
+    grid-template-columns: minmax(0, var(--bs-board-max)) var(--bs-sidebar-width);
+    grid-template-rows: minmax(0, 1fr);
+    width: min(100%, var(--bs-workspace-max));
+  }
 }
 
 @media (max-width: 700px) {
-  .clone-workspace {
+  .bs-kit-app {
     --bs-workspace-top: 24px;
     --bs-workspace-bottom: 0px;
     --bs-board-max: min(92vw, 420px);
     --bs-sidebar-width: min(92vw, 420px);
     --bs-workspace-max: var(--bs-board-max);
+  }
+
+  .clone-workspace {
     grid-template-columns: 1fr;
     grid-template-rows: auto auto;
     width: 100%;
     overflow-y: auto;
   }
 
-  .clone-workspace[data-panel="false"] {
+  .bs-kit-app[data-panel="false"] .clone-workspace {
     grid-template-rows: auto;
   }
 
@@ -1459,6 +1430,32 @@ html[data-theme] .text-\[var\(--app-muted-soft\)\] {
     border-top: 1px solid var(--bs-divider);
     border-left: 0;
   }
+}
+
+.clone-settings-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  background: color-mix(in srgb, var(--bs-bg) 62%, transparent);
+  padding: 56px max(
+    var(--bs-sidebar-pad-x),
+    calc((100vw - var(--bs-workspace-max)) / 2 + var(--bs-sidebar-pad-x))
+  ) 24px 24px;
+}
+
+.clone-settings-dialog {
+  display: flex;
+  width: min(100%, 360px);
+  flex-direction: column;
+  gap: 18px;
+  border: 1px solid var(--bs-divider);
+  border-radius: 12px;
+  background: var(--bs-surface-0);
+  box-shadow: var(--app-shadow);
+  padding: 20px;
 }
 
 @media (min-width: 1280px) {

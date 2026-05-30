@@ -15,7 +15,7 @@ export async function GET() {
 
   const { data: clone } = await supabase
     .from("user_clones")
-    .select("id, provider, username, status")
+    .select("id, provider, username, status, rating")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -58,6 +58,7 @@ export async function GET() {
       provider: clone.provider,
       username: clone.username,
       status: clone.status,
+      rating: clone.rating,
     },
     activeGame: activeGameView,
   });

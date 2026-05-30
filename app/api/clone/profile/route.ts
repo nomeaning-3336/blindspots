@@ -24,6 +24,16 @@ export async function POST(request: Request) {
 
   const supabase = getSupabaseAdminClient();
 
+  await supabase
+    .from("clone_games")
+    .update({
+      state: "abandoned",
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId)
+    .in("state", ["playing", "postmortem"]);
+
   // Upsert linked chess profile (reuse existing logic)
   await upsertLinkedChessProfileForUser(userId, {
     provider,
@@ -40,6 +50,7 @@ export async function POST(request: Request) {
         provider,
         username,
         status: "needs_training",
+        rating: null,
         embedding: null,
         embedding_model: null,
         embedding_version: "maia4all-v1",

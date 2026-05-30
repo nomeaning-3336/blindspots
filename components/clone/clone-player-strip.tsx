@@ -2,12 +2,14 @@
 
 interface ClonePlayerStripProps {
   cloneUsername: string;
+  rating?: number | null;
   cloneColor: "white" | "black";
   thinking: boolean;
 }
 
 export function ClonePlayerStrip({
   cloneUsername,
+  rating,
   cloneColor,
   thinking,
 }: ClonePlayerStripProps) {
@@ -24,6 +26,9 @@ export function ClonePlayerStrip({
         <span className="text-sm font-medium text-[var(--app-text)]">
           {cloneUsername}
         </span>
+        {rating ? (
+          <span className="rating">({rating})</span>
+        ) : null}
         {thinking && (
           <span className="text-sm text-[var(--app-muted)]">
             (Thinking…)
