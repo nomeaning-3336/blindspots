@@ -1,5 +1,7 @@
 # Blindspots.gg
 
+> This repository is part of a personal project to build a chess-improvement website.
+
 Blindspots.gg is a position-based chess training tool that drills the mistakes you actually made in your own games.
 
 It pulls your recent games from Lichess or Chess.com, runs Stockfish over every move you played, and finds the positions where you lost evaluation. Those positions become your training material. You play them back from one move before the mistake, against a configurable opponent, and the system grades you on how well you preserve the position over a short sequence. As you play more sequences, the mistakes you make during training are reincorporated into the mistakes queue — so the material evolves beyond your original games. If you leave the platform, play some games elsewhere, and come back, the system re-syncs your profile, analyzes the new games, and imports any fresh mistakes into the queue.
